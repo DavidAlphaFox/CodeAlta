@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 namespace CodeNoesis.CodexSdk;
 
 /// <summary>
-/// EXPERIMENTAL. Represents one request_user_input question and its optional options.
+/// EXPERIMENTAL. Represents one request_user_input question and its required options.
 /// </summary>
 public sealed partial record ToolRequestUserInputQuestion
 {
@@ -17,6 +17,10 @@ public sealed partial record ToolRequestUserInputQuestion
     public string Id { get; set; } = string.Empty;
     [JsonPropertyName("question")]
     public string Question { get; set; } = string.Empty;
+    [JsonPropertyName("isOther")]
+    public bool? IsOther { get; set; }
+    [JsonPropertyName("isSecret")]
+    public bool? IsSecret { get; set; }
     [JsonPropertyName("options")]
     public List<JsonElement>? Options { get; set; }
 }

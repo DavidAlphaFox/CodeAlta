@@ -6,11 +6,16 @@ using System.Text.Json.Serialization;
 
 namespace CodeNoesis.CodexSdk.V2;
 
+/// <summary>
+/// Authentication mode for OpenAI-backed providers.
+/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<AuthMode>))]
 public enum AuthMode
 {
     [JsonStringEnumMemberName("apikey")]
     Apikey,
     [JsonStringEnumMemberName("chatgpt")]
-    Chatgpt
+    Chatgpt,
+    [JsonStringEnumMemberName("chatgptAuthTokens")]
+    ChatgptAuthTokens
 }

@@ -10,4 +10,6 @@ public sealed partial record InitializeParams
 {
     [JsonPropertyName("clientInfo")]
     public ClientInfo ClientInfo { get; set; } = default!;
+    [JsonPropertyName("capabilities")]
+    public InitializeCapabilities? Capabilities { get; set; }
 }

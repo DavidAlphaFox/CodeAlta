@@ -14,6 +14,8 @@ public sealed partial record Model
     public string Description { get; set; } = string.Empty;
     [JsonPropertyName("displayName")]
     public string DisplayName { get; set; } = string.Empty;
+    [JsonPropertyName("hidden")]
+    public bool Hidden { get; set; }
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
     [JsonPropertyName("isDefault")]
@@ -22,4 +24,10 @@ public sealed partial record Model
     public string ModelValue { get; set; } = string.Empty;
     [JsonPropertyName("supportedReasoningEfforts")]
     public List<ReasoningEffortOption> SupportedReasoningEfforts { get; set; } = [];
+    [JsonPropertyName("inputModalities")]
+    public List<InputModality>? InputModalities { get; set; }
+    [JsonPropertyName("supportsPersonality")]
+    public bool? SupportsPersonality { get; set; }
+    [JsonPropertyName("upgrade")]
+    public string? Upgrade { get; set; }
 }

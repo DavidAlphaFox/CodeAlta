@@ -22,9 +22,6 @@ public sealed partial record Thread
     /// <summary>Model provider used for this thread (for example, 'openai').</summary>
     [JsonPropertyName("modelProvider")]
     public string ModelProvider { get; set; } = string.Empty;
-    /// <summary>[UNSTABLE] Path to the thread on disk.</summary>
-    [JsonPropertyName("path")]
-    public string Path { get; set; } = string.Empty;
     /// <summary>Usually the first user message in the thread, if available.</summary>
     [JsonPropertyName("preview")]
     public string Preview { get; set; } = string.Empty;
@@ -40,4 +37,7 @@ public sealed partial record Thread
     /// <summary>Optional Git metadata captured when the thread was created.</summary>
     [JsonPropertyName("gitInfo")]
     public GitInfo? GitInfo { get; set; }
+    /// <summary>[UNSTABLE] Path to the thread on disk.</summary>
+    [JsonPropertyName("path")]
+    public string? Path { get; set; }
 }

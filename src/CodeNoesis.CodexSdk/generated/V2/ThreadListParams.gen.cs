@@ -14,6 +14,9 @@ public sealed partial record ThreadListParams
     /// <summary>Opaque pagination cursor returned by a previous call.</summary>
     [JsonPropertyName("cursor")]
     public string? Cursor { get; set; }
+    /// <summary>Optional cwd filter; when set, only threads whose session cwd exactly matches this path are returned.</summary>
+    [JsonPropertyName("cwd")]
+    public string? Cwd { get; set; }
     /// <summary>Optional page size; defaults to a reasonable server-side value.</summary>
     [JsonPropertyName("limit")]
     public uint? Limit { get; set; }
@@ -23,4 +26,7 @@ public sealed partial record ThreadListParams
     /// <summary>Optional sort key; defaults to created_at.</summary>
     [JsonPropertyName("sortKey")]
     public ThreadSortKey? SortKey { get; set; }
+    /// <summary>Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to interactive sources.</summary>
+    [JsonPropertyName("sourceKinds")]
+    public List<JsonElement>? SourceKinds { get; set; }
 }

@@ -12,6 +12,7 @@ namespace CodeNoesis.CodexSdk;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(ErrorEventMsg), typeDiscriminator: "error")]
 [JsonDerivedType(typeof(WarningEventMsg), typeDiscriminator: "warning")]
+[JsonDerivedType(typeof(ModelRerouteEventMsg), typeDiscriminator: "model_reroute")]
 [JsonDerivedType(typeof(ContextCompactedEventMsg), typeDiscriminator: "context_compacted")]
 [JsonDerivedType(typeof(ThreadRolledBackEventMsg), typeDiscriminator: "thread_rolled_back")]
 [JsonDerivedType(typeof(TaskStartedEventMsg), typeDiscriminator: "task_started")]
@@ -26,6 +27,7 @@ namespace CodeNoesis.CodexSdk;
 [JsonDerivedType(typeof(AgentReasoningRawContentDeltaEventMsg), typeDiscriminator: "agent_reasoning_raw_content_delta")]
 [JsonDerivedType(typeof(AgentReasoningSectionBreakEventMsg), typeDiscriminator: "agent_reasoning_section_break")]
 [JsonDerivedType(typeof(SessionConfiguredEventMsg), typeDiscriminator: "session_configured")]
+[JsonDerivedType(typeof(ThreadNameUpdatedEventMsg), typeDiscriminator: "thread_name_updated")]
 [JsonDerivedType(typeof(McpStartupUpdateEventMsg), typeDiscriminator: "mcp_startup_update")]
 [JsonDerivedType(typeof(McpStartupCompleteEventMsg), typeDiscriminator: "mcp_startup_complete")]
 [JsonDerivedType(typeof(McpToolCallBeginEventMsg), typeDiscriminator: "mcp_tool_call_begin")]
@@ -39,6 +41,7 @@ namespace CodeNoesis.CodexSdk;
 [JsonDerivedType(typeof(ViewImageToolCallEventMsg), typeDiscriminator: "view_image_tool_call")]
 [JsonDerivedType(typeof(ExecApprovalRequestEventMsg), typeDiscriminator: "exec_approval_request")]
 [JsonDerivedType(typeof(RequestUserInputEventMsg), typeDiscriminator: "request_user_input")]
+[JsonDerivedType(typeof(DynamicToolCallRequestEventMsg), typeDiscriminator: "dynamic_tool_call_request")]
 [JsonDerivedType(typeof(ElicitationRequestEventMsg), typeDiscriminator: "elicitation_request")]
 [JsonDerivedType(typeof(ApplyPatchApprovalRequestEventMsg), typeDiscriminator: "apply_patch_approval_request")]
 [JsonDerivedType(typeof(DeprecationNoticeEventMsg), typeDiscriminator: "deprecation_notice")]
@@ -53,6 +56,8 @@ namespace CodeNoesis.CodexSdk;
 [JsonDerivedType(typeof(McpListToolsResponseEventMsg), typeDiscriminator: "mcp_list_tools_response")]
 [JsonDerivedType(typeof(ListCustomPromptsResponseEventMsg), typeDiscriminator: "list_custom_prompts_response")]
 [JsonDerivedType(typeof(ListSkillsResponseEventMsg), typeDiscriminator: "list_skills_response")]
+[JsonDerivedType(typeof(ListRemoteSkillsResponseEventMsg), typeDiscriminator: "list_remote_skills_response")]
+[JsonDerivedType(typeof(RemoteSkillDownloadedEventMsg), typeDiscriminator: "remote_skill_downloaded")]
 [JsonDerivedType(typeof(SkillsUpdateAvailableEventMsg), typeDiscriminator: "skills_update_available")]
 [JsonDerivedType(typeof(PlanUpdateEventMsg), typeDiscriminator: "plan_update")]
 [JsonDerivedType(typeof(TurnAbortedEventMsg), typeDiscriminator: "turn_aborted")]
@@ -63,6 +68,7 @@ namespace CodeNoesis.CodexSdk;
 [JsonDerivedType(typeof(ItemStartedEventMsg), typeDiscriminator: "item_started")]
 [JsonDerivedType(typeof(ItemCompletedEventMsg), typeDiscriminator: "item_completed")]
 [JsonDerivedType(typeof(AgentMessageContentDeltaEventMsg), typeDiscriminator: "agent_message_content_delta")]
+[JsonDerivedType(typeof(PlanDeltaEventMsg), typeDiscriminator: "plan_delta")]
 [JsonDerivedType(typeof(ReasoningContentDeltaEventMsg), typeDiscriminator: "reasoning_content_delta")]
 [JsonDerivedType(typeof(ReasoningRawContentDeltaEventMsg), typeDiscriminator: "reasoning_raw_content_delta")]
 [JsonDerivedType(typeof(CollabAgentSpawnBeginEventMsg), typeDiscriminator: "collab_agent_spawn_begin")]
@@ -73,6 +79,8 @@ namespace CodeNoesis.CodexSdk;
 [JsonDerivedType(typeof(CollabWaitingEndEventMsg), typeDiscriminator: "collab_waiting_end")]
 [JsonDerivedType(typeof(CollabCloseBeginEventMsg), typeDiscriminator: "collab_close_begin")]
 [JsonDerivedType(typeof(CollabCloseEndEventMsg), typeDiscriminator: "collab_close_end")]
+[JsonDerivedType(typeof(CollabResumeBeginEventMsg), typeDiscriminator: "collab_resume_begin")]
+[JsonDerivedType(typeof(CollabResumeEndEventMsg), typeDiscriminator: "collab_resume_end")]
 public abstract partial record EventMsg
 {
     /// <summary>
@@ -96,6 +104,19 @@ public abstract partial record EventMsg
     }
 
     /// <summary>
+    /// Model routing changed from the requested model to a different model.
+    /// </summary>
+    public sealed partial record ModelRerouteEventMsg : EventMsg
+    {
+        [JsonPropertyName("from_model")]
+        public string FromModel { get; set; } = string.Empty;
+        [JsonPropertyName("reason")]
+        public CodeNoesis.CodexSdk.V2.ModelRerouteReason Reason { get; set; } = default!;
+        [JsonPropertyName("to_model")]
+        public string ToModel { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// Conversation history was compacted (either automatically or manually).
     /// </summary>
     public sealed partial record ContextCompactedEventMsg : EventMsg;
@@ -115,8 +136,12 @@ public abstract partial record EventMsg
     /// </summary>
     public sealed partial record TaskStartedEventMsg : EventMsg
     {
+        [JsonPropertyName("collaboration_mode_kind")]
+        public CodeNoesis.CodexSdk.V2.ModeKind CollaborationModeKind { get; set; } = default!;
         [JsonPropertyName("model_context_window")]
         public long? ModelContextWindow { get; set; }
+        [JsonPropertyName("turn_id")]
+        public string TurnId { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -126,6 +151,8 @@ public abstract partial record EventMsg
     {
         [JsonPropertyName("last_agent_message")]
         public string? LastAgentMessage { get; set; }
+        [JsonPropertyName("turn_id")]
+        public string TurnId { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -234,7 +261,7 @@ public abstract partial record EventMsg
         [JsonPropertyName("cwd")]
         public string Cwd { get; set; } = string.Empty;
         [JsonPropertyName("forked_from_id")]
-        public ThreadId? ForkedFromId { get; set; }
+        public CodeNoesis.CodexSdk.V2.ThreadId? ForkedFromId { get; set; }
         /// <summary>Current number of entries in the history log.</summary>
         [JsonPropertyName("history_entry_count")]
         public uint HistoryEntryCount { get; set; }
@@ -249,17 +276,34 @@ public abstract partial record EventMsg
         public string Model { get; set; } = string.Empty;
         [JsonPropertyName("model_provider_id")]
         public string ModelProviderId { get; set; } = string.Empty;
+        /// <summary>Runtime proxy bind addresses, when the managed proxy was started for this session.</summary>
+        [JsonPropertyName("network_proxy")]
+        public SessionNetworkProxyRuntime? NetworkProxy { get; set; }
         /// <summary>The effort the model is putting into reasoning about the user's request.</summary>
         [JsonPropertyName("reasoning_effort")]
         public CodeNoesis.CodexSdk.V2.ReasoningEffort? ReasoningEffort { get; set; }
+        /// <summary>Path in which the rollout is stored. Can be `None` for ephemeral threads</summary>
         [JsonPropertyName("rollout_path")]
-        public string RolloutPath { get; set; } = string.Empty;
+        public string? RolloutPath { get; set; }
         /// <summary>How to sandbox commands executed in the system</summary>
         [JsonPropertyName("sandbox_policy")]
         public CodeNoesis.CodexSdk.V2.SandboxPolicy SandboxPolicy { get; set; } = default!;
-        /// <summary>Name left as session_id instead of thread_id for backwards compatibility.</summary>
         [JsonPropertyName("session_id")]
-        public ThreadId SessionId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId SessionId { get; set; } = default!;
+        /// <summary>Optional user-facing thread name (may be unset).</summary>
+        [JsonPropertyName("thread_name")]
+        public string? ThreadName { get; set; }
+    }
+
+    /// <summary>
+    /// Updated session metadata (e.g., thread name changes).
+    /// </summary>
+    public sealed partial record ThreadNameUpdatedEventMsg : EventMsg
+    {
+        [JsonPropertyName("thread_id")]
+        public CodeNoesis.CodexSdk.V2.ThreadId ThreadId { get; set; } = default!;
+        [JsonPropertyName("thread_name")]
+        public string? ThreadName { get; set; }
     }
 
     /// <summary>
@@ -319,6 +363,8 @@ public abstract partial record EventMsg
 
     public sealed partial record WebSearchEndEventMsg : EventMsg
     {
+        [JsonPropertyName("action")]
+        public CodeNoesis.CodexSdk.V2.WebSearchAction Action { get; set; } = default!;
         [JsonPropertyName("call_id")]
         public string CallId { get; set; } = string.Empty;
         [JsonPropertyName("query")]
@@ -421,6 +467,9 @@ public abstract partial record EventMsg
         /// <summary>Where the command originated. Defaults to Agent for backward compatibility.</summary>
         [JsonPropertyName("source")]
         public ExecCommandSource Source { get; set; } = default!;
+        /// <summary>Completion status for this command execution.</summary>
+        [JsonPropertyName("status")]
+        public ExecCommandStatus Status { get; set; } = default!;
         /// <summary>Captured stderr</summary>
         [JsonPropertyName("stderr")]
         public string Stderr { get; set; } = string.Empty;
@@ -447,7 +496,10 @@ public abstract partial record EventMsg
 
     public sealed partial record ExecApprovalRequestEventMsg : EventMsg
     {
-        /// <summary>Identifier for the associated exec call, if available.</summary>
+        /// <summary>Identifier for this specific approval callback.  When absent, the approval is for the command item itself (`call_id`). This is present for subcommand approvals (via execve intercept).</summary>
+        [JsonPropertyName("approval_id")]
+        public string? ApprovalId { get; set; }
+        /// <summary>Identifier for the associated command execution item.</summary>
         [JsonPropertyName("call_id")]
         public string CallId { get; set; } = string.Empty;
         /// <summary>The command to be executed.</summary>
@@ -456,6 +508,9 @@ public abstract partial record EventMsg
         /// <summary>The command's working directory.</summary>
         [JsonPropertyName("cwd")]
         public string Cwd { get; set; } = string.Empty;
+        /// <summary>Optional network context for a blocked request that can be approved.</summary>
+        [JsonPropertyName("network_approval_context")]
+        public NetworkApprovalContext? NetworkApprovalContext { get; set; }
         [JsonPropertyName("parsed_cmd")]
         public List<ParsedCommand> ParsedCmd { get; set; } = [];
         /// <summary>Proposed execpolicy amendment that can be applied to allow future runs.</summary>
@@ -479,6 +534,18 @@ public abstract partial record EventMsg
         /// <summary>Turn ID that this request belongs to. Uses `#[serde(default)]` for backwards compatibility.</summary>
         [JsonPropertyName("turn_id")]
         public string? TurnId { get; set; }
+    }
+
+    public sealed partial record DynamicToolCallRequestEventMsg : EventMsg
+    {
+        [JsonPropertyName("arguments")]
+        public JsonElement Arguments { get; set; }
+        [JsonPropertyName("callId")]
+        public string CallId { get; set; } = string.Empty;
+        [JsonPropertyName("tool")]
+        public string Tool { get; set; } = string.Empty;
+        [JsonPropertyName("turnId")]
+        public string TurnId { get; set; } = string.Empty;
     }
 
     public sealed partial record ElicitationRequestEventMsg : EventMsg
@@ -586,6 +653,9 @@ public abstract partial record EventMsg
         /// <summary>The changes that were applied (mirrors PatchApplyBeginEvent::changes).</summary>
         [JsonPropertyName("changes")]
         public Dictionary<string, FileChange>? Changes { get; set; }
+        /// <summary>Completion status for this patch application.</summary>
+        [JsonPropertyName("status")]
+        public CodeNoesis.CodexSdk.V2.PatchApplyStatus Status { get; set; } = default!;
         /// <summary>Captured stderr (parser errors, IO failures, etc.).</summary>
         [JsonPropertyName("stderr")]
         public string Stderr { get; set; } = string.Empty;
@@ -658,12 +728,35 @@ public abstract partial record EventMsg
     }
 
     /// <summary>
+    /// List of remote skills available to the agent.
+    /// </summary>
+    public sealed partial record ListRemoteSkillsResponseEventMsg : EventMsg
+    {
+        [JsonPropertyName("skills")]
+        public List<CodeNoesis.CodexSdk.V2.RemoteSkillSummary> Skills { get; set; } = [];
+    }
+
+    /// <summary>
+    /// Remote skill downloaded to local cache.
+    /// </summary>
+    public sealed partial record RemoteSkillDownloadedEventMsg : EventMsg
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+        [JsonPropertyName("path")]
+        public string Path { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// Notification that skill data may have been updated and clients may want to reload.
     /// </summary>
     public sealed partial record SkillsUpdateAvailableEventMsg : EventMsg;
 
     public sealed partial record PlanUpdateEventMsg : EventMsg
     {
+        /// <summary>Arguments for the `update_plan` todo/checklist tool (not plan mode).</summary>
         [JsonPropertyName("explanation")]
         public string? Explanation { get; set; }
         [JsonPropertyName("plan")]
@@ -674,6 +767,8 @@ public abstract partial record EventMsg
     {
         [JsonPropertyName("reason")]
         public TurnAbortReason Reason { get; set; } = default!;
+        [JsonPropertyName("turn_id")]
+        public string? TurnId { get; set; }
     }
 
     /// <summary>
@@ -712,7 +807,7 @@ public abstract partial record EventMsg
         [JsonPropertyName("item")]
         public TurnItem Item { get; set; } = default!;
         [JsonPropertyName("thread_id")]
-        public ThreadId ThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId ThreadId { get; set; } = default!;
         [JsonPropertyName("turn_id")]
         public string TurnId { get; set; } = string.Empty;
     }
@@ -722,12 +817,24 @@ public abstract partial record EventMsg
         [JsonPropertyName("item")]
         public TurnItem Item { get; set; } = default!;
         [JsonPropertyName("thread_id")]
-        public ThreadId ThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId ThreadId { get; set; } = default!;
         [JsonPropertyName("turn_id")]
         public string TurnId { get; set; } = string.Empty;
     }
 
     public sealed partial record AgentMessageContentDeltaEventMsg : EventMsg
+    {
+        [JsonPropertyName("delta")]
+        public string Delta { get; set; } = string.Empty;
+        [JsonPropertyName("item_id")]
+        public string ItemId { get; set; } = string.Empty;
+        [JsonPropertyName("thread_id")]
+        public string ThreadId { get; set; } = string.Empty;
+        [JsonPropertyName("turn_id")]
+        public string TurnId { get; set; } = string.Empty;
+    }
+
+    public sealed partial record PlanDeltaEventMsg : EventMsg
     {
         [JsonPropertyName("delta")]
         public string Delta { get; set; } = string.Empty;
@@ -780,7 +887,7 @@ public abstract partial record EventMsg
         public string Prompt { get; set; } = string.Empty;
         /// <summary>Thread ID of the sender.</summary>
         [JsonPropertyName("sender_thread_id")]
-        public ThreadId SenderThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId SenderThreadId { get; set; } = default!;
     }
 
     /// <summary>
@@ -793,13 +900,13 @@ public abstract partial record EventMsg
         public string CallId { get; set; } = string.Empty;
         /// <summary>Thread ID of the newly spawned agent, if it was created.</summary>
         [JsonPropertyName("new_thread_id")]
-        public ThreadId? NewThreadId { get; set; }
+        public CodeNoesis.CodexSdk.V2.ThreadId? NewThreadId { get; set; }
         /// <summary>Initial prompt sent to the agent. Can be empty to prevent CoT leaking at the beginning.</summary>
         [JsonPropertyName("prompt")]
         public string Prompt { get; set; } = string.Empty;
         /// <summary>Thread ID of the sender.</summary>
         [JsonPropertyName("sender_thread_id")]
-        public ThreadId SenderThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId SenderThreadId { get; set; } = default!;
         /// <summary>Last known status of the new agent reported to the sender agent.</summary>
         [JsonPropertyName("status")]
         public AgentStatus Status { get; set; } = default!;
@@ -818,10 +925,10 @@ public abstract partial record EventMsg
         public string Prompt { get; set; } = string.Empty;
         /// <summary>Thread ID of the receiver.</summary>
         [JsonPropertyName("receiver_thread_id")]
-        public ThreadId ReceiverThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId ReceiverThreadId { get; set; } = default!;
         /// <summary>Thread ID of the sender.</summary>
         [JsonPropertyName("sender_thread_id")]
-        public ThreadId SenderThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId SenderThreadId { get; set; } = default!;
     }
 
     /// <summary>
@@ -837,10 +944,10 @@ public abstract partial record EventMsg
         public string Prompt { get; set; } = string.Empty;
         /// <summary>Thread ID of the receiver.</summary>
         [JsonPropertyName("receiver_thread_id")]
-        public ThreadId ReceiverThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId ReceiverThreadId { get; set; } = default!;
         /// <summary>Thread ID of the sender.</summary>
         [JsonPropertyName("sender_thread_id")]
-        public ThreadId SenderThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId SenderThreadId { get; set; } = default!;
         /// <summary>Last known status of the receiver agent reported to the sender agent.</summary>
         [JsonPropertyName("status")]
         public AgentStatus Status { get; set; } = default!;
@@ -856,10 +963,10 @@ public abstract partial record EventMsg
         public string CallId { get; set; } = string.Empty;
         /// <summary>Thread ID of the receivers.</summary>
         [JsonPropertyName("receiver_thread_ids")]
-        public List<ThreadId> ReceiverThreadIds { get; set; } = [];
+        public List<CodeNoesis.CodexSdk.V2.ThreadId> ReceiverThreadIds { get; set; } = [];
         /// <summary>Thread ID of the sender.</summary>
         [JsonPropertyName("sender_thread_id")]
-        public ThreadId SenderThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId SenderThreadId { get; set; } = default!;
     }
 
     /// <summary>
@@ -872,7 +979,7 @@ public abstract partial record EventMsg
         public string CallId { get; set; } = string.Empty;
         /// <summary>Thread ID of the sender.</summary>
         [JsonPropertyName("sender_thread_id")]
-        public ThreadId SenderThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId SenderThreadId { get; set; } = default!;
         /// <summary>Last known status of the receiver agents reported to the sender agent.</summary>
         [JsonPropertyName("statuses")]
         public Dictionary<string, AgentStatus> Statuses { get; set; } = [];
@@ -888,10 +995,10 @@ public abstract partial record EventMsg
         public string CallId { get; set; } = string.Empty;
         /// <summary>Thread ID of the receiver.</summary>
         [JsonPropertyName("receiver_thread_id")]
-        public ThreadId ReceiverThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId ReceiverThreadId { get; set; } = default!;
         /// <summary>Thread ID of the sender.</summary>
         [JsonPropertyName("sender_thread_id")]
-        public ThreadId SenderThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId SenderThreadId { get; set; } = default!;
     }
 
     /// <summary>
@@ -904,11 +1011,46 @@ public abstract partial record EventMsg
         public string CallId { get; set; } = string.Empty;
         /// <summary>Thread ID of the receiver.</summary>
         [JsonPropertyName("receiver_thread_id")]
-        public ThreadId ReceiverThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId ReceiverThreadId { get; set; } = default!;
         /// <summary>Thread ID of the sender.</summary>
         [JsonPropertyName("sender_thread_id")]
-        public ThreadId SenderThreadId { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ThreadId SenderThreadId { get; set; } = default!;
         /// <summary>Last known status of the receiver agent reported to the sender agent before the close.</summary>
+        [JsonPropertyName("status")]
+        public AgentStatus Status { get; set; } = default!;
+    }
+
+    /// <summary>
+    /// Collab interaction: resume begin.
+    /// </summary>
+    public sealed partial record CollabResumeBeginEventMsg : EventMsg
+    {
+        /// <summary>Identifier for the collab tool call.</summary>
+        [JsonPropertyName("call_id")]
+        public string CallId { get; set; } = string.Empty;
+        /// <summary>Thread ID of the receiver.</summary>
+        [JsonPropertyName("receiver_thread_id")]
+        public CodeNoesis.CodexSdk.V2.ThreadId ReceiverThreadId { get; set; } = default!;
+        /// <summary>Thread ID of the sender.</summary>
+        [JsonPropertyName("sender_thread_id")]
+        public CodeNoesis.CodexSdk.V2.ThreadId SenderThreadId { get; set; } = default!;
+    }
+
+    /// <summary>
+    /// Collab interaction: resume end.
+    /// </summary>
+    public sealed partial record CollabResumeEndEventMsg : EventMsg
+    {
+        /// <summary>Identifier for the collab tool call.</summary>
+        [JsonPropertyName("call_id")]
+        public string CallId { get; set; } = string.Empty;
+        /// <summary>Thread ID of the receiver.</summary>
+        [JsonPropertyName("receiver_thread_id")]
+        public CodeNoesis.CodexSdk.V2.ThreadId ReceiverThreadId { get; set; } = default!;
+        /// <summary>Thread ID of the sender.</summary>
+        [JsonPropertyName("sender_thread_id")]
+        public CodeNoesis.CodexSdk.V2.ThreadId SenderThreadId { get; set; } = default!;
+        /// <summary>Last known status of the receiver agent reported to the sender agent after resume.</summary>
         [JsonPropertyName("status")]
         public AgentStatus Status { get; set; } = default!;
     }

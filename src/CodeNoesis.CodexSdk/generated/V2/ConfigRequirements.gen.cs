@@ -12,4 +12,8 @@ public sealed partial record ConfigRequirements
     public List<JsonElement>? AllowedApprovalPolicies { get; set; }
     [JsonPropertyName("allowedSandboxModes")]
     public List<JsonElement>? AllowedSandboxModes { get; set; }
+    [JsonPropertyName("allowedWebSearchModes")]
+    public List<JsonElement>? AllowedWebSearchModes { get; set; }
+    [JsonPropertyName("enforceResidency")]
+    public ResidencyRequirement? EnforceResidency { get; set; }
 }

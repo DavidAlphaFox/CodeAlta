@@ -10,6 +10,10 @@ public sealed partial record RateLimitSnapshot
 {
     [JsonPropertyName("credits")]
     public CreditsSnapshot? Credits { get; set; }
+    [JsonPropertyName("limit_id")]
+    public string? LimitId { get; set; }
+    [JsonPropertyName("limit_name")]
+    public string? LimitName { get; set; }
     [JsonPropertyName("plan_type")]
     public PlanType? PlanType { get; set; }
     [JsonPropertyName("primary")]

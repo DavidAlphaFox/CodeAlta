@@ -9,6 +9,7 @@ namespace CodeNoesis.CodexSdk.V2;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(ApiKeyv2), typeDiscriminator: "apiKey")]
 [JsonDerivedType(typeof(Chatgptv2), typeDiscriminator: "chatgpt")]
+[JsonDerivedType(typeof(ChatgptAuthTokensv2), typeDiscriminator: "chatgptAuthTokens")]
 public abstract partial record LoginAccountParams
 {
     public sealed partial record ApiKeyv2 : LoginAccountParams
@@ -18,5 +19,21 @@ public abstract partial record LoginAccountParams
     }
 
     public sealed partial record Chatgptv2 : LoginAccountParams;
+
+    /// <summary>
+    /// [UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Codex-managed ChatGPT auth tokens have.
+    /// </summary>
+    public sealed partial record ChatgptAuthTokensv2 : LoginAccountParams
+    {
+        /// <summary>Access token (JWT) supplied by the client. This token is used for backend API requests and email extraction.</summary>
+        [JsonPropertyName("accessToken")]
+        public string AccessToken { get; set; } = string.Empty;
+        /// <summary>Workspace/account identifier supplied by the client.</summary>
+        [JsonPropertyName("chatgptAccountId")]
+        public string ChatgptAccountId { get; set; } = string.Empty;
+        /// <summary>Optional plan type supplied by the client.  When `null`, Codex attempts to derive the plan type from access-token claims. If unavailable, the plan defaults to `unknown`.</summary>
+        [JsonPropertyName("chatgptPlanType")]
+        public string? ChatgptPlanType { get; set; }
+    }
 
 }

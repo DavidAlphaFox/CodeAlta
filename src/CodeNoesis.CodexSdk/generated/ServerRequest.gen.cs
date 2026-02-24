@@ -13,6 +13,8 @@ namespace CodeNoesis.CodexSdk;
 [JsonDerivedType(typeof(ItemCommandExecutionRequestApprovalRequest), typeDiscriminator: "item/commandExecution/requestApproval")]
 [JsonDerivedType(typeof(ItemFileChangeRequestApprovalRequest), typeDiscriminator: "item/fileChange/requestApproval")]
 [JsonDerivedType(typeof(ItemToolRequestUserInputRequest), typeDiscriminator: "item/tool/requestUserInput")]
+[JsonDerivedType(typeof(ItemToolCallRequest), typeDiscriminator: "item/tool/call")]
+[JsonDerivedType(typeof(AccountChatgptAuthTokensRefreshRequest), typeDiscriminator: "account/chatgptAuthTokens/refresh")]
 [JsonDerivedType(typeof(ApplyPatchApprovalRequest), typeDiscriminator: "applyPatchApproval")]
 [JsonDerivedType(typeof(ExecCommandApprovalRequest), typeDiscriminator: "execCommandApproval")]
 public abstract partial record ServerRequest
@@ -48,6 +50,25 @@ public abstract partial record ServerRequest
         public RequestId Id { get; set; } = default!;
         [JsonPropertyName("params")]
         public ToolRequestUserInputParams Params { get; set; } = default!;
+    }
+
+    /// <summary>
+    /// Execute a dynamic tool call on the client.
+    /// </summary>
+    public sealed partial record ItemToolCallRequest : ServerRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public DynamicToolCallParams Params { get; set; } = default!;
+    }
+
+    public sealed partial record AccountChatgptAuthTokensRefreshRequest : ServerRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public ChatgptAuthTokensRefreshParams Params { get; set; } = default!;
     }
 
     /// <summary>

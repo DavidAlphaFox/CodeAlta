@@ -15,9 +15,6 @@ public sealed partial record TurnStartParams
     /// <summary>Override the approval policy for this turn and subsequent turns.</summary>
     [JsonPropertyName("approvalPolicy")]
     public AskForApproval? ApprovalPolicy { get; set; }
-    /// <summary>EXPERIMENTAL - set a pre-set collaboration mode. Takes precedence over model, reasoning_effort, and developer instructions if set.</summary>
-    [JsonPropertyName("collaborationMode")]
-    public CollaborationMode? CollaborationMode { get; set; }
     /// <summary>Override the working directory for this turn and subsequent turns.</summary>
     [JsonPropertyName("cwd")]
     public string? Cwd { get; set; }
@@ -30,6 +27,9 @@ public sealed partial record TurnStartParams
     /// <summary>Optional JSON Schema used to constrain the final assistant message for this turn.</summary>
     [JsonPropertyName("outputSchema")]
     public JsonElement? OutputSchema { get; set; }
+    /// <summary>Override the personality for this turn and subsequent turns.</summary>
+    [JsonPropertyName("personality")]
+    public Personality? Personality { get; set; }
     /// <summary>Override the sandbox policy for this turn and subsequent turns.</summary>
     [JsonPropertyName("sandboxPolicy")]
     public SandboxPolicy? SandboxPolicy { get; set; }

@@ -9,8 +9,10 @@ namespace CodeNoesis.CodexSdk;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(UserMessageTurnItem), typeDiscriminator: "UserMessage")]
 [JsonDerivedType(typeof(AgentMessageTurnItem), typeDiscriminator: "AgentMessage")]
+[JsonDerivedType(typeof(PlanTurnItem), typeDiscriminator: "Plan")]
 [JsonDerivedType(typeof(ReasoningTurnItem), typeDiscriminator: "Reasoning")]
 [JsonDerivedType(typeof(WebSearchTurnItem), typeDiscriminator: "WebSearch")]
+[JsonDerivedType(typeof(ContextCompactionTurnItem), typeDiscriminator: "ContextCompaction")]
 public abstract partial record TurnItem
 {
     public sealed partial record UserMessageTurnItem : TurnItem
@@ -21,12 +23,28 @@ public abstract partial record TurnItem
         public string Id { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// Assistant-authored message payload used in turn-item streams.
+    /// 
+    /// `phase` is optional because not all providers/models emit it. Consumers should use it when present, but retain legacy completion semantics when it is `None`.
+    /// </summary>
     public sealed partial record AgentMessageTurnItem : TurnItem
     {
         [JsonPropertyName("content")]
         public List<AgentMessageContent> Content { get; set; } = [];
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
+        /// <summary>Optional phase metadata carried through from `ResponseItem::Message`.  This is currently used by TUI rendering to distinguish mid-turn commentary from a final answer and avoid status-indicator jitter.</summary>
+        [JsonPropertyName("phase")]
+        public MessagePhase? Phase { get; set; }
+    }
+
+    public sealed partial record PlanTurnItem : TurnItem
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+        [JsonPropertyName("text")]
+        public string Text { get; set; } = string.Empty;
     }
 
     public sealed partial record ReasoningTurnItem : TurnItem
@@ -41,10 +59,18 @@ public abstract partial record TurnItem
 
     public sealed partial record WebSearchTurnItem : TurnItem
     {
+        [JsonPropertyName("action")]
+        public WebSearchAction Action { get; set; } = default!;
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
         [JsonPropertyName("query")]
         public string Query { get; set; } = string.Empty;
+    }
+
+    public sealed partial record ContextCompactionTurnItem : TurnItem
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
     }
 
 }

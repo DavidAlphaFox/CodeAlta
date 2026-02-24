@@ -14,6 +14,7 @@ namespace CodeNoesis.CodexSdk;
 [JsonDerivedType(typeof(ImageUserInput), typeDiscriminator: "image")]
 [JsonDerivedType(typeof(LocalImageUserInput), typeDiscriminator: "local_image")]
 [JsonDerivedType(typeof(SkillUserInput), typeDiscriminator: "skill")]
+[JsonDerivedType(typeof(MentionUserInput), typeDiscriminator: "mention")]
 public abstract partial record UserInput
 {
     public sealed partial record TextUserInput : UserInput
@@ -47,6 +48,17 @@ public abstract partial record UserInput
     /// Skill selected by the user (name + path to SKILL.md).
     /// </summary>
     public sealed partial record SkillUserInput : UserInput
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+        [JsonPropertyName("path")]
+        public string Path { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Explicit mention selected by the user (name + app://connector id).
+    /// </summary>
+    public sealed partial record MentionUserInput : UserInput
     {
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;

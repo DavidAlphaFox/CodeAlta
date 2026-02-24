@@ -14,4 +14,10 @@ public sealed partial record ConfigWarningNotification
     /// <summary>Optional extra guidance or error details.</summary>
     [JsonPropertyName("details")]
     public string? Details { get; set; }
+    /// <summary>Optional path to the config file that triggered the warning.</summary>
+    [JsonPropertyName("path")]
+    public string? Path { get; set; }
+    /// <summary>Optional range for the error location inside the config file.</summary>
+    [JsonPropertyName("range")]
+    public TextRange? Range { get; set; }
 }

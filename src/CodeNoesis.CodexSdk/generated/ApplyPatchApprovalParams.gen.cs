@@ -12,7 +12,7 @@ public sealed partial record ApplyPatchApprovalParams
     [JsonPropertyName("callId")]
     public string CallId { get; set; } = string.Empty;
     [JsonPropertyName("conversationId")]
-    public ThreadId ConversationId { get; set; } = default!;
+    public CodeNoesis.CodexSdk.V2.ThreadId ConversationId { get; set; } = default!;
     [JsonPropertyName("fileChanges")]
     public Dictionary<string, FileChange> FileChanges { get; set; } = [];
     /// <summary>When set, the agent is asking the user to allow writes under this root for the remainder of the session (unclear if this is honored today).</summary>

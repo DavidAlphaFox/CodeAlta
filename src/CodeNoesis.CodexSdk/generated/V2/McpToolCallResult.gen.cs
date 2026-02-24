@@ -9,7 +9,7 @@ namespace CodeNoesis.CodexSdk.V2;
 public sealed partial record McpToolCallResult
 {
     [JsonPropertyName("content")]
-    public List<ContentBlock> Content { get; set; } = [];
+    public List<JsonElement> Content { get; set; } = [];
     [JsonPropertyName("structuredContent")]
     public JsonElement? StructuredContent { get; set; }
 }

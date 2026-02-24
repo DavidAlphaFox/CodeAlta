@@ -11,6 +11,8 @@ public enum PlanType
 {
     [JsonStringEnumMemberName("free")]
     Free,
+    [JsonStringEnumMemberName("go")]
+    Go,
     [JsonStringEnumMemberName("plus")]
     Plus,
     [JsonStringEnumMemberName("pro")]

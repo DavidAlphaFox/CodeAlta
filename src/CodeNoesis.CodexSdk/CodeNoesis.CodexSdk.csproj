@@ -11,4 +11,8 @@
     <NoWarn>$(NoWarn);SYSLIB1031</NoWarn>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="CodeNoesis.Tests" />
+  </ItemGroup>
+
 </Project>

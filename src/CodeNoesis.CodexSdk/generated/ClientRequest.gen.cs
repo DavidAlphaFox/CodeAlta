@@ -15,17 +15,24 @@ namespace CodeNoesis.CodexSdk;
 [JsonDerivedType(typeof(ThreadResumeRequest), typeDiscriminator: "thread/resume")]
 [JsonDerivedType(typeof(ThreadForkRequest), typeDiscriminator: "thread/fork")]
 [JsonDerivedType(typeof(ThreadArchiveRequest), typeDiscriminator: "thread/archive")]
+[JsonDerivedType(typeof(ThreadNameSetRequest), typeDiscriminator: "thread/name/set")]
+[JsonDerivedType(typeof(ThreadUnarchiveRequest), typeDiscriminator: "thread/unarchive")]
+[JsonDerivedType(typeof(ThreadCompactStartRequest), typeDiscriminator: "thread/compact/start")]
 [JsonDerivedType(typeof(ThreadRollbackRequest), typeDiscriminator: "thread/rollback")]
 [JsonDerivedType(typeof(ThreadListRequest), typeDiscriminator: "thread/list")]
 [JsonDerivedType(typeof(ThreadLoadedListRequest), typeDiscriminator: "thread/loaded/list")]
 [JsonDerivedType(typeof(ThreadReadRequest), typeDiscriminator: "thread/read")]
 [JsonDerivedType(typeof(SkillsListRequest), typeDiscriminator: "skills/list")]
+[JsonDerivedType(typeof(SkillsRemoteListRequest), typeDiscriminator: "skills/remote/list")]
+[JsonDerivedType(typeof(SkillsRemoteExportRequest), typeDiscriminator: "skills/remote/export")]
+[JsonDerivedType(typeof(AppListRequest), typeDiscriminator: "app/list")]
 [JsonDerivedType(typeof(SkillsConfigWriteRequest), typeDiscriminator: "skills/config/write")]
 [JsonDerivedType(typeof(TurnStartRequest), typeDiscriminator: "turn/start")]
+[JsonDerivedType(typeof(TurnSteerRequest), typeDiscriminator: "turn/steer")]
 [JsonDerivedType(typeof(TurnInterruptRequest), typeDiscriminator: "turn/interrupt")]
 [JsonDerivedType(typeof(ReviewStartRequest), typeDiscriminator: "review/start")]
 [JsonDerivedType(typeof(ModelListRequest), typeDiscriminator: "model/list")]
-[JsonDerivedType(typeof(CollaborationModeListRequest), typeDiscriminator: "collaborationMode/list")]
+[JsonDerivedType(typeof(ExperimentalFeatureListRequest), typeDiscriminator: "experimentalFeature/list")]
 [JsonDerivedType(typeof(McpServerOauthLoginRequest), typeDiscriminator: "mcpServer/oauth/login")]
 [JsonDerivedType(typeof(ConfigMcpServerReloadRequest), typeDiscriminator: "config/mcpServer/reload")]
 [JsonDerivedType(typeof(McpServerStatusListRequest), typeDiscriminator: "mcpServerStatus/list")]
@@ -108,6 +115,30 @@ public abstract partial record ClientRequest
         public CodeNoesis.CodexSdk.V2.ThreadArchiveParams Params { get; set; } = default!;
     }
 
+    public sealed partial record ThreadNameSetRequest : ClientRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.ThreadSetNameParams Params { get; set; } = default!;
+    }
+
+    public sealed partial record ThreadUnarchiveRequest : ClientRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.ThreadUnarchiveParams Params { get; set; } = default!;
+    }
+
+    public sealed partial record ThreadCompactStartRequest : ClientRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.ThreadCompactStartParams Params { get; set; } = default!;
+    }
+
     public sealed partial record ThreadRollbackRequest : ClientRequest
     {
         [JsonPropertyName("id")]
@@ -148,6 +179,30 @@ public abstract partial record ClientRequest
         public CodeNoesis.CodexSdk.V2.SkillsListParams Params { get; set; } = default!;
     }
 
+    public sealed partial record SkillsRemoteListRequest : ClientRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.SkillsRemoteReadParams Params { get; set; } = default!;
+    }
+
+    public sealed partial record SkillsRemoteExportRequest : ClientRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.SkillsRemoteWriteParams Params { get; set; } = default!;
+    }
+
+    public sealed partial record AppListRequest : ClientRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.AppsListParams Params { get; set; } = default!;
+    }
+
     public sealed partial record SkillsConfigWriteRequest : ClientRequest
     {
         [JsonPropertyName("id")]
@@ -162,6 +217,14 @@ public abstract partial record ClientRequest
         public RequestId Id { get; set; } = default!;
         [JsonPropertyName("params")]
         public CodeNoesis.CodexSdk.V2.TurnStartParams Params { get; set; } = default!;
+    }
+
+    public sealed partial record TurnSteerRequest : ClientRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.TurnSteerParams Params { get; set; } = default!;
     }
 
     public sealed partial record TurnInterruptRequest : ClientRequest
@@ -188,15 +251,12 @@ public abstract partial record ClientRequest
         public CodeNoesis.CodexSdk.V2.ModelListParams Params { get; set; } = default!;
     }
 
-    /// <summary>
-    /// EXPERIMENTAL - list collaboration mode presets.
-    /// </summary>
-    public sealed partial record CollaborationModeListRequest : ClientRequest
+    public sealed partial record ExperimentalFeatureListRequest : ClientRequest
     {
         [JsonPropertyName("id")]
         public RequestId Id { get; set; } = default!;
         [JsonPropertyName("params")]
-        public CodeNoesis.CodexSdk.V2.CollaborationModeListParams Params { get; set; } = default!;
+        public CodeNoesis.CodexSdk.V2.ExperimentalFeatureListParams Params { get; set; } = default!;
     }
 
     public sealed partial record McpServerOauthLoginRequest : ClientRequest

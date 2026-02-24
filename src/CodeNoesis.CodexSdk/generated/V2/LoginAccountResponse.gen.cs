@@ -9,6 +9,7 @@ namespace CodeNoesis.CodexSdk.V2;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(ApiKeyv2), typeDiscriminator: "apiKey")]
 [JsonDerivedType(typeof(Chatgptv2), typeDiscriminator: "chatgpt")]
+[JsonDerivedType(typeof(ChatgptAuthTokensv2), typeDiscriminator: "chatgptAuthTokens")]
 public abstract partial record LoginAccountResponse
 {
     public sealed partial record ApiKeyv2 : LoginAccountResponse;
@@ -21,5 +22,7 @@ public abstract partial record LoginAccountResponse
         [JsonPropertyName("loginId")]
         public string LoginId { get; set; } = string.Empty;
     }
+
+    public sealed partial record ChatgptAuthTokensv2 : LoginAccountResponse;
 
 }

@@ -16,7 +16,7 @@ public sealed partial record ResourceTemplate
     [JsonPropertyName("uriTemplate")]
     public string UriTemplate { get; set; } = string.Empty;
     [JsonPropertyName("annotations")]
-    public Annotations? Annotations { get; set; }
+    public JsonElement? Annotations { get; set; }
     [JsonPropertyName("description")]
     public string? Description { get; set; }
     [JsonPropertyName("mimeType")]

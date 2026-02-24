@@ -9,14 +9,12 @@ namespace CodeNoesis.CodexSdk.V2;
 /// <summary>
 /// The payload we send back to OpenAI when reporting a tool call result.
 /// 
-/// `content` preserves the historical plain-string payload so downstream integrations (tests, logging, etc.) can keep treating tool output as `String`. When an MCP server returns richer data we additionally populate `content_items` with the structured form that the Responses/Chat Completions APIs understand.
+/// `body` serializes directly as the wire value for `function_call_output.output`. `success` remains internal metadata for downstream handling.
 /// </summary>
 public sealed partial record FunctionCallOutputPayload
 {
-    [JsonPropertyName("content")]
-    public string Content { get; set; } = string.Empty;
-    [JsonPropertyName("content_items")]
-    public List<JsonElement>? ContentItems { get; set; }
+    [JsonPropertyName("body")]
+    public FunctionCallOutputBody Body { get; set; } = default!;
     [JsonPropertyName("success")]
     public bool? Success { get; set; }
 }

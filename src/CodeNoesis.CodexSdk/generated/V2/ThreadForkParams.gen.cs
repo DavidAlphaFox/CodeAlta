@@ -32,9 +32,6 @@ public sealed partial record ThreadForkParams
     public string? Model { get; set; }
     [JsonPropertyName("modelProvider")]
     public string? ModelProvider { get; set; }
-    /// <summary>[UNSTABLE] Specify the rollout path to fork from. If specified, the thread_id param will be ignored.</summary>
-    [JsonPropertyName("path")]
-    public string? Path { get; set; }
     [JsonPropertyName("sandbox")]
     public SandboxMode? Sandbox { get; set; }
 }

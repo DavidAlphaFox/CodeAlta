@@ -1,47 +1,92 @@
-using JKToolKit.CodexSDK.AppServer;
-using NJsonSchema;
-using NJsonSchema.CodeGeneration.CSharp;
+using System.Diagnostics;
+using CodeNoesis.CodexSdk;
+using CodeNoesis.CodexSdk.V2;
 
-/*
-Environment.SetEnvironmentVariable("PATH", $"C:\\Users\\alexa\\.cache\\fnm_multishells\\26060_1771870496842;{Environment.GetEnvironmentVariable("PATH")}");
+// Ensure fnm-managed Node/npm paths are visible to this process.
+ApplyFnmEnvironment();
 
-// --- App Server: threads + turns + streaming deltas ---
-await using var codex = await CodexAppServerClient.StartAsync(new CodexAppServerClientOptions
+var codexClient = await CodexClient.StartAsync(new ClientInfo
 {
-    DefaultClientInfo = new("CodeNoesis", "CodeNoesis App", "1.0.0")
+    Name = "CodeNoesis",
+    Version = "1.0.0",
+    Title = "CodeNoesis App"
 });
 
 
-var threads = await codex.ListThreadsAsync(new ThreadListOptions()
+var threadList = await codexClient.ThreadListAsync(new ThreadListParams()
 {
     Cwd = @"C:\code\lunet\lunet"
 });
 
 
-foreach(var thread in threads.Threads)
+foreach(var thread in threadList.Data)
 {
-    Console.WriteLine($"Name: {thread.Name}, Id: {thread.ThreadId}");
+    Console.WriteLine($"Thread: {thread.Id} - ModelProvider, {thread.ModelProvider}, CliVersion: {thread.CliVersion}, CreatedAt: {thread.CreatedAt} TurnsCount: {thread.Turns.Count}");
 }
-*/
 
-
-
-var schemaPath = @"C:\code\CodexJsonSchema\codex_app_server_protocol.schemas.json";
-
-
-var schemaData = await File.ReadAllTextAsync(schemaPath);
-
-var resolver = new JsonReferenceResolver(null);
-
-var schema = await JsonSchema.FromJsonAsync(schemaData, schemaPath, schemaToResolve =>
-    {
-        Console.WriteLine($"{schemaToResolve.ToJson()}");
-        return resolver;
-    }
-);
-
-var generator = new CSharpGenerator(schema, new CSharpGeneratorSettings()
+static void ApplyFnmEnvironment()
 {
+    // fnm (Fast Node Manager) injects node/npm paths via shell hooks that
+    // don't run in a raw child process.  Run `fnm env --shell cmd` and
+    // apply its SET directives so that codex (installed via npm) is on PATH.
+    var fnmPath = FindOnPath("fnm");
+    if (fnmPath is null)
+        return; // fnm not installed — nothing to do.
 
-});
-var file = generator.GenerateFile();
+    var psi = new ProcessStartInfo(fnmPath, "env --shell cmd")
+    {
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+        CreateNoWindow = true
+    };
+
+    using var proc = Process.Start(psi);
+    if (proc is null)
+        return;
+
+    var output = proc.StandardOutput.ReadToEnd();
+    proc.WaitForExit();
+    if (proc.ExitCode != 0)
+        return;
+
+    foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+        // Lines look like: SET VAR=VALUE
+        if (!line.StartsWith("SET ", StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        var eqIndex = line.IndexOf('=', 4);
+        if (eqIndex < 0)
+            continue;
+
+        var name = line[4..eqIndex];
+        var value = line[(eqIndex + 1)..];
+
+        // Expand %VAR% references (e.g. SET PATH=...;%PATH%).
+        value = Environment.ExpandEnvironmentVariables(value);
+
+        Environment.SetEnvironmentVariable(name, value);
+    }
+
+    static string? FindOnPath(string name)
+    {
+        var pathVar = Environment.GetEnvironmentVariable("PATH") ?? "";
+        var extensions = OperatingSystem.IsWindows()
+            ? new[] { ".exe", ".cmd", ".bat", "" }
+            : new[] { "" };
+
+        foreach (var dir in pathVar.Split(Path.PathSeparator))
+        {
+            foreach (var ext in extensions)
+            {
+                var candidate = Path.Combine(dir, name + ext);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+        }
+
+        return null;
+    }
+}
+

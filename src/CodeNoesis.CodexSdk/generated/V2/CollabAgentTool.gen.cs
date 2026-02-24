@@ -13,6 +13,8 @@ public enum CollabAgentTool
     SpawnAgent,
     [JsonStringEnumMemberName("sendInput")]
     SendInput,
+    [JsonStringEnumMemberName("resumeAgent")]
+    ResumeAgent,
     [JsonStringEnumMemberName("wait")]
     Wait,
     [JsonStringEnumMemberName("closeAgent")]

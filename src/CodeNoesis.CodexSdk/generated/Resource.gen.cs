@@ -16,9 +16,13 @@ public sealed partial record Resource
     [JsonPropertyName("uri")]
     public string Uri { get; set; } = string.Empty;
     [JsonPropertyName("annotations")]
-    public Annotations? Annotations { get; set; }
+    public JsonElement? Annotations { get; set; }
     [JsonPropertyName("description")]
     public string? Description { get; set; }
+    [JsonPropertyName("icons")]
+    public List<JsonElement>? Icons { get; set; }
+    [JsonPropertyName("_meta")]
+    public JsonElement? Meta { get; set; }
     [JsonPropertyName("mimeType")]
     public string? MimeType { get; set; }
     [JsonPropertyName("size")]

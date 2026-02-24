@@ -12,15 +12,19 @@ namespace CodeNoesis.CodexSdk;
 public sealed partial record Tool
 {
     [JsonPropertyName("inputSchema")]
-    public ToolInputSchema InputSchema { get; set; } = default!;
+    public JsonElement InputSchema { get; set; }
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
     [JsonPropertyName("annotations")]
-    public ToolAnnotations? Annotations { get; set; }
+    public JsonElement? Annotations { get; set; }
     [JsonPropertyName("description")]
     public string? Description { get; set; }
+    [JsonPropertyName("icons")]
+    public List<JsonElement>? Icons { get; set; }
+    [JsonPropertyName("_meta")]
+    public JsonElement? Meta { get; set; }
     [JsonPropertyName("outputSchema")]
-    public ToolOutputSchema? OutputSchema { get; set; }
+    public JsonElement? OutputSchema { get; set; }
     [JsonPropertyName("title")]
     public string? Title { get; set; }
 }

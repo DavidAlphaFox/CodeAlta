@@ -12,6 +12,9 @@ namespace CodeNoesis.CodexSdk;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "method")]
 [JsonDerivedType(typeof(ErrorNotification), typeDiscriminator: "error")]
 [JsonDerivedType(typeof(ThreadStartedNotification), typeDiscriminator: "thread/started")]
+[JsonDerivedType(typeof(ThreadArchivedNotification), typeDiscriminator: "thread/archived")]
+[JsonDerivedType(typeof(ThreadUnarchivedNotification), typeDiscriminator: "thread/unarchived")]
+[JsonDerivedType(typeof(ThreadNameUpdatedNotification), typeDiscriminator: "thread/name/updated")]
 [JsonDerivedType(typeof(ThreadTokenUsageUpdatedNotification), typeDiscriminator: "thread/tokenUsage/updated")]
 [JsonDerivedType(typeof(TurnStartedNotification), typeDiscriminator: "turn/started")]
 [JsonDerivedType(typeof(TurnCompletedNotification), typeDiscriminator: "turn/completed")]
@@ -21,6 +24,7 @@ namespace CodeNoesis.CodexSdk;
 [JsonDerivedType(typeof(ItemCompletedNotification), typeDiscriminator: "item/completed")]
 [JsonDerivedType(typeof(RawResponseItemCompletedNotification), typeDiscriminator: "rawResponseItem/completed")]
 [JsonDerivedType(typeof(ItemAgentMessageDeltaNotification), typeDiscriminator: "item/agentMessage/delta")]
+[JsonDerivedType(typeof(ItemPlanDeltaNotification), typeDiscriminator: "item/plan/delta")]
 [JsonDerivedType(typeof(ItemCommandExecutionOutputDeltaNotification), typeDiscriminator: "item/commandExecution/outputDelta")]
 [JsonDerivedType(typeof(ItemCommandExecutionTerminalInteractionNotification), typeDiscriminator: "item/commandExecution/terminalInteraction")]
 [JsonDerivedType(typeof(ItemFileChangeOutputDeltaNotification), typeDiscriminator: "item/fileChange/outputDelta")]
@@ -28,12 +32,16 @@ namespace CodeNoesis.CodexSdk;
 [JsonDerivedType(typeof(McpServerOauthLoginCompletedNotification), typeDiscriminator: "mcpServer/oauthLogin/completed")]
 [JsonDerivedType(typeof(AccountUpdatedNotification), typeDiscriminator: "account/updated")]
 [JsonDerivedType(typeof(AccountRateLimitsUpdatedNotification), typeDiscriminator: "account/rateLimits/updated")]
+[JsonDerivedType(typeof(AppListUpdatedNotification), typeDiscriminator: "app/list/updated")]
 [JsonDerivedType(typeof(ItemReasoningSummaryTextDeltaNotification), typeDiscriminator: "item/reasoning/summaryTextDelta")]
 [JsonDerivedType(typeof(ItemReasoningSummaryPartAddedNotification), typeDiscriminator: "item/reasoning/summaryPartAdded")]
 [JsonDerivedType(typeof(ItemReasoningTextDeltaNotification), typeDiscriminator: "item/reasoning/textDelta")]
 [JsonDerivedType(typeof(ThreadCompactedNotification), typeDiscriminator: "thread/compacted")]
+[JsonDerivedType(typeof(ModelReroutedNotification), typeDiscriminator: "model/rerouted")]
 [JsonDerivedType(typeof(DeprecationNoticeNotification), typeDiscriminator: "deprecationNotice")]
 [JsonDerivedType(typeof(ConfigWarningNotification), typeDiscriminator: "configWarning")]
+[JsonDerivedType(typeof(FuzzyFileSearchSessionUpdatedNotification), typeDiscriminator: "fuzzyFileSearch/sessionUpdated")]
+[JsonDerivedType(typeof(FuzzyFileSearchSessionCompletedNotification), typeDiscriminator: "fuzzyFileSearch/sessionCompleted")]
 [JsonDerivedType(typeof(WindowsWorldWritableWarningNotification), typeDiscriminator: "windows/worldWritableWarning")]
 [JsonDerivedType(typeof(AccountLoginCompletedNotification), typeDiscriminator: "account/login/completed")]
 [JsonDerivedType(typeof(AuthStatusChangeNotification), typeDiscriminator: "authStatusChange")]
@@ -54,6 +62,24 @@ public abstract partial record ServerNotification
     {
         [JsonPropertyName("params")]
         public CodeNoesis.CodexSdk.V2.ThreadStartedNotification Params { get; set; } = default!;
+    }
+
+    public sealed partial record ThreadArchivedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.ThreadArchivedNotification Params { get; set; } = default!;
+    }
+
+    public sealed partial record ThreadUnarchivedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.ThreadUnarchivedNotification Params { get; set; } = default!;
+    }
+
+    public sealed partial record ThreadNameUpdatedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.ThreadNameUpdatedNotification Params { get; set; } = default!;
     }
 
     public sealed partial record ThreadTokenUsageUpdatedNotification : ServerNotification
@@ -113,6 +139,15 @@ public abstract partial record ServerNotification
         public CodeNoesis.CodexSdk.V2.AgentMessageDeltaNotification Params { get; set; } = default!;
     }
 
+    /// <summary>
+    /// EXPERIMENTAL - proposed plan streaming deltas for plan items.
+    /// </summary>
+    public sealed partial record ItemPlanDeltaNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.PlanDeltaNotification Params { get; set; } = default!;
+    }
+
     public sealed partial record ItemCommandExecutionOutputDeltaNotification : ServerNotification
     {
         [JsonPropertyName("params")]
@@ -155,6 +190,12 @@ public abstract partial record ServerNotification
         public CodeNoesis.CodexSdk.V2.AccountRateLimitsUpdatedNotification Params { get; set; } = default!;
     }
 
+    public sealed partial record AppListUpdatedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.AppListUpdatedNotification Params { get; set; } = default!;
+    }
+
     public sealed partial record ItemReasoningSummaryTextDeltaNotification : ServerNotification
     {
         [JsonPropertyName("params")]
@@ -173,10 +214,19 @@ public abstract partial record ServerNotification
         public CodeNoesis.CodexSdk.V2.ReasoningTextDeltaNotification Params { get; set; } = default!;
     }
 
+    /// <summary>
+    /// Deprecated: Use `ContextCompaction` item type instead.
+    /// </summary>
     public sealed partial record ThreadCompactedNotification : ServerNotification
     {
         [JsonPropertyName("params")]
         public CodeNoesis.CodexSdk.V2.ContextCompactedNotification Params { get; set; } = default!;
+    }
+
+    public sealed partial record ModelReroutedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeNoesis.CodexSdk.V2.ModelReroutedNotification Params { get; set; } = default!;
     }
 
     public sealed partial record DeprecationNoticeNotification : ServerNotification
@@ -189,6 +239,18 @@ public abstract partial record ServerNotification
     {
         [JsonPropertyName("params")]
         public CodeNoesis.CodexSdk.V2.ConfigWarningNotification Params { get; set; } = default!;
+    }
+
+    public sealed partial record FuzzyFileSearchSessionUpdatedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public FuzzyFileSearchSessionUpdatedNotification Params { get; set; } = default!;
+    }
+
+    public sealed partial record FuzzyFileSearchSessionCompletedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public FuzzyFileSearchSessionCompletedNotification Params { get; set; } = default!;
     }
 
     /// <summary>

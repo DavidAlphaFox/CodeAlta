@@ -11,6 +11,9 @@ public sealed partial record ModelListParams
     /// <summary>Opaque pagination cursor returned by a previous call.</summary>
     [JsonPropertyName("cursor")]
     public string? Cursor { get; set; }
+    /// <summary>When true, include models that are hidden from the default picker list.</summary>
+    [JsonPropertyName("includeHidden")]
+    public bool? IncludeHidden { get; set; }
     /// <summary>Optional page size; defaults to a reasonable server-side value.</summary>
     [JsonPropertyName("limit")]
     public uint? Limit { get; set; }

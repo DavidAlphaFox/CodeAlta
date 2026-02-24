@@ -18,13 +18,14 @@ public sealed partial record ThreadStartParams
     public string? Cwd { get; set; }
     [JsonPropertyName("developerInstructions")]
     public string? DeveloperInstructions { get; set; }
-    /// <summary>If true, opt into emitting raw response items on the event stream.  This is for internal use only (e.g. Codex Cloud). (TODO): Figure out a better way to categorize internal / experimental events &amp; protocols.</summary>
-    [JsonPropertyName("experimentalRawEvents")]
-    public bool? ExperimentalRawEvents { get; set; }
+    [JsonPropertyName("ephemeral")]
+    public bool? Ephemeral { get; set; }
     [JsonPropertyName("model")]
     public string? Model { get; set; }
     [JsonPropertyName("modelProvider")]
     public string? ModelProvider { get; set; }
+    [JsonPropertyName("personality")]
+    public Personality? Personality { get; set; }
     [JsonPropertyName("sandbox")]
     public SandboxMode? Sandbox { get; set; }
 }

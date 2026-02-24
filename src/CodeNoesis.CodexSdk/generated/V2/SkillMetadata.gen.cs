@@ -18,9 +18,11 @@ public sealed partial record SkillMetadata
     public string Path { get; set; } = string.Empty;
     [JsonPropertyName("scope")]
     public SkillScope Scope { get; set; } = default!;
+    [JsonPropertyName("dependencies")]
+    public SkillDependencies? Dependencies { get; set; }
     [JsonPropertyName("interface")]
     public SkillInterface? Interface { get; set; }
-    /// <summary>Legacy short_description from SKILL.md. Prefer SKILL.toml interface.short_description.</summary>
+    /// <summary>Legacy short_description from SKILL.md. Prefer SKILL.json interface.short_description.</summary>
     [JsonPropertyName("shortDescription")]
     public string? ShortDescription { get; set; }
 }

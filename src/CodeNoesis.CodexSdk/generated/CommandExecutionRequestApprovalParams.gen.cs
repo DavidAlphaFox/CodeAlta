@@ -14,6 +14,9 @@ public sealed partial record CommandExecutionRequestApprovalParams
     public string ThreadId { get; set; } = string.Empty;
     [JsonPropertyName("turnId")]
     public string TurnId { get; set; } = string.Empty;
+    /// <summary>Unique identifier for this specific approval callback.  For regular shell/unified_exec approvals, this is null.  For zsh-exec-bridge subcommand approvals, multiple callbacks can belong to one parent `itemId`, so `approvalId` is a distinct opaque callback id (a UUID) used to disambiguate routing.</summary>
+    [JsonPropertyName("approvalId")]
+    public string? ApprovalId { get; set; }
     /// <summary>The command to be executed.</summary>
     [JsonPropertyName("command")]
     public string? Command { get; set; }

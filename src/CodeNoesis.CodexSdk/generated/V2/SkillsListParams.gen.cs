@@ -14,4 +14,7 @@ public sealed partial record SkillsListParams
     /// <summary>When true, bypass the skills cache and re-scan skills from disk.</summary>
     [JsonPropertyName("forceReload")]
     public bool? ForceReload { get; set; }
+    /// <summary>Optional per-cwd extra roots to scan as user-scoped skills.</summary>
+    [JsonPropertyName("perCwdExtraUserRoots")]
+    public List<JsonElement>? PerCwdExtraUserRoots { get; set; }
 }

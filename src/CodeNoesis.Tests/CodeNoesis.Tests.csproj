@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CodeNoesis\CodeNoesis.csproj" />
+    <ProjectReference Include="..\CodeNoesis.CodexSdk\CodeNoesis.CodexSdk.csproj" />
   </ItemGroup>
 
 </Project>

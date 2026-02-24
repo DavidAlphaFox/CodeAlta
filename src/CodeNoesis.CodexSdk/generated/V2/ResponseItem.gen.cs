@@ -28,6 +28,8 @@ public abstract partial record ResponseItem
         public bool? EndTurn { get; set; }
         [JsonPropertyName("id")]
         public string? Id { get; set; }
+        [JsonPropertyName("phase")]
+        public MessagePhase? Phase { get; set; }
         [JsonPropertyName("role")]
         public string Role { get; set; } = string.Empty;
     }
@@ -51,7 +53,7 @@ public abstract partial record ResponseItem
         /// <summary>Set when using the Responses API.</summary>
         [JsonPropertyName("call_id")]
         public string? CallId { get; set; }
-        /// <summary>Set when using the chat completions API.</summary>
+        /// <summary>Legacy id field retained for compatibility with older payloads.</summary>
         [JsonPropertyName("id")]
         public string? Id { get; set; }
         [JsonPropertyName("status")]
@@ -103,7 +105,7 @@ public abstract partial record ResponseItem
     public sealed partial record WebSearchCallResponseItem : ResponseItem
     {
         [JsonPropertyName("action")]
-        public WebSearchAction Action { get; set; } = default!;
+        public WebSearchAction? Action { get; set; }
         [JsonPropertyName("id")]
         public string? Id { get; set; }
         [JsonPropertyName("status")]

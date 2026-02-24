@@ -14,11 +14,14 @@ public sealed partial record ExecCommandApprovalParams
     [JsonPropertyName("command")]
     public List<string> Command { get; set; } = [];
     [JsonPropertyName("conversationId")]
-    public ThreadId ConversationId { get; set; } = default!;
+    public CodeNoesis.CodexSdk.V2.ThreadId ConversationId { get; set; } = default!;
     [JsonPropertyName("cwd")]
     public string Cwd { get; set; } = string.Empty;
     [JsonPropertyName("parsedCmd")]
     public List<ParsedCommand> ParsedCmd { get; set; } = [];
+    /// <summary>Identifier for this specific approval callback.</summary>
+    [JsonPropertyName("approvalId")]
+    public string? ApprovalId { get; set; }
     [JsonPropertyName("reason")]
     public string? Reason { get; set; }
 }

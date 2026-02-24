@@ -27,17 +27,13 @@ public sealed partial record ThreadResumeParams
     public string? Cwd { get; set; }
     [JsonPropertyName("developerInstructions")]
     public string? DeveloperInstructions { get; set; }
-    /// <summary>[UNSTABLE] FOR CODEX CLOUD - DO NOT USE. If specified, the thread will be resumed with the provided history instead of loaded from disk.</summary>
-    [JsonPropertyName("history")]
-    public List<JsonElement>? History { get; set; }
     /// <summary>Configuration overrides for the resumed thread, if any.</summary>
     [JsonPropertyName("model")]
     public string? Model { get; set; }
     [JsonPropertyName("modelProvider")]
     public string? ModelProvider { get; set; }
-    /// <summary>[UNSTABLE] Specify the rollout path to resume from. If specified, the thread_id param will be ignored.</summary>
-    [JsonPropertyName("path")]
-    public string? Path { get; set; }
+    [JsonPropertyName("personality")]
+    public Personality? Personality { get; set; }
     [JsonPropertyName("sandbox")]
     public SandboxMode? Sandbox { get; set; }
 }

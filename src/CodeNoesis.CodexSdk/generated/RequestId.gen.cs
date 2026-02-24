@@ -6,6 +6,9 @@ using System.Text.Json.Serialization;
 
 namespace CodeNoesis.CodexSdk;
 
+/// <summary>
+/// ID of a request, which can be either a string or an integer.
+/// </summary>
 public partial struct RequestId
 {
     public JsonElement Value { get; set; }

@@ -9,63 +9,10 @@ namespace CodeNoesis.CodexSdk.V2;
 /// <summary>
 /// Collaboration mode for a Codex session.
 /// </summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "mode")]
-[JsonDerivedType(typeof(Plan), typeDiscriminator: "plan")]
-[JsonDerivedType(typeof(Pairprogramming), typeDiscriminator: "pairprogramming")]
-[JsonDerivedType(typeof(Execute), typeDiscriminator: "execute")]
-[JsonDerivedType(typeof(Custom), typeDiscriminator: "custom")]
-public abstract partial record CollaborationMode
+public sealed partial record CollaborationMode
 {
-    /// <summary>
-    /// Settings for a collaboration mode.
-    /// </summary>
-    public sealed partial record Plan : CollaborationMode
-    {
-        [JsonPropertyName("developer_instructions")]
-        public string? DeveloperInstructions { get; set; }
-        [JsonPropertyName("model")]
-        public string Model { get; set; } = string.Empty;
-        [JsonPropertyName("reasoning_effort")]
-        public ReasoningEffort? ReasoningEffort { get; set; }
-    }
-
-    /// <summary>
-    /// Settings for a collaboration mode.
-    /// </summary>
-    public sealed partial record Pairprogramming : CollaborationMode
-    {
-        [JsonPropertyName("developer_instructions")]
-        public string? DeveloperInstructions { get; set; }
-        [JsonPropertyName("model")]
-        public string Model { get; set; } = string.Empty;
-        [JsonPropertyName("reasoning_effort")]
-        public ReasoningEffort? ReasoningEffort { get; set; }
-    }
-
-    /// <summary>
-    /// Settings for a collaboration mode.
-    /// </summary>
-    public sealed partial record Execute : CollaborationMode
-    {
-        [JsonPropertyName("developer_instructions")]
-        public string? DeveloperInstructions { get; set; }
-        [JsonPropertyName("model")]
-        public string Model { get; set; } = string.Empty;
-        [JsonPropertyName("reasoning_effort")]
-        public ReasoningEffort? ReasoningEffort { get; set; }
-    }
-
-    /// <summary>
-    /// Settings for a collaboration mode.
-    /// </summary>
-    public sealed partial record Custom : CollaborationMode
-    {
-        [JsonPropertyName("developer_instructions")]
-        public string? DeveloperInstructions { get; set; }
-        [JsonPropertyName("model")]
-        public string Model { get; set; } = string.Empty;
-        [JsonPropertyName("reasoning_effort")]
-        public ReasoningEffort? ReasoningEffort { get; set; }
-    }
-
+    [JsonPropertyName("mode")]
+    public ModeKind Mode { get; set; } = default!;
+    [JsonPropertyName("settings")]
+    public Settings Settings { get; set; } = default!;
 }

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <!--<OutputType>Library</OutputType>-->
     <OutputType>Exe</OutputType>
@@ -34,15 +34,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!--<PackageReference Include="JKToolKit.CodexSDK" />-->
     <PackageReference Include="MinVer">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="NJsonSchema.CodeGeneration.CSharp" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\JKToolKit.CodexSDK\src\JKToolKit.CodexSDK\JKToolKit.CodexSDK.csproj" />
+    <ProjectReference Include="..\CodeNoesis.CodexSdk\CodeNoesis.CodexSdk.csproj" />
   </ItemGroup>
 </Project>

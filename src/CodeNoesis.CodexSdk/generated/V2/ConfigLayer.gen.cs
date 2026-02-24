@@ -14,4 +14,6 @@ public sealed partial record ConfigLayer
     public ConfigLayerSource Name { get; set; } = default!;
     [JsonPropertyName("version")]
     public string Version { get; set; } = string.Empty;
+    [JsonPropertyName("disabledReason")]
+    public string? DisabledReason { get; set; }
 }

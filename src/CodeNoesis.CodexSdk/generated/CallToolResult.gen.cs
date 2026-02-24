@@ -12,9 +12,11 @@ namespace CodeNoesis.CodexSdk;
 public sealed partial record CallToolResult
 {
     [JsonPropertyName("content")]
-    public List<ContentBlock> Content { get; set; } = [];
+    public List<JsonElement> Content { get; set; } = [];
     [JsonPropertyName("isError")]
     public bool? IsError { get; set; }
+    [JsonPropertyName("_meta")]
+    public JsonElement? Meta { get; set; }
     [JsonPropertyName("structuredContent")]
     public JsonElement? StructuredContent { get; set; }
 }

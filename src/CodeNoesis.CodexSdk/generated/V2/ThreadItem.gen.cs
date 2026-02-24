@@ -9,6 +9,7 @@ namespace CodeNoesis.CodexSdk.V2;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(UserMessageThreadItem), typeDiscriminator: "userMessage")]
 [JsonDerivedType(typeof(AgentMessageThreadItem), typeDiscriminator: "agentMessage")]
+[JsonDerivedType(typeof(PlanThreadItem), typeDiscriminator: "plan")]
 [JsonDerivedType(typeof(ReasoningThreadItem), typeDiscriminator: "reasoning")]
 [JsonDerivedType(typeof(CommandExecutionThreadItem), typeDiscriminator: "commandExecution")]
 [JsonDerivedType(typeof(FileChangeThreadItem), typeDiscriminator: "fileChange")]
@@ -18,6 +19,7 @@ namespace CodeNoesis.CodexSdk.V2;
 [JsonDerivedType(typeof(ImageViewThreadItem), typeDiscriminator: "imageView")]
 [JsonDerivedType(typeof(EnteredReviewModeThreadItem), typeDiscriminator: "enteredReviewMode")]
 [JsonDerivedType(typeof(ExitedReviewModeThreadItem), typeDiscriminator: "exitedReviewMode")]
+[JsonDerivedType(typeof(ContextCompactionThreadItem), typeDiscriminator: "contextCompaction")]
 public abstract partial record ThreadItem
 {
     public sealed partial record UserMessageThreadItem : ThreadItem
@@ -29,6 +31,17 @@ public abstract partial record ThreadItem
     }
 
     public sealed partial record AgentMessageThreadItem : ThreadItem
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+        [JsonPropertyName("text")]
+        public string Text { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// EXPERIMENTAL - proposed plan item content. The completed plan item is authoritative and may not match the concatenation of `PlanDelta` text.
+    /// </summary>
+    public sealed partial record PlanThreadItem : ThreadItem
     {
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
@@ -133,6 +146,8 @@ public abstract partial record ThreadItem
 
     public sealed partial record WebSearchThreadItem : ThreadItem
     {
+        [JsonPropertyName("action")]
+        public WebSearchAction? Action { get; set; }
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
         [JsonPropertyName("query")]
@@ -161,6 +176,12 @@ public abstract partial record ThreadItem
         public string Id { get; set; } = string.Empty;
         [JsonPropertyName("review")]
         public string Review { get; set; } = string.Empty;
+    }
+
+    public sealed partial record ContextCompactionThreadItem : ThreadItem
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
     }
 
 }

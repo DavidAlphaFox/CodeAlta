@@ -8,6 +8,10 @@ namespace CodeNoesis.CodexSdk.V2;
 
 public sealed partial record GetAccountRateLimitsResponse
 {
+    /// <summary>Backward-compatible single-bucket view; mirrors the historical payload.</summary>
     [JsonPropertyName("rateLimits")]
     public RateLimitSnapshot RateLimits { get; set; } = default!;
+    /// <summary>Multi-bucket view keyed by metered `limit_id` (for example, `codex`).</summary>
+    [JsonPropertyName("rateLimitsByLimitId")]
+    public JsonElement? RateLimitsByLimitId { get; set; }
 }

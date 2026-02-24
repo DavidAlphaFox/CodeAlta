@@ -6,17 +6,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeNoesis.CodexSdk.V2;
 
-[JsonConverter(typeof(JsonStringEnumConverter<SessionSource>))]
-public enum SessionSource
+public partial struct SessionSource
 {
-    [JsonStringEnumMemberName("cli")]
-    Cli,
-    [JsonStringEnumMemberName("vscode")]
-    Vscode,
-    [JsonStringEnumMemberName("exec")]
-    Exec,
-    [JsonStringEnumMemberName("appServer")]
-    AppServer,
-    [JsonStringEnumMemberName("unknown")]
-    Unknown
+    public JsonElement Value { get; set; }
 }

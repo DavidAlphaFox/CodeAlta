@@ -22,9 +22,14 @@ public abstract partial record SandboxPolicy
     public sealed partial record DangerFullAccessSandboxPolicy : SandboxPolicy;
 
     /// <summary>
-    /// Read-only access to the entire file-system.
+    /// Read-only access configuration.
     /// </summary>
-    public sealed partial record ReadOnlySandboxPolicy : SandboxPolicy;
+    public sealed partial record ReadOnlySandboxPolicy : SandboxPolicy
+    {
+        /// <summary>Read access granted while running under this policy.</summary>
+        [JsonPropertyName("access")]
+        public ReadOnlyAccess Access { get; set; } = default!;
+    }
 
     /// <summary>
     /// Indicates the process is already in an external sandbox. Allows full disk access while honoring the provided network setting.
@@ -50,6 +55,9 @@ public abstract partial record SandboxPolicy
         /// <summary>When set to `true`, outbound network access is allowed. `false` by default.</summary>
         [JsonPropertyName("network_access")]
         public bool? NetworkAccess { get; set; }
+        /// <summary>Read access granted while running under this policy.</summary>
+        [JsonPropertyName("read_only_access")]
+        public ReadOnlyAccess ReadOnlyAccess { get; set; } = default!;
         /// <summary>Additional folders (beyond cwd and possibly TMPDIR) that should be writable from within the sandbox.</summary>
         [JsonPropertyName("writable_roots")]
         public List<AbsolutePathBuf>? WritableRoots { get; set; }

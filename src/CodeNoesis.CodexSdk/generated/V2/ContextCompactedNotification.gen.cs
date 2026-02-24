@@ -6,6 +6,9 @@ using System.Text.Json.Serialization;
 
 namespace CodeNoesis.CodexSdk.V2;
 
+/// <summary>
+/// Deprecated: Use `ContextCompaction` item type instead.
+/// </summary>
 public sealed partial record ContextCompactedNotification
 {
     [JsonPropertyName("threadId")]
