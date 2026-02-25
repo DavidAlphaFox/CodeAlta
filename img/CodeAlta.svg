@@ -12,10 +12,15 @@
         --ca-accent-0: #00D1FF;
         --ca-accent-1: #4F46E5;
         --ca-accent-2: #A855F7;
+        --ca-accentb-0: #7AE8FF;
+        --ca-accentb-1: #7C74FF;
+        --ca-accentb-2: #D8A5FF;
         --ca-shine-0-opacity: 0.18;
         --ca-shine-1-opacity: 0.06;
         --ca-outline: #FFFFFF;
         --ca-outline-opacity: 0.16;
+        --ca-plate-stroke-opacity: 0.55;
+        --ca-plate-ring-opacity: 0.60;
         --ca-shadow: #000000;
         --ca-shadow-opacity: 0.35;
       }
@@ -35,6 +40,11 @@
       <stop offset="0.55" stop-color="var(--ca-accent-1)"/>
       <stop offset="1" stop-color="var(--ca-accent-2)"/>
     </linearGradient>
+    <linearGradient id="accentBright" x1="156" y1="108" x2="372" y2="412" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="var(--ca-accentb-0)"/>
+      <stop offset="0.55" stop-color="var(--ca-accentb-1)"/>
+      <stop offset="1" stop-color="var(--ca-accentb-2)"/>
+    </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
       <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="var(--ca-shadow)" flood-opacity="var(--ca-shadow-opacity)"/>
     </filter>
@@ -50,6 +60,9 @@
 
   <rect x="0" y="0" width="512" height="512" rx="128" fill="url(#bg)"/>
   <rect x="0" y="0" width="512" height="512" rx="128" fill="url(#shine)"/>
+
+  <rect x="7" y="7" width="498" height="498" rx="121" fill="none" stroke="url(#accent)" stroke-opacity="var(--ca-plate-stroke-opacity)" stroke-width="14"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="url(#accentBright)" stroke-opacity="var(--ca-plate-ring-opacity)" stroke-width="4"/>
 
   <g filter="url(#shadow)" transform="matrix(1.230769 0 0 1.230769 -59.076923 -59.076923)">
     <path d="M168 178L112 256L168 334" stroke="var(--ca-ink)" stroke-opacity="var(--ca-ink-opacity)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
