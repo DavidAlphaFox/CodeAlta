@@ -38,6 +38,14 @@
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
       <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="var(--ca-shadow)" flood-opacity="var(--ca-shadow-opacity)"/>
     </filter>
+
+    <mask id="mountainMask" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect x="0" y="0" width="512" height="512" fill="black"/>
+      <path fill-rule="evenodd" clip-rule="evenodd"
+        d="M256 118L122 404H198L256 268L314 404H390L256 118Z
+           M256 186L216 304H296L256 186Z"
+        fill="white"/>
+    </mask>
   </defs>
 
   <rect x="0" y="0" width="512" height="512" rx="128" fill="url(#bg)"/>
@@ -51,6 +59,16 @@
       d="M256 118L122 404H198L256 268L314 404H390L256 118Z
          M256 186L216 304H296L256 186Z"
       fill="url(#accent)"/>
+
+    <path fill-rule="evenodd" clip-rule="evenodd"
+      d="M256 118L122 404H198L256 268L314 404H390L256 118Z
+         M256 186L216 304H296L256 186Z"
+      fill="none"
+      stroke="url(#accent)"
+      stroke-opacity="0.70"
+      stroke-width="16"
+      stroke-linejoin="round"
+      mask="url(#mountainMask)"/>
 
     <path d="M256 118L122 404H198L256 268L314 404H390L256 118Z" stroke="var(--ca-outline)" stroke-opacity="var(--ca-outline-opacity)" stroke-width="6" stroke-linejoin="round"/>
   </g>
