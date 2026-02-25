@@ -1,8 +1,10 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.IO.Pipelines;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
+using XenoAtom.Logging;
 
 namespace CodeNoesis.CodexSdk;
 
@@ -25,6 +27,7 @@ internal sealed class JsonRpcTransport : IAsyncDisposable
     private readonly Channel<ServerMessage> _incomingMessages;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _readLoop;
+    private readonly Logger? _logger;
     private long _nextId;
 
     /// <summary>
@@ -34,15 +37,17 @@ internal sealed class JsonRpcTransport : IAsyncDisposable
     /// <param name="inputStream">The stream to read server messages from (typically stdout of the codex process).</param>
     /// <param name="outputStream">The stream to write client messages to (typically stdin of the codex process).</param>
     /// <param name="jsonOptions">JSON serializer options to use.</param>
+    /// <param name="logger">Logger for diagnostics</param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="inputStream"/>, <paramref name="outputStream"/>, or
     /// <paramref name="jsonOptions"/> is <see langword="null"/>.
     /// </exception>
-    internal JsonRpcTransport(Stream inputStream, Stream outputStream, JsonSerializerOptions jsonOptions)
+    internal JsonRpcTransport(Stream inputStream, Stream outputStream, JsonSerializerOptions jsonOptions, Logger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(inputStream);
         ArgumentNullException.ThrowIfNull(outputStream);
         ArgumentNullException.ThrowIfNull(jsonOptions);
+        ArgumentNullException.ThrowIfNull(logger);
 
         _inputStream = inputStream;
         _outputStream = outputStream;
@@ -52,6 +57,7 @@ internal sealed class JsonRpcTransport : IAsyncDisposable
             SingleReader = false,
             SingleWriter = true
         });
+        _logger = logger;
         _readLoop = Task.Run(() => ReadLoopAsync(_cts.Token));
     }
 
@@ -239,6 +245,12 @@ internal sealed class JsonRpcTransport : IAsyncDisposable
             writer.WriteEndObject();
         }
 
+        if (_logger is not null && _logger.IsEnabled(LogLevel.Trace))
+        {
+            var json = Encoding.UTF8.GetString(bufferWriter.WrittenMemory.Span);
+            _logger.Trace($"Send: {json}");
+        }
+
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -265,6 +277,12 @@ internal sealed class JsonRpcTransport : IAsyncDisposable
             writer.WritePropertyName("result");
             JsonSerializer.Serialize(writer, result, _jsonOptions);
             writer.WriteEndObject();
+        }
+        
+        if (_logger is not null && _logger.IsEnabled(LogLevel.Trace))
+        {
+            var json = Encoding.UTF8.GetString(bufferWriter.WrittenMemory.Span);
+            _logger.Trace($"Send Response: {json}");
         }
 
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -333,6 +351,13 @@ internal sealed class JsonRpcTransport : IAsyncDisposable
             return;
 
         var reader = new Utf8JsonReader(lineBytes);
+
+        if (_logger is not null && _logger.IsEnabled(LogLevel.Trace))
+        {
+            var json = Encoding.UTF8.GetString(lineBytes);
+            _logger.Trace($"Received: {json}");
+        }
+
         JsonElement element;
         try
         {

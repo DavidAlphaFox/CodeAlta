@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CodeNoesis.CodexSdk.V2;
+using XenoAtom.Logging;
 
 namespace CodeNoesis.CodexSdk;
 
@@ -43,6 +44,11 @@ public sealed class CodexClient : IAsyncDisposable
     private readonly JsonSerializerOptions _jsonOptions;
     private bool _disposed;
 
+    /// <summary>
+    /// Represents the name of the logger used for logging events in the application.
+    /// </summary>
+    public const string LoggerName = "codex.app-server";
+
     private CodexClient(CodexProcess process, JsonRpcTransport transport, JsonSerializerOptions jsonOptions)
     {
         _process = process;
@@ -79,9 +85,10 @@ public sealed class CodexClient : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(clientInfo);
 
-        var process = CodexProcess.Start(processOptions, cancellationToken);
+        var logger = LogManager.GetLogger(LoggerName);
+        var process = CodexProcess.Start(processOptions, cancellationToken, logger);
         var jsonOptions = CreateJsonSerializerOptions();
-        var transport = new JsonRpcTransport(process.StandardOutput, process.StandardInput, jsonOptions);
+        var transport = new JsonRpcTransport(process.StandardOutput, process.StandardInput, jsonOptions, logger);
 
         var client = new CodexClient(process, transport, jsonOptions);
         try
@@ -129,8 +136,9 @@ public sealed class CodexClient : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(serverOutput);
         ArgumentNullException.ThrowIfNull(clientInput);
 
+        var logger = LogManager.GetLogger(LoggerName);
         var jsonOptions = CreateJsonSerializerOptions();
-        var transport = new JsonRpcTransport(serverOutput, clientInput, jsonOptions);
+        var transport = new JsonRpcTransport(serverOutput, clientInput, jsonOptions, logger);
 
         var client = new CodexClient(process: null!, transport, jsonOptions);
         try

@@ -6,6 +6,8 @@ using LLama.Native;
 using System.Diagnostics;
 using System.Numerics.Tensors;
 using System.Text.Json;
+using XenoAtom.Logging;
+using XenoAtom.Logging.Writers;
 
 /*
 NativeLibraryConfig.All.WithLogCallback((level, message) =>
@@ -62,6 +64,18 @@ for (int i = 0; i < 100; i++)
 return;
 */
 
+LogManager.Initialize(new LogManagerConfig()
+{
+    RootLogger =
+    {
+        MinimumLevel = LogLevel.Trace,
+        Writers =
+        {
+            new TerminalLogWriter()
+        }
+    },
+});
+
 var options = CodexClient.CreateJsonSerializerOptions();
 
 var test = new ThreadStartParams()
@@ -90,6 +104,13 @@ foreach (var model in models.Data)
 {
     Console.WriteLine(model);
 }
+
+var experimentalList = await codexClient.ExperimentalFeatureListAsync(new ExperimentalFeatureListParams());
+experimentalList.Data.ForEach(feature =>
+{
+    Console.WriteLine($"Experimental feature: {feature}");
+});
+
 
 return;
 var accountRead = await codexClient.AccountReadAsync(new GetAccountParams());

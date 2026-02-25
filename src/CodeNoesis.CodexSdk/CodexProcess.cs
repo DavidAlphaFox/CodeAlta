@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using XenoAtom.Logging;
 
 namespace CodeNoesis.CodexSdk;
 
@@ -44,6 +45,7 @@ public sealed class CodexProcess : IAsyncDisposable
     /// (PATH lookup with fnm fallback enabled).
     /// </param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <param name="logger">The logger</param>
     /// <returns>A running <see cref="CodexProcess"/> instance.</returns>
     /// <exception cref="FileNotFoundException">
     /// Thrown when the codex executable cannot be found.
@@ -51,18 +53,23 @@ public sealed class CodexProcess : IAsyncDisposable
     /// <exception cref="InvalidOperationException">
     /// Thrown when the process fails to start.
     /// </exception>
-    public static CodexProcess Start(CodexProcessOptions? options = null, CancellationToken cancellationToken = default)
+    public static CodexProcess Start(CodexProcessOptions? options = null, CancellationToken cancellationToken = default, Logger? logger = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         options ??= new CodexProcessOptions();
 
         var exePath = options.CodexPath
-            ?? FindExecutable("codex")
-            ?? (options.TryFnmLookup ? FindExecutableViaFnm("codex") : null)
-            ?? throw new FileNotFoundException(
-                "Could not find the 'codex' executable on PATH. " +
-                "Ensure codex is installed (e.g., via npm) and available in your PATH, " +
-                "or provide an explicit path via CodexProcessOptions.CodexPath.");
+                      ?? FindExecutable("codex")
+                      ?? (options.TryFnmLookup ? FindExecutableViaFnm("codex") : null)
+                      ?? throw new FileNotFoundException(
+                          "Could not find the 'codex' executable on PATH. " +
+                          "Ensure codex is installed (e.g., via npm) and available in your PATH, " +
+                          "or provide an explicit path via CodexProcessOptions.CodexPath.");
+
+        if (logger is not null && logger.IsEnabled(LogLevel.Debug))
+        {
+            logger.Debug($"Starting codex process with executable: {exePath}");
+        }
 
         var psi = new ProcessStartInfo(exePath, "app-server --listen stdio://")
         {
@@ -74,7 +81,7 @@ public sealed class CodexProcess : IAsyncDisposable
         };
 
         var process = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start codex process: {exePath}");
+                      ?? throw new InvalidOperationException($"Failed to start codex process: {exePath}");
 
         return new CodexProcess(process);
     }

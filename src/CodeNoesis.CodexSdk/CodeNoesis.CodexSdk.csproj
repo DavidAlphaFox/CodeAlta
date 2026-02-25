@@ -12,4 +12,8 @@
     <InternalsVisibleTo Include="CodeNoesis.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="XenoAtom.Logging" />
+  </ItemGroup>
+
 </Project>
