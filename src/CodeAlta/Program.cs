@@ -6,8 +6,31 @@ using LLama.Native;
 using System.Diagnostics;
 using System.Numerics.Tensors;
 using System.Text.Json;
+using CodeAlta.Agent;
+using CodeAlta.Agent.Codex;
+using CodeAlta.Agent.Copilot;
+using GitHub.Copilot.SDK;
 using XenoAtom.Logging;
 using XenoAtom.Logging.Writers;
+
+
+var factory = new AgentBackendFactory();
+
+factory.RegisterCodex(new CodexAgentBackendOptions()
+{
+    ApprovalPolicy = CodeAlta.CodexSdk.V2.AskForApproval.Never,
+    ExperimentalApi = true,
+});
+factory.RegisterCopilot(new CopilotAgentBackendOptions());
+
+
+var codex = factory.Create(AgentBackendIds.Codex);
+
+var models = await codex.ListModelsAsync();
+foreach (var model in models)
+{
+    Console.WriteLine(model);
+}
 
 /*
 NativeLibraryConfig.All.WithLogCallback((level, message) =>
@@ -62,7 +85,7 @@ for (int i = 0; i < 100; i++)
 }
 
 return;
-*/
+
 
 LogManager.Initialize(new LogManagerConfig()
 {
@@ -174,3 +197,6 @@ public static class EmbeddingSimilarity
     public static float DotSimilarityNormalized(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
         => TensorPrimitives.Dot(a, b);
 }
+
+
+*/

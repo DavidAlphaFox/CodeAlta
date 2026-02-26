@@ -48,6 +48,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\CodeAlta.Agent.Codex\CodeAlta.Agent.Codex.csproj" />
+    <ProjectReference Include="..\CodeAlta.Agent.Copilot\CodeAlta.Agent.Copilot.csproj" />
+    <ProjectReference Include="..\CodeAlta.Agent\CodeAlta.Agent.csproj" />
     <ProjectReference Include="..\CodeAlta.CodexSdk\CodeAlta.CodexSdk.csproj" />
   </ItemGroup>
 </Project>
