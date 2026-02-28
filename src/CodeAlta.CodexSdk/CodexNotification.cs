@@ -29,6 +29,29 @@ public abstract record CodexNotification
     /// <summary>Emitted when a thread's name is updated.</summary>
     public sealed record ThreadNameUpdated(ThreadNameUpdatedNotification Data) : CodexNotification;
 
+    /// <summary>Emitted when a loaded thread's status changes (e.g., loaded -&gt; notLoaded).</summary>
+    public sealed record ThreadStatusChanged(ThreadStatusChangedNotification Data) : CodexNotification;
+
+    /// <summary>Emitted when a thread is unloaded/closed by the server.</summary>
+    public sealed record ThreadClosed(ThreadClosedNotification Data) : CodexNotification;
+
+    // Thread realtime (experimental)
+
+    /// <summary>Emitted when thread realtime starts for a thread.</summary>
+    public sealed record ThreadRealtimeStarted(ThreadRealtimeStartedNotification Data) : CodexNotification;
+
+    /// <summary>Emitted when a raw realtime item is added (non-audio).</summary>
+    public sealed record ThreadRealtimeItemAdded(ThreadRealtimeItemAddedNotification Data) : CodexNotification;
+
+    /// <summary>Emitted when an output audio delta is streamed for a realtime session.</summary>
+    public sealed record ThreadRealtimeOutputAudioDelta(ThreadRealtimeOutputAudioDeltaNotification Data) : CodexNotification;
+
+    /// <summary>Emitted when thread realtime encounters an error.</summary>
+    public sealed record ThreadRealtimeError(ThreadRealtimeErrorNotification Data) : CodexNotification;
+
+    /// <summary>Emitted when the realtime transport closes.</summary>
+    public sealed record ThreadRealtimeClosed(ThreadRealtimeClosedNotification Data) : CodexNotification;
+
     // ── Turn lifecycle ────────────────────────────────────────────
 
     /// <summary>Emitted when a turn begins on a thread.</summary>
@@ -129,6 +152,14 @@ public abstract record CodexNotification
     /// <summary>Emitted when an MCP server OAuth login flow completes.</summary>
     public sealed record McpServerOauthLoginCompleted(McpServerOauthLoginCompletedNotification Data) : CodexNotification;
 
+    // Fuzzy file search (experimental)
+
+    /// <summary>Emitted when the fuzzy file search session returns updated matches.</summary>
+    public sealed record FuzzyFileSearchSessionUpdated(FuzzyFileSearchSessionUpdatedNotification Data) : CodexNotification;
+
+    /// <summary>Emitted when the fuzzy file search session completes indexing/matching for the query.</summary>
+    public sealed record FuzzyFileSearchSessionCompleted(FuzzyFileSearchSessionCompletedNotification Data) : CodexNotification;
+
     // ── Config ────────────────────────────────────────────────────
 
     /// <summary>Emitted when a config warning is detected.</summary>
@@ -146,6 +177,14 @@ public abstract record CodexNotification
 
     /// <summary>Emitted when world-writable directories are detected on Windows.</summary>
     public sealed record WindowsWorldWritableWarning(WindowsWorldWritableWarningNotification Data) : CodexNotification;
+
+    /// <summary>Emitted when Windows sandbox setup completes.</summary>
+    public sealed record WindowsSandboxSetupCompleted(WindowsSandboxSetupCompletedNotification Data) : CodexNotification;
+
+    // Server request lifecycle
+
+    /// <summary>Emitted when a pending server request has been resolved or cleared.</summary>
+    public sealed record ServerRequestResolved(ServerRequestResolvedNotification Data) : CodexNotification;
 
     // ── Catch-all ─────────────────────────────────────────────────
 
