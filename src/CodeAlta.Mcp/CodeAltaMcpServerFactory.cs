@@ -1,4 +1,5 @@
 using CodeAlta.DotNet;
+using CodeAlta.Mcp.Logging;
 using CodeAlta.Mcp.Tools;
 using CodeAlta.Persistence;
 using CodeAlta.Search;
@@ -7,6 +8,7 @@ using CodeAlta.Workspaces.Bootstrap;
 using CodeAlta.Workspaces.Roles;
 using CodeAlta.Workspaces.Skills;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
@@ -60,6 +62,11 @@ public sealed class CodeAltaMcpServerFactory
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddSingleton(_options);
         serviceCollection.AddSingleton(_sessionRegistry);
+        serviceCollection.AddLogging(builder =>
+        {
+            builder.ClearProviders();
+            builder.AddProvider(new XenoAtomLoggerProvider());
+        });
 
         AddForwardedService<TaskRepository>(serviceCollection);
         AddForwardedService<ArtifactStore>(serviceCollection);
