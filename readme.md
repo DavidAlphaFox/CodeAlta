@@ -6,7 +6,9 @@ An agentic AI coding CLI assistant developed in .NET.
 
 ## ✨ Features
 
-- TODO
+- Workspace descriptors and machine profile overrides (`CodeAlta.Workspaces`)
+- Scope resolution and checkout planning APIs for multi-repo workspaces
+- MSTest coverage for workspace YAML parsing, template resolution, and bootstrap planning
 
 ## 📖 User Guide
 

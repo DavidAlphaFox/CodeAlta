@@ -31,5 +31,7 @@
   <Project Path="CodeAlta.Agent.Copilot/CodeAlta.Agent.Copilot.csproj" />
   <Project Path="CodeAlta.CodexSdk/CodeAlta.CodexSdk.csproj" Id="4507c156-d675-4280-bd1c-2a5d8285c07f" />
   <Project Path="CodeAlta.Tests/CodeAlta.Tests.csproj" />
+  <Project Path="CodeAlta.Workspaces.Tests/CodeAlta.Workspaces.Tests.csproj" />
+  <Project Path="CodeAlta.Workspaces/CodeAlta.Workspaces.csproj" />
   <Project Path="CodeAlta/CodeAlta.csproj" />
 </Solution>

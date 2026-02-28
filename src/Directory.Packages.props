@@ -12,6 +12,7 @@
     <PackageVersion Include="MSTest" Version="4.1.0" />
     <PackageVersion Include="NJsonSchema" Version="11.5.2" />
     <PackageVersion Include="NJsonSchema.CodeGeneration.CSharp" Version="11.5.2" />
+    <PackageVersion Include="SharpYaml" Version="2.1.4" />
     <PackageVersion Include="XenoAtom.CommandLine.Terminal" Version="2.0.2" />
     <PackageVersion Include="XenoAtom.Logging" Version="1.1.1" />
     <PackageVersion Include="XenoAtom.Logging.Terminal" Version="1.1.1" />
