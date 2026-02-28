@@ -5,10 +5,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SharpYaml" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\CodeAlta.Agent\CodeAlta.Agent.csproj" />
     <ProjectReference Include="..\CodeAlta.Mcp\CodeAlta.Mcp.csproj" />
     <ProjectReference Include="..\CodeAlta.Persistence\CodeAlta.Persistence.csproj" />

@@ -2,9 +2,9 @@ using System.Text.Json;
 using CodeAlta.Agent;
 using CodeAlta.Orchestration;
 using CodeAlta.Orchestration.Context;
-using CodeAlta.Orchestration.Roles;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Persistence;
+using CodeAlta.Workspaces.Roles;
 
 namespace CodeAlta.Orchestration.Tests;
 
