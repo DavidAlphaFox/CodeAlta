@@ -1,5 +1,9 @@
+using System.Text;
+using CodeAlta.Agent;
 using CodeAlta.DotNet;
 using CodeAlta.Mcp;
+using CodeAlta.Orchestration.Mcp;
+using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Persistence;
 using CodeAlta.Search;
 using CodeAlta.Workspaces;
@@ -20,6 +24,8 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     private readonly DotNetDiagnosticsService _dotNetDiagnosticsService;
     private readonly Indexer _indexer;
     private readonly CodeAltaMcpServerFactory _mcpFactory;
+    private readonly McpToolBridge _mcpToolBridge;
+    private readonly AgentHub _agentHub;
 
     private TerminalApp? _app;
     private DockLayout? _root;
@@ -42,6 +48,12 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     private ChatPromptEditor? _chatInput;
     private Visual? _chatInputView;
     private MarkdownMarkupConverter? _chatMarkdownConverter;
+    private AgentBackendId _chatBackendId = AgentBackendIds.Copilot;
+    private AgentId? _chatAgentId;
+    private IDisposable? _chatEventSubscription;
+    private bool _chatAutoApprove;
+    private StringBuilder? _chatStreamingBuffer;
+    private MarkdownControl? _chatStreamingMarkdown;
 
     public CodeAltaTerminalUi(
         WorkspaceCatalog workspaceCatalog,
@@ -51,7 +63,9 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         DotNetIndexService dotNetIndexService,
         DotNetDiagnosticsService dotNetDiagnosticsService,
         Indexer indexer,
-        CodeAltaMcpServerFactory mcpFactory)
+        CodeAltaMcpServerFactory mcpFactory,
+        McpToolBridge mcpToolBridge,
+        AgentHub agentHub)
     {
         ArgumentNullException.ThrowIfNull(workspaceCatalog);
         ArgumentNullException.ThrowIfNull(workspaceResolver);
@@ -61,6 +75,8 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(dotNetDiagnosticsService);
         ArgumentNullException.ThrowIfNull(indexer);
         ArgumentNullException.ThrowIfNull(mcpFactory);
+        ArgumentNullException.ThrowIfNull(mcpToolBridge);
+        ArgumentNullException.ThrowIfNull(agentHub);
 
         _workspaceCatalog = workspaceCatalog;
         _workspaceResolver = workspaceResolver;
@@ -70,6 +86,8 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         _dotNetDiagnosticsService = dotNetDiagnosticsService;
         _indexer = indexer;
         _mcpFactory = mcpFactory;
+        _mcpToolBridge = mcpToolBridge;
+        _agentHub = agentHub;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -111,6 +129,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _chatEventSubscription?.Dispose();
         if (_app is not null)
         {
             await _app.DisposeAsync().ConfigureAwait(false);
@@ -208,6 +227,10 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         var controls = new WrapHStack(
             [
                 new Button(new TextBlock("Clear")).Click(ClearChat),
+                new Button(new TextBlock("Start Copilot")).Click(() => _ = EnsureChatSessionAsync(AgentBackendIds.Copilot)),
+                new Button(new TextBlock("Start Codex")).Click(() => _ = EnsureChatSessionAsync(AgentBackendIds.Codex)),
+                new Button(new TextBlock("Abort")).Click(() => _ = AbortChatAsync()),
+                new Button(new TextBlock("Toggle Auto-Approve")).Click(ToggleChatAutoApprove),
                 new Button(new TextBlock("Send")).Click(() => _chatInput?.Accept()),
             ])
         {
@@ -619,16 +642,26 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             {
                 _chatInput.Text = string.Empty;
             }
+
+            _chatStreamingMarkdown = null;
+            _chatStreamingBuffer = null;
         });
     }
 
-    private Task SendChatMessageAsync(string text)
+    private async Task SendChatMessageAsync(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
-            return Task.CompletedTask;
+            return;
         }
 
+        var flow = _chatFlow;
+        if (flow is null)
+        {
+            return;
+        }
+
+        MarkdownControl? streamingMarkdown = null;
         PostToUi(() =>
         {
             if (_chatInput is not null)
@@ -636,19 +669,53 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
                 _chatInput.Text = string.Empty;
             }
 
-            var flow = _chatFlow;
-            if (flow is null)
-            {
-                return;
-            }
-
             flow.Items.Add(CreateUserChatItem(text));
-            flow.Items.Add(CreateAssistantChatItem(
-                "Chat UI is wired (PromptEditor + DocumentFlow + MarkdownControl), but agent runtime integration is not enabled yet."));
+
+            var assistantItem = CreateAssistantStreamingChatItem(out streamingMarkdown);
+            flow.Items.Add(assistantItem);
             flow.ScrollToTail();
         });
 
-        return Task.CompletedTask;
+        if (streamingMarkdown is null)
+        {
+            return;
+        }
+
+        _chatStreamingMarkdown = streamingMarkdown;
+        _chatStreamingBuffer = new StringBuilder();
+
+        try
+        {
+            await EnsureChatSessionAsync(_chatBackendId).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            PostToUi(() =>
+            {
+                streamingMarkdown.Markdown = $"**Failed to start agent session:** {ex.Message}";
+            });
+            return;
+        }
+
+        if (_chatAgentId is null)
+        {
+            PostToUi(() => streamingMarkdown.Markdown = "**Agent session is not available.**");
+            return;
+        }
+
+        SetStatus($"Running agent ({_chatBackendId.Value})...");
+        try
+        {
+            await _agentHub.RunAsync(
+                _chatAgentId.Value,
+                new AgentSendOptions { Input = AgentInput.Text(text) },
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            PostToUi(() => streamingMarkdown.Markdown = $"**Agent run failed:** {ex.Message}");
+            SetStatus($"Agent run failed: {ex.Message}");
+        }
     }
 
     private static DocumentFlowItem CreateUserChatItem(string markdown)
@@ -697,6 +764,214 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             BackgroundStyle = Style.None.WithBackground(Colors.DarkSlateGray),
             BorderStyle = Style.None.WithForeground(Colors.SlateGray),
         };
+    }
+
+    private static DocumentFlowItem CreateAssistantStreamingChatItem(out MarkdownControl markdownControl)
+    {
+        markdownControl = new MarkdownControl(string.Empty)
+        {
+            HorizontalAlignment = Align.Stretch,
+            VerticalAlignment = Align.Stretch,
+            Options = MarkdownRenderOptions.Default with
+            {
+                WrapCodeBlocks = true,
+                MaxCodeBlockHeight = 14,
+            },
+        };
+
+        var content = new FlowDocument().Add(markdownControl);
+        return new DocumentFlowItem
+        {
+            Content = content,
+            Alignment = DocumentFlowAlignment.Left,
+            MaxWidth = 84,
+            BackgroundStyle = Style.None.WithBackground(Colors.DarkSlateGray),
+            BorderStyle = Style.None.WithForeground(Colors.SlateGray),
+        };
+    }
+
+    private void ToggleChatAutoApprove()
+    {
+        _chatAutoApprove = !_chatAutoApprove;
+        SetStatus(_chatAutoApprove ? "Chat approvals: auto-approve ON" : "Chat approvals: auto-approve OFF");
+    }
+
+    private async Task AbortChatAsync()
+    {
+        var agentId = _chatAgentId;
+        if (agentId is null)
+        {
+            SetStatus("No active chat agent session.");
+            return;
+        }
+
+        SetStatus("Aborting agent run...");
+        try
+        {
+            // Abort is best-effort; we don't currently surface cancellation at the hub level beyond the session abort.
+            await _agentHub.AbortAsync(agentId.Value, CancellationToken.None).ConfigureAwait(false);
+            SetStatus("Abort requested.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Abort failed: {ex.Message}");
+        }
+    }
+
+    private async Task EnsureChatSessionAsync(AgentBackendId backendId)
+    {
+        if (_chatAgentId is not null && string.Equals(_chatBackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _chatBackendId = backendId;
+
+        SetStatus($"Starting chat session ({backendId.Value})...");
+
+        var tools = backendId == AgentBackendIds.Copilot
+            ? await _mcpToolBridge.GetToolsAsync().ConfigureAwait(false)
+            : null;
+
+        var identity = await _agentHub.RegisterAgentAsync(
+                "chat.global",
+                new CodeAlta.Orchestration.AgentScope { Kind = CodeAlta.Orchestration.AgentScopeKind.Global },
+                backendId,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        _chatAgentId = identity.AgentId;
+
+        _chatEventSubscription?.Dispose();
+        _chatEventSubscription = null;
+
+        await _agentHub.StartSessionAsync(
+                identity.AgentId,
+                new AgentSessionCreateOptions
+                {
+                    Streaming = true,
+                    WorkingDirectory = Environment.CurrentDirectory,
+                    Tools = tools,
+                    OnPermissionRequest = HandleChatPermissionRequestAsync,
+                    OnUserInputRequest = HandleChatUserInputRequestAsync,
+                },
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        _chatEventSubscription = await _agentHub.SubscribeSessionEventsAsync(
+                identity.AgentId,
+                HandleChatAgentEvent,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        SetStatus($"Chat session ready ({backendId.Value}).");
+    }
+
+    private Task<AgentPermissionDecision> HandleChatPermissionRequestAsync(
+        AgentPermissionRequest request,
+        CancellationToken cancellationToken)
+    {
+        _ = request;
+        _ = cancellationToken;
+
+        if (_chatAutoApprove)
+        {
+            return Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce));
+        }
+
+        PostToUi(() =>
+        {
+            _chatFlow?.Items.Add(CreateAssistantChatItem(
+                "**Permission request denied.** Enable auto-approve to allow backend actions."));
+            _chatFlow?.ScrollToTail();
+        });
+
+        return Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.Deny));
+    }
+
+    private Task<AgentUserInputResponse> HandleChatUserInputRequestAsync(
+        AgentUserInputRequest request,
+        CancellationToken cancellationToken)
+    {
+        _ = cancellationToken;
+        var answers = request.Questions.ToDictionary(static x => x.Id, static _ => string.Empty, StringComparer.Ordinal);
+
+        PostToUi(() =>
+        {
+            _chatFlow?.Items.Add(CreateAssistantChatItem(
+                "**User input requested by backend.** This UI does not yet support interactive answers; returning empty responses."));
+            _chatFlow?.ScrollToTail();
+        });
+
+        return Task.FromResult(new AgentUserInputResponse(answers));
+    }
+
+    private void HandleChatAgentEvent(AgentEvent @event)
+    {
+        switch (@event)
+        {
+            case AgentAssistantMessageDeltaEvent delta:
+                AppendAssistantDelta(delta.Delta);
+                break;
+            case AgentAssistantMessageEvent message:
+                FinalizeAssistantMessage(message.Content);
+                break;
+            case AgentSessionIdleEvent:
+                SetStatus($"Agent idle ({_chatBackendId.Value}).");
+                _chatStreamingMarkdown = null;
+                _chatStreamingBuffer = null;
+                break;
+            case AgentErrorEvent error:
+                FinalizeAssistantMessage($"**Agent error:** {error.Message}");
+                break;
+        }
+    }
+
+    private void AppendAssistantDelta(string delta)
+    {
+        if (string.IsNullOrEmpty(delta))
+        {
+            return;
+        }
+
+        var buffer = _chatStreamingBuffer;
+        var markdown = _chatStreamingMarkdown;
+        if (buffer is null || markdown is null)
+        {
+            return;
+        }
+
+        buffer.Append(delta);
+        var text = buffer.ToString();
+
+        PostToUi(() =>
+        {
+            markdown.Markdown = text;
+            _chatFlow?.ScrollToTail();
+        });
+    }
+
+    private void FinalizeAssistantMessage(string content)
+    {
+        var markdown = _chatStreamingMarkdown;
+        if (markdown is null)
+        {
+            PostToUi(() =>
+            {
+                _chatFlow?.Items.Add(CreateAssistantChatItem(content));
+                _chatFlow?.ScrollToTail();
+            });
+            return;
+        }
+
+        PostToUi(() =>
+        {
+            markdown.Markdown = content;
+            _chatFlow?.ScrollToTail();
+        });
+
+        _chatStreamingMarkdown = null;
+        _chatStreamingBuffer = null;
     }
 
     private void SetStatus(string message)

@@ -1,6 +1,11 @@
+using CodeAlta.Agent;
+using CodeAlta.Agent.Codex;
+using CodeAlta.Agent.Copilot;
 using CodeAlta.DotNet;
 using CodeAlta.Mcp;
 using CodeAlta.Orchestration;
+using CodeAlta.Orchestration.Mcp;
+using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Persistence;
 using CodeAlta.Search;
 using CodeAlta.Workspaces;
@@ -30,6 +35,8 @@ internal sealed class TerminalHost : IAsyncDisposable
     private readonly DotNetIndexService _dotNetIndexService;
     private readonly DotNetDiagnosticsService _dotNetDiagnosticsService;
     private readonly Indexer _indexer;
+    private readonly McpToolBridge _mcpToolBridge;
+    private readonly AgentHub _agentHub;
 
     private TerminalHost(
         IServiceProvider mcpServices,
@@ -40,7 +47,9 @@ internal sealed class TerminalHost : IAsyncDisposable
         SearchService searchService,
         DotNetIndexService dotNetIndexService,
         DotNetDiagnosticsService dotNetDiagnosticsService,
-        Indexer indexer)
+        Indexer indexer,
+        McpToolBridge mcpToolBridge,
+        AgentHub agentHub)
     {
         _mcpServices = mcpServices;
         _mcpFactory = mcpFactory;
@@ -51,6 +60,8 @@ internal sealed class TerminalHost : IAsyncDisposable
         _dotNetIndexService = dotNetIndexService;
         _dotNetDiagnosticsService = dotNetDiagnosticsService;
         _indexer = indexer;
+        _mcpToolBridge = mcpToolBridge;
+        _agentHub = agentHub;
     }
 
     public static async Task<TerminalHost> CreateAsync(CancellationToken cancellationToken)
@@ -143,6 +154,13 @@ internal sealed class TerminalHost : IAsyncDisposable
             mcpServices.GetRequiredService<McpSessionRegistry>(),
             mcpServices.GetRequiredService<CodeAltaMcpOptions>());
 
+        var backendFactory = new AgentBackendFactory();
+        backendFactory.RegisterCodex(new CodexAgentBackendOptions());
+        backendFactory.RegisterCopilot(new CopilotAgentBackendOptions());
+
+        var agentHub = new AgentHub(backendFactory, agentRepository);
+        var mcpToolBridge = new McpToolBridge(mcpFactory);
+
         return new TerminalHost(
             mcpServices,
             mcpFactory,
@@ -152,7 +170,9 @@ internal sealed class TerminalHost : IAsyncDisposable
             searchService,
             dotNetIndexService,
             dotNetDiagnosticsService,
-            indexer);
+            indexer,
+            mcpToolBridge,
+            agentHub);
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -165,22 +185,28 @@ internal sealed class TerminalHost : IAsyncDisposable
             _dotNetIndexService,
             _dotNetDiagnosticsService,
             _indexer,
-            _mcpFactory);
+            _mcpFactory,
+            _mcpToolBridge,
+            _agentHub);
 
         await ui.RunAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
+        await _mcpToolBridge.DisposeAsync().ConfigureAwait(false);
+        await _agentHub.DisposeAsync().ConfigureAwait(false);
+
         switch (_mcpServices)
         {
             case IAsyncDisposable asyncDisposable:
-                return asyncDisposable.DisposeAsync();
+                await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+                break;
             case IDisposable disposable:
                 disposable.Dispose();
-                return ValueTask.CompletedTask;
+                break;
             default:
-                return ValueTask.CompletedTask;
+                break;
         }
     }
 

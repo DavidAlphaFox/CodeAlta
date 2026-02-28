@@ -190,6 +190,45 @@ public sealed class OrchestrationInfrastructureTests
         Assert.IsTrue(events.OfType<RunCompletedEvent>().Any());
     }
 
+    [TestMethod]
+    public async Task AgentHub_SubscribeSessionEventsAsync_ForwardsSessionEvents()
+    {
+        using var temp = TempDirectory.Create();
+        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
+        var repository = new AgentRepository(db);
+
+        var backendFactory = new AgentBackendFactory();
+        backendFactory.Register("fake", static () => new FakeBackend());
+
+        await using var hub = new AgentHub(backendFactory, repository);
+        var identity = await hub.RegisterAgentAsync(
+            "builder.project",
+            new AgentScope { Kind = AgentScopeKind.Project, Id = "project-1" },
+            new AgentBackendId("fake")).ConfigureAwait(false);
+
+        await hub.StartSessionAsync(
+            identity.AgentId,
+            new AgentSessionCreateOptions
+            {
+                OnPermissionRequest = static (_, _) =>
+                    Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+            }).ConfigureAwait(false);
+
+        var received = new List<AgentEvent>();
+        using var subscription = await hub.SubscribeSessionEventsAsync(
+                identity.AgentId,
+                received.Add)
+            .ConfigureAwait(false);
+
+        _ = await hub.RunAsync(
+                identity.AgentId,
+                new AgentSendOptions { Input = AgentInput.Text("hello") })
+            .ConfigureAwait(false);
+
+        Assert.IsTrue(received.OfType<AgentAssistantMessageEvent>().Any());
+        Assert.IsTrue(received.OfType<AgentSessionIdleEvent>().Any());
+    }
+
     private static async Task<CodeAltaDb> CreateDbAsync(string rootPath)
     {
         var dbPath = Path.Combine(rootPath, "state", "db", "codealta.db");
@@ -266,6 +305,8 @@ public sealed class OrchestrationInfrastructureTests
         {
             private readonly FakeBackend _backend;
             private readonly List<AgentEvent> _events = [];
+            private readonly List<Action<AgentEvent>> _subscribers = [];
+            private readonly object _subscriberLock = new();
 
             public FakeSession(FakeBackend backend, string? sessionId = null)
             {
@@ -297,26 +338,57 @@ public sealed class OrchestrationInfrastructureTests
 
             public IDisposable Subscribe(Action<AgentEvent> handler)
             {
-                return DisposableAction.Create(() => { });
+                ArgumentNullException.ThrowIfNull(handler);
+
+                lock (_subscriberLock)
+                {
+                    _subscribers.Add(handler);
+                }
+
+                return DisposableAction.Create(() =>
+                {
+                    lock (_subscriberLock)
+                    {
+                        _subscribers.Remove(handler);
+                    }
+                });
             }
 
             public Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default)
             {
                 ArgumentNullException.ThrowIfNull(options);
                 var runId = new AgentRunId($"fake-run-{Interlocked.Increment(ref _backend._runCounter)}");
-                _events.Add(
-                    new AgentAssistantMessageEvent(
-                        BackendId,
-                        SessionId,
-                        DateTimeOffset.UtcNow,
-                        runId,
-                        "ok"));
-                _events.Add(
-                    new AgentSessionIdleEvent(
-                        BackendId,
-                        SessionId,
-                        DateTimeOffset.UtcNow));
+                var message = new AgentAssistantMessageEvent(
+                    BackendId,
+                    SessionId,
+                    DateTimeOffset.UtcNow,
+                    runId,
+                    "ok");
+                var idle = new AgentSessionIdleEvent(
+                    BackendId,
+                    SessionId,
+                    DateTimeOffset.UtcNow);
+
+                _events.Add(message);
+                _events.Add(idle);
+
+                Publish(message);
+                Publish(idle);
                 return Task.FromResult(runId);
+            }
+
+            private void Publish(AgentEvent @event)
+            {
+                Action<AgentEvent>[] subscribers;
+                lock (_subscriberLock)
+                {
+                    subscribers = _subscribers.ToArray();
+                }
+
+                foreach (var subscriber in subscribers)
+                {
+                    subscriber(@event);
+                }
             }
 
             public Task AbortAsync(CancellationToken cancellationToken = default)

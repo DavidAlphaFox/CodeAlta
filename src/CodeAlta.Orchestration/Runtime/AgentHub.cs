@@ -217,6 +217,92 @@ public sealed class AgentHub : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Subscribes to normalized agent events from the active agent session.
+    /// </summary>
+    /// <param name="agentId">Agent id.</param>
+    /// <param name="handler">Event handler.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>An <see cref="IDisposable"/> that unsubscribes when disposed.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="handler"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the agent has no active session.</exception>
+    public async Task<IDisposable> SubscribeSessionEventsAsync(
+        AgentId agentId,
+        Action<AgentEvent> handler,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+
+        SessionEntry entry;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_sessions.TryGetValue(agentId, out entry!))
+            {
+                throw new InvalidOperationException($"Agent '{agentId}' does not have an active session.");
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        return entry.Session.Subscribe(handler);
+    }
+
+    /// <summary>
+    /// Retrieves the stored history for the active agent session (best effort).
+    /// </summary>
+    /// <param name="agentId">Agent id.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The session event history.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the agent has no active session.</exception>
+    public async Task<IReadOnlyList<AgentEvent>> GetSessionHistoryAsync(
+        AgentId agentId,
+        CancellationToken cancellationToken = default)
+    {
+        SessionEntry entry;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_sessions.TryGetValue(agentId, out entry!))
+            {
+                throw new InvalidOperationException($"Agent '{agentId}' does not have an active session.");
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        return await entry.Session.GetHistoryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Aborts/cancels the currently running work in the active agent session (best effort).
+    /// </summary>
+    /// <param name="agentId">Agent id.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the agent has no active session.</exception>
+    public async Task AbortAsync(AgentId agentId, CancellationToken cancellationToken = default)
+    {
+        SessionEntry entry;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_sessions.TryGetValue(agentId, out entry!))
+            {
+                throw new InvalidOperationException($"Agent '{agentId}' does not have an active session.");
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        await entry.Session.AbortAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
