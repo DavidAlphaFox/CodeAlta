@@ -26,6 +26,7 @@ Companion docs:
 - **Task**: durable work item stored in SQLite (shared state).
 - **Knowledge record**: durable, retrievable snippet with a source reference.
 - **Context pack**: the material injected into a session to perform a task within the context budget.
+- **Scope directive**: an explicit user-provided selector (workspace/project/path) used by the global agent to route work and attach context.
 
 ---
 
@@ -123,8 +124,10 @@ Output:
 Suggested algorithm:
 
 1. **Resolve scope**:
-   - if user request names a workspace/project explicitly, route there
-   - otherwise use “active workspace” and ask only if ambiguous
+   - prefer an out-of-band scope from the UI (active workspace/project picker)
+   - otherwise parse an inline scope directive (e.g. `@workspace(...)`, `@project(...)`, `@path(...)`)
+   - if the directive is ambiguous or unknown, ask a clarifying question instead of guessing
+   - if no directive exists, use the current active scope
 2. **Load pinned context** for the scope (workspace + project).
 3. **Load task tree**:
    - current task + parents (goal) + immediate children (next steps)

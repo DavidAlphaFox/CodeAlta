@@ -265,6 +265,30 @@ Portability note (multi-machine):
   - a git repo containing workspace manifests (YAML/Markdown) and curated knowledge artifacts
   - CodeAlta can clone/sync this repo to reconstruct workspaces on a different machine
 
+### 6.1 Scope selection (user-facing)
+
+When the user interacts with the **global agent**, the user should be able to specify scope quickly and unambiguously, so the orchestrator can attach the right context (workspace/project summaries, retrieval results, active tasks).
+
+Core behavior:
+
+- Maintain an **active scope**: `activeWorkspaceId` and optional `activeProjectId`.
+- If the user does not specify scope explicitly, default to the active scope.
+- If the user specifies an unknown/ambiguous scope, ask a clarifying question rather than guessing.
+- Always surface the active scope in the UI (status line / prompt header) so the user can see where work will happen.
+
+Scope should be specifiable in at least three ways:
+
+- **UI selection** (TUI/IDE): workspace/project picker sets the active scope out-of-band.
+- **Commands**: e.g. `:ws <name|id>`, `:proj <name|id>`, `:scope global|workspace|project`.
+- **Inline directives** (for plain chat-only environments): e.g. `@workspace(<name|id>)`, `@project(<name|id>)`, `@path(<path>)`.
+
+The chosen scope affects:
+
+- which agents are invoked (workspace vs project knowledge/planner/builder)
+- which roots are allowed for file operations and approvals
+- retrieval boundaries for FTS5/embeddings search
+- where tasks and artifacts are stored/linked
+
 ---
 
 ## 7. Memory window strategy

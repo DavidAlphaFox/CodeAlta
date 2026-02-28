@@ -249,6 +249,13 @@ Portability tools (multi-machine):
 - `workspace.import(workspaceManifest) -> workspaceId`
 - `workspace.set_home(workspaceId, homePathOrGitRemote)` (optional: git-backed workspace repo)
 
+Optional scope helpers (for “global agent” UX and routing):
+
+- `workspace.resolve(nameOrId) -> workspaceId`
+- `project.resolve(workspaceId, nameOrId) -> projectId`
+- `context.get_active_scope() -> { workspaceId, projectId? }`
+- `context.set_active_scope(workspaceId, projectId?)`
+
 These tools are used by the global agent to route work reliably.
 
 ---
