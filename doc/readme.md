@@ -59,3 +59,16 @@ Current MCP infrastructure (`CodeAlta.Mcp`) includes:
   - in-process tool discovery (`ListTools`)
   - task create/get roundtrip
   - indexed search query returning artifact-backed sources.
+
+## Agent Orchestration
+
+Current orchestration infrastructure (`CodeAlta.Orchestration`) includes:
+
+- Identity and scope primitives for orchestrated agents (`AgentIdentity`, `AgentScope`, `AgentScopeKind`).
+- `RoleProfileStore` for parsing role markdown from frontmatter-based and Copilot-style role files.
+- `ContextPackBuilder` with provider composition and strict character-budget enforcement.
+- `PlannerService` for durable plan creation:
+  - root + child task creation in SQLite
+  - persisted `plan.output` markdown artifacts.
+- `BuilderService` for task completion and persisted `builder.verification` artifacts.
+- `AgentHub` runtime for backend-agnostic agent registration, session lifecycle, and run event emission.
