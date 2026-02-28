@@ -33,7 +33,7 @@ public static class SchemaWalker
 {
     /// <summary>
     /// Load the schema and return all type definitions with resolved namespaces.
-    /// Pre-processes the JSON to fix boolean schemas (true/false → {}/{"not":{}})
+    /// Pre-processes the JSON to fix boolean schemas (true/false -> {}/{"not":{}})
     /// which NJsonSchema doesn't handle.
     /// </summary>
     public static async Task<List<TypeDef>> LoadDefinitionsAsync(
@@ -45,9 +45,9 @@ public static class SchemaWalker
         ReplaceBooleanSchemas(node);
 
         // Detect and hoist nested namespace definitions
-        // e.g. definitions.v2.Foo → definitions.v2__Foo
+        // e.g. definitions.v2.Foo -> definitions.v2__Foo
         // and rewrite all $ref pointers accordingly
-        var namespacePrefixes = new Dictionary<string, string>(); // "v2" → "V2"
+        var namespacePrefixes = new Dictionary<string, string>(); // "v2" -> "V2"
         var defsObj = node["definitions"]?.AsObject();
         if (defsObj != null)
         {
@@ -75,11 +75,16 @@ public static class SchemaWalker
                 defsObj.Remove(nsName);
             }
 
-            // Rewrite all $ref pointers: #/definitions/v2/Foo → #/definitions/v2__Foo
+            // Rewrite all $ref pointers: #/definitions/v2/Foo -> #/definitions/v2__Foo
             foreach (var (nsName, _) in namespacesToHoist)
             {
                 RewriteRefs(node, $"#/definitions/{nsName}/", $"#/definitions/{nsName}__");
             }
+
+            // Some Codex schema bundles reference root definitions that only exist under a nested namespace
+            // (e.g. ThreadId is only defined under definitions/v2 but referenced as #/definitions/ThreadId).
+            // Add alias definitions to keep $ref targets resolvable.
+            FixupMissingRootDefinitionAliases(node, defsObj, namespacesToHoist.Select(static x => x.nsName).ToArray());
         }
 
         var processedJson = node.ToJsonString(new JsonSerializerOptions
@@ -162,6 +167,77 @@ public static class SchemaWalker
         }
     }
 
+    private static void FixupMissingRootDefinitionAliases(
+        JsonNode rootNode,
+        JsonObject definitions,
+        IReadOnlyList<string> hoistedNamespaces)
+    {
+        ArgumentNullException.ThrowIfNull(rootNode);
+        ArgumentNullException.ThrowIfNull(definitions);
+        ArgumentNullException.ThrowIfNull(hoistedNamespaces);
+
+        if (hoistedNamespaces.Count == 0 || definitions.Count == 0)
+        {
+            return;
+        }
+
+        var referenced = new HashSet<string>(StringComparer.Ordinal);
+        CollectRootDefinitionRefs(rootNode, referenced);
+
+        foreach (var name in referenced)
+        {
+            if (definitions.ContainsKey(name))
+            {
+                continue;
+            }
+
+            foreach (var ns in hoistedNamespaces)
+            {
+                var candidate = $"{ns}__{name}";
+                if (definitions.ContainsKey(candidate))
+                {
+                    definitions[name] = new JsonObject
+                    {
+                        ["$ref"] = $"#/definitions/{candidate}"
+                    };
+                    break;
+                }
+            }
+        }
+    }
+
+    private static void CollectRootDefinitionRefs(JsonNode? node, HashSet<string> referencedNames)
+    {
+        if (node is JsonObject obj)
+        {
+            if (obj.ContainsKey("$ref") && obj["$ref"] is JsonValue refVal && refVal.GetValueKind() == JsonValueKind.String)
+            {
+                var refStr = refVal.GetValue<string>();
+                const string prefix = "#/definitions/";
+                if (refStr.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    var rest = refStr[prefix.Length..];
+                    if (!rest.Contains('/', StringComparison.Ordinal))
+                    {
+                        referencedNames.Add(rest);
+                    }
+                }
+            }
+
+            foreach (var (_, child) in obj)
+            {
+                CollectRootDefinitionRefs(child, referencedNames);
+            }
+        }
+        else if (node is JsonArray arr)
+        {
+            foreach (var item in arr)
+            {
+                CollectRootDefinitionRefs(item, referencedNames);
+            }
+        }
+    }
+
     /// <summary>
     /// Tries to detect a discriminator property from a oneOf schema.
     /// Returns null if this is not a tagged union.
@@ -229,10 +305,10 @@ public static class SchemaWalker
     {
         if (schema.HasReference)
             return Resolve(schema.Reference!);
-        // allOf with single element → unwrap
+        // allOf with single element -> unwrap
         if (schema.AllOf.Count == 1 && schema.Type == JsonObjectType.None)
             return Resolve(schema.AllOf.First());
-        // oneOf with single element → unwrap (Rust serde single-variant enums)
+        // oneOf with single element -> unwrap (Rust serde single-variant enums)
         if (schema.OneOf.Count == 1 && schema.Type == JsonObjectType.None)
             return Resolve(schema.OneOf.First());
         return schema;
@@ -247,7 +323,7 @@ public static class SchemaWalker
     }
 
     /// <summary>
-    /// Recursively replaces boolean schemas (true → {}, false → {"not":{}})
+    /// Recursively replaces boolean schemas (true -> {}, false -> {"not":{}})
     /// in JSON nodes. JSON Schema draft-07 allows true/false as schemas,
     /// but NJsonSchema can't parse them.
     /// </summary>

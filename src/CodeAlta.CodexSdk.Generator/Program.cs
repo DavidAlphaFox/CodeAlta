@@ -99,8 +99,67 @@ Console.WriteLine(
     $"(raw: {codexVersionInfo.RawOutput})");
 Console.WriteLine();
 
-// Load all definitions
-var defs = await SchemaWalker.LoadDefinitionsAsync(schemaFile, rootNamespace);
+// Load all definitions (retry once after regenerating schema when default schema folder is stale/corrupt)
+List<TypeDef> defs;
+try
+{
+    defs = await SchemaWalker.LoadDefinitionsAsync(schemaFile, rootNamespace);
+}
+catch (Exception ex) when (schemaFile is not null && schemaFile.StartsWith(schemaDir, StringComparison.OrdinalIgnoreCase))
+{
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine($"Failed to load schema (will regenerate once): {ex.Message}");
+    Console.ResetColor();
+
+    try
+    {
+        if (Directory.Exists(schemaDir))
+        {
+            Directory.Delete(schemaDir, recursive: true);
+        }
+    }
+    catch
+    {
+        // Best-effort cleanup; codex will overwrite/regen files anyway.
+    }
+
+    Console.WriteLine("Regenerating schema via: codex app-server generate-json-schema ...");
+
+    Directory.CreateDirectory(schemaDir);
+
+    ProcessStartInfo psi;
+    if (codexPath != null)
+    {
+        psi = CodexProcessHelper.CreateCommandProcessStartInfo(
+            codexPath,
+            $"app-server generate-json-schema --out \"{schemaDir}\"");
+    }
+    else if (OperatingSystem.IsWindows())
+    {
+        psi = CodexProcessHelper.CreateCommandProcessStartInfo(
+            "pwsh",
+            $"-NoProfile -NonInteractive -Command \"codex app-server generate-json-schema --out '{schemaDir}'\"");
+    }
+    else
+    {
+        psi = CodexProcessHelper.CreateCommandProcessStartInfo(
+            "/bin/sh",
+            $"-c \"codex app-server generate-json-schema --out '{schemaDir}'\"");
+    }
+
+    using var proc = Process.Start(psi)
+        ?? throw new InvalidOperationException("Failed to start codex process.");
+    await proc.WaitForExitAsync().ConfigureAwait(false);
+
+    if (proc.ExitCode != 0)
+    {
+        var stderr = await proc.StandardError.ReadToEndAsync().ConfigureAwait(false);
+        Console.Error.WriteLine($"codex exited with code {proc.ExitCode}: {stderr}");
+        return 1;
+    }
+
+    defs = await SchemaWalker.LoadDefinitionsAsync(schemaFile, rootNamespace);
+}
 Console.WriteLine($"Found {defs.Count} type definitions");
 
 // Build emitter with full type registry

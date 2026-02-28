@@ -35,7 +35,7 @@ public class CSharpEmitter
     }
 
     /// <summary>
-    /// Generate all files grouped by namespace → (filename, content).
+    /// Generate all files grouped by namespace -> (filename, content).
     /// </summary>
     public Dictionary<string, List<(string FileName, string Content)>> EmitAll(
         IReadOnlyList<TypeDef> defs)
@@ -218,8 +218,8 @@ public class CSharpEmitter
         if (result.Contains("::"))
         {
             // Use the full qualified name to avoid duplicates
-            // "ApiKeyv2::LoginAccountResponse" → "ApiKeyV2"
-            // "Chatgptv2::LoginAccountResponse" → "ChatgptV2"
+            // "ApiKeyv2::LoginAccountResponse" -> "ApiKeyV2"
+            // "Chatgptv2::LoginAccountResponse" -> "ChatgptV2"
             var parts = result.Split("::");
             var prefix = SchemaWalker.ToPascalCase(parts[0].Trim());
             var suffix = SchemaWalker.ToPascalCase(parts[^1].Trim());
@@ -285,7 +285,7 @@ public class CSharpEmitter
         if (tokenVariants != null)
             return EmitTokenDiscriminatedUnion(def, schema, tokenVariants);
 
-        // Fallback: JsonElement wrapper — no custom converter, deserialize manually
+        // Fallback: JsonElement wrapper - no custom converter, deserialize manually
         var variantSummary = string.Join(", ", schema.OneOf.Select(v =>
         {
             var r = SchemaWalker.Resolve(v);
@@ -293,7 +293,7 @@ public class CSharpEmitter
             if (r.Properties.Count > 0) return "{" + string.Join(",", r.Properties.Keys) + "}";
             return r.Title ?? "?";
         }));
-        _warnings.Add($"oneOf without discriminator: {def.CsNamespace}.{def.Name} — emitted as JsonElement wrapper. Variants: [{variantSummary}]");
+        _warnings.Add($"oneOf without discriminator: {def.CsNamespace}.{def.Name} - emitted as JsonElement wrapper. Variants: [{variantSummary}]");
 
         sb.AppendLine($"public partial struct {def.Name}");
         sb.AppendLine("{");
@@ -407,6 +407,8 @@ public class CSharpEmitter
                 {
                     inlineProps = GetObjectProperties(
                         resolved, def.CsNamespace, $"{def.Name}.{variantName}");
+                    inlineProps = FixPropertyNameCollisions(inlineProps, variantName);
+                    inlineProps = FixShadowedNestedTypeReferences(inlineProps, variantName, def.CsNamespace);
                     innerType = null;
                 }
             }
@@ -550,11 +552,18 @@ public class CSharpEmitter
             }
             else
             {
+                var effectiveInnerType = innerType!;
+                if (effectiveInnerType == variantName && HasTopLevelTypeInNamespace(def.CsNamespace, variantName))
+                {
+                    // Within a nested record named "X", the unqualified identifier "X" resolves to the nested type,
+                    // not a top-level type with the same name. Qualify to avoid shadowing.
+                    effectiveInnerType = $"{def.CsNamespace}.{effectiveInnerType}";
+                }
                 var defaultVal = GetDefaultValue(innerType!);
                 var defaultSuffix = defaultVal != null ? $" = {defaultVal};" : "";
                 sb.AppendLine($"    public sealed partial record {variantName} : {def.Name}");
                 sb.AppendLine($"    {{");
-                sb.AppendLine($"        public {innerType} Value {{ get; set; }}{defaultSuffix}");
+                sb.AppendLine($"        public {effectiveInnerType} Value {{ get; set; }}{defaultSuffix}");
                 sb.AppendLine($"    }}");
             }
 
@@ -727,7 +736,7 @@ public class CSharpEmitter
             if (r.Type != JsonObjectType.None) return r.Type.ToString();
             return r.Title ?? "?";
         }));
-        _warnings.Add($"anyOf without $ref variants: {def.CsNamespace}.{def.Name} — emitted as JsonElement wrapper. Variants: [{variantSummary}]");
+        _warnings.Add($"anyOf without $ref variants: {def.CsNamespace}.{def.Name} - emitted as JsonElement wrapper. Variants: [{variantSummary}]");
 
         sb.AppendLine($"public partial struct {def.Name}");
         sb.AppendLine("{");
@@ -840,6 +849,65 @@ public class CSharpEmitter
                 : p).ToList();
     }
 
+    private bool HasTopLevelTypeInNamespace(string csNamespace, string typeName)
+    {
+        foreach (var (_, def) in _pointerToTypeDef)
+        {
+            if (def.CsNamespace == csNamespace && def.Name == typeName)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// If a nested record is named <paramref name="nestedTypeName"/>, unqualified references to that identifier
+    /// within the nested type resolve to the nested type itself, not any top-level type in the namespace with the
+    /// same name. Qualify those type references to avoid shadowing.
+    /// </summary>
+    private List<PropertyInfo> FixShadowedNestedTypeReferences(
+        List<PropertyInfo> props,
+        string nestedTypeName,
+        string contextNamespace)
+    {
+        if (!HasTopLevelTypeInNamespace(contextNamespace, nestedTypeName))
+            return props;
+
+        return props
+            .Select(p => p with
+            {
+                CsType = QualifyTypeNameIfShadowedByNestedType(p.CsType, nestedTypeName, contextNamespace)
+            })
+            .ToList();
+    }
+
+    private static string QualifyTypeNameIfShadowedByNestedType(
+        string csType,
+        string nestedTypeName,
+        string contextNamespace)
+    {
+        if (string.IsNullOrWhiteSpace(csType))
+            return csType;
+
+        var nullableSuffix = csType.EndsWith("?", StringComparison.Ordinal) ? "?" : "";
+        var core = nullableSuffix.Length == 0 ? csType : csType[..^1];
+
+        var openIdx = core.IndexOf('<');
+        if (openIdx < 0)
+        {
+            if (core == nestedTypeName)
+                core = $"{contextNamespace}.{core}";
+            return core + nullableSuffix;
+        }
+
+        // Generic: recurse on each argument.
+        var outer = core[..openIdx];
+        var inner = core[(openIdx + 1)..^1]; // strip < and >
+        var args = SplitGenericArgs(inner);
+        var qualifiedArgs = args
+            .Select(a => QualifyTypeNameIfShadowedByNestedType(a.Trim(), nestedTypeName, contextNamespace));
+        return $"{outer}<{string.Join(", ", qualifiedArgs)}>{nullableSuffix}";
+    }
+
     #endregion
 
     #region Type Alias
@@ -899,7 +967,7 @@ public class CSharpEmitter
             JsonObjectType.None => "empty/true schema",
             _ => $"unsupported type: {schema.Type}"
         };
-        _warnings.Add($"JsonElement wrapper: {def.CsNamespace}.{def.Name} — {reason}");
+        _warnings.Add($"JsonElement wrapper: {def.CsNamespace}.{def.Name} - {reason}");
 
         sb.AppendLine($"public partial record struct {def.Name}");
         sb.AppendLine("{");
@@ -937,7 +1005,7 @@ public class CSharpEmitter
             return baseType;
         }
 
-        // allOf with single ref → just the ref type
+        // allOf with single ref -> just the ref type
         if (propSchema.AllOf.Count == 1 && propSchema.Type == JsonObjectType.None)
         {
             var resolved = SchemaWalker.Resolve(propSchema.AllOf.First());
