@@ -6,4 +6,8 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.CodexSdk.V2;
 
-public sealed partial record AppsConfig;
+public sealed partial record AppsConfig
+{
+    [JsonPropertyName("_default")]
+    public AppsDefaultConfig? Default { get; set; }
+}

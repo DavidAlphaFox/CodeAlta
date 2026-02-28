@@ -28,15 +28,27 @@ public sealed partial record Thread
     /// <summary>Origin of the thread (CLI, VSCode, codex exec, codex app-server, etc.).</summary>
     [JsonPropertyName("source")]
     public SessionSource Source { get; set; } = default!;
+    /// <summary>Current runtime status for the thread.</summary>
+    [JsonPropertyName("status")]
+    public ThreadStatus Status { get; set; } = default!;
     /// <summary>Only populated on `thread/resume`, `thread/rollback`, `thread/fork`, and `thread/read` (when `includeTurns` is true) responses. For all other responses and notifications returning a Thread, the turns field will be an empty list.</summary>
     [JsonPropertyName("turns")]
     public List<Turn> Turns { get; set; } = [];
     /// <summary>Unix timestamp (in seconds) when the thread was last updated.</summary>
     [JsonPropertyName("updatedAt")]
     public long UpdatedAt { get; set; }
+    /// <summary>Optional random unique nickname assigned to an AgentControl-spawned sub-agent.</summary>
+    [JsonPropertyName("agentNickname")]
+    public string? AgentNickname { get; set; }
+    /// <summary>Optional role (agent_role) assigned to an AgentControl-spawned sub-agent.</summary>
+    [JsonPropertyName("agentRole")]
+    public string? AgentRole { get; set; }
     /// <summary>Optional Git metadata captured when the thread was created.</summary>
     [JsonPropertyName("gitInfo")]
     public GitInfo? GitInfo { get; set; }
+    /// <summary>Optional user-facing thread title.</summary>
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
     /// <summary>[UNSTABLE] Path to the thread on disk.</summary>
     [JsonPropertyName("path")]
     public string? Path { get; set; }

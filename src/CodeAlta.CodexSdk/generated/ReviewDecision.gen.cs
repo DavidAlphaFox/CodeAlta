@@ -37,6 +37,13 @@ internal sealed class ReviewDecisionJsonConverter : JsonConverter<ReviewDecision
                     __result.ProposedExecpolicyAmendment = JsonSerializer.Deserialize<List<string>>(__ProposedExecpolicyAmendmentProp, options)!;
                 return __result;
             }
+            if (obj.TryGetProperty("network_policy_amendment", out var __NetworkPolicyAmendmentElem))
+            {
+                var __result = new ReviewDecision.NetworkPolicyAmendment();
+                if (__NetworkPolicyAmendmentElem.TryGetProperty("network_policy_amendment", out var __NetworkPolicyAmendmentValueProp))
+                    __result.NetworkPolicyAmendmentValue = JsonSerializer.Deserialize<CodeAlta.CodexSdk.NetworkPolicyAmendment>(__NetworkPolicyAmendmentValueProp, options)!;
+                return __result;
+            }
             throw new JsonException($"Unknown ReviewDecision object variant. Properties: {string.Join(", ", EnumeratePropertyNames(obj))}");
         }
 
@@ -67,6 +74,15 @@ internal sealed class ReviewDecisionJsonConverter : JsonConverter<ReviewDecision
             case ReviewDecision.ApprovedForSession:
                 writer.WriteStringValue("approved_for_session");
                 break;
+            case ReviewDecision.NetworkPolicyAmendment v:
+                writer.WriteStartObject();
+                writer.WritePropertyName("network_policy_amendment");
+                writer.WriteStartObject();
+                writer.WritePropertyName("network_policy_amendment");
+                JsonSerializer.Serialize(writer, v.NetworkPolicyAmendmentValue, options);
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+                break;
             case ReviewDecision.Denied:
                 writer.WriteStringValue("denied");
                 break;
@@ -89,6 +105,11 @@ public abstract partial record ReviewDecision
         public List<string> ProposedExecpolicyAmendment { get; set; } = [];
     }
     public sealed partial record ApprovedForSession : ReviewDecision;
+    public sealed partial record NetworkPolicyAmendment : ReviewDecision
+    {
+        [JsonPropertyName("network_policy_amendment")]
+        public CodeAlta.CodexSdk.NetworkPolicyAmendment NetworkPolicyAmendmentValue { get; set; } = default!;
+    }
     public sealed partial record Denied : ReviewDecision;
     public sealed partial record Abort : ReviewDecision;
 }

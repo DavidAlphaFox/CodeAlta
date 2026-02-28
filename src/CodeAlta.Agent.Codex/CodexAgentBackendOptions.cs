@@ -37,5 +37,5 @@ public sealed class CodexAgentBackendOptions
     /// <summary>
     /// Gets or initializes the default approval policy used when creating/resuming threads.
     /// </summary>
-    public V2AskForApproval ApprovalPolicy { get; init; } = V2AskForApproval.OnRequest;
+    public V2AskForApproval ApprovalPolicy { get; init; } = new V2AskForApproval.OnRequest();
 }

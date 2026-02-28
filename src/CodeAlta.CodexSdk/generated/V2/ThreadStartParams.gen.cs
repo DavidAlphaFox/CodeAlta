@@ -28,4 +28,6 @@ public sealed partial record ThreadStartParams
     public Personality? Personality { get; set; }
     [JsonPropertyName("sandbox")]
     public SandboxMode? Sandbox { get; set; }
+    [JsonPropertyName("serviceName")]
+    public string? ServiceName { get; set; }
 }

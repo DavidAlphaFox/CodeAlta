@@ -7,14 +7,12 @@ using System.Text.Json.Serialization;
 namespace CodeAlta.CodexSdk.V2;
 
 /// <summary>
-/// A mask for collaboration mode settings, allowing partial updates. All fields except `name` are optional, enabling selective updates.
+/// EXPERIMENTAL - collaboration mode preset metadata for clients.
 /// </summary>
 public sealed partial record CollaborationModeMask
 {
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
-    [JsonPropertyName("developer_instructions")]
-    public string? DeveloperInstructions { get; set; }
     [JsonPropertyName("mode")]
     public ModeKind? Mode { get; set; }
     [JsonPropertyName("model")]

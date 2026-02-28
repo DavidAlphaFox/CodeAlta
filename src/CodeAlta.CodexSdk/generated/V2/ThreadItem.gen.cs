@@ -14,6 +14,7 @@ namespace CodeAlta.CodexSdk.V2;
 [JsonDerivedType(typeof(CommandExecutionThreadItem), typeDiscriminator: "commandExecution")]
 [JsonDerivedType(typeof(FileChangeThreadItem), typeDiscriminator: "fileChange")]
 [JsonDerivedType(typeof(McpToolCallThreadItem), typeDiscriminator: "mcpToolCall")]
+[JsonDerivedType(typeof(DynamicToolCallThreadItem), typeDiscriminator: "dynamicToolCall")]
 [JsonDerivedType(typeof(CollabAgentToolCallThreadItem), typeDiscriminator: "collabAgentToolCall")]
 [JsonDerivedType(typeof(WebSearchThreadItem), typeDiscriminator: "webSearch")]
 [JsonDerivedType(typeof(ImageViewThreadItem), typeDiscriminator: "imageView")]
@@ -34,6 +35,8 @@ public abstract partial record ThreadItem
     {
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
+        [JsonPropertyName("phase")]
+        public MessagePhase? Phase { get; set; }
         [JsonPropertyName("text")]
         public string Text { get; set; } = string.Empty;
     }
@@ -115,6 +118,25 @@ public abstract partial record ThreadItem
         public string Server { get; set; } = string.Empty;
         [JsonPropertyName("status")]
         public McpToolCallStatus Status { get; set; } = default!;
+        [JsonPropertyName("tool")]
+        public string Tool { get; set; } = string.Empty;
+    }
+
+    public sealed partial record DynamicToolCallThreadItem : ThreadItem
+    {
+        [JsonPropertyName("arguments")]
+        public JsonElement Arguments { get; set; }
+        [JsonPropertyName("contentItems")]
+        public List<DynamicToolCallOutputContentItem>? ContentItems { get; set; }
+        /// <summary>The duration of the dynamic tool call in milliseconds.</summary>
+        [JsonPropertyName("durationMs")]
+        public long? DurationMs { get; set; }
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+        [JsonPropertyName("status")]
+        public DynamicToolCallStatus Status { get; set; } = default!;
+        [JsonPropertyName("success")]
+        public bool? Success { get; set; }
         [JsonPropertyName("tool")]
         public string Tool { get; set; } = string.Empty;
     }

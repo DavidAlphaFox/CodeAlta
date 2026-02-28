@@ -7,15 +7,15 @@ using System.Text.Json.Serialization;
 namespace CodeAlta.CodexSdk;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "state")]
-[JsonDerivedType(typeof(StateMcpStartupStatus), typeDiscriminator: "starting")]
-[JsonDerivedType(typeof(StateMcpStartupStatus2), typeDiscriminator: "ready")]
+[JsonDerivedType(typeof(StartingMcpStartupStatus), typeDiscriminator: "starting")]
+[JsonDerivedType(typeof(ReadyMcpStartupStatus), typeDiscriminator: "ready")]
 [JsonDerivedType(typeof(Failed), typeDiscriminator: "failed")]
-[JsonDerivedType(typeof(StateMcpStartupStatus3), typeDiscriminator: "cancelled")]
+[JsonDerivedType(typeof(CancelledMcpStartupStatus), typeDiscriminator: "cancelled")]
 public abstract partial record McpStartupStatus
 {
-    public sealed partial record StateMcpStartupStatus : McpStartupStatus;
+    public sealed partial record StartingMcpStartupStatus : McpStartupStatus;
 
-    public sealed partial record StateMcpStartupStatus2 : McpStartupStatus;
+    public sealed partial record ReadyMcpStartupStatus : McpStartupStatus;
 
     public sealed partial record Failed : McpStartupStatus
     {
@@ -23,6 +23,6 @@ public abstract partial record McpStartupStatus
         public string Error { get; set; } = string.Empty;
     }
 
-    public sealed partial record StateMcpStartupStatus3 : McpStartupStatus;
+    public sealed partial record CancelledMcpStartupStatus : McpStartupStatus;
 
 }

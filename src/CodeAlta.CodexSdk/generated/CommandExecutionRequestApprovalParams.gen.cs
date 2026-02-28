@@ -26,9 +26,15 @@ public sealed partial record CommandExecutionRequestApprovalParams
     /// <summary>The command's working directory.</summary>
     [JsonPropertyName("cwd")]
     public string? Cwd { get; set; }
+    /// <summary>Optional context for a managed-network approval prompt.</summary>
+    [JsonPropertyName("networkApprovalContext")]
+    public NetworkApprovalContext? NetworkApprovalContext { get; set; }
     /// <summary>Optional proposed execpolicy amendment to allow similar commands without prompting.</summary>
     [JsonPropertyName("proposedExecpolicyAmendment")]
     public List<string>? ProposedExecpolicyAmendment { get; set; }
+    /// <summary>Optional proposed network policy amendments (allow/deny host) for future requests.</summary>
+    [JsonPropertyName("proposedNetworkPolicyAmendments")]
+    public List<NetworkPolicyAmendment>? ProposedNetworkPolicyAmendments { get; set; }
     /// <summary>Optional explanatory reason (e.g. request for network access).</summary>
     [JsonPropertyName("reason")]
     public string? Reason { get; set; }

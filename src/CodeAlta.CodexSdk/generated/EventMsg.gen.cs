@@ -12,6 +12,9 @@ namespace CodeAlta.CodexSdk;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(ErrorEventMsg), typeDiscriminator: "error")]
 [JsonDerivedType(typeof(WarningEventMsg), typeDiscriminator: "warning")]
+[JsonDerivedType(typeof(RealtimeConversationStartedEventMsg), typeDiscriminator: "realtime_conversation_started")]
+[JsonDerivedType(typeof(RealtimeConversationRealtimeEventMsg), typeDiscriminator: "realtime_conversation_realtime")]
+[JsonDerivedType(typeof(RealtimeConversationClosedEventMsg), typeDiscriminator: "realtime_conversation_closed")]
 [JsonDerivedType(typeof(ModelRerouteEventMsg), typeDiscriminator: "model_reroute")]
 [JsonDerivedType(typeof(ContextCompactedEventMsg), typeDiscriminator: "context_compacted")]
 [JsonDerivedType(typeof(ThreadRolledBackEventMsg), typeDiscriminator: "thread_rolled_back")]
@@ -42,6 +45,7 @@ namespace CodeAlta.CodexSdk;
 [JsonDerivedType(typeof(ExecApprovalRequestEventMsg), typeDiscriminator: "exec_approval_request")]
 [JsonDerivedType(typeof(RequestUserInputEventMsg), typeDiscriminator: "request_user_input")]
 [JsonDerivedType(typeof(DynamicToolCallRequestEventMsg), typeDiscriminator: "dynamic_tool_call_request")]
+[JsonDerivedType(typeof(DynamicToolCallResponseEventMsg), typeDiscriminator: "dynamic_tool_call_response")]
 [JsonDerivedType(typeof(ElicitationRequestEventMsg), typeDiscriminator: "elicitation_request")]
 [JsonDerivedType(typeof(ApplyPatchApprovalRequestEventMsg), typeDiscriminator: "apply_patch_approval_request")]
 [JsonDerivedType(typeof(DeprecationNoticeEventMsg), typeDiscriminator: "deprecation_notice")]
@@ -101,6 +105,33 @@ public abstract partial record EventMsg
     {
         [JsonPropertyName("message")]
         public string Message { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Realtime conversation lifecycle start event.
+    /// </summary>
+    public sealed partial record RealtimeConversationStartedEventMsg : EventMsg
+    {
+        [JsonPropertyName("session_id")]
+        public string? SessionId { get; set; }
+    }
+
+    /// <summary>
+    /// Realtime conversation streaming payload event.
+    /// </summary>
+    public sealed partial record RealtimeConversationRealtimeEventMsg : EventMsg
+    {
+        [JsonPropertyName("payload")]
+        public RealtimeEvent Payload { get; set; } = default!;
+    }
+
+    /// <summary>
+    /// Realtime conversation lifecycle close event.
+    /// </summary>
+    public sealed partial record RealtimeConversationClosedEventMsg : EventMsg
+    {
+        [JsonPropertyName("reason")]
+        public string? Reason { get; set; }
     }
 
     /// <summary>
@@ -173,6 +204,8 @@ public abstract partial record EventMsg
     {
         [JsonPropertyName("message")]
         public string Message { get; set; } = string.Empty;
+        [JsonPropertyName("phase")]
+        public CodeAlta.CodexSdk.V2.MessagePhase? Phase { get; set; }
     }
 
     /// <summary>
@@ -496,9 +529,15 @@ public abstract partial record EventMsg
 
     public sealed partial record ExecApprovalRequestEventMsg : EventMsg
     {
+        /// <summary>Optional additional filesystem permissions requested for this command.</summary>
+        [JsonPropertyName("additional_permissions")]
+        public PermissionProfile? AdditionalPermissions { get; set; }
         /// <summary>Identifier for this specific approval callback.  When absent, the approval is for the command item itself (`call_id`). This is present for subcommand approvals (via execve intercept).</summary>
         [JsonPropertyName("approval_id")]
         public string? ApprovalId { get; set; }
+        /// <summary>Ordered list of decisions the client may present for this prompt.  When absent, clients should derive the legacy default set from the other fields on this request.</summary>
+        [JsonPropertyName("available_decisions")]
+        public List<ReviewDecision>? AvailableDecisions { get; set; }
         /// <summary>Identifier for the associated command execution item.</summary>
         [JsonPropertyName("call_id")]
         public string CallId { get; set; } = string.Empty;
@@ -516,6 +555,9 @@ public abstract partial record EventMsg
         /// <summary>Proposed execpolicy amendment that can be applied to allow future runs.</summary>
         [JsonPropertyName("proposed_execpolicy_amendment")]
         public List<string>? ProposedExecpolicyAmendment { get; set; }
+        /// <summary>Proposed network policy amendments (for example allow/deny this host in future).</summary>
+        [JsonPropertyName("proposed_network_policy_amendments")]
+        public List<NetworkPolicyAmendment>? ProposedNetworkPolicyAmendments { get; set; }
         /// <summary>Optional human-readable reason for the approval (e.g. retry without sandbox).</summary>
         [JsonPropertyName("reason")]
         public string? Reason { get; set; }
@@ -545,6 +587,34 @@ public abstract partial record EventMsg
         [JsonPropertyName("tool")]
         public string Tool { get; set; } = string.Empty;
         [JsonPropertyName("turnId")]
+        public string TurnId { get; set; } = string.Empty;
+    }
+
+    public sealed partial record DynamicToolCallResponseEventMsg : EventMsg
+    {
+        /// <summary>Dynamic tool call arguments.</summary>
+        [JsonPropertyName("arguments")]
+        public JsonElement Arguments { get; set; }
+        /// <summary>Identifier for the corresponding DynamicToolCallRequest.</summary>
+        [JsonPropertyName("call_id")]
+        public string CallId { get; set; } = string.Empty;
+        /// <summary>Dynamic tool response content items.</summary>
+        [JsonPropertyName("content_items")]
+        public List<CodeAlta.CodexSdk.V2.DynamicToolCallOutputContentItem> ContentItems { get; set; } = [];
+        /// <summary>The duration of the dynamic tool call.</summary>
+        [JsonPropertyName("duration")]
+        public Duration Duration { get; set; } = default!;
+        /// <summary>Optional error text when the tool call failed before producing a response.</summary>
+        [JsonPropertyName("error")]
+        public string? Error { get; set; }
+        /// <summary>Whether the tool call succeeded.</summary>
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+        /// <summary>Dynamic tool name.</summary>
+        [JsonPropertyName("tool")]
+        public string Tool { get; set; } = string.Empty;
+        /// <summary>Turn ID that this dynamic tool call belongs to.</summary>
+        [JsonPropertyName("turn_id")]
         public string TurnId { get; set; } = string.Empty;
     }
 
@@ -898,6 +968,12 @@ public abstract partial record EventMsg
         /// <summary>Identifier for the collab tool call.</summary>
         [JsonPropertyName("call_id")]
         public string CallId { get; set; } = string.Empty;
+        /// <summary>Optional nickname assigned to the new agent.</summary>
+        [JsonPropertyName("new_agent_nickname")]
+        public string? NewAgentNickname { get; set; }
+        /// <summary>Optional role assigned to the new agent.</summary>
+        [JsonPropertyName("new_agent_role")]
+        public string? NewAgentRole { get; set; }
         /// <summary>Thread ID of the newly spawned agent, if it was created.</summary>
         [JsonPropertyName("new_thread_id")]
         public CodeAlta.CodexSdk.V2.ThreadId? NewThreadId { get; set; }
@@ -942,6 +1018,12 @@ public abstract partial record EventMsg
         /// <summary>Prompt sent from the sender to the receiver. Can be empty to prevent CoT leaking at the beginning.</summary>
         [JsonPropertyName("prompt")]
         public string Prompt { get; set; } = string.Empty;
+        /// <summary>Optional nickname assigned to the receiver agent.</summary>
+        [JsonPropertyName("receiver_agent_nickname")]
+        public string? ReceiverAgentNickname { get; set; }
+        /// <summary>Optional role assigned to the receiver agent.</summary>
+        [JsonPropertyName("receiver_agent_role")]
+        public string? ReceiverAgentRole { get; set; }
         /// <summary>Thread ID of the receiver.</summary>
         [JsonPropertyName("receiver_thread_id")]
         public CodeAlta.CodexSdk.V2.ThreadId ReceiverThreadId { get; set; } = default!;
@@ -961,6 +1043,9 @@ public abstract partial record EventMsg
         /// <summary>ID of the waiting call.</summary>
         [JsonPropertyName("call_id")]
         public string CallId { get; set; } = string.Empty;
+        /// <summary>Optional nicknames/roles for receivers.</summary>
+        [JsonPropertyName("receiver_agents")]
+        public List<CollabAgentRef>? ReceiverAgents { get; set; }
         /// <summary>Thread ID of the receivers.</summary>
         [JsonPropertyName("receiver_thread_ids")]
         public List<CodeAlta.CodexSdk.V2.ThreadId> ReceiverThreadIds { get; set; } = [];
@@ -974,6 +1059,9 @@ public abstract partial record EventMsg
     /// </summary>
     public sealed partial record CollabWaitingEndEventMsg : EventMsg
     {
+        /// <summary>Optional receiver metadata paired with final statuses.</summary>
+        [JsonPropertyName("agent_statuses")]
+        public List<CollabAgentStatusEntry>? AgentStatuses { get; set; }
         /// <summary>ID of the waiting call.</summary>
         [JsonPropertyName("call_id")]
         public string CallId { get; set; } = string.Empty;
@@ -1009,6 +1097,12 @@ public abstract partial record EventMsg
         /// <summary>Identifier for the collab tool call.</summary>
         [JsonPropertyName("call_id")]
         public string CallId { get; set; } = string.Empty;
+        /// <summary>Optional nickname assigned to the receiver agent.</summary>
+        [JsonPropertyName("receiver_agent_nickname")]
+        public string? ReceiverAgentNickname { get; set; }
+        /// <summary>Optional role assigned to the receiver agent.</summary>
+        [JsonPropertyName("receiver_agent_role")]
+        public string? ReceiverAgentRole { get; set; }
         /// <summary>Thread ID of the receiver.</summary>
         [JsonPropertyName("receiver_thread_id")]
         public CodeAlta.CodexSdk.V2.ThreadId ReceiverThreadId { get; set; } = default!;
@@ -1028,6 +1122,12 @@ public abstract partial record EventMsg
         /// <summary>Identifier for the collab tool call.</summary>
         [JsonPropertyName("call_id")]
         public string CallId { get; set; } = string.Empty;
+        /// <summary>Optional nickname assigned to the receiver agent.</summary>
+        [JsonPropertyName("receiver_agent_nickname")]
+        public string? ReceiverAgentNickname { get; set; }
+        /// <summary>Optional role assigned to the receiver agent.</summary>
+        [JsonPropertyName("receiver_agent_role")]
+        public string? ReceiverAgentRole { get; set; }
         /// <summary>Thread ID of the receiver.</summary>
         [JsonPropertyName("receiver_thread_id")]
         public CodeAlta.CodexSdk.V2.ThreadId ReceiverThreadId { get; set; } = default!;
@@ -1044,6 +1144,12 @@ public abstract partial record EventMsg
         /// <summary>Identifier for the collab tool call.</summary>
         [JsonPropertyName("call_id")]
         public string CallId { get; set; } = string.Empty;
+        /// <summary>Optional nickname assigned to the receiver agent.</summary>
+        [JsonPropertyName("receiver_agent_nickname")]
+        public string? ReceiverAgentNickname { get; set; }
+        /// <summary>Optional role assigned to the receiver agent.</summary>
+        [JsonPropertyName("receiver_agent_role")]
+        public string? ReceiverAgentRole { get; set; }
         /// <summary>Thread ID of the receiver.</summary>
         [JsonPropertyName("receiver_thread_id")]
         public CodeAlta.CodexSdk.V2.ThreadId ReceiverThreadId { get; set; } = default!;

@@ -15,6 +15,7 @@ namespace CodeAlta.CodexSdk;
 [JsonDerivedType(typeof(ThreadResumeRequest), typeDiscriminator: "thread/resume")]
 [JsonDerivedType(typeof(ThreadForkRequest), typeDiscriminator: "thread/fork")]
 [JsonDerivedType(typeof(ThreadArchiveRequest), typeDiscriminator: "thread/archive")]
+[JsonDerivedType(typeof(ThreadUnsubscribeRequest), typeDiscriminator: "thread/unsubscribe")]
 [JsonDerivedType(typeof(ThreadNameSetRequest), typeDiscriminator: "thread/name/set")]
 [JsonDerivedType(typeof(ThreadUnarchiveRequest), typeDiscriminator: "thread/unarchive")]
 [JsonDerivedType(typeof(ThreadCompactStartRequest), typeDiscriminator: "thread/compact/start")]
@@ -36,6 +37,7 @@ namespace CodeAlta.CodexSdk;
 [JsonDerivedType(typeof(McpServerOauthLoginRequest), typeDiscriminator: "mcpServer/oauth/login")]
 [JsonDerivedType(typeof(ConfigMcpServerReloadRequest), typeDiscriminator: "config/mcpServer/reload")]
 [JsonDerivedType(typeof(McpServerStatusListRequest), typeDiscriminator: "mcpServerStatus/list")]
+[JsonDerivedType(typeof(WindowsSandboxSetupStartRequest), typeDiscriminator: "windowsSandbox/setupStart")]
 [JsonDerivedType(typeof(AccountLoginStartRequest), typeDiscriminator: "account/login/start")]
 [JsonDerivedType(typeof(AccountLoginCancelRequest), typeDiscriminator: "account/login/cancel")]
 [JsonDerivedType(typeof(AccountLogoutRequest), typeDiscriminator: "account/logout")]
@@ -43,33 +45,13 @@ namespace CodeAlta.CodexSdk;
 [JsonDerivedType(typeof(FeedbackUploadRequest), typeDiscriminator: "feedback/upload")]
 [JsonDerivedType(typeof(CommandExecRequest), typeDiscriminator: "command/exec")]
 [JsonDerivedType(typeof(ConfigReadRequest), typeDiscriminator: "config/read")]
+[JsonDerivedType(typeof(ExternalAgentConfigDetectRequest), typeDiscriminator: "externalAgentConfig/detect")]
+[JsonDerivedType(typeof(ExternalAgentConfigImportRequest), typeDiscriminator: "externalAgentConfig/import")]
 [JsonDerivedType(typeof(ConfigValueWriteRequest), typeDiscriminator: "config/value/write")]
 [JsonDerivedType(typeof(ConfigBatchWriteRequest), typeDiscriminator: "config/batchWrite")]
 [JsonDerivedType(typeof(ConfigRequirementsReadRequest), typeDiscriminator: "configRequirements/read")]
 [JsonDerivedType(typeof(AccountReadRequest), typeDiscriminator: "account/read")]
-[JsonDerivedType(typeof(NewConversationRequest), typeDiscriminator: "newConversation")]
-[JsonDerivedType(typeof(GetConversationSummaryRequest), typeDiscriminator: "getConversationSummary")]
-[JsonDerivedType(typeof(ListConversationsRequest), typeDiscriminator: "listConversations")]
-[JsonDerivedType(typeof(ResumeConversationRequest), typeDiscriminator: "resumeConversation")]
-[JsonDerivedType(typeof(ForkConversationRequest), typeDiscriminator: "forkConversation")]
-[JsonDerivedType(typeof(ArchiveConversationRequest), typeDiscriminator: "archiveConversation")]
-[JsonDerivedType(typeof(SendUserMessageRequest), typeDiscriminator: "sendUserMessage")]
-[JsonDerivedType(typeof(SendUserTurnRequest), typeDiscriminator: "sendUserTurn")]
-[JsonDerivedType(typeof(InterruptConversationRequest), typeDiscriminator: "interruptConversation")]
-[JsonDerivedType(typeof(AddConversationListenerRequest), typeDiscriminator: "addConversationListener")]
-[JsonDerivedType(typeof(RemoveConversationListenerRequest), typeDiscriminator: "removeConversationListener")]
-[JsonDerivedType(typeof(GitDiffToRemoteRequest), typeDiscriminator: "gitDiffToRemote")]
-[JsonDerivedType(typeof(LoginApiKeyRequest), typeDiscriminator: "loginApiKey")]
-[JsonDerivedType(typeof(LoginChatGptRequest), typeDiscriminator: "loginChatGpt")]
-[JsonDerivedType(typeof(CancelLoginChatGptRequest), typeDiscriminator: "cancelLoginChatGpt")]
-[JsonDerivedType(typeof(LogoutChatGptRequest), typeDiscriminator: "logoutChatGpt")]
-[JsonDerivedType(typeof(GetAuthStatusRequest), typeDiscriminator: "getAuthStatus")]
-[JsonDerivedType(typeof(GetUserSavedConfigRequest), typeDiscriminator: "getUserSavedConfig")]
-[JsonDerivedType(typeof(SetDefaultModelRequest), typeDiscriminator: "setDefaultModel")]
-[JsonDerivedType(typeof(GetUserAgentRequest), typeDiscriminator: "getUserAgent")]
-[JsonDerivedType(typeof(UserInfoRequest), typeDiscriminator: "userInfo")]
 [JsonDerivedType(typeof(FuzzyFileSearchRequest), typeDiscriminator: "fuzzyFileSearch")]
-[JsonDerivedType(typeof(ExecOneOffCommandRequest), typeDiscriminator: "execOneOffCommand")]
 public abstract partial record ClientRequest
 {
     public sealed partial record InitializeRequest : ClientRequest
@@ -113,6 +95,14 @@ public abstract partial record ClientRequest
         public RequestId Id { get; set; } = default!;
         [JsonPropertyName("params")]
         public CodeAlta.CodexSdk.V2.ThreadArchiveParams Params { get; set; } = default!;
+    }
+
+    public sealed partial record ThreadUnsubscribeRequest : ClientRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.ThreadUnsubscribeParams Params { get; set; } = default!;
     }
 
     public sealed partial record ThreadNameSetRequest : ClientRequest
@@ -283,6 +273,14 @@ public abstract partial record ClientRequest
         public CodeAlta.CodexSdk.V2.ListMcpServerStatusParams Params { get; set; } = default!;
     }
 
+    public sealed partial record WindowsSandboxSetupStartRequest : ClientRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.WindowsSandboxSetupStartParams Params { get; set; } = default!;
+    }
+
     public sealed partial record AccountLoginStartRequest : ClientRequest
     {
         [JsonPropertyName("id")]
@@ -342,6 +340,22 @@ public abstract partial record ClientRequest
         public CodeAlta.CodexSdk.V2.ConfigReadParams Params { get; set; } = default!;
     }
 
+    public sealed partial record ExternalAgentConfigDetectRequest : ClientRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.ExternalAgentConfigDetectParams Params { get; set; } = default!;
+    }
+
+    public sealed partial record ExternalAgentConfigImportRequest : ClientRequest
+    {
+        [JsonPropertyName("id")]
+        public RequestId Id { get; set; } = default!;
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.ExternalAgentConfigImportParams Params { get; set; } = default!;
+    }
+
     public sealed partial record ConfigValueWriteRequest : ClientRequest
     {
         [JsonPropertyName("id")]
@@ -374,206 +388,12 @@ public abstract partial record ClientRequest
         public CodeAlta.CodexSdk.V2.GetAccountParams Params { get; set; } = default!;
     }
 
-    /// <summary>
-    /// DEPRECATED APIs below
-    /// </summary>
-    public sealed partial record NewConversationRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public NewConversationParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record GetConversationSummaryRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public GetConversationSummaryParams Params { get; set; } = default!;
-    }
-
-    /// <summary>
-    /// List recorded Codex conversations (rollouts) with optional pagination and search.
-    /// </summary>
-    public sealed partial record ListConversationsRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public ListConversationsParams Params { get; set; } = default!;
-    }
-
-    /// <summary>
-    /// Resume a recorded Codex conversation from a rollout file.
-    /// </summary>
-    public sealed partial record ResumeConversationRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public ResumeConversationParams Params { get; set; } = default!;
-    }
-
-    /// <summary>
-    /// Fork a recorded Codex conversation into a new session.
-    /// </summary>
-    public sealed partial record ForkConversationRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public ForkConversationParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record ArchiveConversationRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public ArchiveConversationParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record SendUserMessageRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public SendUserMessageParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record SendUserTurnRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public SendUserTurnParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record InterruptConversationRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public InterruptConversationParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record AddConversationListenerRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public AddConversationListenerParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record RemoveConversationListenerRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public RemoveConversationListenerParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record GitDiffToRemoteRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public GitDiffToRemoteParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record LoginApiKeyRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public LoginApiKeyParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record LoginChatGptRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public JsonElement? Params { get; set; }
-    }
-
-    public sealed partial record CancelLoginChatGptRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public CancelLoginChatGptParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record LogoutChatGptRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public JsonElement? Params { get; set; }
-    }
-
-    /// <summary>
-    /// DEPRECATED in favor of GetAccount
-    /// </summary>
-    public sealed partial record GetAuthStatusRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public GetAuthStatusParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record GetUserSavedConfigRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public JsonElement? Params { get; set; }
-    }
-
-    public sealed partial record SetDefaultModelRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public SetDefaultModelParams Params { get; set; } = default!;
-    }
-
-    public sealed partial record GetUserAgentRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public JsonElement? Params { get; set; }
-    }
-
-    public sealed partial record UserInfoRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public JsonElement? Params { get; set; }
-    }
-
     public sealed partial record FuzzyFileSearchRequest : ClientRequest
     {
         [JsonPropertyName("id")]
         public RequestId Id { get; set; } = default!;
         [JsonPropertyName("params")]
         public FuzzyFileSearchParams Params { get; set; } = default!;
-    }
-
-    /// <summary>
-    /// Execute a command (argv vector) under the server's sandbox.
-    /// </summary>
-    public sealed partial record ExecOneOffCommandRequest : ClientRequest
-    {
-        [JsonPropertyName("id")]
-        public RequestId Id { get; set; } = default!;
-        [JsonPropertyName("params")]
-        public ExecOneOffCommandParams Params { get; set; } = default!;
     }
 
 }

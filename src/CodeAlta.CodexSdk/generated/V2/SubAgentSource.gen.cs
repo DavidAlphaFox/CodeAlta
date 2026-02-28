@@ -33,6 +33,10 @@ internal sealed class SubAgentSourceJsonConverter : JsonConverter<SubAgentSource
                     __result.Depth = JsonSerializer.Deserialize<int>(__DepthProp, options);
                 if (__ThreadSpawnElem.TryGetProperty("parent_thread_id", out var __ParentThreadIdProp))
                     __result.ParentThreadId = JsonSerializer.Deserialize<ThreadId>(__ParentThreadIdProp, options)!;
+                if (__ThreadSpawnElem.TryGetProperty("agent_nickname", out var __AgentNicknameProp))
+                    __result.AgentNickname = JsonSerializer.Deserialize<string?>(__AgentNicknameProp, options);
+                if (__ThreadSpawnElem.TryGetProperty("agent_role", out var __AgentRoleProp))
+                    __result.AgentRole = JsonSerializer.Deserialize<string?>(__AgentRoleProp, options);
                 return __result;
             }
             if (obj.TryGetProperty("other", out var __OtherElem))
@@ -69,6 +73,16 @@ internal sealed class SubAgentSourceJsonConverter : JsonConverter<SubAgentSource
                 JsonSerializer.Serialize(writer, v.Depth, options);
                 writer.WritePropertyName("parent_thread_id");
                 JsonSerializer.Serialize(writer, v.ParentThreadId, options);
+                if (v.AgentNickname is not null)
+                {
+                    writer.WritePropertyName("agent_nickname");
+                    JsonSerializer.Serialize(writer, v.AgentNickname, options);
+                }
+                if (v.AgentRole is not null)
+                {
+                    writer.WritePropertyName("agent_role");
+                    JsonSerializer.Serialize(writer, v.AgentRole, options);
+                }
                 writer.WriteEndObject();
                 writer.WriteEndObject();
                 break;
@@ -96,6 +110,10 @@ public abstract partial record SubAgentSource
         public int Depth { get; set; }
         [JsonPropertyName("parent_thread_id")]
         public ThreadId ParentThreadId { get; set; } = default!;
+        [JsonPropertyName("agent_nickname")]
+        public string? AgentNickname { get; set; }
+        [JsonPropertyName("agent_role")]
+        public string? AgentRole { get; set; }
     }
     public sealed partial record Other : SubAgentSource
     {

@@ -13,8 +13,8 @@ public enum NetworkApprovalProtocol
     Http,
     [JsonStringEnumMemberName("https")]
     Https,
-    [JsonStringEnumMemberName("socks5_tcp")]
+    [JsonStringEnumMemberName("socks5Tcp")]
     Socks5Tcp,
-    [JsonStringEnumMemberName("socks5_udp")]
+    [JsonStringEnumMemberName("socks5Udp")]
     Socks5Udp
 }

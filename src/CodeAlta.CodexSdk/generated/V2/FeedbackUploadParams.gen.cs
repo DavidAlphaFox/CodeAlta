@@ -12,6 +12,8 @@ public sealed partial record FeedbackUploadParams
     public string Classification { get; set; } = string.Empty;
     [JsonPropertyName("includeLogs")]
     public bool IncludeLogs { get; set; }
+    [JsonPropertyName("extraLogFiles")]
+    public List<string>? ExtraLogFiles { get; set; }
     [JsonPropertyName("reason")]
     public string? Reason { get; set; }
     [JsonPropertyName("threadId")]

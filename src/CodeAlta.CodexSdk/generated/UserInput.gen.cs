@@ -6,13 +6,10 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.CodexSdk;
 
-/// <summary>
-/// User input
-/// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(TextUserInput), typeDiscriminator: "text")]
 [JsonDerivedType(typeof(ImageUserInput), typeDiscriminator: "image")]
-[JsonDerivedType(typeof(LocalImageUserInput), typeDiscriminator: "local_image")]
+[JsonDerivedType(typeof(LocalImageUserInput), typeDiscriminator: "localImage")]
 [JsonDerivedType(typeof(SkillUserInput), typeDiscriminator: "skill")]
 [JsonDerivedType(typeof(MentionUserInput), typeDiscriminator: "mention")]
 public abstract partial record UserInput
@@ -21,32 +18,23 @@ public abstract partial record UserInput
     {
         [JsonPropertyName("text")]
         public string Text { get; set; } = string.Empty;
-        /// <summary>UI-defined spans within `text` that should be treated as special elements. These are byte ranges into the UTF-8 `text` buffer and are used to render or persist rich input markers (e.g., image placeholders) across history and resume without mutating the literal text.</summary>
+        /// <summary>UI-defined spans within `text` used to render or persist special elements.</summary>
         [JsonPropertyName("text_elements")]
-        public List<TextElement>? TextElements { get; set; }
+        public List<CodeAlta.CodexSdk.V2.TextElement>? TextElements { get; set; }
     }
 
-    /// <summary>
-    /// Pre‑encoded data: URI image.
-    /// </summary>
     public sealed partial record ImageUserInput : UserInput
     {
-        [JsonPropertyName("image_url")]
-        public string ImageUrl { get; set; } = string.Empty;
+        [JsonPropertyName("url")]
+        public string Url { get; set; } = string.Empty;
     }
 
-    /// <summary>
-    /// Local image path provided by the user.  This will be converted to an `Image` variant (base64 data URL) during request serialization.
-    /// </summary>
     public sealed partial record LocalImageUserInput : UserInput
     {
         [JsonPropertyName("path")]
         public string Path { get; set; } = string.Empty;
     }
 
-    /// <summary>
-    /// Skill selected by the user (name + path to SKILL.md).
-    /// </summary>
     public sealed partial record SkillUserInput : UserInput
     {
         [JsonPropertyName("name")]
@@ -55,9 +43,6 @@ public abstract partial record UserInput
         public string Path { get; set; } = string.Empty;
     }
 
-    /// <summary>
-    /// Explicit mention selected by the user (name + app://connector id).
-    /// </summary>
     public sealed partial record MentionUserInput : UserInput
     {
         [JsonPropertyName("name")]

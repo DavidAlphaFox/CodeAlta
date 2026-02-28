@@ -23,6 +23,9 @@ public sealed partial record ThreadListParams
     /// <summary>Optional provider filter; when set, only sessions recorded under these providers are returned. When present but empty, includes all providers.</summary>
     [JsonPropertyName("modelProviders")]
     public List<string>? ModelProviders { get; set; }
+    /// <summary>Optional substring filter for the extracted thread title.</summary>
+    [JsonPropertyName("searchTerm")]
+    public string? SearchTerm { get; set; }
     /// <summary>Optional sort key; defaults to created_at.</summary>
     [JsonPropertyName("sortKey")]
     public ThreadSortKey? SortKey { get; set; }

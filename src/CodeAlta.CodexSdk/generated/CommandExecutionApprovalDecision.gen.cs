@@ -34,6 +34,13 @@ internal sealed class CommandExecutionApprovalDecisionJsonConverter : JsonConver
                     __result.ExecpolicyAmendment = JsonSerializer.Deserialize<List<string>>(__ExecpolicyAmendmentProp, options)!;
                 return __result;
             }
+            if (obj.TryGetProperty("applyNetworkPolicyAmendment", out var __ApplyNetworkPolicyAmendmentElem))
+            {
+                var __result = new CommandExecutionApprovalDecision.ApplyNetworkPolicyAmendment();
+                if (__ApplyNetworkPolicyAmendmentElem.TryGetProperty("network_policy_amendment", out var __NetworkPolicyAmendmentProp))
+                    __result.NetworkPolicyAmendment = JsonSerializer.Deserialize<NetworkPolicyAmendment>(__NetworkPolicyAmendmentProp, options)!;
+                return __result;
+            }
             throw new JsonException($"Unknown CommandExecutionApprovalDecision object variant. Properties: {string.Join(", ", EnumeratePropertyNames(obj))}");
         }
 
@@ -64,6 +71,15 @@ internal sealed class CommandExecutionApprovalDecisionJsonConverter : JsonConver
                 writer.WriteEndObject();
                 writer.WriteEndObject();
                 break;
+            case CommandExecutionApprovalDecision.ApplyNetworkPolicyAmendment v:
+                writer.WriteStartObject();
+                writer.WritePropertyName("applyNetworkPolicyAmendment");
+                writer.WriteStartObject();
+                writer.WritePropertyName("network_policy_amendment");
+                JsonSerializer.Serialize(writer, v.NetworkPolicyAmendment, options);
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+                break;
             case CommandExecutionApprovalDecision.Decline:
                 writer.WriteStringValue("decline");
                 break;
@@ -85,6 +101,11 @@ public abstract partial record CommandExecutionApprovalDecision
     {
         [JsonPropertyName("execpolicy_amendment")]
         public List<string> ExecpolicyAmendment { get; set; } = [];
+    }
+    public sealed partial record ApplyNetworkPolicyAmendment : CommandExecutionApprovalDecision
+    {
+        [JsonPropertyName("network_policy_amendment")]
+        public NetworkPolicyAmendment NetworkPolicyAmendment { get; set; } = default!;
     }
     public sealed partial record Decline : CommandExecutionApprovalDecision;
     public sealed partial record Cancel : CommandExecutionApprovalDecision;

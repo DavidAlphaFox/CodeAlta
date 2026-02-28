@@ -8,7 +8,7 @@ namespace CodeAlta.CodexSdk;
 
 public sealed partial record ApplyPatchApprovalParams
 {
-    /// <summary>Use to correlate this with [codex_core::protocol::PatchApplyBeginEvent] and [codex_core::protocol::PatchApplyEndEvent].</summary>
+    /// <summary>Use to correlate this with [codex_protocol::protocol::PatchApplyBeginEvent] and [codex_protocol::protocol::PatchApplyEndEvent].</summary>
     [JsonPropertyName("callId")]
     public string CallId { get; set; } = string.Empty;
     [JsonPropertyName("conversationId")]

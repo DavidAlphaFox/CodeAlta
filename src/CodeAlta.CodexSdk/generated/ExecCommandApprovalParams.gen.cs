@@ -8,7 +8,7 @@ namespace CodeAlta.CodexSdk;
 
 public sealed partial record ExecCommandApprovalParams
 {
-    /// <summary>Use to correlate this with [codex_core::protocol::ExecCommandBeginEvent] and [codex_core::protocol::ExecCommandEndEvent].</summary>
+    /// <summary>Use to correlate this with [codex_protocol::protocol::ExecCommandBeginEvent] and [codex_protocol::protocol::ExecCommandEndEvent].</summary>
     [JsonPropertyName("callId")]
     public string CallId { get; set; } = string.Empty;
     [JsonPropertyName("command")]

@@ -12,8 +12,10 @@ namespace CodeAlta.CodexSdk;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "method")]
 [JsonDerivedType(typeof(ErrorNotification), typeDiscriminator: "error")]
 [JsonDerivedType(typeof(ThreadStartedNotification), typeDiscriminator: "thread/started")]
+[JsonDerivedType(typeof(ThreadStatusChangedNotification), typeDiscriminator: "thread/status/changed")]
 [JsonDerivedType(typeof(ThreadArchivedNotification), typeDiscriminator: "thread/archived")]
 [JsonDerivedType(typeof(ThreadUnarchivedNotification), typeDiscriminator: "thread/unarchived")]
+[JsonDerivedType(typeof(ThreadClosedNotification), typeDiscriminator: "thread/closed")]
 [JsonDerivedType(typeof(ThreadNameUpdatedNotification), typeDiscriminator: "thread/name/updated")]
 [JsonDerivedType(typeof(ThreadTokenUsageUpdatedNotification), typeDiscriminator: "thread/tokenUsage/updated")]
 [JsonDerivedType(typeof(TurnStartedNotification), typeDiscriminator: "turn/started")]
@@ -22,7 +24,6 @@ namespace CodeAlta.CodexSdk;
 [JsonDerivedType(typeof(TurnPlanUpdatedNotification), typeDiscriminator: "turn/plan/updated")]
 [JsonDerivedType(typeof(ItemStartedNotification), typeDiscriminator: "item/started")]
 [JsonDerivedType(typeof(ItemCompletedNotification), typeDiscriminator: "item/completed")]
-[JsonDerivedType(typeof(RawResponseItemCompletedNotification), typeDiscriminator: "rawResponseItem/completed")]
 [JsonDerivedType(typeof(ItemAgentMessageDeltaNotification), typeDiscriminator: "item/agentMessage/delta")]
 [JsonDerivedType(typeof(ItemPlanDeltaNotification), typeDiscriminator: "item/plan/delta")]
 [JsonDerivedType(typeof(ItemCommandExecutionOutputDeltaNotification), typeDiscriminator: "item/commandExecution/outputDelta")]
@@ -42,11 +43,14 @@ namespace CodeAlta.CodexSdk;
 [JsonDerivedType(typeof(ConfigWarningNotification), typeDiscriminator: "configWarning")]
 [JsonDerivedType(typeof(FuzzyFileSearchSessionUpdatedNotification), typeDiscriminator: "fuzzyFileSearch/sessionUpdated")]
 [JsonDerivedType(typeof(FuzzyFileSearchSessionCompletedNotification), typeDiscriminator: "fuzzyFileSearch/sessionCompleted")]
+[JsonDerivedType(typeof(ThreadRealtimeStartedNotification), typeDiscriminator: "thread/realtime/started")]
+[JsonDerivedType(typeof(ThreadRealtimeItemAddedNotification), typeDiscriminator: "thread/realtime/itemAdded")]
+[JsonDerivedType(typeof(ThreadRealtimeOutputAudioDeltaNotification), typeDiscriminator: "thread/realtime/outputAudio/delta")]
+[JsonDerivedType(typeof(ThreadRealtimeErrorNotification), typeDiscriminator: "thread/realtime/error")]
+[JsonDerivedType(typeof(ThreadRealtimeClosedNotification), typeDiscriminator: "thread/realtime/closed")]
 [JsonDerivedType(typeof(WindowsWorldWritableWarningNotification), typeDiscriminator: "windows/worldWritableWarning")]
+[JsonDerivedType(typeof(WindowsSandboxSetupCompletedNotification), typeDiscriminator: "windowsSandbox/setupCompleted")]
 [JsonDerivedType(typeof(AccountLoginCompletedNotification), typeDiscriminator: "account/login/completed")]
-[JsonDerivedType(typeof(AuthStatusChangeNotification), typeDiscriminator: "authStatusChange")]
-[JsonDerivedType(typeof(LoginChatGptCompleteNotification), typeDiscriminator: "loginChatGptComplete")]
-[JsonDerivedType(typeof(SessionConfiguredNotification), typeDiscriminator: "sessionConfigured")]
 public abstract partial record ServerNotification
 {
     /// <summary>
@@ -64,6 +68,12 @@ public abstract partial record ServerNotification
         public CodeAlta.CodexSdk.V2.ThreadStartedNotification Params { get; set; } = default!;
     }
 
+    public sealed partial record ThreadStatusChangedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.ThreadStatusChangedNotification Params { get; set; } = default!;
+    }
+
     public sealed partial record ThreadArchivedNotification : ServerNotification
     {
         [JsonPropertyName("params")]
@@ -74,6 +84,12 @@ public abstract partial record ServerNotification
     {
         [JsonPropertyName("params")]
         public CodeAlta.CodexSdk.V2.ThreadUnarchivedNotification Params { get; set; } = default!;
+    }
+
+    public sealed partial record ThreadClosedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.ThreadClosedNotification Params { get; set; } = default!;
     }
 
     public sealed partial record ThreadNameUpdatedNotification : ServerNotification
@@ -122,15 +138,6 @@ public abstract partial record ServerNotification
     {
         [JsonPropertyName("params")]
         public CodeAlta.CodexSdk.V2.ItemCompletedNotification Params { get; set; } = default!;
-    }
-
-    /// <summary>
-    /// This event is internal-only. Used by Codex Cloud.
-    /// </summary>
-    public sealed partial record RawResponseItemCompletedNotification : ServerNotification
-    {
-        [JsonPropertyName("params")]
-        public CodeAlta.CodexSdk.V2.RawResponseItemCompletedNotification Params { get; set; } = default!;
     }
 
     public sealed partial record ItemAgentMessageDeltaNotification : ServerNotification
@@ -253,6 +260,36 @@ public abstract partial record ServerNotification
         public FuzzyFileSearchSessionCompletedNotification Params { get; set; } = default!;
     }
 
+    public sealed partial record ThreadRealtimeStartedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.ThreadRealtimeStartedNotification Params { get; set; } = default!;
+    }
+
+    public sealed partial record ThreadRealtimeItemAddedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.ThreadRealtimeItemAddedNotification Params { get; set; } = default!;
+    }
+
+    public sealed partial record ThreadRealtimeOutputAudioDeltaNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.ThreadRealtimeOutputAudioDeltaNotification Params { get; set; } = default!;
+    }
+
+    public sealed partial record ThreadRealtimeErrorNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.ThreadRealtimeErrorNotification Params { get; set; } = default!;
+    }
+
+    public sealed partial record ThreadRealtimeClosedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.ThreadRealtimeClosedNotification Params { get; set; } = default!;
+    }
+
     /// <summary>
     /// Notifies the user of world-writable directories on Windows, which cannot be protected by the sandbox.
     /// </summary>
@@ -262,34 +299,16 @@ public abstract partial record ServerNotification
         public CodeAlta.CodexSdk.V2.WindowsWorldWritableWarningNotification Params { get; set; } = default!;
     }
 
+    public sealed partial record WindowsSandboxSetupCompletedNotification : ServerNotification
+    {
+        [JsonPropertyName("params")]
+        public CodeAlta.CodexSdk.V2.WindowsSandboxSetupCompletedNotification Params { get; set; } = default!;
+    }
+
     public sealed partial record AccountLoginCompletedNotification : ServerNotification
     {
         [JsonPropertyName("params")]
         public CodeAlta.CodexSdk.V2.AccountLoginCompletedNotification Params { get; set; } = default!;
-    }
-
-    /// <summary>
-    /// DEPRECATED NOTIFICATIONS below
-    /// </summary>
-    public sealed partial record AuthStatusChangeNotification : ServerNotification
-    {
-        [JsonPropertyName("params")]
-        public AuthStatusChangeNotification Params { get; set; } = default!;
-    }
-
-    /// <summary>
-    /// Deprecated: use `account/login/completed` instead.
-    /// </summary>
-    public sealed partial record LoginChatGptCompleteNotification : ServerNotification
-    {
-        [JsonPropertyName("params")]
-        public LoginChatGptCompleteNotification Params { get; set; } = default!;
-    }
-
-    public sealed partial record SessionConfiguredNotification : ServerNotification
-    {
-        [JsonPropertyName("params")]
-        public SessionConfiguredNotification Params { get; set; } = default!;
     }
 
 }
