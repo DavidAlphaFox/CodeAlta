@@ -2,6 +2,15 @@
   <Folder Name="/doc/">
     <File Path="../doc/readme.md" />
     <File Path="../doc/specs/agent_api_specs.md" />
+    <File Path="../doc/specs/blueprint_agentic_coding_specs.md" />
+    <File Path="../doc/specs/blueprint_codealta_specs.md" />
+    <File Path="../doc/specs/blueprint_mcp_server_specs.md" />
+    <File Path="../doc/specs/implementation_plan.md" />
+    <File Path="../doc/specs/implementation_plan_agent_orchestration.md" />
+    <File Path="../doc/specs/implementation_plan_dotnet.md" />
+    <File Path="../doc/specs/implementation_plan_mcp_server.md" />
+    <File Path="../doc/specs/implementation_plan_storage_search.md" />
+    <File Path="../doc/specs/implementation_plan_workspaces_bootstrap.md" />
   </Folder>
   <Folder Name="/general/">
     <File Path="../.editorconfig" />
