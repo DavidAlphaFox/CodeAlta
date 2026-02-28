@@ -1,7 +1,7 @@
 # Spec Coverage Matrix: `doc/specs/implementation_plan.md`
 
 As of: 2026-02-28  
-Code state: `b41f453e399b9fababc43ab3b52557071d196506`
+Code state: `e70a1ddd4b74c7adedb02c707268088009aa317c`
 
 Legend:
 - Done: implemented and covered by tests (or trivially verified)
@@ -104,7 +104,7 @@ Tool-surface gaps versus `implementation_plan_mcp_server.md`:
 | Create `CodeAlta.Orchestration` | Done | `src/CodeAlta.Orchestration/*` | Orchestration tests |
 | Implement role profiles | Done | Role parsing/storage in `src/CodeAlta.Workspaces/Roles/*` | `RoleProfileStore_ParsesFrontmatterAndCopilotMarkdown` |
 | Implement scope resolution + context pack builder | Done | `src/CodeAlta.Workspaces/WorkspaceResolver.cs`, `src/CodeAlta.Orchestration/Context/ContextPackBuilder.cs` | `ContextPackBuilder_EnforcesBudgetAndPreservesSourceLinks` |
-| Integrate with `CodeAlta.Agent` backends and route tool calls | Partial | `src/CodeAlta.Orchestration/Runtime/AgentHub.cs` exists; end-to-end tool routing via MCP is not fully implemented/tested | Tests use a fake backend; no “backend tool call -> MCP tool -> persistence” integration test |
+| Integrate with `CodeAlta.Agent` backends and route tool calls | Partial | `src/CodeAlta.Orchestration/Runtime/AgentHub.cs`; MCP tool bridge `src/CodeAlta.Orchestration/Mcp/McpToolBridge.cs` is used by the terminal host Chat screen (`src/CodeAlta/TerminalUi/CodeAltaTerminalUi.cs`) to expose `codealta.*` MCP tools to Copilot backends | `src/CodeAlta.Orchestration.Tests/McpToolBridgeTests.cs` verifies MCP tools can be invoked through the bridge; Codex tool registration remains limited (no dynamic tool registration support in `CodeAlta.CodexSdk` thread start params) |
 | Persist planner/knowledge outputs to artifacts | Partial | Planner/builder persist artifacts; knowledge agent artifact flows are minimal | `OrchestrationFlow_PlannerCreatesAndBuilderCompletesTasks` covers planner + builder artifacts |
 
 ### Milestone 5 — .NET-first services
@@ -120,4 +120,4 @@ Tool-surface gaps versus `implementation_plan_mcp_server.md`:
 | Milestone Item | Status | Implementation Evidence | Test Evidence / Notes |
 | --- | --- | --- | --- |
 | Replace `Program.cs` playground with real TUI host | Done | `src/CodeAlta/Program.cs`, `src/CodeAlta/TerminalUi/CodeAltaTerminalUi.cs` | No automated UI tests |
-| Responsive UI loops, background job views, scope selection UX | Partial | `src/CodeAlta/TerminalUi/CodeAltaTerminalUi.cs` | Includes basic Jobs screen and workspace scope selector; does not yet include richer UX (task drill-down, background job list beyond indexing, etc.) |
+| Responsive UI loops, background job views, scope selection UX | Partial | `src/CodeAlta/TerminalUi/CodeAltaTerminalUi.cs` | Includes Jobs screen, scope selector, and a Chat screen using `PromptEditor` + `DocumentFlow` + markdown rendering, wired to `AgentHub` sessions; still missing richer UX (task drill-down, background job list beyond indexing, etc.) |
