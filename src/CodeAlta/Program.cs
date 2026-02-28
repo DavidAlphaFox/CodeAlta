@@ -1,214 +1,381 @@
-using CodeAlta.CodexSdk;
-using CodeAlta.CodexSdk.V2;
-using LLama;
-using LLama.Common;
-using LLama.Native;
-using System.Diagnostics;
-using System.Numerics.Tensors;
-using System.Text.Json;
-using CodeAlta.Agent;
-using CodeAlta.Agent.Codex;
-using CodeAlta.Agent.Copilot;
-using GitHub.Copilot.SDK;
-using XenoAtom.Logging;
-using XenoAtom.Logging.Writers;
-using XenoAtom.Terminal;
+using CodeAlta.DotNet;
+using CodeAlta.Mcp;
+using CodeAlta.Orchestration;
+using CodeAlta.Persistence;
+using CodeAlta.Search;
+using CodeAlta.Workspaces;
+using Microsoft.Extensions.DependencyInjection;
 
-
-var factory = new AgentBackendFactory();
-
-factory.RegisterCodex(new CodexAgentBackendOptions()
+var cancellationTokenSource = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) =>
 {
-    ApprovalPolicy = CodeAlta.CodexSdk.V2.AskForApproval.Never,
-    ExperimentalApi = true,
-});
-factory.RegisterCopilot(new CopilotAgentBackendOptions());
-
-
-var codex = factory.Create(AgentBackendIds.Codex);
-
-var models = await codex.ListModelsAsync();
-Terminal.WriteLine("Codex models:");
-foreach (var model in models)
-{
-    Terminal.WriteLine(model.ToString());
-}
-Terminal.WriteLine();
-
-var copilot = factory.Create(AgentBackendIds.Copilot);
-var copilotModels = await copilot.ListModelsAsync();
-Terminal.WriteLine("Copilot models:");
-foreach (var model in copilotModels)
-{
-    Terminal.WriteLine(model.ToString());
-}
-Terminal.WriteLine();
-
-/*
-NativeLibraryConfig.All.WithLogCallback((level, message) =>
-{
-});
-
-//NativeLibraryConfig.All.WithAvx(AvxLevel.Avx2);
-
-// var modelPath = @"C:\code\huggingface\jina-embeddings-v5-text-nano-text-matching-GGUF\v5-nano-text-matching-Q8_0.gguf";
-
-
-//var modelPath = @"C:\code\huggingface\nomic-embed-code-GGUF\nomic-embed-code.Q6_K.gguf";
-//var modelPath = @"C:\code\huggingface\nomic-embed-text-v1.5-GGUF\nomic-embed-text-v1.5.Q6_K.gguf";
-var modelPath = @"C:\code\huggingface\embeddinggemma-300M-GGUF\embeddinggemma-300M-Q8_0.gguf";
-
-var @params = new ModelParams(modelPath)
-{
-    // Embedding models can return one embedding per token, or all of them can be combined ("pooled") into
-    // one single embedding. Setting PoolingType to "Mean" will combine all of the embeddings using mean average.
-    PoolingType = LLamaPoolingType.Last,
+    e.Cancel = true;
+    cancellationTokenSource.Cancel();
 };
-using var weights = LLamaWeights.LoadFromFile(@params);
-var embedder = new LLamaEmbedder(weights, @params);
 
-var clock = Stopwatch.StartNew();
-for (int i = 0; i < 100; i++)
+await using var app = await TerminalHost.CreateAsync(cancellationTokenSource.Token).ConfigureAwait(false);
+await app.RunAsync(cancellationTokenSource.Token).ConfigureAwait(false);
+
+internal sealed class TerminalHost : IAsyncDisposable
 {
-    clock.Restart();
-    var results = await embedder.GetEmbeddings(
-        """
-        title: Reducing allocations | text: path=docs/performance.md
-        type=markdown
+    private readonly IServiceProvider _mcpServices;
+    private readonly CodeAltaMcpServerFactory _mcpFactory;
+    private readonly WorkspaceCatalog _workspaceCatalog;
+    private readonly WorkspaceResolver _workspaceResolver;
+    private readonly TaskRepository _taskRepository;
+    private readonly SearchService _searchService;
+    private readonly DotNetIndexService _dotNetIndexService;
+    private readonly DotNetDiagnosticsService _dotNetDiagnosticsService;
+    private readonly Indexer _indexer;
 
-        Use Span<T> and ArrayPool<T> for high throughput parsing. Avoid LINQ in tight loops.
-        """);
-    clock.Stop();
-    var elapsed = clock.Elapsed;
-
-
-    Console.WriteLine($"Got {results.Count} embeddings, each of dimension {results[0].Length} in {elapsed.TotalMilliseconds}ms");
-
-    var anotherResults = await embedder.GetEmbeddings("task: search result | query: How can I reduce allocations in our C# parser?");
-    Console.WriteLine($"Got {anotherResults.Count} embeddings, each of dimension {anotherResults[0].Length}.");
-
-    var a = results.Single().ToArray();
-    var b = anotherResults.Single().ToArray();
-
-    EmbeddingSimilarity.NormalizeL2(a);
-    EmbeddingSimilarity.NormalizeL2(b);
-
-    Console.WriteLine($"Similarities: {EmbeddingSimilarity.DotSimilarityNormalized(a, b)}");
-}
-
-return;
-
-
-LogManager.Initialize(new LogManagerConfig()
-{
-    RootLogger =
+    private TerminalHost(
+        IServiceProvider mcpServices,
+        CodeAltaMcpServerFactory mcpFactory,
+        WorkspaceCatalog workspaceCatalog,
+        WorkspaceResolver workspaceResolver,
+        TaskRepository taskRepository,
+        SearchService searchService,
+        DotNetIndexService dotNetIndexService,
+        DotNetDiagnosticsService dotNetDiagnosticsService,
+        Indexer indexer)
     {
-        MinimumLevel = LogLevel.Info,
-        Writers =
+        _mcpServices = mcpServices;
+        _mcpFactory = mcpFactory;
+        _workspaceCatalog = workspaceCatalog;
+        _workspaceResolver = workspaceResolver;
+        _taskRepository = taskRepository;
+        _searchService = searchService;
+        _dotNetIndexService = dotNetIndexService;
+        _dotNetDiagnosticsService = dotNetDiagnosticsService;
+        _indexer = indexer;
+    }
+
+    public static async Task<TerminalHost> CreateAsync(CancellationToken cancellationToken)
+    {
+        var homeRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".codealta");
+        Directory.CreateDirectory(homeRoot);
+
+        var db = new CodeAltaDb(
+            new CodeAltaDbOptions
+            {
+                DatabasePath = Path.Combine(homeRoot, "state", "db", "codealta.db"),
+            });
+        await db.InitializeAsync(cancellationToken).ConfigureAwait(false);
+
+        var taskRepository = new TaskRepository(db);
+        var artifactStore = new ArtifactStore();
+        var artifactRepository = new ArtifactRepository(db);
+        var agentRepository = new AgentRepository(db);
+        var documentIndexStore = new DocumentIndexStore(db);
+        var embeddingManager = new EmbeddingModelManager(new HashEmbedder());
+        var indexingQueue = new IndexingQueue();
+        var indexer = new Indexer(indexingQueue, documentIndexStore, embeddingManager);
+        var searchService = new SearchService(documentIndexStore, embeddingManager);
+        var workspaceCatalog = new WorkspaceCatalog(
+            new WorkspaceCatalogOptions
+            {
+                GlobalRepoRoot = Path.Combine(homeRoot, "repo"),
+            });
+        var workspaceResolver = new WorkspaceResolver(workspaceCatalog);
+
+        var dotNetOptions = new DotNetOptions
         {
-            new TerminalLogWriter()
+            ArtifactRoot = Path.Combine(homeRoot, "knowledge", "dotnet"),
+        };
+        var dotNetIndexService = new DotNetIndexService(
+            new DotNetWorkspaceService(),
+            new SymbolIndexService(),
+            artifactStore,
+            artifactRepository,
+            indexer,
+            dotNetOptions);
+        var dotNetDiagnosticsService = new DotNetDiagnosticsService(
+            artifactStore,
+            artifactRepository,
+            indexer,
+            dotNetOptions);
+
+        var mcpOptions = new CodeAltaMcpOptions
+        {
+            ServerName = "CodeAlta",
+            ServerVersion = "0.1.0-preview",
+            ArtifactRoot = Path.Combine(homeRoot, "artifacts"),
+        };
+
+        var mcpServiceCollection = new ServiceCollection();
+        mcpServiceCollection.AddSingleton(taskRepository);
+        mcpServiceCollection.AddSingleton(artifactStore);
+        mcpServiceCollection.AddSingleton(artifactRepository);
+        mcpServiceCollection.AddSingleton(agentRepository);
+        mcpServiceCollection.AddSingleton(indexer);
+        mcpServiceCollection.AddSingleton(searchService);
+        mcpServiceCollection.AddSingleton(workspaceCatalog);
+        mcpServiceCollection.AddSingleton(workspaceResolver);
+        mcpServiceCollection.AddSingleton(mcpOptions);
+        mcpServiceCollection.AddSingleton(new McpSessionRegistry());
+        var mcpServices = mcpServiceCollection.BuildServiceProvider();
+
+        var mcpFactory = new CodeAltaMcpServerFactory(
+            mcpServices,
+            mcpServices.GetRequiredService<McpSessionRegistry>(),
+            mcpServices.GetRequiredService<CodeAltaMcpOptions>());
+
+        return new TerminalHost(
+            mcpServices,
+            mcpFactory,
+            workspaceCatalog,
+            workspaceResolver,
+            taskRepository,
+            searchService,
+            dotNetIndexService,
+            dotNetDiagnosticsService,
+            indexer);
+    }
+
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            RenderMenu();
+            var choice = Console.ReadLine()?.Trim();
+            if (string.IsNullOrWhiteSpace(choice))
+            {
+                continue;
+            }
+
+            if (choice is "0" or "q" or "Q" or "exit")
+            {
+                return;
+            }
+
+            try
+            {
+                switch (choice)
+                {
+                    case "1":
+                        await ListWorkspacesAsync(cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "2":
+                        await ResolveScopeAsync(cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "3":
+                        await ListTasksAsync(cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "4":
+                        await CreateTaskAsync(cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "5":
+                        await SearchAsync(cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "6":
+                        await RefreshDotNetIndexAsync(cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "7":
+                        await RunDotNetDiagnosticsAsync(cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "8":
+                        await McpHealthCheckAsync(cancellationToken).ConfigureAwait(false);
+                        break;
+                    default:
+                        Console.WriteLine("Unknown option.");
+                        break;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Console.WriteLine($"Operation failed: {ex.Message}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("Press Enter to continue...");
+            Console.ReadLine();
         }
-    },
-});
-
-var options = CodexClient.CreateJsonSerializerOptions();
-
-var test = new ThreadStartParams()
-{
-    Config = new Dictionary<string, JsonElement>
-    {
-        ["test"] = JsonSerializer.SerializeToElement("value", options)
     }
-};
 
-var result = JsonSerializer.Serialize(test, options);
-Console.WriteLine(result);
+    public ValueTask DisposeAsync()
+    {
+        switch (_mcpServices)
+        {
+            case IAsyncDisposable asyncDisposable:
+                return asyncDisposable.DisposeAsync();
+            case IDisposable disposable:
+                disposable.Dispose();
+                return ValueTask.CompletedTask;
+            default:
+                return ValueTask.CompletedTask;
+        }
+    }
 
-var codexClient = await CodexClient.StartAsync(new ClientInfo
-{
-    Name = "CodeAlta",
-    Version = "1.0.0",
-    Title = "CodeAlta App"
-});
+    private void RenderMenu()
+    {
+        Console.Clear();
+        Console.WriteLine("CodeAlta Terminal Host");
+        Console.WriteLine("=====================");
+        Console.WriteLine($"Index Queue Depth: {_indexer.Status.QueueDepth}");
+        Console.WriteLine();
+        Console.WriteLine("1. List Workspaces");
+        Console.WriteLine("2. Resolve Scope");
+        Console.WriteLine("3. List Tasks");
+        Console.WriteLine("4. Create Task");
+        Console.WriteLine("5. Search Query");
+        Console.WriteLine("6. Refresh .NET Index");
+        Console.WriteLine("7. Run .NET Diagnostics");
+        Console.WriteLine("8. MCP Health Check");
+        Console.WriteLine("0. Exit");
+        Console.WriteLine();
+        Console.Write("Select: ");
+    }
 
-var config = await codexClient.ConfigReadAsync(new ConfigReadParams()
-{
-    Cwd = AppContext.BaseDirectory
-});
-Console.WriteLine(config);
+    private async Task ListWorkspacesAsync(CancellationToken cancellationToken)
+    {
+        var workspaces = await _workspaceCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
+        if (workspaces.Count == 0)
+        {
+            Console.WriteLine("No workspaces were discovered.");
+            return;
+        }
 
-var models = await codexClient.ModelListAsync(new ModelListParams());
-foreach (var model in models.Data)
-{
-    Console.WriteLine(model);
+        foreach (var workspace in workspaces)
+        {
+            Console.WriteLine($"- {workspace.Key} ({workspace.DisplayName}) projects={workspace.Projects.Count}");
+        }
+    }
+
+    private async Task ResolveScopeAsync(CancellationToken cancellationToken)
+    {
+        Console.Write("Scope kind (global|workspace|project): ");
+        var kind = Console.ReadLine()?.Trim()?.ToLowerInvariant();
+        var selector = kind switch
+        {
+            "global" => ScopeSelector.Global(),
+            "workspace" => ScopeSelector.Workspace(ReadRequired("Workspace key")),
+            "project" => ScopeSelector.Project(ReadRequired("Project key")),
+            _ => throw new ArgumentException("Invalid scope kind."),
+        };
+
+        var resolutions = await _workspaceResolver.ResolveAsync(selector, cancellationToken: cancellationToken).ConfigureAwait(false);
+        foreach (var resolution in resolutions)
+        {
+            Console.WriteLine($"Workspace: {resolution.Workspace.Key}");
+            foreach (var project in resolution.Projects)
+            {
+                Console.WriteLine($"  - {project.Project.Key} => {project.CheckoutPath}");
+            }
+        }
+    }
+
+    private async Task ListTasksAsync(CancellationToken cancellationToken)
+    {
+        var tasks = await _taskRepository.ListAsync(limit: 20, cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (tasks.Count == 0)
+        {
+            Console.WriteLine("No tasks.");
+            return;
+        }
+
+        foreach (var task in tasks)
+        {
+            Console.WriteLine($"- {task.TaskId} [{task.Status}] {task.Title}");
+        }
+    }
+
+    private async Task CreateTaskAsync(CancellationToken cancellationToken)
+    {
+        var title = ReadRequired("Task title");
+        var workspaceId = ReadOptional("Workspace id (optional)");
+        var projectId = ReadOptional("Project id (optional)");
+
+        var task = await _taskRepository.CreateAsync(
+            new CreateTaskRequest
+            {
+                Title = title,
+                WorkspaceId = workspaceId,
+                ProjectId = projectId,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        Console.WriteLine($"Created task: {task.TaskId}");
+    }
+
+    private async Task SearchAsync(CancellationToken cancellationToken)
+    {
+        var queryText = ReadRequired("Search text");
+        var results = await _searchService.QueryHybridAsync(
+            new SearchQuery
+            {
+                Text = queryText,
+                Limit = 10,
+                PrefilterLimit = 20,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (results.Count == 0)
+        {
+            Console.WriteLine("No results.");
+            return;
+        }
+
+        foreach (var result in results)
+        {
+            Console.WriteLine($"- {result.Title ?? result.SourceId}");
+            Console.WriteLine($"  {result.LinkUri}");
+            if (!string.IsNullOrWhiteSpace(result.Snippet))
+            {
+                Console.WriteLine($"  {result.Snippet}");
+            }
+        }
+    }
+
+    private async Task RefreshDotNetIndexAsync(CancellationToken cancellationToken)
+    {
+        var repoPath = ReadRequired("Repository path");
+        var refresh = await _dotNetIndexService.RefreshIndexAsync(
+            repoPath,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        Console.WriteLine(
+            $"Index refreshed. symbols={refresh.SymbolCount} indexedDocuments={refresh.IndexedDocumentCount} graphArtifact={refresh.ProjectGraphArtifactId}");
+    }
+
+    private async Task RunDotNetDiagnosticsAsync(CancellationToken cancellationToken)
+    {
+        var targetPath = ReadRequired("Path to repo/solution/project");
+        var result = await _dotNetDiagnosticsService.RunBuildAsync(targetPath, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        Console.WriteLine($"Diagnostics complete. success={result.Success} exitCode={result.ExitCode}");
+        Console.WriteLine($"Artifact: {result.ArtifactPath}");
+    }
+
+    private async Task McpHealthCheckAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await InProcessMcpConnection.CreateAsync(_mcpFactory, cancellationToken)
+            .ConfigureAwait(false);
+        var tools = await connection.Client.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        Console.WriteLine($"MCP tools available: {tools.Count}");
+        foreach (var tool in tools.Take(10))
+        {
+            Console.WriteLine($"- {tool.Name}");
+        }
+    }
+
+    private static string ReadRequired(string label)
+    {
+        while (true)
+        {
+            Console.Write($"{label}: ");
+            var value = Console.ReadLine()?.Trim();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+    }
+
+    private static string? ReadOptional(string label)
+    {
+        Console.Write($"{label}: ");
+        var value = Console.ReadLine()?.Trim();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
 }
-
-var experimentalList = await codexClient.ExperimentalFeatureListAsync(new ExperimentalFeatureListParams());
-experimentalList.Data.ForEach(feature =>
-{
-    Console.WriteLine($"Experimental feature: {feature}");
-});
-
-
-var skillList = await codexClient.SkillsListAsync(new());
-skillList.Data.ForEach(skill =>
-{
-    Console.WriteLine($"Skill:");
-    foreach (var skillMeta in skill.Skills)
-    {
-        Console.WriteLine($"  {skillMeta}");
-    }
-});
-
-return;
-var accountRead = await codexClient.AccountReadAsync(new GetAccountParams());
-Console.WriteLine(accountRead.Account);
-
-var rateLimit = await codexClient.AccountRateLimitsReadAsync();
-Console.WriteLine($"Rate limit: {rateLimit}");
-
-
-var threadList = await codexClient.ThreadListAsync(new ThreadListParams()
-{
-    //Cwd = @"C:\code\XenoAtom\XenoAtom.CommandLine"
-});
-
-
-foreach(var thread in threadList.Data)
-{
-    Console.WriteLine($"Thread: {thread.Id} - ModelProvider: {thread.ModelProvider}, Cwd: {thread.Cwd}, CliVersion: {thread.CliVersion}, CreatedAt: {thread.CreatedAt} TurnsCount: {thread.Turns.Count}, Preview: {thread.Preview}, Source: {thread.Source}, GitInfo: {thread.GitInfo}, Path: {thread.Path}");
-}
-
-public static class EmbeddingSimilarity
-{
-    // Cosine similarity = dot(a,b) / (||a|| * ||b||)
-    // If you pre-normalize embeddings to unit length, cosine similarity = dot(a,b).
-    public static float CosineSimilarity(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
-    {
-        if (a.Length != b.Length) throw new ArgumentException("Vectors must have same length.");
-
-        float dot = TensorPrimitives.Dot(a, b);
-        float normA = MathF.Sqrt(TensorPrimitives.Dot(a, a));
-        float normB = MathF.Sqrt(TensorPrimitives.Dot(b, b));
-
-        // Avoid division by zero
-        if (normA == 0 || normB == 0) return 0;
-
-        return dot / (normA * normB);
-    }
-
-    // Normalize in-place: v = v / ||v||
-    public static void NormalizeL2(Span<float> v)
-    {
-        float norm = MathF.Sqrt(TensorPrimitives.Dot(v, v));
-        if (norm == 0) return;
-        TensorPrimitives.Divide(v, norm, v);
-    }
-
-    // If both vectors are already normalized, this is the fastest similarity:
-    public static float DotSimilarityNormalized(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
-        => TensorPrimitives.Dot(a, b);
-}
-
-
-*/

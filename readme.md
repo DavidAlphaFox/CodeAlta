@@ -14,6 +14,7 @@ An agentic AI coding CLI assistant developed in .NET.
 - In-process MCP server surface with tools for tasks, artifacts, search, workspaces, and agents (`CodeAlta.Mcp`)
 - Agent orchestration services for role profiles, context packs, and planner/builder durable workflows (`CodeAlta.Orchestration`)
 - .NET first-class services for workspace discovery, symbol indexing, context snippets, diagnostics, and index refresh (`CodeAlta.DotNet`)
+- Interactive terminal host wired to workspace/task/search/.NET/MCP services (`CodeAlta`)
 - In-memory MCP transport tests for tool discovery and roundtrip tool calls
 
 ## 📖 User Guide

@@ -90,3 +90,23 @@ Current `.NET` infrastructure (`CodeAlta.DotNet`) includes:
   - symbol lookup path/range validation
   - symbol context source-link generation
   - refresh-index and diagnostics artifact persistence.
+
+## Terminal Host
+
+The `CodeAlta` executable now runs as an interactive terminal host instead of a playground script.
+
+Current terminal host capabilities:
+
+- Workspace operations:
+  - list discovered workspaces
+  - resolve global/workspace/project scopes.
+- Task operations:
+  - list tasks
+  - create tasks.
+- Search operations:
+  - run hybrid search queries over indexed artifacts/documents.
+- .NET operations:
+  - refresh `.NET` project/symbol index artifacts
+  - run `dotnet build` diagnostics with persisted artifacts.
+- MCP operations:
+  - in-process MCP health check by listing registered `codealta.*` tools.
