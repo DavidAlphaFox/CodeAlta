@@ -1,5 +1,6 @@
 using CodeAlta.Workspaces;
 using CodeAlta.Workspaces.Bootstrap;
+using CodeAlta.Workspaces.Skills;
 
 namespace CodeAlta.Workspaces.Tests;
 
@@ -155,6 +156,60 @@ public sealed class WorkspaceInfrastructureTests
 
         Assert.AreEqual(1, plans.Count);
         Assert.AreEqual(CheckoutAction.Clone, plans[0].Action);
+    }
+
+    [TestMethod]
+    public async Task SkillCatalog_ListAndGet_Works()
+    {
+        using var root = TempDirectory.Create();
+        var skillsRoot = Path.Combine(root.Path, ".codealta", "skills");
+        var skillPath = Path.Combine(skillsRoot, "sample-skill");
+        Directory.CreateDirectory(skillPath);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(skillPath, "SKILL.md"),
+            """
+            # Sample Skill
+
+            Lists and reads skills from disk.
+            """
+        ).ConfigureAwait(false);
+
+        var catalog = new SkillCatalog();
+        var listed = await catalog.ListAsync([skillsRoot]).ConfigureAwait(false);
+
+        Assert.AreEqual(1, listed.Count);
+        Assert.AreEqual("sample-skill", listed[0].Name);
+        Assert.AreEqual("Sample Skill", listed[0].Title);
+        Assert.AreEqual("Lists and reads skills from disk.", listed[0].Description);
+
+        var doc = await catalog.GetAsync([skillsRoot], "sample-skill").ConfigureAwait(false);
+        Assert.IsNotNull(doc);
+        StringAssert.Contains(doc.Content, "Sample Skill");
+    }
+
+    [TestMethod]
+    public async Task SkillCatalog_GetResourceAsync_ReadsBytes()
+    {
+        using var root = TempDirectory.Create();
+        var skillsRoot = Path.Combine(root.Path, ".codealta", "skills");
+        var skillPath = Path.Combine(skillsRoot, "sample-skill");
+        Directory.CreateDirectory(skillPath);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(skillPath, "SKILL.md"),
+            "# Sample Skill").ConfigureAwait(false);
+
+        var resources = Path.Combine(skillPath, "resources");
+        Directory.CreateDirectory(resources);
+        var resourcePath = Path.Combine(resources, "data.txt");
+        await File.WriteAllTextAsync(resourcePath, "hello").ConfigureAwait(false);
+
+        var catalog = new SkillCatalog();
+        var bytes = await catalog.GetResourceAsync([skillsRoot], "sample-skill", Path.Combine("resources", "data.txt"))
+            .ConfigureAwait(false);
+
+        Assert.AreEqual("hello", System.Text.Encoding.UTF8.GetString(bytes));
     }
 
     private static WorkspaceDescriptor CreateWorkspaceDescriptor()
