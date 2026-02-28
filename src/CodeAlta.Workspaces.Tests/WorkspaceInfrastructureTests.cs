@@ -233,6 +233,59 @@ public sealed class WorkspaceInfrastructureTests
         Assert.IsTrue(Directory.Exists(Path.Combine(globalRepoRoot, "machines")));
     }
 
+    [TestMethod]
+    public async Task WorkspaceBootstrapper_EnsureCheckedOutAsync_ClonesMissingRepo()
+    {
+        if (!IsGitAvailable())
+        {
+            Assert.Inconclusive("git CLI was not available on PATH.");
+        }
+
+        using var root = TempDirectory.Create();
+        var remote = Path.Combine(root.Path, "remote.git");
+        var checkout = Path.Combine(root.Path, "checkouts", "repo-main");
+
+        RunGit(root.Path, $"init --bare \"{remote}\"");
+
+        var resolution = new WorkspaceResolution
+        {
+            Workspace = new WorkspaceDescriptor
+            {
+                Id = WorkspaceId.NewVersion7().ToString(),
+                Key = "wk-core",
+                DisplayName = "Core Workspace",
+                DefaultCheckoutRoot = root.Path,
+                Projects = [],
+            },
+            Projects =
+            [
+                new ResolvedProject
+                {
+                    Project = new ProjectDescriptor
+                    {
+                        Id = ProjectId.NewVersion7().ToString(),
+                        Key = "repo-main",
+                        DisplayName = "Main Repo",
+                        RepoUrl = remote,
+                        DefaultBranch = "main",
+                        Checkout = new CheckoutRule { PathTemplate = checkout },
+                    },
+                    CheckoutPath = checkout,
+                    CodeAltaRoot = Path.Combine(checkout, ".codealta"),
+                },
+            ],
+            CodeAltaRoots = [Path.Combine(checkout, ".codealta")],
+        };
+
+        var bootstrapper = new WorkspaceBootstrapper(new WorkspaceBootstrapPlanner(), new GitService());
+        var results = await bootstrapper.EnsureCheckedOutAsync(resolution).ConfigureAwait(false);
+
+        Assert.AreEqual(1, results.Count);
+        Assert.IsTrue(results[0].Success);
+        Assert.IsTrue(Directory.Exists(Path.Combine(checkout, ".git")));
+        Assert.IsTrue(Directory.Exists(Path.Combine(checkout, ".codealta")));
+    }
+
     private static WorkspaceDescriptor CreateWorkspaceDescriptor()
     {
         return new WorkspaceDescriptor
@@ -288,6 +341,32 @@ public sealed class WorkspaceInfrastructureTests
         catch
         {
             return false;
+        }
+    }
+
+    private static void RunGit(string workingDirectory, string arguments)
+    {
+        var startInfo = new ProcessStartInfo("git", arguments)
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            Assert.Inconclusive("Failed to start git process.");
+        }
+
+        process.WaitForExit(milliseconds: 10_000);
+        if (process.ExitCode != 0)
+        {
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            Assert.Fail($"git {arguments} failed: {string.Join("\n", new[] { output, error }.Where(x => !string.IsNullOrWhiteSpace(x)))}");
         }
     }
 
