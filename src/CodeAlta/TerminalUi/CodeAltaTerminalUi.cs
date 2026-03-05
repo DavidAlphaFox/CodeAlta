@@ -197,10 +197,8 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         {
             HorizontalAlignment = Align.Stretch,
             VerticalAlignment = Align.Stretch,
-            ItemPadding = new Thickness(1),
-            ItemSpacing = 1,
+            ItemPadding = new Thickness(1, 1, 0, 0),
         };
-        _chatFlow.ScrollToTail(false);
 
         var chatInput = new ChatPromptEditor(
                 text => _ = SendChatMessageAsync(text))
@@ -665,7 +663,6 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
             flow.Items.Add(pendingChatMessage.UserItem);
             flow.Items.Add(pendingChatMessage.AssistantItem);
-            flow.ScrollToTail();
         });
 
         _chatStreamingMarkdown = pendingChatMessage.StreamingMarkdown;
@@ -712,15 +709,15 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
                     WrapCodeBlocks = true,
                     MaxCodeBlockHeight = 10,
                 },
-            });
+            })
+            .Add(new Rule());
 
         return new DocumentFlowItem
         {
             Content = content,
-            Alignment = DocumentFlowAlignment.Right,
-            MaxWidth = 80,
-            BackgroundStyle = Style.None.WithBackground(Colors.DarkSlateBlue),
-            BorderStyle = Style.None.WithForeground(Colors.SlateBlue),
+            Alignment = DocumentFlowAlignment.Stretch,
+            //MaxWidth = 80,
+            BackgroundStyle = Style.None.WithBackground(Color.RgbA(0xFF, 0xFF, 0xFF,  0x2)),
         };
     }
 
@@ -736,15 +733,16 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
                     WrapCodeBlocks = true,
                     MaxCodeBlockHeight = 14,
                 },
-            });
+            })
+            .Add(new Rule());
 
         return new DocumentFlowItem
         {
             Content = content,
-            Alignment = DocumentFlowAlignment.Left,
-            MaxWidth = 84,
-            BackgroundStyle = Style.None.WithBackground(Colors.DarkSlateGray),
-            BorderStyle = Style.None.WithForeground(Colors.SlateGray),
+            Alignment = DocumentFlowAlignment.Stretch,
+            //MaxWidth = 84,
+            //BackgroundStyle = Style.None.WithBackground(Colors.DarkSlateGray),
+            //BorderStyle = Style.None.WithForeground(Colors.SlateGray),
         };
     }
 
@@ -761,14 +759,14 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             },
         };
 
-        var content = new FlowDocument().Add(markdownControl);
+        var content = new FlowDocument().Add(markdownControl).Add(new Rule());
         return new DocumentFlowItem
         {
             Content = content,
-            Alignment = DocumentFlowAlignment.Left,
-            MaxWidth = 84,
-            BackgroundStyle = Style.None.WithBackground(Colors.DarkSlateGray),
-            BorderStyle = Style.None.WithForeground(Colors.SlateGray),
+            Alignment = DocumentFlowAlignment.Stretch,
+            //MaxWidth = 84,
+            //BackgroundStyle = Style.None.WithBackground(Colors.DarkSlateGray),
+            //BorderStyle = Style.None.WithForeground(Colors.SlateGray),
         };
     }
 
@@ -855,7 +853,6 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         {
             _chatFlow?.Items.Add(CreateAssistantChatItem(
                 "**Permission request denied.** Enable auto-approve to allow backend actions."));
-            _chatFlow?.ScrollToTail();
         });
 
         return Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.Deny));
@@ -872,7 +869,6 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         {
             _chatFlow?.Items.Add(CreateAssistantChatItem(
                 "**User input requested by backend.** This UI does not yet support interactive answers; returning empty responses."));
-            _chatFlow?.ScrollToTail();
         });
 
         return Task.FromResult(new AgentUserInputResponse(answers));
@@ -919,7 +915,6 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         PostToUi(() =>
         {
             markdown.Markdown = text;
-            _chatFlow?.ScrollToTail();
         });
     }
 
@@ -931,7 +926,6 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             PostToUi(() =>
             {
                 _chatFlow?.Items.Add(CreateAssistantChatItem(content));
-                _chatFlow?.ScrollToTail();
             });
             return;
         }
@@ -939,7 +933,6 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         PostToUi(() =>
         {
             markdown.Markdown = content;
-            _chatFlow?.ScrollToTail();
         });
 
         _chatStreamingMarkdown = null;
