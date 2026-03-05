@@ -204,7 +204,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
         var chatInput = new ChatPromptEditor(
                 text => _ = SendChatMessageAsync(text))
-            .PromptMarkup("[primary]you[/] ")
+            .PromptMarkup("[primary]>[/] ")
             .ContinuationPromptMarkup("[muted]·[/] ")
             .EnableWordHints(false)
             .Highlighter(HighlightMarkdown)
@@ -655,7 +655,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             return;
         }
 
-        MarkdownControl? streamingMarkdown = null;
+        var pendingChatMessage = CreatePendingChatMessage(text);
         PostToUi(() =>
         {
             if (_chatInput is not null)
@@ -663,19 +663,12 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
                 _chatInput.Text = string.Empty;
             }
 
-            flow.Items.Add(CreateUserChatItem(text));
-
-            var assistantItem = CreateAssistantStreamingChatItem(out streamingMarkdown);
-            flow.Items.Add(assistantItem);
+            flow.Items.Add(pendingChatMessage.UserItem);
+            flow.Items.Add(pendingChatMessage.AssistantItem);
             flow.ScrollToTail();
         });
 
-        if (streamingMarkdown is null)
-        {
-            return;
-        }
-
-        _chatStreamingMarkdown = streamingMarkdown;
+        _chatStreamingMarkdown = pendingChatMessage.StreamingMarkdown;
         _chatStreamingBuffer = new StringBuilder();
 
         AgentId agentId;
@@ -687,7 +680,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         {
             PostToUi(() =>
             {
-                streamingMarkdown.Markdown = $"**Failed to start agent session:** {ex.Message}";
+                pendingChatMessage.StreamingMarkdown.Markdown = $"**Failed to start agent session:** {ex.Message}";
             });
             return;
         }
@@ -702,7 +695,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            PostToUi(() => streamingMarkdown.Markdown = $"**Agent run failed:** {ex.Message}");
+            PostToUi(() => pendingChatMessage.StreamingMarkdown.Markdown = $"**Agent run failed:** {ex.Message}");
             SetStatus($"Agent run failed: {ex.Message}");
         }
     }
@@ -777,6 +770,15 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             BackgroundStyle = Style.None.WithBackground(Colors.DarkSlateGray),
             BorderStyle = Style.None.WithForeground(Colors.SlateGray),
         };
+    }
+
+    internal static PendingChatMessage CreatePendingChatMessage(string userMarkdown)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userMarkdown);
+
+        var userItem = CreateUserChatItem(userMarkdown);
+        var assistantItem = CreateAssistantStreamingChatItem(out var streamingMarkdown);
+        return new PendingChatMessage(userItem, assistantItem, streamingMarkdown);
     }
 
     private void ToggleChatAutoApprove()
@@ -970,6 +972,11 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         Jobs,
         Mcp,
     }
+
+    internal sealed record PendingChatMessage(
+        DocumentFlowItem UserItem,
+        DocumentFlowItem AssistantItem,
+        MarkdownControl StreamingMarkdown);
 
     private sealed class ChatPromptEditor : PromptEditor
     {
