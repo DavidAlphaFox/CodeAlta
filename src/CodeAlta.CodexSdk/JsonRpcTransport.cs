@@ -193,11 +193,22 @@ internal sealed class JsonRpcTransport : IAsyncDisposable
     /// <param name="result">The result to send back.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     internal async Task SendResponseAsync<TResult>(
-        long id,
+        RequestId id,
         TResult result,
         CancellationToken cancellationToken = default)
     {
         await WriteResponseEnvelopeAsync(id, result, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal Task SendResponseAsync<TResult>(
+        long id,
+        TResult result,
+        CancellationToken cancellationToken = default)
+    {
+        return SendResponseAsync(
+            new RequestId.IntegerValue { Value = id },
+            result,
+            cancellationToken);
     }
 
     /// <inheritdoc />
@@ -264,7 +275,7 @@ internal sealed class JsonRpcTransport : IAsyncDisposable
     }
 
     private async Task WriteResponseEnvelopeAsync<TResult>(
-        long id,
+        RequestId id,
         TResult result,
         CancellationToken cancellationToken)
     {
@@ -272,7 +283,8 @@ internal sealed class JsonRpcTransport : IAsyncDisposable
         using (var writer = new Utf8JsonWriter(bufferWriter))
         {
             writer.WriteStartObject();
-            writer.WriteNumber("id", id);
+            writer.WritePropertyName("id");
+            JsonSerializer.Serialize(writer, id, _jsonOptions);
             writer.WritePropertyName("result");
             JsonSerializer.Serialize(writer, result, _jsonOptions);
             writer.WriteEndObject();
@@ -398,7 +410,8 @@ internal sealed class JsonRpcTransport : IAsyncDisposable
         else if (hasId && hasMethod)
         {
             // Server-initiated request (e.g., approval requests).
-            var id = idProp.GetInt64();
+            var id = idProp.Deserialize<RequestId>(_jsonOptions)
+                ?? throw new JsonException("Server request 'id' must be a string or number.");
             var method = methodProp.GetString() ?? "";
             var paramsElement = element.TryGetProperty("params", out var p) ? p.Clone() : default;
             _incomingMessages.Writer.TryWrite(new ServerMessage(method, paramsElement, id));
@@ -423,4 +436,4 @@ internal sealed class JsonRpcTransport : IAsyncDisposable
 /// Non-null when this is a server-initiated request that requires a response (e.g., approval requests).
 /// Null for notifications.
 /// </param>
-internal sealed record ServerMessage(string Method, JsonElement Params, long? RequestId);
+internal sealed record ServerMessage(string Method, JsonElement Params, RequestId? RequestId);

@@ -185,18 +185,18 @@ public sealed class CodexAgentSession : ICodexAgentSession
         Publish(eventData);
     }
 
-    internal async Task HandleServerRequestAsync(CodexServerRequest request, CancellationToken cancellationToken)
+    internal async Task HandleServerRequestAsync(ServerRequest request, CancellationToken cancellationToken)
     {
         switch (request)
         {
-            case CodexServerRequest.CommandExecutionApproval commandApproval:
+            case ServerRequest.ItemCommandExecutionRequestApprovalRequest commandApproval:
             {
                 CommandExecutionRequestApprovalResponse response;
                 try
                 {
                     var permissionRequest = CodexAgentMapper.ToPermissionRequest(
                         ThreadId,
-                        commandApproval.Data);
+                        commandApproval.Params);
 
                     var decision = await GetPermissionHandler()
                         .Invoke(permissionRequest, cancellationToken)
@@ -215,21 +215,21 @@ public sealed class CodexAgentSession : ICodexAgentSession
                         new AgentPermissionDecision(AgentPermissionDecisionKind.Deny));
                 }
 
-                await _backend.Client.RespondToApprovalAsync(
-                        commandApproval.RequestId,
+                await _backend.Client.RespondToRequestAsync(
+                        commandApproval.Id,
                         response,
                         cancellationToken)
                     .ConfigureAwait(false);
                 break;
             }
-            case CodexServerRequest.FileChangeApproval fileApproval:
+            case ServerRequest.ItemFileChangeRequestApprovalRequest fileApproval:
             {
                 FileChangeRequestApprovalResponse response;
                 try
                 {
                     var permissionRequest = CodexAgentMapper.ToPermissionRequest(
                         ThreadId,
-                        fileApproval.Data);
+                        fileApproval.Params);
 
                     var decision = await GetPermissionHandler()
                         .Invoke(permissionRequest, cancellationToken)
@@ -248,14 +248,14 @@ public sealed class CodexAgentSession : ICodexAgentSession
                         new AgentPermissionDecision(AgentPermissionDecisionKind.Deny));
                 }
 
-                await _backend.Client.RespondToApprovalAsync(
-                        fileApproval.RequestId,
+                await _backend.Client.RespondToRequestAsync(
+                        fileApproval.Id,
                         response,
                         cancellationToken)
                     .ConfigureAwait(false);
                 break;
             }
-            case CodexServerRequest.ToolRequestUserInput requestUserInput:
+            case ServerRequest.ItemToolRequestUserInputRequest requestUserInput:
             {
                 ToolRequestUserInputResponse mappedResponse;
                 try
@@ -266,7 +266,7 @@ public sealed class CodexAgentSession : ICodexAgentSession
                         throw new InvalidOperationException("No AgentUserInputRequestHandler is configured for this session.");
                     }
 
-                    var mappedRequest = CodexAgentMapper.ToAgentUserInputRequest(requestUserInput.Data);
+                    var mappedRequest = CodexAgentMapper.ToAgentUserInputRequest(requestUserInput.Params);
                     var response = await handler.Invoke(mappedRequest, cancellationToken).ConfigureAwait(false);
                     mappedResponse = CodexAgentMapper.ToToolRequestUserInputResponse(response);
                 }
@@ -277,22 +277,22 @@ public sealed class CodexAgentSession : ICodexAgentSession
                 catch (Exception ex)
                 {
                     PublishHandlerError("tool user input", ex);
-                    mappedResponse = CodexAgentMapper.CreateEmptyToolRequestUserInputResponse(requestUserInput.Data);
+                    mappedResponse = CodexAgentMapper.CreateEmptyToolRequestUserInputResponse(requestUserInput.Params);
                 }
 
-                await _backend.Client.RespondToApprovalAsync(
-                        requestUserInput.RequestId,
+                await _backend.Client.RespondToRequestAsync(
+                        requestUserInput.Id,
                         mappedResponse,
                         cancellationToken)
                     .ConfigureAwait(false);
                 break;
             }
-            case CodexServerRequest.ToolCall toolCall:
+            case ServerRequest.ItemToolCallRequest toolCall:
             {
                 DynamicToolCallResponse response;
                 try
                 {
-                    var toolResult = await InvokeToolAsync(toolCall.Data, cancellationToken).ConfigureAwait(false);
+                    var toolResult = await InvokeToolAsync(toolCall.Params, cancellationToken).ConfigureAwait(false);
                     response = CodexAgentMapper.ToDynamicToolCallResponse(toolResult);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -309,8 +309,8 @@ public sealed class CodexAgentSession : ICodexAgentSession
                             Error: ex.Message));
                 }
 
-                await _backend.Client.RespondToApprovalAsync(
-                        toolCall.RequestId,
+                await _backend.Client.RespondToRequestAsync(
+                        toolCall.Id,
                         response,
                         cancellationToken)
                     .ConfigureAwait(false);

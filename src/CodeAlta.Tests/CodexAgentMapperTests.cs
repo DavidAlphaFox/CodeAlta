@@ -162,4 +162,24 @@ public sealed class CodexAgentMapperTests
         Assert.AreEqual(string.Empty, response.Answers["q1"].Answers.Single());
         Assert.AreEqual(string.Empty, response.Answers["q2"].Answers.Single());
     }
+
+    [TestMethod]
+    public void TryGetThreadId_UsesGeneratedServerRequest()
+    {
+        var request = new ServerRequest.ItemFileChangeRequestApprovalRequest
+        {
+            Id = new RequestId.IntegerValue { Value = 7 },
+            Params = new FileChangeRequestApprovalParams
+            {
+                ItemId = "item-1",
+                ThreadId = "thread-1",
+                TurnId = "turn-1"
+            }
+        };
+
+        var result = CodexAgentMapper.TryGetThreadId(request, out var threadId);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual("thread-1", threadId);
+    }
 }

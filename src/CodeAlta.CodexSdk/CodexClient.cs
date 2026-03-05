@@ -161,16 +161,17 @@ public sealed partial class CodexClient : IAsyncDisposable
     /// <remarks>
     /// <para>
     /// This method yields <see cref="CodexNotification"/> for server notifications and
-    /// <see cref="CodexServerRequest"/> for server-initiated requests (such as approval prompts).
+    /// generated <see cref="ServerRequest"/> values for modeled server-initiated requests (such as approval prompts).
+    /// Unknown request methods are yielded as <see cref="CodexUnknownServerRequest"/>.
     /// Both are delivered as the base type <see cref="object"/>; use pattern matching to distinguish.
     /// </para>
     /// <para>
     /// For server-initiated requests, the caller is responsible for responding via
-    /// <see cref="RespondToApprovalAsync{TResult}"/> to unblock the turn.
+    /// <see cref="RespondToRequestAsync{TResult}(RequestId, TResult, CancellationToken)"/> to unblock the turn.
     /// </para>
     /// </remarks>
     /// <param name="cancellationToken">A token to cancel the enumeration.</param>
-    /// <returns>An async enumerable of <see cref="CodexNotification"/> and <see cref="CodexServerRequest"/> instances.</returns>
+    /// <returns>An async enumerable of <see cref="CodexNotification"/>, <see cref="ServerRequest"/>, and <see cref="CodexUnknownServerRequest"/> instances.</returns>
     public async IAsyncEnumerable<object> StreamAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -200,20 +201,40 @@ public sealed partial class CodexClient : IAsyncDisposable
     // ── Approval responses ────────────────────────────────────────
 
     /// <summary>
-    /// Responds to a server-initiated approval request (command execution or file change).
+    /// Responds to a server-initiated request using its JSON-RPC request id.
     /// </summary>
-    /// <typeparam name="TResult">The response type (e.g., <see cref="CommandExecutionRequestApprovalResponse"/>).</typeparam>
-    /// <param name="requestId">The JSON-RPC request id from the <see cref="CodexServerRequest"/>.</param>
+    /// <typeparam name="TResult">The response type expected by the server request.</typeparam>
+    /// <param name="requestId">The JSON-RPC request id from the received <see cref="ServerRequest"/>.</param>
     /// <param name="result">The response payload.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <exception cref="ObjectDisposedException">Thrown when the client has been disposed.</exception>
-    public async Task RespondToApprovalAsync<TResult>(
+    public async Task RespondToRequestAsync<TResult>(
+        RequestId requestId,
+        TResult result,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(requestId);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await _transport.SendResponseAsync(requestId, result, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Responds to a numeric server-initiated request id.
+    /// </summary>
+    /// <typeparam name="TResult">The response type expected by the server request.</typeparam>
+    /// <param name="requestId">The numeric JSON-RPC request id.</param>
+    /// <param name="result">The response payload.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <exception cref="ObjectDisposedException">Thrown when the client has been disposed.</exception>
+    public Task RespondToApprovalAsync<TResult>(
         long requestId,
         TResult result,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        await _transport.SendResponseAsync(requestId, result, cancellationToken).ConfigureAwait(false);
+        return RespondToRequestAsync(
+            new RequestId.IntegerValue { Value = requestId },
+            result,
+            cancellationToken);
     }
 
     // ── Thread APIs ───────────────────────────────────────────────

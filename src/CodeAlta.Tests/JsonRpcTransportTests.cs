@@ -128,7 +128,28 @@ public class JsonRpcTransportTests
 
         // Assert
         Assert.AreEqual("item/commandExecution/requestApproval", message.Method);
-        Assert.AreEqual(42L, message.RequestId);
+        Assert.IsInstanceOfType<RequestId.IntegerValue>(message.RequestId);
+        Assert.AreEqual(42L, ((RequestId.IntegerValue)message.RequestId!).Value);
+    }
+
+    [TestMethod]
+    public async Task ReceivesServerRequest_WithStringId()
+    {
+        var serverOutput = new MemoryStream();
+        var clientInput = new MemoryStream();
+
+        var request = """{"method":"item/commandExecution/requestApproval","id":"req-42","params":{"itemId":"item_1","threadId":"thr_1","turnId":"turn_1","command":"rm -rf /"}}""" + "\n";
+        serverOutput.Write(Encoding.UTF8.GetBytes(request));
+        serverOutput.Position = 0;
+
+        await using var transport = new JsonRpcTransport(serverOutput, clientInput, CreateOptions());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var message = await transport.Messages.ReadAsync(cts.Token);
+
+        Assert.AreEqual("item/commandExecution/requestApproval", message.Method);
+        Assert.IsInstanceOfType<RequestId.StringValue>(message.RequestId);
+        Assert.AreEqual("req-42", ((RequestId.StringValue)message.RequestId!).Value);
     }
 
     [TestMethod]

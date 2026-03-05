@@ -424,16 +424,16 @@ internal static class CodexAgentMapper
         return threadId is not null;
     }
 
-    public static bool TryGetThreadId(CodexServerRequest request, out string? threadId)
+    public static bool TryGetThreadId(ServerRequest request, out string? threadId)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         threadId = request switch
         {
-            CodexServerRequest.CommandExecutionApproval value => value.Data.ThreadId,
-            CodexServerRequest.FileChangeApproval value => value.Data.ThreadId,
-            CodexServerRequest.ToolRequestUserInput value => value.Data.ThreadId,
-            CodexServerRequest.ToolCall value => value.Data.ThreadId,
+            ServerRequest.ItemCommandExecutionRequestApprovalRequest value => value.Params.ThreadId,
+            ServerRequest.ItemFileChangeRequestApprovalRequest value => value.Params.ThreadId,
+            ServerRequest.ItemToolRequestUserInputRequest value => value.Params.ThreadId,
+            ServerRequest.ItemToolCallRequest value => value.Params.ThreadId,
             _ => null
         };
 

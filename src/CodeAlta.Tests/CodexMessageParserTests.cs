@@ -134,4 +134,40 @@ public sealed class CodexMessageParserTests
         Assert.IsInstanceOfType(typed.Data.RequestId, typeof(RequestId.IntegerValue));
         Assert.AreEqual(60L, ((RequestId.IntegerValue)typed.Data.RequestId).Value);
     }
+
+    [TestMethod]
+    public void ParseServerMessage_HandlesGeneratedServerRequest()
+    {
+        var options = CodexClient.CreateJsonSerializerOptions();
+
+        var request = CodexMessageParser.ParseServerMessage(
+            "item/commandExecution/requestApproval",
+            ParseJsonElement("""{ "itemId": "item_1", "threadId": "thr_123", "turnId": "turn_456", "command": "echo hi" }"""),
+            new RequestId.IntegerValue { Value = 42 },
+            options);
+
+        Assert.IsInstanceOfType(request, typeof(ServerRequest.ItemCommandExecutionRequestApprovalRequest));
+        var typed = (ServerRequest.ItemCommandExecutionRequestApprovalRequest)request!;
+        Assert.AreEqual(42L, ((RequestId.IntegerValue)typed.Id).Value);
+        Assert.AreEqual("thr_123", typed.Params.ThreadId);
+        Assert.AreEqual("turn_456", typed.Params.TurnId);
+    }
+
+    [TestMethod]
+    public void ParseServerMessage_UnknownRequest_PreservesRawPayload()
+    {
+        var options = CodexClient.CreateJsonSerializerOptions();
+
+        var request = CodexMessageParser.ParseServerMessage(
+            "custom/request",
+            ParseJsonElement("""{ "threadId": "thr_123", "value": true }"""),
+            new RequestId.StringValue { Value = "req-9" },
+            options);
+
+        Assert.IsInstanceOfType(request, typeof(CodexUnknownServerRequest));
+        var typed = (CodexUnknownServerRequest)request!;
+        Assert.AreEqual("custom/request", typed.Method);
+        Assert.AreEqual("req-9", ((RequestId.StringValue)typed.RequestId).Value);
+        Assert.AreEqual("thr_123", typed.Params.GetProperty("threadId").GetString());
+    }
 }

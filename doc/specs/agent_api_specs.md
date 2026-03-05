@@ -551,8 +551,8 @@ Model mapping notes (Codex):
 ### 7.5 Permission/approval mapping
 
 Codex approvals arrive as **server-initiated JSON-RPC requests** (in `CodexClient.StreamAsync()`), specifically:
-- `CodexServerRequest.CommandExecutionApproval`
-- `CodexServerRequest.FileChangeApproval`
+- `ServerRequest.ItemCommandExecutionRequestApprovalRequest`
+- `ServerRequest.ItemFileChangeRequestApprovalRequest`
 
 Adapter strategy:
 1. Convert the server request to `AgentPermissionRequest` (`Kind` = `"commandExecution"` or `"fileChange"`, `Raw` = params).
@@ -560,7 +560,7 @@ Adapter strategy:
 3. Map `AgentPermissionDecision` to the corresponding Codex response type:
    - command: `CommandExecutionRequestApprovalResponse { Decision = ... }`
    - file: `FileChangeRequestApprovalResponse { Decision = ... }`
-4. Reply via `CodexClient.RespondToApprovalAsync(requestId, response)`.
+4. Reply via `CodexClient.RespondToRequestAsync(requestId, response)`.
 
 Decision mapping:
 - `AllowOnce` → `accept`
@@ -572,11 +572,11 @@ Decision mapping:
 ### 7.6 User input requests
 
 Codex can request user input via server request:
-- `CodexServerRequest.ToolRequestUserInput` (contains 1–3 questions)
+- `ServerRequest.ItemToolRequestUserInputRequest` (contains 1–3 questions)
 
 Adapter strategy:
 - Convert to `AgentUserInputRequest` and invoke `OnUserInputRequest`.
-- Map answers back to `ToolRequestUserInputResponse` and respond via `RespondToApprovalAsync`.
+- Map answers back to `ToolRequestUserInputResponse` and respond via `RespondToRequestAsync`.
 
 ### 7.7 Event stream mapping
 

@@ -229,7 +229,7 @@ public sealed class CodexAgentBackend : ICodexAgentBackend
                         DispatchNotification(notification);
                         break;
 
-                    case CodexServerRequest request:
+                    case ServerRequest request:
                         await DispatchServerRequestAsync(request, cancellationToken).ConfigureAwait(false);
                         break;
                 }
@@ -272,7 +272,7 @@ public sealed class CodexAgentBackend : ICodexAgentBackend
         session.HandleNotification(notification);
     }
 
-    private async Task DispatchServerRequestAsync(CodexServerRequest request, CancellationToken cancellationToken)
+    private async Task DispatchServerRequestAsync(ServerRequest request, CancellationToken cancellationToken)
     {
         if (!CodexAgentMapper.TryGetThreadId(request, out var threadId) || threadId is null)
             return;

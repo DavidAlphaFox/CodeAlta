@@ -10,49 +10,66 @@ internal static class CodexMessageParser
     internal static object? ParseServerMessage(
         string method,
         JsonElement parameters,
-        long? requestId,
+        RequestId? requestId,
         JsonSerializerOptions jsonOptions)
     {
         ArgumentNullException.ThrowIfNull(method);
 
-        if (requestId is { } id)
-            return ParseServerRequest(method, parameters, id, jsonOptions);
+        if (requestId is not null)
+            return ParseServerRequest(method, parameters, requestId, jsonOptions);
 
         return ParseNotification(method, parameters, jsonOptions);
     }
 
-    internal static CodexServerRequest ParseServerRequest(
+    internal static object ParseServerRequest(
         string method,
         JsonElement parameters,
-        long requestId,
+        RequestId requestId,
         JsonSerializerOptions jsonOptions)
     {
         ArgumentNullException.ThrowIfNull(method);
+        ArgumentNullException.ThrowIfNull(requestId);
         ArgumentNullException.ThrowIfNull(jsonOptions);
 
         return method switch
         {
             "item/commandExecution/requestApproval" =>
-                new CodexServerRequest.CommandExecutionApproval(
-                    requestId,
-                    parameters.Deserialize<CommandExecutionRequestApprovalParams>(jsonOptions)!),
+                new ServerRequest.ItemCommandExecutionRequestApprovalRequest
+                {
+                    Id = requestId,
+                    Params = parameters.Deserialize<CommandExecutionRequestApprovalParams>(jsonOptions)!
+                },
             "item/fileChange/requestApproval" =>
-                new CodexServerRequest.FileChangeApproval(
-                    requestId,
-                    parameters.Deserialize<FileChangeRequestApprovalParams>(jsonOptions)!),
+                new ServerRequest.ItemFileChangeRequestApprovalRequest
+                {
+                    Id = requestId,
+                    Params = parameters.Deserialize<FileChangeRequestApprovalParams>(jsonOptions)!
+                },
             "item/tool/requestUserInput" =>
-                new CodexServerRequest.ToolRequestUserInput(
-                    requestId,
-                    parameters.Deserialize<ToolRequestUserInputParams>(jsonOptions)!),
+                new ServerRequest.ItemToolRequestUserInputRequest
+                {
+                    Id = requestId,
+                    Params = parameters.Deserialize<ToolRequestUserInputParams>(jsonOptions)!
+                },
+            "mcpServer/elicitation/request" =>
+                new ServerRequest.McpServerElicitationRequestRequest
+                {
+                    Id = requestId,
+                    Params = parameters.Deserialize<McpServerElicitationRequestParams>(jsonOptions)!
+                },
             "item/tool/call" =>
-                new CodexServerRequest.ToolCall(
-                    requestId,
-                    parameters.Deserialize<DynamicToolCallParams>(jsonOptions)!),
+                new ServerRequest.ItemToolCallRequest
+                {
+                    Id = requestId,
+                    Params = parameters.Deserialize<DynamicToolCallParams>(jsonOptions)!
+                },
             "account/chatgptAuthTokens/refresh" =>
-                new CodexServerRequest.ChatgptAuthTokensRefresh(
-                    requestId,
-                    parameters.Deserialize<ChatgptAuthTokensRefreshParams>(jsonOptions)!),
-            _ => new CodexServerRequest.UnknownRequest(requestId, method, parameters)
+                new ServerRequest.AccountChatgptAuthTokensRefreshRequest
+                {
+                    Id = requestId,
+                    Params = parameters.Deserialize<ChatgptAuthTokensRefreshParams>(jsonOptions)!
+                },
+            _ => new CodexUnknownServerRequest(requestId, method, parameters)
         };
     }
 
