@@ -62,9 +62,10 @@ public sealed class CodeAltaTerminalUiTests
                 "search_workspace",
                 "Searching the workspace."));
 
-        StringAssert.Contains(markdown, "MCP Tool Call");
-        StringAssert.Contains(markdown, "Started");
+        StringAssert.Contains(markdown, "Calling MCP Tool Call");
+        StringAssert.Contains(markdown, "Name");
         StringAssert.Contains(markdown, "search_workspace");
+        StringAssert.Contains(markdown, "Detail");
         StringAssert.Contains(markdown, "Searching the workspace.");
     }
 
@@ -162,7 +163,7 @@ public sealed class CodeAltaTerminalUiTests
                     ])),
             autoApprove: true);
 
-        StringAssert.Contains(markdown, "Auto-Approve will pick the first available choice");
+        StringAssert.Contains(markdown, "Auto-Approve will prefer continue/inspect-style choices");
     }
 
     [TestMethod]
@@ -268,6 +269,33 @@ public sealed class CodeAltaTerminalUiTests
 
         StringAssert.Contains(markdown, "_Status:_ Permission resolved: AllowOnce.");
         StringAssert.Contains(markdown, "Decision: Allow Once");
+    }
+
+    [TestMethod]
+    public void FormatChatImmediatePermissionDecisionMarkdown_ShowsCodeAltaResponse()
+    {
+        var markdown = CodeAltaTerminalUi.FormatChatImmediatePermissionDecisionMarkdown(
+            new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce),
+            autoApprove: true);
+
+        StringAssert.Contains(markdown, "CodeAlta response: auto-approved");
+        StringAssert.Contains(markdown, "Decision: Allow Once");
+    }
+
+    [TestMethod]
+    public void FormatChatImmediateUserInputResponseMarkdown_ShowsReturnedAnswer()
+    {
+        var markdown = CodeAltaTerminalUi.FormatChatImmediateUserInputResponseMarkdown(
+            new AgentUserInputResponse(
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["answer"] = "Look in C:\\code for projects",
+                }),
+            autoApprove: true);
+
+        StringAssert.Contains(markdown, "CodeAlta auto-answered");
+        StringAssert.Contains(markdown, "`answer`");
+        StringAssert.Contains(markdown, "Look in C:\\code for projects");
     }
 
     [TestMethod]

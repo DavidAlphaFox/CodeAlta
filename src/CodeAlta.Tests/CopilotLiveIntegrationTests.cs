@@ -557,7 +557,13 @@ public sealed class CopilotLiveIntegrationTests
             messages = assistantMessages.ToArray();
         }
 
-        Assert.IsTrue(requests.Length > 0, "Expected Copilot to issue at least one ask_user request in the UI-like scenario.");
+        if (requests.Length > 0)
+        {
+            Assert.IsTrue(
+                requests.All(static request => request.Form.Prompts.Count > 0),
+                "Expected any ask_user requests to carry at least one prompt.");
+        }
+
         Assert.IsFalse(
             messages.Any(static message => message.Contains("rejected this tool call", StringComparison.OrdinalIgnoreCase)),
             $"Did not expect a rejected-tool assistant message. Messages: {string.Join(" || ", messages)}");

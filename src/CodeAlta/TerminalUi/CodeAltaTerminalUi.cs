@@ -1330,16 +1330,31 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         _ = cancellationToken;
         RecordChatPermissionRequest(request);
 
+        AgentPermissionDecision decision;
         if (_chatAutoApproveState.Value)
         {
+            decision = new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce);
+            UpsertChatInteraction(
+                request.InteractionId,
+                null,
+                FormatChatImmediatePermissionDecisionMarkdown(decision, autoApprove: true),
+                ChatTimelineTone.Interaction);
             SetStatus($"Auto-approved permission request ({request.Kind}).", showSpinner: true);
-            return Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce));
+        }
+        else
+        {
+            decision = new AgentPermissionDecision(AgentPermissionDecisionKind.Deny);
+            UpsertChatInteraction(
+                request.InteractionId,
+                null,
+                FormatChatImmediatePermissionDecisionMarkdown(decision, autoApprove: false),
+                ChatTimelineTone.Interaction);
+            SetStatus(
+                "Permission requested. Auto-Approve is off, so CodeAlta denied it because terminal approval UI is not implemented yet.",
+                showSpinner: true);
         }
 
-        SetStatus(
-            "Permission requested. Auto-Approve is off, so CodeAlta denied it because terminal approval UI is not implemented yet.",
-            showSpinner: true);
-        return Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.Deny));
+        return Task.FromResult(decision);
     }
 
     private Task<AgentUserInputResponse> HandleChatUserInputRequestAsync(
@@ -1351,6 +1366,11 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
         var response = CreateChatUserInputResponse(request, _chatAutoApproveState.Value);
         var hasMeaningfulAnswer = response.Answers.Values.Any(static value => !string.IsNullOrWhiteSpace(value));
+        UpsertChatInteraction(
+            request.InteractionId,
+            null,
+            FormatChatImmediateUserInputResponseMarkdown(response, _chatAutoApproveState.Value),
+            ChatTimelineTone.Interaction);
         SetStatus(
             _chatAutoApproveState.Value
                 ? hasMeaningfulAnswer
@@ -1859,20 +1879,24 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
         var builder = new StringBuilder();
         builder.Append("**")
-            .Append(GetActivityKindLabel(activity.Kind))
-            .Append(" · ")
-            .Append(GetActivityPhaseLabel(activity.Phase))
+            .Append(GetActivityHeadline(activity.Kind, activity.Phase))
             .Append("** ")
             .Append(GetActivityIcon(activity.Kind));
 
         if (!string.IsNullOrWhiteSpace(activity.Name))
         {
-            builder.Append(" — `").Append(activity.Name).Append('`');
+            builder.AppendLine()
+                .AppendLine()
+                .Append("- Name: `")
+                .Append(activity.Name)
+                .Append('`');
         }
 
         if (!string.IsNullOrWhiteSpace(activity.Message))
         {
-            builder.AppendLine().AppendLine().Append(activity.Message);
+            builder.AppendLine()
+                .Append("- Detail: ")
+                .Append(activity.Message);
         }
 
         return builder.ToString();
@@ -2005,7 +2029,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             .AppendLine()
             .Append(
                 autoApprove
-                    ? "_The agent asked a question. Auto-Approve will pick the first available choice or a neutral fallback answer so the run can continue._"
+                    ? "_The agent asked a question. Auto-Approve will prefer continue/inspect-style choices or use a neutral fallback answer so the run can continue._"
                     : "_The agent asked a question. Terminal question prompts are not implemented yet, so CodeAlta returns empty answers for now._");
 
         for (var index = 0; index < request.Form.Prompts.Count; index++)
@@ -2087,6 +2111,54 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         return string.IsNullOrWhiteSpace(detailsMarkdown)
             ? $"**{label}** · \n\n{interaction.Message}"
             : $"**{label}** · \n\n{interaction.Message}\n\n{detailsMarkdown}";
+    }
+
+    internal static string FormatChatImmediatePermissionDecisionMarkdown(
+        AgentPermissionDecision decision,
+        bool autoApprove)
+    {
+        ArgumentNullException.ThrowIfNull(decision);
+
+        var reason = autoApprove
+            ? "CodeAlta response: auto-approved this request."
+            : "CodeAlta response: denied this request because interactive approval UI is not implemented yet.";
+        return $"_Status:_ {reason}\n\n- Decision: {SplitPascalCase(decision.Kind.ToString())}";
+    }
+
+    internal static string FormatChatImmediateUserInputResponseMarkdown(
+        AgentUserInputResponse response,
+        bool autoApprove)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        var builder = new StringBuilder();
+        if (autoApprove)
+        {
+            builder.Append("_Status:_ CodeAlta auto-answered the question.");
+        }
+        else
+        {
+            builder.Append("_Status:_ CodeAlta returned an empty answer because terminal question prompts are not implemented yet.");
+        }
+
+        foreach (var answer in response.Answers)
+        {
+            builder.AppendLine()
+                .AppendLine()
+                .Append("- `")
+                .Append(answer.Key)
+                .Append("`: ");
+            if (string.IsNullOrWhiteSpace(answer.Value))
+            {
+                builder.Append("_empty_");
+            }
+            else
+            {
+                builder.Append('`').Append(answer.Value).Append('`');
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static string CreateChatContentKey(AgentContentKind kind, string contentId)
@@ -2174,6 +2246,22 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             AgentCommandPreviewKind.ListFiles => "List Files",
             _ => SplitPascalCase(kind.ToString()),
         };
+
+    private static string GetActivityHeadline(AgentActivityKind kind, AgentActivityPhase phase)
+    {
+        var label = GetActivityKindLabel(kind);
+        return phase switch
+        {
+            AgentActivityPhase.Requested or AgentActivityPhase.Started => $"Calling {label}",
+            AgentActivityPhase.Completed => $"{label} Result",
+            AgentActivityPhase.Failed => $"{label} Failed",
+            AgentActivityPhase.Canceled => $"{label} Canceled",
+            AgentActivityPhase.Progressed => $"{label} Update",
+            AgentActivityPhase.Selected => $"{label} Selected",
+            AgentActivityPhase.Deselected => $"{label} Deselected",
+            _ => $"{label} · {GetActivityPhaseLabel(phase)}",
+        };
+    }
 
     private static string FormatChatCalloutMarkdown(string icon, string title, string content)
     {
