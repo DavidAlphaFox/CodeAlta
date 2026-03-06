@@ -91,7 +91,7 @@ The abstraction should:
 
 1. give the UI enough signal to explain what the agent is doing in real time
 2. keep a reasonably consistent surface across Copilot and Codex
-3. remain additive and low-risk for current consumers
+3. optimize for the cleanest long-term event model, even if it breaks the current abstraction
 4. preserve correlation identifiers so the UI can update the right row/block in place
 5. treat subagents/collaboration as first-class activities, but not as nested transcripts by default
 6. avoid forcing a 1:1 mapping for every backend-specific event
@@ -101,7 +101,14 @@ Non-goals:
 
 - perfect parity for every backend-specific feature
 - normalizing realtime audio / every OS-specific warning in the first pass
+- preserving the current assistant-only event model for compatibility
 - replacing backend-specific request handlers for approval and user input
+
+Compatibility policy:
+
+- CodeAlta is private and still evolving
+- preserving legacy event shapes is **not** a design goal
+- it is acceptable to replace the current event surface if the result is cleaner and easier to use
 
 ## 4. Options Considered
 
@@ -168,21 +175,27 @@ Recommended families:
 
 This gives a consistent UI model without exploding the number of concrete event types or forcing everything through one giant generic payload.
 
+However, a few high-value cases should still use **dedicated typed payloads or dedicated records** rather than a generic `JsonElement Details` blob:
+
+- structured plans
+- approval prompts
+- user-input forms
+- structured tool / file-change results
+
 ## 5. Recommended Event Model
 
-## 5.1 Keep the current events
+## 5.1 Replace the current assistant-only event surface
 
-Do **not** remove the current event records in the first pass:
+Because CodeAlta is private/pre-release, the proposal should prefer the cleaner model over compatibility wrappers.
 
-- `AgentAssistantMessageDeltaEvent`
-- `AgentAssistantMessageEvent`
-- `AgentSessionIdleEvent`
-- `AgentErrorEvent`
-- `AgentRawEvent`
+Recommended replacement:
 
-They are already used by `CodeAltaTerminalUi` and tests.
+- replace `AgentAssistantMessageDeltaEvent` with `AgentContentDeltaEvent(Kind = Assistant, ...)`
+- replace `AgentAssistantMessageEvent` with `AgentContentCompletedEvent(Kind = Assistant, ...)`
+- fold session idle into the session-update/lifecycle model instead of keeping a dedicated compatibility event
+- keep `AgentErrorEvent` and `AgentRawEvent` only if they still make sense semantically, not for legacy reasons
 
-Instead, add richer event families alongside them.
+In practice, this means the implementation can update `CodeAltaTerminalUi`, tests, and both adapters in one coordinated change set instead of carrying duplicate legacy event types.
 
 ## 5.2 Add a content family
 
@@ -300,6 +313,9 @@ Recommended enums:
 ```csharp
 public enum AgentSessionUpdateKind
 {
+    Started,
+    Resumed,
+    Idle,
     Info,
     Warning,
     ModelChanged,
@@ -374,7 +390,239 @@ Why:
 - Copilot request handlers are operationally equivalent, even when not emitted by the session stream
 - the UI can show “agent is asking permission” or “agent requested user input” in a consistent way
 
-## 5.6 Keep raw as the escape hatch
+## 5.6 Some messages need dedicated structured types
+
+The event families above are the right top-level shape, but some payloads are too important to leave as generic text or `JsonElement`.
+
+The rule should be:
+
+- use the event families for **timeline semantics**
+- use dedicated typed payloads for **messages that drive richer UI controls**
+
+The most important cases are below.
+
+### 5.6.1 Plans need a dedicated typed shape
+
+Plan information exists in two different forms:
+
+1. **plan text / streaming proposal text**
+2. **structured plan snapshot with steps and statuses**
+
+Those are not the same thing.
+
+Codex already exposes a real structured plan snapshot:
+
+- `TurnPlanUpdatedNotification.Plan` → list of `TurnPlanStep`
+- `TurnPlanUpdatedNotification.Explanation`
+- `TurnPlanStep.Status` → `pending`, `inProgress`, `completed`
+
+Copilot is weaker here:
+
+- `SessionPlanChangedEvent` currently exposes only an operation (`create`, `update`, `delete`)
+- there is no equivalent step list in the session event stream
+
+Because of that, `AgentContentKind.Plan` is not enough by itself.
+
+Recommended addition:
+
+```csharp
+public sealed record AgentPlanSnapshotEvent(
+    AgentBackendId BackendId,
+    string SessionId,
+    DateTimeOffset Timestamp,
+    AgentRunId? RunId,
+    AgentPlanSnapshot Snapshot)
+    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+
+public sealed record AgentPlanSnapshot(
+    AgentPlanChangeKind? ChangeKind,
+    string? Explanation,
+    IReadOnlyList<AgentPlanStep>? Steps);
+
+public sealed record AgentPlanStep(
+    string Text,
+    AgentPlanStepStatus? Status);
+```
+
+Recommended mapping:
+
+- **Codex**
+  - `TurnPlanUpdated` → `AgentPlanSnapshotEvent` with `Steps` + `Explanation`
+  - `PlanDelta` / completed `PlanThreadItem` → `AgentContent*Event(Kind = Plan, ...)`
+- **Copilot**
+  - `SessionPlanChangedEvent` → `AgentPlanSnapshotEvent` with `ChangeKind` only and no `Steps`
+
+This gives the UI a proper “plan card” surface when step data exists, without pretending Copilot has more structure than it actually does.
+
+### 5.6.2 User input needs a typed form model
+
+The current `AgentUserInputRequest` shape is too weak for rich UI:
+
+- it only carries `Id`, `Question`, `Choices`, `AllowFreeform`
+
+That loses important Codex information:
+
+- `Header`
+- option descriptions
+- `IsSecret`
+- multi-question forms with per-question UI metadata
+
+Backend detail:
+
+- **Copilot** `UserInputRequest`
+  - `Question`
+  - `Choices`
+  - `AllowFreeform`
+- **Codex** `ToolRequestUserInputParams`
+  - `ItemId`
+  - `Questions[]`
+  - each question has `Header`, `Id`, `Question`, `IsOther`, `IsSecret`, `Options[]`
+  - each option has `Label`, `Description`
+
+Recommended shared model:
+
+```csharp
+public sealed record AgentUserInputRequestedEvent(
+    AgentBackendId BackendId,
+    string SessionId,
+    DateTimeOffset Timestamp,
+    AgentRunId? RunId,
+    string InteractionId,
+    AgentUserInputForm Form)
+    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+
+public sealed record AgentUserInputForm(
+    IReadOnlyList<AgentUserInputPrompt> Prompts);
+
+public sealed record AgentUserInputPrompt(
+    string Id,
+    string Question,
+    string? Header = null,
+    IReadOnlyList<AgentUserInputOption>? Options = null,
+    bool AllowFreeform = true,
+    bool IsSecret = false);
+
+public sealed record AgentUserInputOption(
+    string Label,
+    string? Description = null);
+```
+
+Recommended model update:
+
+- keep `AgentUserInputRequestHandler`, but extend `AgentUserInputQuestion` or replace it with the richer prompt model above
+- emit `AgentUserInputRequestedEvent` before invoking the handler
+- emit `AgentInteractionEvent(UserInputResolved, ...)` after resolution
+
+This is important because “pick from a list”, “freeform vs constrained”, and “secret input” are UI behavior, not incidental details.
+
+### 5.6.3 Approval requests need typed payloads
+
+The current `AgentPermissionRequest` is also too weak for approval UI:
+
+```csharp
+public sealed record AgentPermissionRequest(
+    AgentBackendId BackendId,
+    string SessionId,
+    string Kind,
+    JsonElement Raw);
+```
+
+That is operationally sufficient, but too lossy for UI that wants to show:
+
+- command text
+- working directory
+- parsed command actions
+- network host/protocol
+- file-write scope / grant root
+- reason text
+- proposed policy amendments
+
+Backend detail:
+
+- **Copilot** `PermissionRequest`
+  - `Kind`
+  - `ToolCallId`
+  - loose `ExtensionData`
+- **Codex** `CommandExecutionRequestApprovalParams`
+  - `ApprovalId`, `Command`, `CommandActions`, `Cwd`, `NetworkApprovalContext`, `Reason`, `ProposedExecpolicyAmendment`, `ProposedNetworkPolicyAmendments`
+- **Codex** `FileChangeRequestApprovalParams`
+  - `GrantRoot`, `Reason`
+
+Recommended shared model:
+
+```csharp
+public sealed record AgentPermissionRequestedEvent(
+    AgentBackendId BackendId,
+    string SessionId,
+    DateTimeOffset Timestamp,
+    AgentRunId? RunId,
+    string InteractionId,
+    AgentPermissionPrompt Prompt)
+    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+
+public abstract record AgentPermissionPrompt(string Kind);
+
+public sealed record AgentCommandPermissionPrompt(
+    string? ApprovalId,
+    string? Command,
+    string? WorkingDirectory,
+    IReadOnlyList<AgentCommandPreviewAction>? Actions,
+    string? Reason,
+    AgentNetworkAccessRequest? Network,
+    IReadOnlyList<string>? ProposedExecPolicyAmendment,
+    IReadOnlyList<AgentNetworkPolicyAmendment>? ProposedNetworkPolicyAmendments)
+    : AgentPermissionPrompt("commandExecution");
+
+public sealed record AgentFileChangePermissionPrompt(
+    string? GrantRoot,
+    string? Reason)
+    : AgentPermissionPrompt("fileChange");
+```
+
+This should be a first-class shared contract, not a compatibility-only side channel.
+
+### 5.6.4 Tool and file-change results may need structured result blocks
+
+Simple text output fits `AgentContentDeltaEvent`.
+
+Some result payloads do not:
+
+- **Copilot** `ToolExecutionCompleteData.Result.Contents`
+  - text
+  - terminal
+  - image
+  - audio
+  - resource link
+  - resource
+- **Codex** dynamic tool output content items
+  - text
+  - image
+- **Codex** MCP tool call results
+  - raw content blocks
+  - `StructuredContent`
+- **Codex** file changes
+  - `FileChangeThreadItem.Changes[]` with path, diff, and change kind
+
+Recommendation:
+
+- do **not** create a giant “structured output” abstraction in the first pass
+- do define a small optional typed result-block model for later UI work
+
+Example:
+
+```csharp
+public abstract record AgentResultBlock
+{
+    public sealed record Text(string Value) : AgentResultBlock;
+    public sealed record Terminal(string Text, int? ExitCode = null, string? Cwd = null) : AgentResultBlock;
+    public sealed record Image(string MimeType, string DataOrUrl) : AgentResultBlock;
+    public sealed record ResourceLink(string Name, string Uri, string? Description = null) : AgentResultBlock;
+}
+```
+
+For v1, it is acceptable to keep most of this in `Details`, but the proposal should explicitly leave room for typed result blocks.
+
+## 5.7 Keep raw as the escape hatch
 
 `AgentRawEvent` must remain.
 
@@ -403,6 +651,9 @@ Everything else can remain raw until there is a clear UI need.
 | Tool lifecycle | `ToolUserRequestedEvent`, `ToolExecution*` | `ItemStarted` / `ItemCompleted` for tool-like `ThreadItem`s, `McpToolCallProgress` | Codex uses typed item lifecycle + deltas |
 | Command output | `ToolExecutionPartialResultEvent` / tool result text | `CommandExecutionOutputDelta` | normalize as content, kind `CommandOutput` |
 | File change output | tool result text when Copilot exposes it | `FileChangeOutputDelta` | normalize as content, kind `FileChangeOutput` |
+| User input form | `UserInputRequest` callback | `ToolRequestUserInputParams` server request | needs a typed form model, not just text |
+| Approval prompt | `PermissionRequest` callback | `CommandExecutionRequestApprovalParams`, `FileChangeRequestApprovalParams` | needs typed prompt data for UI |
+| Structured tool result | `ToolExecutionCompleteData.Result.Contents` | dynamic tool output items, MCP structured content, file-change diffs | likely phase 2 typed result blocks |
 | Usage / compaction | `SessionUsageInfoEvent`, `AssistantUsageEvent`, `SessionCompaction*` | `ThreadTokenUsageUpdated`, `ThreadCompacted`, `ContextCompactionThreadItem` | session updates |
 | Notices | `SessionInfoEvent`, `SessionWarningEvent`, `SessionModelChangeEvent`, `SessionModeChangedEvent`, `SystemMessageEvent` | `ConfigWarning`, `DeprecationNotice`, `ModelRerouted`, Windows warnings | session updates |
 | Subagents / collaboration | `Subagent*` | `CollabAgentToolCallThreadItem` lifecycle | useful for agentic UI |
@@ -456,11 +707,13 @@ Without stable IDs, the UI will not be able to update the correct row in place.
 
 - `AssistantMessageData.ToolRequests`
 - `AssistantMessageData.ReasoningText`
+- `UserInputRequest.Choices` / `AllowFreeform`
+- `PermissionRequest.Kind` / `ToolCallId` / `ExtensionData`
 - `ToolExecutionCompleteData.Result`
 - `ToolExecutionCompleteData.Error`
 - `SessionShutdownData`
 
-These belong in `Details` for the first pass, not in raw-only storage.
+These should not remain raw-only. Some can stay in `Details` for phase 1, but user-input forms and permission prompts should move to typed payloads.
 
 ### Events that can remain raw initially
 
@@ -492,6 +745,25 @@ The Codex adapter should use both.
 - `PlanDelta` / `TurnPlanUpdated` / completed `PlanThreadItem` → plan updates
 - `ThreadTokenUsageUpdated` / `ThreadCompacted` → session updates
 - `ConfigWarning`, `DeprecationNotice`, `ModelRerouted` → session notices
+
+### Important Codex structured payloads
+
+Codex is the stronger backend for several structured UI cases:
+
+- **Plans**
+  - `TurnPlanUpdatedNotification.Plan` gives a real step list with status
+  - `TurnPlanUpdatedNotification.Explanation` can be shown above the list
+- **User input**
+  - `ToolRequestUserInputQuestion.Header`
+  - `ToolRequestUserInputQuestion.IsSecret`
+  - `ToolRequestUserInputOption.Description`
+- **Approvals**
+  - command approval exposes command text, cwd, parsed command actions, network context, and policy amendments
+  - file approval exposes grant root and reason
+- **File changes**
+  - `FileChangeThreadItem.Changes[]` already gives path, diff, and patch kind
+
+These are the strongest argument for introducing typed payloads rather than relying only on `JsonElement Details`.
 
 ### Requests currently handled outside the event stream
 
@@ -581,11 +853,13 @@ Maintain a timeline state keyed by content/activity IDs:
 
 - **assistant blocks** — markdown, expanded by default
 - **reasoning blocks** — markdown, collapsed by default
+- **plan cards** — structured steps when `AgentPlanSnapshotEvent` is available, plain text otherwise
 - **tool/activity rows** — one row per activity, updated in place
 - **subagent rows** — summarized activity rows, expandable but collapsed by default
 - **session notices** — dim/info/warning rows
 - **usage/model changes** — status bar or side panel, optionally transcript rows
-- **approval/user-input cards** — interactive rows in the timeline
+- **approval cards** — command/file/network-specific UI rather than generic JSON
+- **user-input forms** — list/select/secret/freeform controls driven by typed prompt metadata
 
 ### Practical implication
 
@@ -603,8 +877,19 @@ Add new enums and records, ideally in separate files:
 - `AgentActivityEvent.cs`
 - `AgentSessionUpdateEvent.cs`
 - `AgentInteractionEvent.cs`
+- `AgentPlanEvent.cs`
+- `AgentPermissionPrompt.cs`
+- `AgentUserInputForm.cs`
+- optionally later `AgentResultBlock.cs`
 
-Keep the current event records unchanged.
+Replace the current assistant-only event records where the richer model makes them redundant.
+
+Also revisit these existing contracts:
+
+- `src/CodeAlta.Agent/AgentUserInputRequest.cs`
+- `src/CodeAlta.Agent/AgentPermissionRequest.cs`
+
+They are currently too weak for richer interactive UI and should either be extended or complemented by new typed payload models.
 
 ## 10.2 `CodeAlta.Agent.Copilot`
 
@@ -614,6 +899,8 @@ Extend `CopilotAgentMapper.ToAgentEvent(...)` to emit:
 - tool lifecycle events
 - usage / compaction / warning / model/session update events
 - subagent / hook / skill events where useful
+- structured plan snapshot events with operation-only payloads
+- typed tool-result blocks when the UI is ready to consume them
 
 For approval and user-input callbacks, emit `AgentInteractionEvent`s from the session layer around the callback invocation.
 
@@ -624,6 +911,10 @@ Extend `CodexAgentMapper.ToAgentEvent(...)` and `CodexAgentSession.HandleServerR
 - reasoning / plan / command / file/tool lifecycle events
 - session updates
 - interaction events for approval / user input / tool call handling
+- typed plan snapshot events
+- typed approval prompts
+- typed user-input forms
+- optionally later typed file-change summaries / result blocks
 
 Most of the data is already present in `CodexNotification`, `ThreadItem`, and server request types.
 
@@ -650,30 +941,34 @@ Add or extend:
 
 ### Phase 1 — Shared model
 
-1. Add the new event families to `src/CodeAlta.Agent/`.
-2. Keep the current event types intact.
-3. Update `doc/specs/agent_api_specs.md` after the design settles.
+1. Replace the current event model in `src/CodeAlta.Agent/` with the richer families.
+2. Add typed payload contracts for plans, user-input forms, and approval prompts.
+3. Update current consumers (`CodeAlta`, tests, adapters) in the same change set.
+4. Update `doc/specs/agent_api_specs.md` after the design settles.
 
 ### Phase 2 — Copilot adapter
 
 1. Map reasoning events.
 2. Map tool lifecycle events.
 3. Map session warning/model/usage/compaction events.
-4. Emit interaction events around permission/user-input callbacks.
+4. Emit operation-only plan snapshot events.
+5. Emit interaction events around permission/user-input callbacks.
 
 ### Phase 3 — Codex adapter
 
 1. Map reasoning and plan notifications.
-2. Map `ItemStarted` / `ItemCompleted` by `ThreadItem` type.
-3. Map command/file/tool output deltas.
-4. Emit interaction events around server requests.
-5. Map notices, usage, and compaction.
+2. Map `TurnPlanUpdated` into typed plan snapshots.
+3. Map `ItemStarted` / `ItemCompleted` by `ThreadItem` type.
+4. Map command/file/tool output deltas.
+5. Emit typed interaction events around server requests.
+6. Map notices, usage, and compaction.
 
 ### Phase 4 — UI
 
 1. Replace single-stream assistant state with keyed timeline state.
 2. Add renderers for assistant, reasoning, activity, notice, and interaction events.
-3. Keep the current minimal assistant path working during migration.
+3. Add dedicated renderers for plan cards, approval cards, and user-input forms.
+4. Keep the current minimal assistant path working during migration.
 
 ### Phase 5 — Cleanup
 
@@ -685,14 +980,15 @@ Add or extend:
 
 If you implement this proposal, proceed in this order:
 
-1. extend `CodeAlta.Agent` with additive event types only
+1. replace the current `CodeAlta.Agent` event surface with the richer model
 2. add correlation IDs (`ContentId`, `ActivityId`, `ParentActivityId`) from day one
-3. map Copilot reasoning/tool/session-update events first
-4. map Codex reasoning/plan/item-lifecycle events second
-5. emit interaction events from session-layer request handling
-6. update the terminal UI to use keyed timeline entries instead of a single streaming buffer
-7. add unit tests before live tests
-8. keep `AgentRawEvent` for anything not yet normalized
+3. introduce typed plan, approval, and input-form payloads before wiring the UI
+4. map Copilot reasoning/tool/session-update events first
+5. map Codex reasoning/plan/item-lifecycle events second
+6. emit interaction events from session-layer request handling
+7. update the terminal UI to use keyed timeline entries instead of a single streaming buffer
+8. add unit tests before live tests
+9. keep `AgentRawEvent` for anything not yet normalized
 
 ## 13. Recommendation
 
@@ -702,6 +998,7 @@ The better tradeoff is:
 
 - a **small number of event families**
 - **enums inside each family**
+- **dedicated typed payloads for plans, approvals, and user-input forms**
 - **stable correlation IDs**
 - **raw fallback for everything else**
 
@@ -709,4 +1006,4 @@ That gives CodeAlta the best of both worlds:
 
 - enough shared structure for a consistent UI
 - enough flexibility to preserve rich backend-specific workflows
-- a migration path that does not break the current assistant-only consumers
+- a cleaner event surface without compatibility-only wrappers
