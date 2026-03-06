@@ -99,7 +99,8 @@ Current terminal host capabilities:
 
 - Chat (global agent) operations:
   - Chat screen powered by `PromptEditor` (input) and `DocumentFlow` + `MarkdownControl` (rendered conversation history).
-  - Start a Copilot or Codex session via `AgentHub`.
+  - Automatically probes and initializes both Copilot and Codex backends (when available), with inline warnings when a local CLI/runtime is not installed.
+  - Backend, model, and reasoning-effort selectors are shown under the prompt and are kept in-memory for the current UI session.
   - Copilot sessions are started with `codealta.*` MCP tools bridged into the backend via `McpToolBridge` (tool calls execute against the in-process MCP server, with MCP tool ids normalized to Copilot-compatible function names).
   - Permission requests are deny-by-default unless "Auto-Approve" is enabled in the Chat screen.
 - Workspace operations:

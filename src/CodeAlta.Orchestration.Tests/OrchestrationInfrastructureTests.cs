@@ -229,6 +229,28 @@ public sealed class OrchestrationInfrastructureTests
         Assert.IsTrue(received.OfType<AgentSessionUpdateEvent>().Any(x => x.Kind == AgentSessionUpdateKind.Idle));
     }
 
+    [TestMethod]
+    public async Task AgentHub_ListModelsAsync_ReturnsBackendModels()
+    {
+        using var temp = TempDirectory.Create();
+        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
+        var repository = new AgentRepository(db);
+
+        var backendFactory = new AgentBackendFactory();
+        backendFactory.Register("fake", static () => new FakeBackend(
+        [
+            new AgentModelInfo("model-a", DisplayName: "Model A"),
+            new AgentModelInfo("model-b", DisplayName: "Model B"),
+        ]));
+
+        await using var hub = new AgentHub(backendFactory, repository);
+        var models = await hub.ListModelsAsync(new AgentBackendId("fake")).ConfigureAwait(false);
+
+        Assert.AreEqual(2, models.Count);
+        Assert.AreEqual("model-a", models[0].Id);
+        Assert.AreEqual("Model B", models[1].DisplayName);
+    }
+
     private static async Task<CodeAltaDb> CreateDbAsync(string rootPath)
     {
         var dbPath = Path.Combine(rootPath, "state", "db", "codealta.db");
@@ -258,6 +280,12 @@ public sealed class OrchestrationInfrastructureTests
     private sealed class FakeBackend : IAgentBackend
     {
         private int _runCounter;
+        private readonly IReadOnlyList<AgentModelInfo> _models;
+
+        public FakeBackend(IReadOnlyList<AgentModelInfo>? models = null)
+        {
+            _models = models ?? [];
+        }
 
         public AgentBackendId BackendId => new("fake");
 
@@ -274,7 +302,7 @@ public sealed class OrchestrationInfrastructureTests
 
         public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default)
         {
-            return Task.FromResult<IReadOnlyList<AgentModelInfo>>([]);
+            return Task.FromResult(_models);
         }
 
         public Task<IReadOnlyList<AgentSessionMetadata>> ListSessionsAsync(

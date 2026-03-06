@@ -27,6 +27,8 @@ public sealed class ChatAgentConnectionTests
                 () => connection.EnsureConnectedAsync(
                     new AgentBackendId("fakechat"),
                     Environment.CurrentDirectory,
+                    model: null,
+                    reasoningEffort: null,
                     tools: null,
                     permissionRequestHandler: static (_, _) =>
                         Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
@@ -39,6 +41,8 @@ public sealed class ChatAgentConnectionTests
         var agentId = await connection.EnsureConnectedAsync(
                 new AgentBackendId("fakechat"),
                 Environment.CurrentDirectory,
+                model: null,
+                reasoningEffort: null,
                 tools: null,
                 permissionRequestHandler: static (_, _) =>
                     Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
@@ -57,6 +61,63 @@ public sealed class ChatAgentConnectionTests
         Assert.IsTrue(received.OfType<AgentSessionUpdateEvent>().Any(x => x.Kind == AgentSessionUpdateKind.Idle));
     }
 
+    [TestMethod]
+    public async Task EnsureConnectedAsync_RecreatesSessionWhenModelOrReasoningChanges()
+    {
+        using var temp = TempDirectory.Create();
+        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
+        var repository = new AgentRepository(db);
+
+        var backendFactory = new AgentBackendFactory();
+        var backend = new FlakyBackend(skipFirstFailure: true);
+        backendFactory.Register("fakechat", () => backend);
+
+        await using var hub = new AgentHub(backendFactory, repository);
+        await using var connection = new ChatAgentConnection(hub, static _ => { });
+
+        var firstAgentId = await connection.EnsureConnectedAsync(
+                new AgentBackendId("fakechat"),
+                Environment.CurrentDirectory,
+                model: "model-a",
+                reasoningEffort: AgentReasoningEffort.Low,
+                tools: null,
+                permissionRequestHandler: static (_, _) =>
+                    Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                userInputRequestHandler: null)
+            .ConfigureAwait(false);
+
+        var secondAgentId = await connection.EnsureConnectedAsync(
+                new AgentBackendId("fakechat"),
+                Environment.CurrentDirectory,
+                model: "model-a",
+                reasoningEffort: AgentReasoningEffort.Low,
+                tools: null,
+                permissionRequestHandler: static (_, _) =>
+                    Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                userInputRequestHandler: null)
+            .ConfigureAwait(false);
+
+        var thirdAgentId = await connection.EnsureConnectedAsync(
+                new AgentBackendId("fakechat"),
+                Environment.CurrentDirectory,
+                model: "model-b",
+                reasoningEffort: AgentReasoningEffort.High,
+                tools: null,
+                permissionRequestHandler: static (_, _) =>
+                    Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                userInputRequestHandler: null)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(firstAgentId, secondAgentId);
+        Assert.AreEqual(firstAgentId, thirdAgentId);
+        Assert.AreEqual(2, backend.CreateSessionAttempts);
+        CollectionAssert.AreEqual(new[] { "model-a", "model-b" }, backend.CreatedModels);
+        CollectionAssert.AreEqual(
+            new[] { AgentReasoningEffort.Low, AgentReasoningEffort.High },
+            backend.CreatedReasoningEfforts.ToArray());
+        Assert.AreEqual(1, backend.DisposedSessionCount);
+    }
+
     private static async Task<CodeAltaDb> CreateDbAsync(string rootPath)
     {
         var dbPath = Path.Combine(rootPath, "state", "db", "codealta.db");
@@ -68,12 +129,24 @@ public sealed class ChatAgentConnectionTests
     private sealed class FlakyBackend : IAgentBackend
     {
         private int _runCounter;
+        private readonly bool _skipFirstFailure;
+
+        public FlakyBackend(bool skipFirstFailure = false)
+        {
+            _skipFirstFailure = skipFirstFailure;
+        }
 
         public AgentBackendId BackendId => new("fakechat");
 
         public string DisplayName => "Fake Chat";
 
         public int CreateSessionAttempts { get; private set; }
+
+        public List<string?> CreatedModels { get; } = [];
+
+        public List<AgentReasoningEffort> CreatedReasoningEfforts { get; } = [];
+
+        public int DisposedSessionCount { get; private set; }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
@@ -96,7 +169,13 @@ public sealed class ChatAgentConnectionTests
             ArgumentNullException.ThrowIfNull(options);
 
             CreateSessionAttempts++;
-            if (CreateSessionAttempts == 1)
+            CreatedModels.Add(options.Model);
+            if (options.ReasoningEffort is { } reasoningEffort)
+            {
+                CreatedReasoningEfforts.Add(reasoningEffort);
+            }
+
+            if (!_skipFirstFailure && CreateSessionAttempts == 1)
             {
                 throw new InvalidOperationException("simulated session startup failure");
             }
@@ -131,7 +210,11 @@ public sealed class ChatAgentConnectionTests
 
             public string? WorkspacePath => null;
 
-            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+            public ValueTask DisposeAsync()
+            {
+                _backend.DisposedSessionCount++;
+                return ValueTask.CompletedTask;
+            }
 
             public async IAsyncEnumerable<AgentEvent> StreamEventsAsync(
                 [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)

@@ -124,4 +124,42 @@ public sealed class CodeAltaTerminalUiTests
 
         Assert.AreEqual("_Status:_ Permission resolved: AllowOnce.", markdown);
     }
+
+    [TestMethod]
+    public void BuildChatReasoningOptions_PreservesDefaultAndSupportedEfforts()
+    {
+        var options = CodeAltaTerminalUi.BuildChatReasoningOptions(
+            new AgentModelInfo(
+                "model-a",
+                SupportedReasoningEfforts: [AgentReasoningEffort.Minimal, AgentReasoningEffort.High]));
+
+        Assert.AreEqual("Default", options[0].Label);
+        CollectionAssert.AreEqual(
+            new[] { "Default", "Minimal", "High" },
+            options.Select(static option => option.Label).ToArray());
+    }
+
+    [TestMethod]
+    public void BuildChatBackendStatusMarkup_IncludesWarningsAndSelectedBackend()
+    {
+        var states = new[]
+        {
+            new CodeAltaTerminalUi.ChatBackendState(AgentBackendIds.Codex, "Codex")
+            {
+                Availability = CodeAltaTerminalUi.ChatBackendAvailability.Ready,
+                StatusMessage = "Connected · 2 models",
+            },
+            new CodeAltaTerminalUi.ChatBackendState(AgentBackendIds.Copilot, "Copilot")
+            {
+                Availability = CodeAltaTerminalUi.ChatBackendAvailability.Unsupported,
+                StatusMessage = "Copilot is unavailable: CLI not found.",
+            },
+        };
+
+        var markup = CodeAltaTerminalUi.BuildChatBackendStatusMarkup(states, AgentBackendIds.Codex, isInitializing: false);
+
+        StringAssert.Contains(markup, "Codex");
+        StringAssert.Contains(markup, "Copilot");
+        StringAssert.Contains(markup, "CLI not found");
+    }
 }

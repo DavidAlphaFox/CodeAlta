@@ -115,6 +115,7 @@ public sealed class AgentHub : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(options);
 
         AgentIdentity identity;
+        SessionEntry? previousEntry = null;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -136,11 +137,21 @@ public sealed class AgentHub : IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            if (_sessions.TryGetValue(agentId, out previousEntry))
+            {
+                _sessions.Remove(agentId);
+            }
+
             _sessions[agentId] = sessionEntry;
         }
         finally
         {
             _gate.Release();
+        }
+
+        if (previousEntry is not null)
+        {
+            await previousEntry.DisposeAsync().ConfigureAwait(false);
         }
 
         await _agentRepository.UpsertSessionAsync(
@@ -155,6 +166,20 @@ public sealed class AgentHub : IAsyncDisposable
             cancellationToken).ConfigureAwait(false);
 
         return session.SessionId;
+    }
+
+    /// <summary>
+    /// Lists the available models for a backend.
+    /// </summary>
+    /// <param name="backendId">The backend identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The available backend models.</returns>
+    public async Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(
+        AgentBackendId backendId,
+        CancellationToken cancellationToken = default)
+    {
+        var backend = await GetOrCreateBackendAsync(backendId, cancellationToken).ConfigureAwait(false);
+        return await backend.ListModelsAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -301,6 +326,35 @@ public sealed class AgentHub : IAsyncDisposable
         }
 
         await entry.Session.AbortAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Stops and disposes the active session for an agent, if present.
+    /// </summary>
+    /// <param name="agentId">Agent id.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task StopSessionAsync(AgentId agentId, CancellationToken cancellationToken = default)
+    {
+        SessionEntry? entry = null;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_sessions.TryGetValue(agentId, out entry))
+            {
+                _sessions.Remove(agentId);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (entry is not null)
+        {
+            await entry.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />

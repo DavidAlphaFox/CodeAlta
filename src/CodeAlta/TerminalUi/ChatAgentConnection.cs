@@ -10,6 +10,8 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
 
     private AgentId? _connectedAgentId;
     private AgentBackendId? _connectedBackendId;
+    private string? _connectedModel;
+    private AgentReasoningEffort? _connectedReasoningEffort;
     private IDisposable? _eventSubscription;
 
     public ChatAgentConnection(AgentHub agentHub, Action<AgentEvent> eventHandler)
@@ -25,6 +27,10 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
 
     public AgentBackendId? ConnectedBackendId => _connectedBackendId;
 
+    public string? ConnectedModel => _connectedModel;
+
+    public AgentReasoningEffort? ConnectedReasoningEffort => _connectedReasoningEffort;
+
     public bool IsConnected =>
         _connectedAgentId is not null &&
         _eventSubscription is not null &&
@@ -33,6 +39,8 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
     public async Task<AgentId> EnsureConnectedAsync(
         AgentBackendId backendId,
         string workingDirectory,
+        string? model,
+        AgentReasoningEffort? reasoningEffort,
         IReadOnlyList<AgentToolDefinition>? tools,
         AgentPermissionRequestHandler permissionRequestHandler,
         AgentUserInputRequestHandler? userInputRequestHandler,
@@ -44,25 +52,50 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
         if (IsConnected &&
             _connectedAgentId is { } connectedAgentId &&
             _connectedBackendId is { } connectedBackendId &&
-            string.Equals(connectedBackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase))
+            string.Equals(connectedBackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(_connectedModel, model, StringComparison.Ordinal) &&
+            _connectedReasoningEffort == reasoningEffort)
         {
             return connectedAgentId;
         }
 
-        var identity = await _agentHub.RegisterAgentAsync(
-                "chat.global",
-                new AgentScope { Kind = AgentScopeKind.Global },
-                backendId,
-                cancellationToken)
-            .ConfigureAwait(false);
+        AgentId agentId;
+        if (_connectedAgentId is { } existingAgentId &&
+            _connectedBackendId is { } existingBackendId &&
+            string.Equals(existingBackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase))
+        {
+            _eventSubscription?.Dispose();
+            _eventSubscription = null;
+            await _agentHub.StopSessionAsync(existingAgentId, cancellationToken).ConfigureAwait(false);
+            agentId = existingAgentId;
+        }
+        else
+        {
+            if (_connectedAgentId is { } previousAgentId)
+            {
+                _eventSubscription?.Dispose();
+                _eventSubscription = null;
+                await _agentHub.StopSessionAsync(previousAgentId, cancellationToken).ConfigureAwait(false);
+            }
+
+            var identity = await _agentHub.RegisterAgentAsync(
+                    "chat.global",
+                    new AgentScope { Kind = AgentScopeKind.Global },
+                    backendId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            agentId = identity.AgentId;
+        }
 
         IDisposable? newSubscription = null;
         try
         {
             await _agentHub.StartSessionAsync(
-                    identity.AgentId,
+                    agentId,
                     new AgentSessionCreateOptions
                     {
+                        Model = model,
+                        ReasoningEffort = reasoningEffort,
                         Streaming = true,
                         WorkingDirectory = workingDirectory,
                         Tools = tools,
@@ -75,7 +108,7 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
                 .ConfigureAwait(false);
 
             newSubscription = await _agentHub.SubscribeSessionEventsAsync(
-                    identity.AgentId,
+                    agentId,
                     _eventHandler,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -88,9 +121,11 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
 
         _eventSubscription?.Dispose();
         _eventSubscription = newSubscription;
-        _connectedAgentId = identity.AgentId;
+        _connectedAgentId = agentId;
         _connectedBackendId = backendId;
-        return identity.AgentId;
+        _connectedModel = model;
+        _connectedReasoningEffort = reasoningEffort;
+        return agentId;
     }
 
     public async Task AbortAsync(CancellationToken cancellationToken = default)
@@ -103,12 +138,18 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
         await _agentHub.AbortAsync(agentId, cancellationToken).ConfigureAwait(false);
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         _eventSubscription?.Dispose();
         _eventSubscription = null;
+        if (_connectedAgentId is { } agentId)
+        {
+            await _agentHub.StopSessionAsync(agentId).ConfigureAwait(false);
+        }
+
         _connectedAgentId = null;
         _connectedBackendId = null;
-        return ValueTask.CompletedTask;
+        _connectedModel = null;
+        _connectedReasoningEffort = null;
     }
 }

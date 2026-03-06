@@ -8,6 +8,7 @@ using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Persistence;
 using CodeAlta.Search;
 using CodeAlta.Workspaces;
+using XenoAtom.Ansi;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
@@ -29,7 +30,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     private readonly CodeAltaMcpServerFactory _mcpFactory;
     private readonly McpToolBridge _mcpToolBridge;
     private readonly AgentHub _agentHub;
-    private readonly ChatAgentConnection _chatConnection;
+    private readonly Dictionary<string, ChatAgentConnection> _chatConnections = new(StringComparer.OrdinalIgnoreCase);
 
     private DockLayout? _root;
     private TextBlock? _header;
@@ -53,8 +54,18 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     private ChatPromptEditor? _chatInput;
     private Visual? _chatInputView;
     private MarkdownMarkupConverter? _chatMarkdownConverter;
+    private Select<ChatBackendOption>? _chatBackendSelect;
+    private Select<ChatModelOption>? _chatModelSelect;
+    private Select<ChatReasoningOption>? _chatReasoningSelect;
+    private Markup? _chatBackendStatusMarkup;
     private AgentBackendId _chatBackendId = AgentBackendIds.Codex;
     private bool _chatAutoApprove;
+    private bool _chatBackendsInitializing;
+    private bool _chatSelectorsRefreshing;
+    private readonly State<int> _chatBackendSelectedIndex = new(0);
+    private readonly State<int> _chatModelSelectedIndex = new(0);
+    private readonly State<int> _chatReasoningSelectedIndex = new(0);
+    private readonly Dictionary<string, ChatBackendState> _chatBackendStates = CreateChatBackendStates();
     private readonly object _chatTimelineLock = new();
     private PendingAssistantState? _chatPendingAssistant;
     private readonly Dictionary<string, ChatContentState> _chatContentStates = new(StringComparer.Ordinal);
@@ -97,7 +108,8 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         _mcpFactory = mcpFactory;
         _mcpToolBridge = mcpToolBridge;
         _agentHub = agentHub;
-        _chatConnection = new ChatAgentConnection(agentHub, HandleChatAgentEvent);
+        _chatConnections.Add(AgentBackendIds.Codex.Value, new ChatAgentConnection(agentHub, HandleChatAgentEvent));
+        _chatConnections.Add(AgentBackendIds.Copilot.Value, new ChatAgentConnection(agentHub, HandleChatAgentEvent));
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -149,7 +161,10 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await _chatConnection.DisposeAsync().ConfigureAwait(false);
+        foreach (var connection in _chatConnections.Values)
+        {
+            await connection.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     private Visual BuildFooter()
@@ -232,6 +247,29 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             .MinHeight(3)
             .MaxHeight(9);
         _chatInputView ??= _chatInput.Scrollable();
+        _chatBackendSelect ??= new Select<ChatBackendOption>()
+            .SelectedIndex(_chatBackendSelectedIndex)
+            .SelectionChanged((_, e) => OnChatBackendSelectionChanged(e.NewIndex))
+            .MinWidth(12)
+            .MaxWidth(20);
+        _chatModelSelect ??= new Select<ChatModelOption>()
+            .SelectedIndex(_chatModelSelectedIndex)
+            .SelectionChanged((_, e) => OnChatModelSelectionChanged(e.NewIndex))
+            .MinWidth(18)
+            .MaxWidth(36)
+            .HorizontalAlignment(Align.Stretch);
+        _chatReasoningSelect ??= new Select<ChatReasoningOption>()
+            .SelectedIndex(_chatReasoningSelectedIndex)
+            .SelectionChanged((_, e) => OnChatReasoningSelectionChanged(e.NewIndex))
+            .MinWidth(12)
+            .MaxWidth(22);
+        _chatBackendStatusMarkup ??= new Markup(string.Empty)
+        {
+            Wrap = true,
+        };
+
+        RefreshChatSelectors();
+        _ = InitializeChatBackendsAsync();
 
         var help = new Markup(
             "[dim]Enter accepts the prompt. Use markdown for formatting; assistant messages will render markdown.[/]");
@@ -239,8 +277,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         var controls = new WrapHStack(
             [
                 new Button(new TextBlock("Clear")).Click(ClearChat),
-                new Button(new TextBlock("Start Copilot")).Click(() => _ = EnsureChatSessionAsync(AgentBackendIds.Copilot)),
-                new Button(new TextBlock("Start Codex")).Click(() => _ = EnsureChatSessionAsync(AgentBackendIds.Codex)),
+                new Button(new TextBlock("Refresh Backends")).Click(() => _ = RefreshChatBackendsAsync()),
                 new Button(new TextBlock("Abort")).Click(() => _ = AbortChatAsync()),
                 new Button(new TextBlock("Toggle Auto-Approve")).Click(ToggleChatAutoApprove),
                 new Button(new TextBlock("Send")).Click(() => _chatInput?.Accept()),
@@ -253,7 +290,24 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         return new DockLayout(
             top: new VStack([new TextBlock("Chat"), help, controls]) { Spacing = 1 },
             content: _chatFlow,
-            bottom: _chatInputView);
+            bottom: new VStack(
+                [
+                    _chatInputView,
+                    new WrapHStack(
+                        [
+                            new VStack([new TextBlock("Agent"), _chatBackendSelect]) { Spacing = 0 },
+                            new VStack([new TextBlock("Model"), _chatModelSelect]) { Spacing = 0 },
+                            new VStack([new TextBlock("Reasoning"), _chatReasoningSelect]) { Spacing = 0 },
+                        ])
+                    {
+                        Spacing = 2,
+                        RunSpacing = 1,
+                    },
+                    _chatBackendStatusMarkup,
+                ])
+            {
+                Spacing = 1,
+            });
 
         void HighlightMarkdown(in PromptEditorHighlightRequest request, List<StyledRun> runs)
         {
@@ -276,6 +330,417 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
             return string.Create(snapshot.Length, snapshot, static (span, s) => s.CopyTo(0, span));
         }
+    }
+
+    private ChatAgentConnection GetChatConnection(AgentBackendId backendId)
+    {
+        if (_chatConnections.TryGetValue(backendId.Value, out var connection))
+        {
+            return connection;
+        }
+
+        throw new KeyNotFoundException($"No chat connection is registered for backend '{backendId.Value}'.");
+    }
+
+    private async Task InitializeChatBackendsAsync()
+    {
+        if (_chatBackendsInitializing ||
+            _chatBackendStates.Values.All(static state => state.Availability != ChatBackendAvailability.Unknown))
+        {
+            return;
+        }
+
+        _chatBackendsInitializing = true;
+        RefreshChatBackendStatusMarkup();
+        try
+        {
+            var initializationTasks = _chatBackendStates.Values
+                .Select(InitializeChatBackendAsync)
+                .ToArray();
+            await Task.WhenAll(initializationTasks).ConfigureAwait(false);
+        }
+        finally
+        {
+            _chatBackendsInitializing = false;
+            RefreshChatSelectors();
+        }
+
+        if (_chatBackendStates.Values.Any(static state => state.Availability == ChatBackendAvailability.Ready))
+        {
+            SetStatus("Chat backends initialized.");
+        }
+        else
+        {
+            SetStatus("No supported chat backend was detected.");
+        }
+    }
+
+    private async Task RefreshChatBackendsAsync()
+    {
+        if (_chatBackendsInitializing)
+        {
+            return;
+        }
+
+        foreach (var backendState in _chatBackendStates.Values)
+        {
+            backendState.Availability = ChatBackendAvailability.Unknown;
+            backendState.StatusMessage = "Not initialized.";
+            backendState.Models.Clear();
+            backendState.SelectedModelId = null;
+            backendState.SelectedReasoningEffort = null;
+        }
+
+        RefreshChatSelectors();
+        await InitializeChatBackendsAsync().ConfigureAwait(false);
+    }
+
+    private async Task InitializeChatBackendAsync(ChatBackendState backendState)
+    {
+        backendState.Availability = ChatBackendAvailability.Connecting;
+        backendState.StatusMessage = "Connecting...";
+        RefreshChatSelectors();
+
+        try
+        {
+            var models = await _agentHub.ListModelsAsync(backendState.BackendId).ConfigureAwait(false);
+
+            backendState.Models.Clear();
+            backendState.Models.AddRange(models);
+            if (backendState.Models.Count > 0)
+            {
+                if (string.IsNullOrWhiteSpace(backendState.SelectedModelId) ||
+                    backendState.Models.All(model => !string.Equals(model.Id, backendState.SelectedModelId, StringComparison.Ordinal)))
+                {
+                    backendState.SelectedModelId = backendState.Models[0].Id;
+                }
+            }
+            else
+            {
+                backendState.SelectedModelId = null;
+            }
+
+            backendState.SelectedReasoningEffort = NormalizeReasoningEffort(
+                backendState.SelectedReasoningEffort,
+                GetSelectedModel(backendState));
+            RefreshChatSelectors();
+
+            await EnsureChatSessionAsync(backendState.BackendId, updateStatus: false).ConfigureAwait(false);
+
+            backendState.Availability = ChatBackendAvailability.Ready;
+            backendState.StatusMessage = BuildReadyStatusMessage(backendState);
+        }
+        catch (FileNotFoundException ex)
+        {
+            backendState.Availability = ChatBackendAvailability.Unsupported;
+            backendState.StatusMessage = BuildUnsupportedBackendMessage(backendState, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            backendState.Availability = ChatBackendAvailability.Failed;
+            backendState.StatusMessage = BuildFailedBackendMessage(backendState, ex.Message);
+        }
+
+        RefreshChatSelectors();
+    }
+
+    private void OnChatBackendSelectionChanged(int newIndex)
+    {
+        if (_chatSelectorsRefreshing)
+        {
+            return;
+        }
+
+        var backendOptions = BuildChatBackendOptions();
+        if ((uint)newIndex >= (uint)backendOptions.Count)
+        {
+            return;
+        }
+
+        _chatBackendId = backendOptions[newIndex].BackendId;
+        RefreshChatSelectors();
+        RefreshChatBackendStatusMarkup();
+        _ = EnsureSelectedChatBackendReadyAsync();
+    }
+
+    private void OnChatModelSelectionChanged(int newIndex)
+    {
+        if (_chatSelectorsRefreshing)
+        {
+            return;
+        }
+
+        var backendState = _chatBackendStates[_chatBackendId.Value];
+        var modelOptions = BuildChatModelOptions(backendState);
+        if (modelOptions.Count == 0)
+        {
+            backendState.SelectedModelId = null;
+            backendState.SelectedReasoningEffort = NormalizeReasoningEffort(
+                backendState.SelectedReasoningEffort,
+                model: null);
+            RefreshChatSelectors();
+            return;
+        }
+
+        var clampedIndex = Math.Clamp(newIndex, 0, modelOptions.Count - 1);
+        backendState.SelectedModelId = modelOptions[clampedIndex].ModelId;
+        backendState.SelectedReasoningEffort = NormalizeReasoningEffort(
+            backendState.SelectedReasoningEffort,
+            GetSelectedModel(backendState));
+        RefreshChatSelectors();
+        _ = EnsureSelectedChatBackendReadyAsync();
+    }
+
+    private void OnChatReasoningSelectionChanged(int newIndex)
+    {
+        if (_chatSelectorsRefreshing)
+        {
+            return;
+        }
+
+        var backendState = _chatBackendStates[_chatBackendId.Value];
+        var reasoningOptions = BuildChatReasoningOptions(GetSelectedModel(backendState));
+        if (reasoningOptions.Count == 0)
+        {
+            backendState.SelectedReasoningEffort = null;
+            RefreshChatSelectors();
+            return;
+        }
+
+        var clampedIndex = Math.Clamp(newIndex, 0, reasoningOptions.Count - 1);
+        backendState.SelectedReasoningEffort = reasoningOptions[clampedIndex].Effort;
+        RefreshChatSelectors();
+        _ = EnsureSelectedChatBackendReadyAsync();
+    }
+
+    private void RefreshChatSelectors()
+    {
+        var backendOptions = BuildChatBackendOptions();
+        var selectedBackendIndex = Math.Clamp(
+            backendOptions.FindIndex(option => string.Equals(option.BackendId.Value, _chatBackendId.Value, StringComparison.OrdinalIgnoreCase)),
+            0,
+            Math.Max(0, backendOptions.Count - 1));
+        var selectedBackendState = _chatBackendStates[backendOptions[selectedBackendIndex].BackendId.Value];
+        var modelOptions = BuildChatModelOptions(selectedBackendState);
+        var selectedModelIndex = Math.Clamp(
+            modelOptions.FindIndex(option => string.Equals(option.ModelId, selectedBackendState.SelectedModelId, StringComparison.Ordinal)),
+            0,
+            Math.Max(0, modelOptions.Count - 1));
+        var selectedModel = GetSelectedModel(selectedBackendState);
+        var reasoningOptions = BuildChatReasoningOptions(selectedModel);
+        var selectedReasoningIndex = Math.Clamp(
+            reasoningOptions.FindIndex(option => option.Effort == selectedBackendState.SelectedReasoningEffort),
+            0,
+            Math.Max(0, reasoningOptions.Count - 1));
+
+        PostToUi(() =>
+        {
+            if (_chatBackendSelect is null ||
+                _chatModelSelect is null ||
+                _chatReasoningSelect is null)
+            {
+                return;
+            }
+
+            _chatSelectorsRefreshing = true;
+            try
+            {
+                ReplaceSelectItems(_chatBackendSelect, backendOptions);
+                ReplaceSelectItems(_chatModelSelect, modelOptions);
+                ReplaceSelectItems(_chatReasoningSelect, reasoningOptions);
+
+                _chatBackendSelectedIndex.Value = selectedBackendIndex;
+                _chatModelSelectedIndex.Value = selectedModelIndex;
+                _chatReasoningSelectedIndex.Value = selectedReasoningIndex;
+
+                _chatModelSelect.IsEnabled = selectedBackendState.Availability == ChatBackendAvailability.Ready;
+                _chatReasoningSelect.IsEnabled = selectedBackendState.Availability == ChatBackendAvailability.Ready;
+            }
+            finally
+            {
+                _chatSelectorsRefreshing = false;
+            }
+
+            RefreshChatBackendStatusMarkup();
+        });
+    }
+
+    private void RefreshChatBackendStatusMarkup()
+    {
+        var markup = BuildChatBackendStatusMarkup(_chatBackendStates.Values, _chatBackendId, _chatBackendsInitializing);
+        PostToUi(() =>
+        {
+            if (_chatBackendStatusMarkup is not null)
+            {
+                _chatBackendStatusMarkup.Text = markup;
+            }
+        });
+    }
+
+    private static void ReplaceSelectItems<T>(Select<T> select, IReadOnlyList<T> items)
+    {
+        select.Items.Clear();
+        foreach (var item in items)
+        {
+            select.Items.Add(item);
+        }
+    }
+
+    private static List<ChatBackendOption> BuildChatBackendOptions()
+    {
+        return
+        [
+            new ChatBackendOption(AgentBackendIds.Codex, "Codex"),
+            new ChatBackendOption(AgentBackendIds.Copilot, "Copilot"),
+        ];
+    }
+
+    private static List<ChatModelOption> BuildChatModelOptions(ChatBackendState backendState)
+    {
+        if (backendState.Models.Count == 0)
+        {
+            return [new ChatModelOption(null, "(default)")];
+        }
+
+        return backendState.Models
+            .Select(model => new ChatModelOption(model.Id, model.DisplayName ?? model.Id))
+            .ToList();
+    }
+
+    internal static List<ChatReasoningOption> BuildChatReasoningOptions(AgentModelInfo? model)
+    {
+        var options = new List<ChatReasoningOption>
+        {
+            new(null, "Default"),
+        };
+
+        var efforts = model?.SupportedReasoningEfforts is { Count: > 0 } supported
+            ? supported
+            : Enum.GetValues<AgentReasoningEffort>();
+
+        foreach (var effort in efforts.Distinct())
+        {
+            options.Add(new ChatReasoningOption(effort, SplitPascalCase(effort.ToString())));
+        }
+
+        return options;
+    }
+
+    internal static string BuildChatBackendStatusMarkup(
+        IEnumerable<ChatBackendState> backendStates,
+        AgentBackendId selectedBackendId,
+        bool isInitializing)
+    {
+        var items = backendStates
+            .OrderBy(static state => state.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Select(state =>
+            {
+                var tone = state.Availability switch
+                {
+                    ChatBackendAvailability.Ready => "success",
+                    ChatBackendAvailability.Unsupported or ChatBackendAvailability.Failed => "warning",
+                    ChatBackendAvailability.Connecting => "primary",
+                    _ => "muted",
+                };
+                var icon = state.Availability switch
+                {
+                    ChatBackendAvailability.Ready => "󰄬",
+                    ChatBackendAvailability.Unsupported => "",
+                    ChatBackendAvailability.Failed => "",
+                    ChatBackendAvailability.Connecting => "󰔛",
+                    _ => "󰒓",
+                };
+                var selected = string.Equals(state.BackendId.Value, selectedBackendId.Value, StringComparison.OrdinalIgnoreCase)
+                    ? "[bold]"
+                    : string.Empty;
+                var reset = selected.Length > 0 ? "[/]" : string.Empty;
+                var status = string.IsNullOrWhiteSpace(state.StatusMessage) ? string.Empty : $" [dim]- {AnsiMarkup.Escape(state.StatusMessage)}[/]";
+                return $"{selected}[{tone}]{icon} {AnsiMarkup.Escape(state.DisplayName)}[/]{reset}{status}";
+            });
+
+        var prefix = isInitializing
+            ? "[primary]󰔛 Detecting backends...[/] "
+            : string.Empty;
+        return prefix + string.Join("   ", items);
+    }
+
+    private static AgentReasoningEffort? NormalizeReasoningEffort(
+        AgentReasoningEffort? selectedReasoningEffort,
+        AgentModelInfo? model)
+    {
+        if (selectedReasoningEffort is null)
+        {
+            return null;
+        }
+
+        if (model?.SupportedReasoningEfforts is not { Count: > 0 } supportedReasoningEfforts)
+        {
+            return selectedReasoningEffort;
+        }
+
+        return supportedReasoningEfforts.Contains(selectedReasoningEffort.Value)
+            ? selectedReasoningEffort
+            : null;
+    }
+
+    private static AgentModelInfo? GetSelectedModel(ChatBackendState backendState)
+    {
+        return string.IsNullOrWhiteSpace(backendState.SelectedModelId)
+            ? null
+            : backendState.Models.FirstOrDefault(model =>
+                string.Equals(model.Id, backendState.SelectedModelId, StringComparison.Ordinal));
+    }
+
+    private async Task EnsureSelectedChatBackendReadyAsync()
+    {
+        var backendState = _chatBackendStates[_chatBackendId.Value];
+        if (_chatBackendsInitializing ||
+            backendState.Availability != ChatBackendAvailability.Ready)
+        {
+            return;
+        }
+
+        try
+        {
+            await EnsureChatSessionAsync(_chatBackendId, updateStatus: false).ConfigureAwait(false);
+            backendState.StatusMessage = BuildReadyStatusMessage(backendState);
+        }
+        catch (Exception ex)
+        {
+            backendState.Availability = ChatBackendAvailability.Failed;
+            backendState.StatusMessage = BuildFailedBackendMessage(backendState, ex.Message);
+            SetStatus(backendState.StatusMessage);
+        }
+
+        RefreshChatBackendStatusMarkup();
+    }
+
+    private static string BuildReadyStatusMessage(ChatBackendState backendState)
+    {
+        var selectedModel = GetSelectedModel(backendState);
+        if (selectedModel is not null)
+        {
+            return $"Connected · {selectedModel.DisplayName ?? selectedModel.Id}";
+        }
+
+        return backendState.Models.Count switch
+        {
+            0 => "Connected.",
+            1 => $"Connected · {backendState.Models[0].DisplayName ?? backendState.Models[0].Id}",
+            _ => $"Connected · {backendState.Models.Count} models",
+        };
+    }
+
+    private static string BuildUnsupportedBackendMessage(ChatBackendState backendState, string message)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(message) ? "CLI not found." : message.Trim();
+        return $"{backendState.DisplayName} is unavailable: {trimmed}";
+    }
+
+    private static string BuildFailedBackendMessage(ChatBackendState backendState, string message)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(message) ? "Failed to initialize backend." : message.Trim();
+        return $"{backendState.DisplayName} failed: {trimmed}";
     }
 
     private Visual BuildWorkspacesView()
@@ -780,7 +1245,8 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
     private async Task AbortChatAsync()
     {
-        var agentId = _chatConnection.CurrentAgentId;
+        var connection = GetChatConnection(_chatBackendId);
+        var agentId = connection.CurrentAgentId;
         if (agentId is null)
         {
             SetStatus("No active chat agent session.");
@@ -791,7 +1257,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         try
         {
             // Abort is best-effort; we don't currently surface cancellation at the hub level beyond the session abort.
-            await _chatConnection.AbortAsync(CancellationToken.None).ConfigureAwait(false);
+            await connection.AbortAsync(CancellationToken.None).ConfigureAwait(false);
             SetStatus("Abort requested.");
         }
         catch (Exception ex)
@@ -800,33 +1266,58 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         }
     }
 
-    private async Task<AgentId> EnsureChatSessionAsync(AgentBackendId backendId)
+    private async Task<AgentId> EnsureChatSessionAsync(AgentBackendId backendId, bool updateStatus = true)
     {
         _chatBackendId = backendId;
+        var backendState = _chatBackendStates[backendId.Value];
+        if (backendState.Availability is ChatBackendAvailability.Unsupported or ChatBackendAvailability.Failed)
+        {
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(backendState.StatusMessage)
+                    ? $"Backend '{backendState.DisplayName}' is not available."
+                    : backendState.StatusMessage);
+        }
 
-        if (_chatConnection.IsConnected &&
-            _chatConnection.CurrentAgentId is { } connectedAgentId &&
-            _chatConnection.ConnectedBackendId is { } connectedBackendId &&
-            string.Equals(connectedBackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase))
+        var connection = GetChatConnection(backendId);
+        var selectedModelId = backendState.SelectedModelId;
+        var selectedReasoningEffort = backendState.SelectedReasoningEffort;
+
+        if (connection.IsConnected &&
+            connection.CurrentAgentId is { } connectedAgentId &&
+            connection.ConnectedBackendId is { } connectedBackendId &&
+            string.Equals(connectedBackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(connection.ConnectedModel, selectedModelId, StringComparison.Ordinal) &&
+            connection.ConnectedReasoningEffort == selectedReasoningEffort)
         {
             return connectedAgentId;
         }
 
-        SetStatus($"Starting chat session ({backendId.Value})...", showSpinner: true);
+        if (updateStatus)
+        {
+            SetStatus($"Starting chat session ({backendId.Value})...", showSpinner: true);
+        }
 
         var tools = backendId == AgentBackendIds.Copilot
             ? await _mcpToolBridge.GetToolsAsync().ConfigureAwait(false)
             : null;
 
-        var agentId = await _chatConnection.EnsureConnectedAsync(
+        var agentId = await connection.EnsureConnectedAsync(
                 backendId,
                 Environment.CurrentDirectory,
+                selectedModelId,
+                selectedReasoningEffort,
                 tools,
                 HandleChatPermissionRequestAsync,
                 HandleChatUserInputRequestAsync,
                 CancellationToken.None)
             .ConfigureAwait(false);
-        SetStatus($"Chat session ready ({backendId.Value}).");
+        backendState.Availability = ChatBackendAvailability.Ready;
+        backendState.StatusMessage = BuildReadyStatusMessage(backendState);
+        RefreshChatBackendStatusMarkup();
+        if (updateStatus)
+        {
+            SetStatus($"Chat session ready ({backendId.Value}).");
+        }
         return agentId;
     }
 
@@ -857,6 +1348,11 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
     private void HandleChatAgentEvent(AgentEvent @event)
     {
+        if (!string.Equals(@event.BackendId.Value, _chatBackendId.Value, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         switch (@event)
         {
             case AgentContentDeltaEvent delta:
@@ -1227,6 +1723,15 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             pendingAssistant.Markdown.Markdown = "_No assistant content was returned._";
             _chatFlow?.ScrollToTail();
         });
+    }
+
+    private static Dictionary<string, ChatBackendState> CreateChatBackendStates()
+    {
+        return new Dictionary<string, ChatBackendState>(StringComparer.OrdinalIgnoreCase)
+        {
+            [AgentBackendIds.Codex.Value] = new(AgentBackendIds.Codex, "Codex"),
+            [AgentBackendIds.Copilot.Value] = new(AgentBackendIds.Copilot, "Copilot"),
+        };
     }
 
     private static ChatMarkdownEntry CreateChatMarkdownItem(string markdown, ChatTimelineTone tone)
@@ -1720,6 +2225,15 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         DocumentFlowItem AssistantItem,
         MarkdownControl StreamingMarkdown);
 
+    internal enum ChatBackendAvailability
+    {
+        Unknown,
+        Connecting,
+        Ready,
+        Unsupported,
+        Failed,
+    }
+
     private enum ChatTimelineTone
     {
         Assistant,
@@ -1729,9 +2243,47 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         Interaction,
     }
 
+    internal sealed record ChatBackendOption(
+        AgentBackendId BackendId,
+        string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    internal sealed record ChatModelOption(
+        string? ModelId,
+        string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    internal sealed record ChatReasoningOption(
+        AgentReasoningEffort? Effort,
+        string Label)
+    {
+        public override string ToString() => Label;
+    }
+
     private sealed record ChatMarkdownEntry(
         DocumentFlowItem Item,
         MarkdownControl Markdown);
+
+    internal sealed class ChatBackendState(AgentBackendId backendId, string displayName)
+    {
+        public AgentBackendId BackendId { get; } = backendId;
+
+        public string DisplayName { get; } = displayName;
+
+        public ChatBackendAvailability Availability { get; set; }
+
+        public string StatusMessage { get; set; } = "Not initialized.";
+
+        public List<AgentModelInfo> Models { get; } = [];
+
+        public string? SelectedModelId { get; set; }
+
+        public AgentReasoningEffort? SelectedReasoningEffort { get; set; }
+    }
 
     private sealed class ChatContentState(
         DocumentFlowItem item,
