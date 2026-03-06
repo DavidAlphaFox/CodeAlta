@@ -939,6 +939,21 @@ Add or extend:
 
 ## 11. Implementation Plan
 
+Implementation status in the current private codebase:
+
+- **Phase 1** is implemented.
+- **Phase 2** is implemented.
+- **Phase 3** is implemented.
+- **Phase 4** is implemented with a markdown timeline renderer in the terminal UI.
+- Remaining work is follow-up polish, broader live-test coverage, and any additional backend-specific mappings that prove useful in practice.
+
+Important current UI behavior:
+
+- reasoning, plan snapshots, activity rows, notices, approval requests, user-input requests, and resolved interactions now render in the terminal chat timeline
+- approval and user-input requests are visible even when the terminal UI still answers them automatically (`deny` or empty responses)
+- timeline entries are keyed by content/activity/interaction identifiers instead of one shared assistant stream
+- the chat view now preserves its timeline state when switching away from and back to the chat screen
+
 ### Phase 1 — Shared model
 
 1. Replace the current event model in `src/CodeAlta.Agent/` with the richer families.
