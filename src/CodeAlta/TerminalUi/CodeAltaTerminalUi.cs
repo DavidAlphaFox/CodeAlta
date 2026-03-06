@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using CodeAlta.Agent;
 using CodeAlta.DotNet;
 using CodeAlta.Mcp;
@@ -54,8 +55,14 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     private MarkdownMarkupConverter? _chatMarkdownConverter;
     private AgentBackendId _chatBackendId = AgentBackendIds.Codex;
     private bool _chatAutoApprove;
-    private StringBuilder? _chatStreamingBuffer;
-    private MarkdownControl? _chatStreamingMarkdown;
+    private readonly object _chatTimelineLock = new();
+    private PendingAssistantState? _chatPendingAssistant;
+    private readonly Dictionary<string, ChatContentState> _chatContentStates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ChatStatusState> _chatActivityStates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ChatStatusState> _chatInteractionStates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ChatStatusState> _chatPlanStates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AgentPermissionRequest> _chatPermissionRequests = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AgentUserInputRequest> _chatUserInputRequests = new(StringComparer.Ordinal);
 
     public CodeAltaTerminalUi(
         WorkspaceCatalog workspaceCatalog,
@@ -208,7 +215,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     {
         _chatMarkdownConverter ??= new MarkdownMarkupConverter();
 
-        _chatFlow = new DocumentFlow
+        _chatFlow ??= new DocumentFlow
         {
             HorizontalAlignment = Align.Stretch,
             VerticalAlignment = Align.Stretch,
@@ -216,18 +223,15 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         };
         _chatFlow.ScrollToTail();
 
-        var chatInput = new ChatPromptEditor(
+        _chatInput ??= new ChatPromptEditor(
                 text => _ = SendChatMessageAsync(text))
             .PromptMarkup("[primary]>[/] ")
             .ContinuationPromptMarkup("[muted]·[/] ")
             .EnableWordHints(false)
             .Highlighter(HighlightMarkdown)
             .MinHeight(3)
-            .MaxHeight(9)
-            ;
-
-        _chatInput = chatInput;
-        _chatInputView = chatInput.Scrollable();
+            .MaxHeight(9);
+        _chatInputView ??= _chatInput.Scrollable();
 
         var help = new Markup(
             "[dim]Enter accepts the prompt. Use markdown for formatting; assistant messages will render markdown.[/]");
@@ -643,6 +647,17 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
     private void ClearChat()
     {
+        lock (_chatTimelineLock)
+        {
+            _chatPendingAssistant = null;
+            _chatContentStates.Clear();
+            _chatActivityStates.Clear();
+            _chatInteractionStates.Clear();
+            _chatPlanStates.Clear();
+            _chatPermissionRequests.Clear();
+            _chatUserInputRequests.Clear();
+        }
+
         PostToUi(() =>
         {
             _chatFlow?.Items.Clear();
@@ -650,9 +665,6 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             {
                 _chatInput.Text = string.Empty;
             }
-
-            _chatStreamingMarkdown = null;
-            _chatStreamingBuffer = null;
         });
     }
 
@@ -679,10 +691,15 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
             flow.Items.Add(pendingChatMessage.UserItem);
             flow.Items.Add(pendingChatMessage.AssistantItem);
+            flow.ScrollToTail();
         });
 
-        _chatStreamingMarkdown = pendingChatMessage.StreamingMarkdown;
-        _chatStreamingBuffer = new StringBuilder();
+        lock (_chatTimelineLock)
+        {
+            _chatPendingAssistant = new PendingAssistantState(
+                pendingChatMessage.AssistantItem,
+                pendingChatMessage.StreamingMarkdown);
+        }
 
         AgentId agentId;
         try
@@ -691,10 +708,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            PostToUi(() =>
-            {
-                pendingChatMessage.StreamingMarkdown.Markdown = $"**Failed to start agent session:** {ex.Message}";
-            });
+            RenderRunFailure($"**Failed to start agent session:** {ex.Message}");
             return;
         }
 
@@ -708,7 +722,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            PostToUi(() => pendingChatMessage.StreamingMarkdown.Markdown = $"**Agent run failed:** {ex.Message}");
+            RenderRunFailure($"**Agent run failed:** {ex.Message}");
             SetStatus($"Agent run failed: {ex.Message}");
         }
     }
@@ -739,51 +753,14 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
     private static DocumentFlowItem CreateAssistantChatItem(string markdown)
     {
-        var content = new FlowDocument()
-            .Add(new MarkdownControl(markdown)
-            {
-                HorizontalAlignment = Align.Stretch,
-                VerticalAlignment = Align.Stretch,
-                Options = MarkdownRenderOptions.Default with
-                {
-                    WrapCodeBlocks = true,
-                    MaxCodeBlockHeight = 14,
-                },
-            })
-            .Add(new Rule());
-
-        return new DocumentFlowItem
-        {
-            Content = content,
-            Alignment = DocumentFlowAlignment.Stretch,
-            //MaxWidth = 84,
-            //BackgroundStyle = Style.None.WithBackground(Colors.DarkSlateGray),
-            //BorderStyle = Style.None.WithForeground(Colors.SlateGray),
-        };
+        return CreateChatMarkdownItem(markdown, ChatTimelineTone.Assistant).Item;
     }
 
     private static DocumentFlowItem CreateAssistantStreamingChatItem(out MarkdownControl markdownControl)
     {
-        markdownControl = new MarkdownControl(string.Empty)
-        {
-            HorizontalAlignment = Align.Stretch,
-            VerticalAlignment = Align.Stretch,
-            Options = MarkdownRenderOptions.Default with
-            {
-                WrapCodeBlocks = true,
-                MaxCodeBlockHeight = 14,
-            },
-        };
-
-        var content = new FlowDocument().Add(markdownControl).Add(new Rule());
-        return new DocumentFlowItem
-        {
-            Content = content,
-            Alignment = DocumentFlowAlignment.Stretch,
-            //MaxWidth = 84,
-            //BackgroundStyle = Style.None.WithBackground(Colors.DarkSlateGray),
-            //BorderStyle = Style.None.WithForeground(Colors.SlateGray),
-        };
+        var (item, control) = CreateChatMarkdownItem(string.Empty, ChatTimelineTone.Assistant);
+        markdownControl = control;
+        return item;
     }
 
     internal static PendingChatMessage CreatePendingChatMessage(string userMarkdown)
@@ -865,12 +842,6 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             return Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce));
         }
 
-        PostToUi(() =>
-        {
-            _chatFlow?.Items.Add(CreateAssistantChatItem(
-                "**Permission request denied.** Enable auto-approve to allow backend actions."));
-        });
-
         return Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.Deny));
     }
 
@@ -881,12 +852,6 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         _ = cancellationToken;
         var answers = request.Form.Prompts.ToDictionary(static x => x.Id, static _ => string.Empty, StringComparer.Ordinal);
 
-        PostToUi(() =>
-        {
-            _chatFlow?.Items.Add(CreateAssistantChatItem(
-                "**User input requested by backend.** This UI does not yet support interactive answers; returning empty responses."));
-        });
-
         return Task.FromResult(new AgentUserInputResponse(answers));
     }
 
@@ -894,69 +859,828 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     {
         switch (@event)
         {
-            case AgentContentDeltaEvent { Kind: AgentContentKind.Assistant } delta:
-                AppendAssistantDelta(delta.Delta);
+            case AgentContentDeltaEvent delta:
+                AppendChatContent(delta);
                 break;
-            case AgentContentCompletedEvent { Kind: AgentContentKind.Assistant } message:
-                FinalizeAssistantMessage(message.Content);
+            case AgentContentCompletedEvent message:
+                FinalizeChatContent(message);
                 break;
-            case AgentSessionUpdateEvent { Kind: AgentSessionUpdateKind.Idle }:
-                SetStatus($"Agent idle ({_chatBackendId.Value}).");
-                _chatStreamingMarkdown = null;
-                _chatStreamingBuffer = null;
+            case AgentPlanSnapshotEvent plan:
+                UpsertChatPlan(plan);
+                break;
+            case AgentActivityEvent activity:
+                UpsertChatActivity(activity);
+                break;
+            case AgentPermissionRequest permissionRequest:
+                lock (_chatTimelineLock)
+                {
+                    _chatPermissionRequests[permissionRequest.InteractionId] = permissionRequest;
+                }
+
+                UpsertChatInteraction(
+                    permissionRequest.InteractionId,
+                    FormatChatPermissionRequestMarkdown(permissionRequest),
+                    null,
+                    ChatTimelineTone.Interaction);
+                SetStatus($"Permission requested ({permissionRequest.Kind}).", showSpinner: true);
+                break;
+            case AgentUserInputRequest userInputRequest:
+                lock (_chatTimelineLock)
+                {
+                    _chatUserInputRequests[userInputRequest.InteractionId] = userInputRequest;
+                }
+
+                UpsertChatInteraction(
+                    userInputRequest.InteractionId,
+                    FormatChatUserInputRequestMarkdown(userInputRequest),
+                    null,
+                    ChatTimelineTone.Interaction);
+                SetStatus("Waiting for backend input resolution...", showSpinner: true);
+                break;
+            case AgentInteractionEvent interaction:
+                HandleChatInteraction(interaction);
+                break;
+            case AgentSessionUpdateEvent update:
+                HandleChatSessionUpdate(update);
                 break;
             case AgentErrorEvent error:
-                FinalizeAssistantMessage($"**Agent error:** {error.Message}");
+                RenderChatError(error);
                 break;
         }
     }
 
-    private void AppendAssistantDelta(string delta)
+    private void AppendChatContent(AgentContentDeltaEvent delta)
     {
-        if (string.IsNullOrEmpty(delta))
+        if (string.IsNullOrEmpty(delta.Delta))
         {
             return;
         }
 
-        var buffer = _chatStreamingBuffer;
-        var markdown = _chatStreamingMarkdown;
-        if (buffer is null || markdown is null)
+        var state = GetOrCreateChatContentState(delta.Kind, delta.ContentId);
+        string markdownText;
+        lock (_chatTimelineLock)
         {
-            return;
+            state.Buffer.Append(delta.Delta);
+            markdownText = FormatChatContentMarkdown(delta.Kind, state.Buffer.ToString());
         }
-
-        buffer.Append(delta);
-        var text = buffer.ToString();
 
         PostToUi(() =>
         {
-            markdown.Markdown = text;
+            state.Markdown.Markdown = markdownText;
             _chatFlow?.ScrollToTail();
         });
     }
 
-    private void FinalizeAssistantMessage(string content)
+    private void FinalizeChatContent(AgentContentCompletedEvent content)
     {
-        var markdown = _chatStreamingMarkdown;
-        if (markdown is null)
+        var state = GetOrCreateChatContentState(content.Kind, content.ContentId);
+        lock (_chatTimelineLock)
+        {
+            state.Buffer.Clear();
+            state.Buffer.Append(content.Content);
+        }
+
+        var markdownText = FormatChatContentMarkdown(content.Kind, content.Content);
+
+        PostToUi(() =>
+        {
+            state.Markdown.Markdown = markdownText;
+            _chatFlow?.ScrollToTail();
+        });
+    }
+
+    private void UpsertChatPlan(AgentPlanSnapshotEvent plan)
+    {
+        var key = $"plan:{plan.RunId?.Value ?? "session"}";
+        UpsertChatStatus(
+            _chatPlanStates,
+            key,
+            FormatChatPlanMarkdown(plan.Snapshot),
+            ChatTimelineTone.Notice);
+    }
+
+    private void UpsertChatActivity(AgentActivityEvent activity)
+    {
+        UpsertChatStatus(
+            _chatActivityStates,
+            $"activity:{activity.ActivityId}",
+            FormatChatActivityMarkdown(activity),
+            ChatTimelineTone.Activity);
+
+        if (activity.Kind == AgentActivityKind.Turn &&
+            activity.Phase == AgentActivityPhase.Started)
+        {
+            SetStatus($"Running agent ({_chatBackendId.Value})...", showSpinner: true);
+        }
+    }
+
+    private void HandleChatInteraction(AgentInteractionEvent interaction)
+    {
+        UpsertChatInteraction(
+            interaction.InteractionId,
+            null,
+            FormatChatInteractionResolutionMarkdown(interaction, includeHeading: false),
+            ChatTimelineTone.Interaction);
+
+        switch (interaction.Kind)
+        {
+            case AgentInteractionKind.PermissionResolved:
+                lock (_chatTimelineLock)
+                {
+                    _chatPermissionRequests.Remove(interaction.InteractionId);
+                }
+
+                SetStatus(interaction.Message ?? "Permission resolved.");
+                break;
+
+            case AgentInteractionKind.UserInputResolved:
+                lock (_chatTimelineLock)
+                {
+                    _chatUserInputRequests.Remove(interaction.InteractionId);
+                }
+
+                SetStatus(interaction.Message ?? "User input resolved.");
+                break;
+        }
+    }
+
+    private void HandleChatSessionUpdate(AgentSessionUpdateEvent update)
+    {
+        if (update.Kind == AgentSessionUpdateKind.Idle)
+        {
+            ReplaceEmptyPendingAssistantPlaceholder();
+            SetStatus($"Agent idle ({_chatBackendId.Value}).");
+            return;
+        }
+
+        if (update.Kind == AgentSessionUpdateKind.Started ||
+            update.Kind == AgentSessionUpdateKind.Resumed)
+        {
+            SetStatus(update.Message ?? $"Chat session ready ({_chatBackendId.Value}).");
+        }
+
+        UpsertChatStatus(
+            dictionary: null,
+            key: null,
+            markdown: FormatChatSessionUpdateMarkdown(update),
+            tone: update.Kind == AgentSessionUpdateKind.Warning ? ChatTimelineTone.Interaction : ChatTimelineTone.Notice);
+    }
+
+    private void RenderChatError(AgentErrorEvent error)
+    {
+        SetStatus($"Agent error: {error.Message}");
+
+        PendingAssistantState? pendingAssistant;
+        lock (_chatTimelineLock)
+        {
+            pendingAssistant = _chatPendingAssistant;
+            if (pendingAssistant is not null && pendingAssistant.Buffer.Length == 0)
+            {
+                _chatPendingAssistant = null;
+            }
+            else
+            {
+                pendingAssistant = null;
+            }
+        }
+
+        if (pendingAssistant is not null)
         {
             PostToUi(() =>
             {
-                _chatFlow?.Items.Add(CreateAssistantChatItem(content));
+                pendingAssistant.Buffer.Append(error.Message);
+                pendingAssistant.Markdown.Markdown = $"**Agent error:** {error.Message}";
                 _chatFlow?.ScrollToTail();
             });
             return;
         }
 
+        AppendChatTimelineItem(
+            CreateChatMarkdownItem($"**Agent error:** {error.Message}", ChatTimelineTone.Interaction).Item);
+    }
+
+    private void RenderRunFailure(string markdown)
+    {
+        PendingAssistantState? pendingAssistant;
+        lock (_chatTimelineLock)
+        {
+            pendingAssistant = _chatPendingAssistant;
+            _chatPendingAssistant = null;
+        }
+
+        if (pendingAssistant is not null)
+        {
+            PostToUi(() =>
+            {
+                pendingAssistant.Buffer.Append(markdown);
+                pendingAssistant.Markdown.Markdown = markdown;
+                _chatFlow?.ScrollToTail();
+            });
+            return;
+        }
+
+        AppendChatTimelineItem(CreateChatMarkdownItem(markdown, ChatTimelineTone.Interaction).Item);
+    }
+
+    private ChatContentState GetOrCreateChatContentState(AgentContentKind kind, string contentId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(contentId);
+
+        lock (_chatTimelineLock)
+        {
+            var key = CreateChatContentKey(kind, contentId);
+            if (_chatContentStates.TryGetValue(key, out var state))
+            {
+                return state;
+            }
+
+            if (kind == AgentContentKind.Assistant &&
+                _chatPendingAssistant is { ContentId: null } pendingAssistant)
+            {
+                pendingAssistant.ContentId = contentId;
+                _chatPendingAssistant = null;
+                state = new ChatContentState(
+                    pendingAssistant.Item,
+                    pendingAssistant.Markdown,
+                    pendingAssistant.Buffer,
+                    kind);
+                _chatContentStates[key] = state;
+                return state;
+            }
+
+            state = CreateChatContentState(kind);
+            _chatContentStates[key] = state;
+            AppendChatTimelineItem(state.Item);
+            return state;
+        }
+    }
+
+    private ChatContentState CreateChatContentState(AgentContentKind kind)
+    {
+        var (item, markdown) = CreateChatMarkdownItem(FormatChatContentMarkdown(kind, string.Empty), GetContentTone(kind));
+        return new ChatContentState(item, markdown, new StringBuilder(), kind);
+    }
+
+    private void UpsertChatStatus(
+        Dictionary<string, ChatStatusState>? dictionary,
+        string? key,
+        string markdown,
+        ChatTimelineTone tone)
+    {
+        ChatStatusState state;
+        lock (_chatTimelineLock)
+        {
+            if (dictionary is null || key is null)
+            {
+                state = CreateChatStatusState(markdown, tone);
+                AppendChatTimelineItem(state.Item);
+                return;
+            }
+
+            if (!dictionary.TryGetValue(key, out state!))
+            {
+                state = CreateChatStatusState(markdown, tone);
+                dictionary[key] = state;
+                AppendChatTimelineItem(state.Item);
+            }
+
+            state.BaseMarkdown = markdown;
+        }
+
         PostToUi(() =>
         {
-            markdown.Markdown = content;
+            state.Markdown.Markdown = state.MarkdownValue;
             _chatFlow?.ScrollToTail();
         });
-
-        _chatStreamingMarkdown = null;
-        _chatStreamingBuffer = null;
     }
+
+    private void UpsertChatInteraction(
+        string interactionId,
+        string? baseMarkdown,
+        string? statusMarkdown,
+        ChatTimelineTone tone)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(interactionId);
+
+        ChatStatusState state;
+        lock (_chatTimelineLock)
+        {
+            if (!_chatInteractionStates.TryGetValue(interactionId, out state!))
+            {
+                state = CreateChatStatusState(baseMarkdown ?? statusMarkdown ?? string.Empty, tone);
+                _chatInteractionStates[interactionId] = state;
+                AppendChatTimelineItem(state.Item);
+            }
+
+            if (!string.IsNullOrWhiteSpace(baseMarkdown))
+            {
+                state.BaseMarkdown = baseMarkdown;
+            }
+
+            if (!string.IsNullOrWhiteSpace(statusMarkdown))
+            {
+                state.StatusMarkdown = statusMarkdown;
+            }
+        }
+
+        PostToUi(() =>
+        {
+            state.Markdown.Markdown = state.MarkdownValue;
+            _chatFlow?.ScrollToTail();
+        });
+    }
+
+    private ChatStatusState CreateChatStatusState(string markdown, ChatTimelineTone tone)
+    {
+        var (item, control) = CreateChatMarkdownItem(markdown, tone);
+        return new ChatStatusState(item, control)
+        {
+            BaseMarkdown = markdown,
+        };
+    }
+
+    private void AppendChatTimelineItem(DocumentFlowItem item)
+    {
+        PostToUi(() =>
+        {
+            _chatFlow?.Items.Add(item);
+            _chatFlow?.ScrollToTail();
+        });
+    }
+
+    private void ReplaceEmptyPendingAssistantPlaceholder()
+    {
+        PendingAssistantState? pendingAssistant;
+        lock (_chatTimelineLock)
+        {
+            pendingAssistant = _chatPendingAssistant;
+            _chatPendingAssistant = null;
+        }
+
+        if (pendingAssistant is null || pendingAssistant.Buffer.Length > 0)
+        {
+            return;
+        }
+
+        PostToUi(() =>
+        {
+            pendingAssistant.Markdown.Markdown = "_No assistant content was returned._";
+            _chatFlow?.ScrollToTail();
+        });
+    }
+
+    private static ChatMarkdownEntry CreateChatMarkdownItem(string markdown, ChatTimelineTone tone)
+    {
+        var markdownControl = new MarkdownControl(markdown)
+        {
+            HorizontalAlignment = Align.Stretch,
+            VerticalAlignment = Align.Stretch,
+            Options = MarkdownRenderOptions.Default with
+            {
+                WrapCodeBlocks = true,
+                MaxCodeBlockHeight = 14,
+            },
+        };
+
+        return new ChatMarkdownEntry(
+            new DocumentFlowItem
+            {
+                Content = new FlowDocument().Add(markdownControl).Add(new Rule()),
+                Alignment = DocumentFlowAlignment.Stretch,
+                BackgroundStyle = tone switch
+                {
+                    ChatTimelineTone.Reasoning => Style.None.WithBackground(Color.RgbA(0x6B, 0xB8, 0xFF, 0x10)),
+                    ChatTimelineTone.Activity => Style.None.WithBackground(Color.RgbA(0xC0, 0xC0, 0xC0, 0x08)),
+                    ChatTimelineTone.Notice => Style.None.WithBackground(Color.RgbA(0x8F, 0xD7, 0xB2, 0x0A)),
+                    ChatTimelineTone.Interaction => Style.None.WithBackground(Color.RgbA(0xFF, 0xC8, 0x66, 0x0E)),
+                    _ => Style.None,
+                },
+                BorderStyle = tone switch
+                {
+                    ChatTimelineTone.Reasoning => Style.None.WithForeground(Color.Rgb(0x6B, 0xB8, 0xFF)),
+                    ChatTimelineTone.Activity => Style.None.WithForeground(Color.Rgb(0xA0, 0xA0, 0xA0)),
+                    ChatTimelineTone.Notice => Style.None.WithForeground(Color.Rgb(0x8F, 0xD7, 0xB2)),
+                    ChatTimelineTone.Interaction => Style.None.WithForeground(Color.Rgb(0xFF, 0xC8, 0x66)),
+                    _ => Style.None,
+                },
+            },
+            markdownControl);
+    }
+
+    internal static string FormatChatContentMarkdown(AgentContentKind kind, string content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        return kind switch
+        {
+            AgentContentKind.Assistant => content,
+            AgentContentKind.Reasoning => FormatChatCalloutMarkdown("", "Reasoning", content),
+            AgentContentKind.ReasoningSummary => FormatChatCalloutMarkdown("󰦨", "Reasoning Summary", content),
+            AgentContentKind.Plan => FormatChatCalloutMarkdown("", "Plan", content),
+            AgentContentKind.CommandOutput => FormatChatOutputMarkdown("", "Command Output", content),
+            AgentContentKind.FileChangeOutput => FormatChatOutputMarkdown("", "File Change Output", content),
+            AgentContentKind.ToolOutput => FormatChatOutputMarkdown("", "Tool Output", content),
+            AgentContentKind.Notice => FormatChatCalloutMarkdown("", "Notice", content),
+            _ => content,
+        };
+    }
+
+    internal static string FormatChatPlanMarkdown(AgentPlanSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var builder = new StringBuilder("**Plan");
+        if (snapshot.ChangeKind is { } changeKind)
+        {
+            builder.Append(' ').Append(SplitPascalCase(changeKind.ToString()));
+        }
+
+        builder.Append("** · ");
+        if (!string.IsNullOrWhiteSpace(snapshot.Explanation))
+        {
+            builder.AppendLine().AppendLine().Append(snapshot.Explanation);
+        }
+
+        if (snapshot.Steps is { Count: > 0 } steps)
+        {
+            foreach (var step in steps)
+            {
+                builder.AppendLine()
+                    .Append("- ")
+                    .Append(FormatPlanStepStatus(step.Status))
+                    .Append(step.Text);
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    internal static string FormatChatActivityMarkdown(AgentActivityEvent activity)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+
+        var builder = new StringBuilder();
+        builder.Append("**")
+            .Append(GetActivityKindLabel(activity.Kind))
+            .Append(" · ")
+            .Append(GetActivityPhaseLabel(activity.Phase))
+            .Append("** ")
+            .Append(GetActivityIcon(activity.Kind));
+
+        if (!string.IsNullOrWhiteSpace(activity.Name))
+        {
+            builder.Append(" — `").Append(activity.Name).Append('`');
+        }
+
+        if (!string.IsNullOrWhiteSpace(activity.Message))
+        {
+            builder.AppendLine().AppendLine().Append(activity.Message);
+        }
+
+        return builder.ToString();
+    }
+
+    internal static string FormatChatSessionUpdateMarkdown(AgentSessionUpdateEvent update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+
+        var label = update.Kind switch
+        {
+            AgentSessionUpdateKind.Info => "Info · ",
+            AgentSessionUpdateKind.Warning => "Warning · ",
+            AgentSessionUpdateKind.ModelChanged => "Model Changed · 󰭹",
+            AgentSessionUpdateKind.ModeChanged => "Mode Changed · 󰆧",
+            AgentSessionUpdateKind.TitleChanged => "Title Changed · 󰑕",
+            AgentSessionUpdateKind.ContextChanged => "Context Changed · 󰉋",
+            AgentSessionUpdateKind.PlanUpdated => "Plan Updated · ",
+            AgentSessionUpdateKind.UsageUpdated => "Usage Updated · 󰮯",
+            AgentSessionUpdateKind.CompactionStarted => "Compaction Started · 󰫙",
+            AgentSessionUpdateKind.CompactionCompleted => "Compaction Completed · 󰫛",
+            AgentSessionUpdateKind.Handoff => "Handoff · 󰒍",
+            AgentSessionUpdateKind.Truncated => "Session Truncated · 󰆴",
+            AgentSessionUpdateKind.Shutdown => "Session Shutdown · 󰅖",
+            AgentSessionUpdateKind.TaskCompleted => "Task Completed · 󰄬",
+            AgentSessionUpdateKind.DiffUpdated => "Diff Updated · ",
+            AgentSessionUpdateKind.Started => "Session Started · 󰔛",
+            AgentSessionUpdateKind.Resumed => "Session Resumed · 󰑐",
+            AgentSessionUpdateKind.Idle => "Agent Idle · 󰄛",
+            _ => update.Kind.ToString(),
+        };
+
+        return string.IsNullOrWhiteSpace(update.Message)
+            ? $"**{label}**"
+            : $"**{label}**\n\n{update.Message}";
+    }
+
+    internal static string FormatChatPermissionRequestMarkdown(AgentPermissionRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var builder = new StringBuilder();
+
+        switch (request)
+        {
+            case AgentCommandPermissionRequest command:
+                builder.Append("**Command Permission Request** · ");
+                builder.AppendLine()
+                    .AppendLine()
+                    .Append("- Kind: command execution");
+
+                if (!string.IsNullOrWhiteSpace(command.Command))
+                {
+                    builder.AppendLine()
+                        .AppendLine()
+                        .Append(FormatChatCodeFence(command.Command, "shell"));
+                }
+
+                AppendBullet(builder, "Working directory", command.WorkingDirectory, code: true);
+                AppendBullet(builder, "Reason", command.Reason);
+
+                if (command.Actions is { Count: > 0 } actions)
+                {
+                    builder.AppendLine().AppendLine().AppendLine("**Actions**");
+                    foreach (var action in actions)
+                    {
+                        builder.Append("- ")
+                            .Append(ToDisplayLabel(action.Kind));
+
+                        if (!string.IsNullOrWhiteSpace(action.Path))
+                        {
+                            builder.Append(": `").Append(action.Path).Append('`');
+                        }
+                        else if (!string.IsNullOrWhiteSpace(action.Query))
+                        {
+                            builder.Append(": `").Append(action.Query).Append('`');
+                        }
+
+                        builder.AppendLine();
+                    }
+                }
+
+                if (command.Network is { } network)
+                {
+                    AppendBullet(builder, "Network", $"{network.Protocol}://{network.Host}");
+                }
+
+                break;
+
+            case AgentFileChangePermissionRequest fileChange:
+                builder.Append("**File Change Permission Request** · ");
+                builder.AppendLine()
+                    .AppendLine()
+                    .Append("- Kind: file change");
+                AppendBullet(builder, "Grant root", fileChange.GrantRoot, code: true);
+                AppendBullet(builder, "Reason", fileChange.Reason);
+                break;
+
+            case AgentGenericPermissionRequest generic:
+                builder.Append("**Permission Request** · ");
+                builder.AppendLine().AppendLine().Append("- Kind: ").Append(generic.Kind);
+                if (TryGetStringProperty(generic.Raw, "toolName", out var toolName))
+                {
+                    builder.AppendLine().Append("- Tool: `").Append(toolName).Append('`');
+                }
+
+                builder.AppendLine()
+                    .AppendLine()
+                    .Append(FormatChatCodeFence(generic.Raw.GetRawText(), "json"));
+
+                break;
+
+            default:
+                builder.Append("**Permission Request** · ");
+                builder.AppendLine().AppendLine().Append("- Kind: ").Append(request.Kind);
+                break;
+        }
+
+        return builder.ToString();
+    }
+
+    internal static string FormatChatUserInputRequestMarkdown(AgentUserInputRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var builder = new StringBuilder("**User Input Requested** · 󰞋");
+        foreach (var prompt in request.Form.Prompts)
+        {
+            builder.AppendLine()
+                .AppendLine()
+                .Append("- Question: ")
+                .Append(prompt.Question);
+
+            if (!string.IsNullOrWhiteSpace(prompt.Header))
+            {
+                builder.AppendLine().Append("- Header: ").Append(prompt.Header);
+            }
+
+            if (prompt.Options is { Count: > 0 } options)
+            {
+                builder.AppendLine().Append("- Options: ").Append(string.Join(", ", options.Select(static option => option.Label)));
+            }
+
+            if (!prompt.AllowFreeform)
+            {
+                builder.AppendLine().Append("- Freeform: disabled");
+            }
+
+            if (prompt.IsSecret)
+            {
+                builder.AppendLine().Append("- Input: secret");
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    internal static string FormatChatInteractionResolutionMarkdown(AgentInteractionEvent interaction, bool includeHeading)
+    {
+        ArgumentNullException.ThrowIfNull(interaction);
+
+        var label = interaction.Kind switch
+        {
+            AgentInteractionKind.PermissionResolved => "Permission Resolved",
+            AgentInteractionKind.UserInputResolved => "User Input Resolved",
+            _ => interaction.Kind.ToString(),
+        };
+
+        if (!includeHeading)
+        {
+            return string.IsNullOrWhiteSpace(interaction.Message)
+                ? "_Status:_ resolved"
+                : $"_Status:_ {interaction.Message}";
+        }
+
+        return string.IsNullOrWhiteSpace(interaction.Message)
+            ? $"**{label}** · "
+            : $"**{label}** · \n\n{interaction.Message}";
+    }
+
+    private static string CreateChatContentKey(AgentContentKind kind, string contentId)
+        => $"content:{kind}:{contentId}";
+
+    private static ChatTimelineTone GetContentTone(AgentContentKind kind)
+    {
+        return kind switch
+        {
+            AgentContentKind.Assistant => ChatTimelineTone.Assistant,
+            AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary => ChatTimelineTone.Reasoning,
+            AgentContentKind.Plan or AgentContentKind.Notice => ChatTimelineTone.Notice,
+            _ => ChatTimelineTone.Activity,
+        };
+    }
+
+    private static string FormatPlanStepStatus(AgentPlanStepStatus? status)
+    {
+        return status switch
+        {
+            AgentPlanStepStatus.Pending => "[ ] ",
+            AgentPlanStepStatus.InProgress => "[~] ",
+            AgentPlanStepStatus.Completed => "[x] ",
+            _ => string.Empty,
+        };
+    }
+
+    private static string GetActivityPhaseLabel(AgentActivityPhase phase)
+    {
+        return phase switch
+        {
+            AgentActivityPhase.Requested => "Requested",
+            AgentActivityPhase.Started => "Started",
+            AgentActivityPhase.Progressed => "In Progress",
+            AgentActivityPhase.Completed => "Completed",
+            AgentActivityPhase.Failed => "Failed",
+            AgentActivityPhase.Canceled => "Canceled",
+            AgentActivityPhase.Selected => "Selected",
+            AgentActivityPhase.Deselected => "Deselected",
+            _ => phase.ToString(),
+        };
+    }
+
+    private static string GetActivityKindLabel(AgentActivityKind kind)
+    {
+        return kind switch
+        {
+            AgentActivityKind.Turn => "Turn",
+            AgentActivityKind.ToolCall => "Tool Call",
+            AgentActivityKind.CommandExecution => "Command Execution",
+            AgentActivityKind.FileChange => "File Change",
+            AgentActivityKind.McpToolCall => "MCP Tool Call",
+            AgentActivityKind.DynamicToolCall => "Dynamic Tool Call",
+            AgentActivityKind.CollabAgentToolCall => "Collab Agent Tool Call",
+            AgentActivityKind.Subagent => "Subagent",
+            AgentActivityKind.Hook => "Hook",
+            AgentActivityKind.Skill => "Skill",
+            AgentActivityKind.Compaction => "Compaction",
+            AgentActivityKind.WebSearch => "Web Search",
+            AgentActivityKind.ImageGeneration => "Image Generation",
+            _ => SplitPascalCase(kind.ToString()),
+        };
+    }
+
+    private static string GetActivityIcon(AgentActivityKind kind)
+    {
+        return kind switch
+        {
+            AgentActivityKind.ToolCall or AgentActivityKind.McpToolCall or AgentActivityKind.DynamicToolCall => "",
+            AgentActivityKind.CommandExecution => "",
+            AgentActivityKind.FileChange => "",
+            AgentActivityKind.CollabAgentToolCall or AgentActivityKind.Subagent => "󰙨",
+            AgentActivityKind.Hook => "󰛢",
+            AgentActivityKind.Skill => "󰌵",
+            AgentActivityKind.WebSearch => "󰖟",
+            AgentActivityKind.ImageGeneration => "󰘨",
+            AgentActivityKind.Turn => "󰆍",
+            _ => "•",
+        };
+    }
+
+    private static string ToDisplayLabel(AgentCommandPreviewKind kind)
+        => kind switch
+        {
+            AgentCommandPreviewKind.ListFiles => "List Files",
+            _ => SplitPascalCase(kind.ToString()),
+        };
+
+    private static string FormatChatCalloutMarkdown(string icon, string title, string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return $"**{title}** · {icon}";
+        }
+
+        return $"**{title}** · {icon}\n\n{content}";
+    }
+
+    private static string FormatChatOutputMarkdown(string icon, string title, string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return $"**{title}** · {icon}";
+        }
+
+        return $"**{title}** · {icon}\n\n{FormatChatCodeFence(content, "text")}";
+    }
+
+    private static string FormatChatCodeFence(string content, string language)
+    {
+        var fence = content.Contains("```", StringComparison.Ordinal) ? "````" : "```";
+        return $"{fence}{language}\n{content}\n{fence}";
+    }
+
+    private static void AppendBullet(StringBuilder builder, string label, string? value, bool code = false)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        builder.AppendLine().Append("- ").Append(label).Append(": ");
+        if (code)
+        {
+            builder.Append('`').Append(value).Append('`');
+        }
+        else
+        {
+            builder.Append(value);
+        }
+    }
+
+    private static string SplitPascalCase(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder(value.Length + 8);
+        for (var index = 0; index < value.Length; index++)
+        {
+            var ch = value[index];
+            if (index > 0 && char.IsUpper(ch) && !char.IsWhiteSpace(value[index - 1]))
+            {
+                builder.Append(' ');
+            }
+
+            builder.Append(ch);
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool TryGetStringProperty(JsonElement element, string propertyName, out string? value)
+    {
+        if (element.ValueKind == JsonValueKind.Object &&
+            element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.String)
+        {
+            value = property.GetString();
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        value = null;
+        return false;
+    }
+
 
     private void SetStatus(string message, bool showSpinner = false)
     {
@@ -995,6 +1719,65 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         DocumentFlowItem UserItem,
         DocumentFlowItem AssistantItem,
         MarkdownControl StreamingMarkdown);
+
+    private enum ChatTimelineTone
+    {
+        Assistant,
+        Reasoning,
+        Activity,
+        Notice,
+        Interaction,
+    }
+
+    private sealed record ChatMarkdownEntry(
+        DocumentFlowItem Item,
+        MarkdownControl Markdown);
+
+    private sealed class ChatContentState(
+        DocumentFlowItem item,
+        MarkdownControl markdown,
+        StringBuilder buffer,
+        AgentContentKind kind)
+    {
+        public DocumentFlowItem Item { get; } = item;
+
+        public MarkdownControl Markdown { get; } = markdown;
+
+        public StringBuilder Buffer { get; } = buffer;
+
+        public AgentContentKind Kind { get; } = kind;
+    }
+
+    private sealed class PendingAssistantState(
+        DocumentFlowItem item,
+        MarkdownControl markdown)
+    {
+        public DocumentFlowItem Item { get; } = item;
+
+        public MarkdownControl Markdown { get; } = markdown;
+
+        public StringBuilder Buffer { get; } = new();
+
+        public string? ContentId { get; set; }
+    }
+
+    private sealed class ChatStatusState(
+        DocumentFlowItem item,
+        MarkdownControl markdown)
+    {
+        public DocumentFlowItem Item { get; } = item;
+
+        public MarkdownControl Markdown { get; } = markdown;
+
+        public string BaseMarkdown { get; set; } = string.Empty;
+
+        public string? StatusMarkdown { get; set; }
+
+        public string MarkdownValue =>
+            string.IsNullOrWhiteSpace(StatusMarkdown)
+                ? BaseMarkdown
+                : $"{BaseMarkdown}\n\n{StatusMarkdown}";
+    }
 
     private sealed class ChatPromptEditor : PromptEditor
     {
