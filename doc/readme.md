@@ -102,7 +102,7 @@ Current terminal host capabilities:
   - Automatically probes and initializes both Copilot and Codex backends (when available), with inline warnings when a local CLI/runtime is not installed.
   - Backend, model, and reasoning-effort selectors are shown under the prompt and are kept in-memory for the current UI session.
   - Copilot sessions are started with `codealta.*` MCP tools bridged into the backend via `McpToolBridge` (tool calls execute against the in-process MCP server, with MCP tool ids normalized to Copilot-compatible function names).
-  - "Auto-Approve" in the Chat screen now auto-approves backend permission requests and auto-resolves `ask_user` prompts by picking the first offered choice (or a neutral fallback for freeform prompts). When disabled, permission requests are denied and question prompts currently resolve to empty answers.
+  - "Auto-Approve" in the Chat screen now auto-approves backend permission requests and auto-resolves `ask_user` prompts by preferring continue/inspect-style choices (or a neutral fallback for freeform prompts). When disabled, permission requests are denied and question prompts currently resolve to empty answers.
 - Workspace operations:
   - list discovered workspaces
   - resolve global/workspace/project scopes.

@@ -436,6 +436,137 @@ public sealed class CopilotLiveIntegrationTests
             $"Expected an assistant summary mentioning Tomlyn. Messages: {string.Join(" || ", messages)}. Events: {string.Join(", ", receivedEvents.Select(static e => e.GetType().Name))}");
     }
 
+    [TestMethod]
+    [TestCategory("LiveCopilot")]
+    public async Task CopilotChatConnection_LiveProjectPrompt_WithUiWorkingDirectory_AutoApproveAvoidsToolRejection()
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable(LiveCopilotTestsEnvironmentVariable), "1", StringComparison.Ordinal))
+        {
+            Assert.Inconclusive(
+                $"Set {LiveCopilotTestsEnvironmentVariable}=1 to run live Copilot integration tests.");
+        }
+
+        const string projectPath = @"C:\code\Tomlyn";
+        const string uiWorkingDirectory = @"C:\code\CodeAlta\src\CodeAlta";
+        if (!Directory.Exists(projectPath) || !Directory.Exists(uiWorkingDirectory))
+        {
+            Assert.Inconclusive($"Required directories are missing: '{projectPath}' or '{uiWorkingDirectory}'.");
+        }
+
+        using var temp = TempDirectory.Create();
+        await using var toolHarness = await ToolBridgeHarness.CreateAsync(temp.Path).ConfigureAwait(false);
+        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
+        var repository = new AgentRepository(db);
+        var backendFactory = new AgentBackendFactory();
+        backendFactory.RegisterCopilot(new CopilotAgentBackendOptions());
+
+        await using var hub = new AgentHub(backendFactory, repository);
+        var receivedEvents = new List<AgentEvent>();
+        await using var connection = new ChatAgentConnection(hub, receivedEvents.Add);
+
+        AgentId agentId;
+        try
+        {
+            var tools = await toolHarness.Bridge.GetToolsAsync().ConfigureAwait(false);
+            agentId = await connection.EnsureConnectedAsync(
+                    AgentBackendIds.Copilot,
+                    uiWorkingDirectory,
+                    model: "gpt-5-mini",
+                    reasoningEffort: null,
+                    tools,
+                    permissionRequestHandler: static (_, _) =>
+                        Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                    userInputRequestHandler: static (request, _) =>
+                        Task.FromResult(CodeAltaTerminalUi.CreateChatUserInputResponse(request, autoApprove: true)))
+                .ConfigureAwait(false);
+        }
+        catch (FileNotFoundException ex)
+        {
+            Assert.Inconclusive($"Copilot executable was not found: {ex.Message}");
+            return;
+        }
+
+        var assistantMessages = new List<string>();
+        var userInputRequests = new List<AgentUserInputRequest>();
+        var idleSeen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var errorEvent = new TaskCompletionSource<AgentErrorEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        using var subscription = await hub.SubscribeSessionEventsAsync(
+                agentId,
+                @event =>
+                {
+                    switch (@event)
+                    {
+                        case AgentUserInputRequest request:
+                            lock (userInputRequests)
+                            {
+                                userInputRequests.Add(request);
+                            }
+
+                            break;
+                        case AgentContentCompletedEvent content when
+                            content.Kind == AgentContentKind.Assistant &&
+                            !string.IsNullOrWhiteSpace(content.Content):
+                            lock (assistantMessages)
+                            {
+                                assistantMessages.Add(content.Content);
+                            }
+
+                            break;
+                        case AgentSessionUpdateEvent { Kind: AgentSessionUpdateKind.Idle }:
+                            idleSeen.TrySetResult();
+                            break;
+                        case AgentErrorEvent error:
+                            errorEvent.TrySetResult(error);
+                            break;
+                    }
+                })
+            .ConfigureAwait(false);
+
+        _ = await hub.RunAsync(
+                agentId,
+                new AgentSendOptions
+                {
+                    Input = AgentInput.Text("Could you tell me a bit more about the project `C:\\code\\Tomlyn`?")
+                })
+            .ConfigureAwait(false);
+
+        var timeoutTask = Task.Delay(TimeSpan.FromMinutes(2));
+        var completedTask = await Task.WhenAny(idleSeen.Task, errorEvent.Task, timeoutTask).ConfigureAwait(false);
+
+        if (completedTask == timeoutTask)
+        {
+            Assert.Fail($"Timed out. Events: {string.Join(", ", receivedEvents.Select(static e => e.GetType().Name))}");
+        }
+
+        if (completedTask == errorEvent.Task)
+        {
+            var error = await errorEvent.Task.ConfigureAwait(false);
+            Assert.Fail($"Copilot emitted an error event: {error.Message}");
+        }
+
+        AgentUserInputRequest[] requests;
+        string[] messages;
+        lock (userInputRequests)
+        {
+            requests = userInputRequests.ToArray();
+        }
+
+        lock (assistantMessages)
+        {
+            messages = assistantMessages.ToArray();
+        }
+
+        Assert.IsTrue(requests.Length > 0, "Expected Copilot to issue at least one ask_user request in the UI-like scenario.");
+        Assert.IsFalse(
+            messages.Any(static message => message.Contains("rejected this tool call", StringComparison.OrdinalIgnoreCase)),
+            $"Did not expect a rejected-tool assistant message. Messages: {string.Join(" || ", messages)}");
+        Assert.IsTrue(
+            messages.Any(static message => message.Contains("Tomlyn", StringComparison.OrdinalIgnoreCase) ||
+                                           message.Contains(@"C:\code", StringComparison.OrdinalIgnoreCase)),
+            $"Expected assistant follow-up after auto-answering ask_user. Messages: {string.Join(" || ", messages)}");
+    }
+
     private static async Task<CodeAltaDb> CreateDbAsync(string rootPath)
     {
         var dbPath = Path.Combine(rootPath, "state", "db", "codealta.db");

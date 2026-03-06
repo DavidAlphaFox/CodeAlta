@@ -200,6 +200,34 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
+    public void CreateChatUserInputResponse_WhenChoicesIncludePositiveAndNegativeOptions_PrefersProceeding()
+    {
+        var response = CodeAltaTerminalUi.CreateChatUserInputResponse(
+            new AgentUserInputRequest(
+                AgentBackendIds.Copilot,
+                "session-1",
+                DateTimeOffset.UtcNow,
+                null,
+                "interaction-1",
+                new AgentUserInputForm(
+                    [
+                        new AgentUserInputPrompt(
+                            Id: "choice",
+                            Question: "Do you want me to continue with the tool call?",
+                            Options:
+                            [
+                                new AgentUserInputOption("Reject the tool call"),
+                                new AgentUserInputOption("Continue and inspect the project"),
+                                new AgentUserInputOption("Provide instructions instead"),
+                            ],
+                            AllowFreeform: false)
+                    ])),
+            autoApprove: true);
+
+        Assert.AreEqual("Continue and inspect the project", response.Answers["choice"]);
+    }
+
+    [TestMethod]
     public void CreateChatUserInputResponse_WhenAutoApproveDisabled_ReturnsEmptyAnswers()
     {
         var response = CodeAltaTerminalUi.CreateChatUserInputResponse(
