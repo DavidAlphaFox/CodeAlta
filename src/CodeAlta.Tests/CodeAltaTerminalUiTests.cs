@@ -126,8 +126,8 @@ public sealed class CodeAltaTerminalUiTests
                 ProposedExecPolicyAmendment: null,
                 ProposedNetworkPolicyAmendments: null));
 
-        StringAssert.Contains(typedMarkdown, "Action Required");
         StringAssert.Contains(typedMarkdown, "Permission Request");
+        StringAssert.Contains(typedMarkdown, "_The agent is blocked");
         StringAssert.Contains(typedMarkdown, "```shell");
         StringAssert.Contains(typedMarkdown, "dotnet test");
         StringAssert.Contains(typedMarkdown, "`C:\\repo`");
@@ -172,8 +172,8 @@ public sealed class CodeAltaTerminalUiTests
                             AllowFreeform: false)
                     ])));
 
-        StringAssert.Contains(markdown, "Action Required");
         StringAssert.Contains(markdown, "User Input Request");
+        StringAssert.Contains(markdown, "Terminal question prompts are not implemented yet");
         StringAssert.Contains(markdown, "Which option do you prefer?");
         StringAssert.Contains(markdown, "Search first");
         StringAssert.Contains(markdown, "Answer directly");

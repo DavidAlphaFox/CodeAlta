@@ -1214,33 +1214,14 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     }
 
     private static DocumentFlowItem CreateUserChatItem(string markdown)
-    {
-        var content = new FlowDocument()
-            .Add(new MarkdownControl(markdown)
-            {
-                HorizontalAlignment = Align.Stretch,
-                VerticalAlignment = Align.Stretch,
-                Options = MarkdownRenderOptions.Default with
-                {
-                    WrapCodeBlocks = true,
-                    MaxCodeBlockHeight = 10,
-                },
-            })
-            .Add(new Rule());
-
-        return new DocumentFlowItem
-        {
-            Content = content,
-            Alignment = DocumentFlowAlignment.Stretch,
-            //MaxWidth = 80,
-            BackgroundStyle = Style.None.WithBackground(Color.RgbA(0xFF, 0xFF, 0xFF,  0x2)),
-        };
-    }
+        => CreateChatMarkdownItem(
+            markdown,
+            ChatTimelineTone.User,
+            headerOverride: "User Prompt",
+            maxCodeBlockHeight: 10).Item;
 
     private static DocumentFlowItem CreateAssistantChatItem(string markdown)
-    {
-        return CreateChatMarkdownItem(markdown, ChatTimelineTone.Assistant).Item;
-    }
+        => CreateChatMarkdownItem(markdown, ChatTimelineTone.Assistant).Item;
 
     private static DocumentFlowItem CreateAssistantStreamingChatItem(out MarkdownControl markdownControl)
     {
@@ -1841,10 +1822,71 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         };
     }
 
-    private static ChatMarkdownEntry CreateChatMarkdownItem(string markdown, ChatTimelineTone tone)
-        => RunOnUiThread(static state => CreateChatMarkdownItemCore(state.markdown, state.tone), (markdown, tone));
+    private static Visual CreateChatCardHeader(ChatTimelineTone tone, string? headerOverride)
+    {
+        var (icon, title, toneName) = GetChatCardHeaderParts(tone, headerOverride);
+        return new Markup($"[{toneName}]{icon}[/] [bold]{AnsiMarkup.Escape(title)}[/]");
+    }
 
-    private static ChatMarkdownEntry CreateChatMarkdownItemCore(string markdown, ChatTimelineTone tone)
+    private static GroupStyle CreateChatGroupStyle(ChatTimelineTone tone)
+    {
+        var (border, background) = tone switch
+        {
+            ChatTimelineTone.User => (Color.Rgb(0xB2, 0x8D, 0xFF), Color.RgbA(0xB2, 0x8D, 0xFF, 0x08)),
+            ChatTimelineTone.Assistant => (Color.Rgb(0x7D, 0xD3, 0xFC), Color.RgbA(0x7D, 0xD3, 0xFC, 0x06)),
+            ChatTimelineTone.Reasoning => (Color.Rgb(0x6B, 0xB8, 0xFF), Color.RgbA(0x6B, 0xB8, 0xFF, 0x10)),
+            ChatTimelineTone.Activity => (Color.Rgb(0xA0, 0xA0, 0xA0), Color.RgbA(0xC0, 0xC0, 0xC0, 0x08)),
+            ChatTimelineTone.Notice => (Color.Rgb(0x8F, 0xD7, 0xB2), Color.RgbA(0x8F, 0xD7, 0xB2, 0x0A)),
+            ChatTimelineTone.Interaction => (Color.Rgb(0xFF, 0xC8, 0x66), Color.RgbA(0xFF, 0xC8, 0x66, 0x0E)),
+            _ => (Color.Rgb(0x7D, 0xD3, 0xFC), Color.RgbA(0x7D, 0xD3, 0xFC, 0x06)),
+        };
+
+        return GroupStyle.Rounded with
+        {
+            BorderCellStyle = Style.None.WithForeground(border),
+            FocusedBorderCellStyle = Style.None.WithForeground(border) | TextStyle.Bold,
+            LabelBackgroundStyle = Style.None.WithBackground(background),
+            BackgroundStyle = Style.None.WithBackground(background),
+        };
+    }
+
+    private static (string Icon, string Title, string ToneName) GetChatCardHeaderParts(ChatTimelineTone tone, string? headerOverride)
+    {
+        var (icon, defaultTitle, toneName) = GetChatCardDefaults(tone);
+        if (!string.IsNullOrWhiteSpace(headerOverride))
+        {
+            return (icon, headerOverride, toneName);
+        }
+
+        return (icon, defaultTitle, toneName);
+    }
+
+    private static (string Icon, string Title, string ToneName) GetChatCardDefaults(ChatTimelineTone tone)
+        => tone switch
+        {
+            ChatTimelineTone.User => ("󰀄", "User Prompt", "accent"),
+            ChatTimelineTone.Assistant => ("󰚩", "Assistant", "success"),
+            ChatTimelineTone.Reasoning => ("", "Reasoning", "primary"),
+            ChatTimelineTone.Activity => ("", "Activity", "muted"),
+            ChatTimelineTone.Notice => ("", "Notice", "success"),
+            ChatTimelineTone.Interaction => ("", "Action Required", "warning"),
+            _ => ("󰍩", "Message", "primary"),
+        };
+
+    private static ChatMarkdownEntry CreateChatMarkdownItem(
+        string markdown,
+        ChatTimelineTone tone,
+        string? headerOverride = null,
+        int maxCodeBlockHeight = 14)
+        => RunOnUiThread(
+            static state => CreateChatMarkdownItemCore(state.markdown, state.tone, state.headerOverride, state.maxCodeBlockHeight),
+            (markdown, tone, headerOverride, maxCodeBlockHeight));
+
+    private static ChatMarkdownEntry CreateChatMarkdownItemCore(
+        string markdown,
+        ChatTimelineTone tone,
+        string? headerOverride,
+        int maxCodeBlockHeight)
     {
         var markdownControl = new MarkdownControl(markdown)
         {
@@ -1853,31 +1895,28 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             Options = MarkdownRenderOptions.Default with
             {
                 WrapCodeBlocks = true,
-                MaxCodeBlockHeight = 14,
+                MaxCodeBlockHeight = maxCodeBlockHeight,
             },
         };
+
+        var copyButton = new Button(new TextBlock("󰆏 Copy"))
+            .Click(() =>
+            {
+                markdownControl.App?.Terminal.Clipboard.TrySetText(markdownControl.Markdown);
+            });
+
+        var group = new Group(CreateChatCardHeader(tone, headerOverride), markdownControl)
+            .TopRightText(copyButton)
+            .Padding(1)
+            .Style(CreateChatGroupStyle(tone))
+            .HorizontalAlignment(Align.Stretch)
+            .VerticalAlignment(Align.Stretch);
 
         return new ChatMarkdownEntry(
             new DocumentFlowItem
             {
-                Content = new FlowDocument().Add(markdownControl).Add(new Rule()),
+                Content = new FlowDocument().Add(group),
                 Alignment = DocumentFlowAlignment.Stretch,
-                BackgroundStyle = tone switch
-                {
-                    ChatTimelineTone.Reasoning => Style.None.WithBackground(Color.RgbA(0x6B, 0xB8, 0xFF, 0x10)),
-                    ChatTimelineTone.Activity => Style.None.WithBackground(Color.RgbA(0xC0, 0xC0, 0xC0, 0x08)),
-                    ChatTimelineTone.Notice => Style.None.WithBackground(Color.RgbA(0x8F, 0xD7, 0xB2, 0x0A)),
-                    ChatTimelineTone.Interaction => Style.None.WithBackground(Color.RgbA(0xFF, 0xC8, 0x66, 0x0E)),
-                    _ => Style.None,
-                },
-                BorderStyle = tone switch
-                {
-                    ChatTimelineTone.Reasoning => Style.None.WithForeground(Color.Rgb(0x6B, 0xB8, 0xFF)),
-                    ChatTimelineTone.Activity => Style.None.WithForeground(Color.Rgb(0xA0, 0xA0, 0xA0)),
-                    ChatTimelineTone.Notice => Style.None.WithForeground(Color.Rgb(0x8F, 0xD7, 0xB2)),
-                    ChatTimelineTone.Interaction => Style.None.WithForeground(Color.Rgb(0xFF, 0xC8, 0x66)),
-                    _ => Style.None,
-                },
             },
             markdownControl);
     }
@@ -1904,13 +1943,13 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        var builder = new StringBuilder("**Plan");
+        var builder = new StringBuilder("** Plan");
         if (snapshot.ChangeKind is { } changeKind)
         {
             builder.Append(' ').Append(SplitPascalCase(changeKind.ToString()));
         }
 
-        builder.Append("** · ");
+        builder.Append("**");
         if (!string.IsNullOrWhiteSpace(snapshot.Explanation))
         {
             builder.AppendLine().AppendLine().Append(snapshot.Explanation);
@@ -1936,9 +1975,10 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
         var builder = new StringBuilder();
         builder.Append("**")
+            .Append(GetActivityIcon(activity.Kind))
+            .Append(' ')
             .Append(GetActivityHeadline(activity.Kind, activity.Phase))
-            .Append("** ")
-            .Append(GetActivityIcon(activity.Kind));
+            .Append("**");
 
         if (!string.IsNullOrWhiteSpace(activity.Name))
         {
@@ -1965,24 +2005,24 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
         var label = update.Kind switch
         {
-            AgentSessionUpdateKind.Info => "Info · ",
-            AgentSessionUpdateKind.Warning => "Warning · ",
-            AgentSessionUpdateKind.ModelChanged => "Model Changed · 󰭹",
-            AgentSessionUpdateKind.ModeChanged => "Mode Changed · 󰆧",
-            AgentSessionUpdateKind.TitleChanged => "Title Changed · 󰑕",
-            AgentSessionUpdateKind.ContextChanged => "Context Changed · 󰉋",
-            AgentSessionUpdateKind.PlanUpdated => "Plan Updated · ",
-            AgentSessionUpdateKind.UsageUpdated => "Usage Updated · 󰮯",
-            AgentSessionUpdateKind.CompactionStarted => "Compaction Started · 󰫙",
-            AgentSessionUpdateKind.CompactionCompleted => "Compaction Completed · 󰫛",
-            AgentSessionUpdateKind.Handoff => "Handoff · 󰒍",
-            AgentSessionUpdateKind.Truncated => "Session Truncated · 󰆴",
-            AgentSessionUpdateKind.Shutdown => "Session Shutdown · 󰅖",
-            AgentSessionUpdateKind.TaskCompleted => "Task Completed · 󰄬",
-            AgentSessionUpdateKind.DiffUpdated => "Diff Updated · ",
-            AgentSessionUpdateKind.Started => "Session Started · 󰔛",
-            AgentSessionUpdateKind.Resumed => "Session Resumed · 󰑐",
-            AgentSessionUpdateKind.Idle => "Agent Idle · 󰄛",
+            AgentSessionUpdateKind.Info => " Info",
+            AgentSessionUpdateKind.Warning => " Warning",
+            AgentSessionUpdateKind.ModelChanged => "󰭹 Model Changed",
+            AgentSessionUpdateKind.ModeChanged => "󰆧 Mode Changed",
+            AgentSessionUpdateKind.TitleChanged => "󰑕 Title Changed",
+            AgentSessionUpdateKind.ContextChanged => "󰉋 Context Changed",
+            AgentSessionUpdateKind.PlanUpdated => " Plan Updated",
+            AgentSessionUpdateKind.UsageUpdated => "󰮯 Usage Updated",
+            AgentSessionUpdateKind.CompactionStarted => "󰫙 Compaction Started",
+            AgentSessionUpdateKind.CompactionCompleted => "󰫛 Compaction Completed",
+            AgentSessionUpdateKind.Handoff => "󰒍 Handoff",
+            AgentSessionUpdateKind.Truncated => "󰆴 Session Truncated",
+            AgentSessionUpdateKind.Shutdown => "󰅖 Session Shutdown",
+            AgentSessionUpdateKind.TaskCompleted => "󰄬 Task Completed",
+            AgentSessionUpdateKind.DiffUpdated => " Diff Updated",
+            AgentSessionUpdateKind.Started => "󰔛 Session Started",
+            AgentSessionUpdateKind.Resumed => "󰑐 Session Resumed",
+            AgentSessionUpdateKind.Idle => "󰄛 Agent Idle",
             _ => update.Kind.ToString(),
         };
 
@@ -1995,7 +2035,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var builder = new StringBuilder("**Action Required · Permission Request** · ");
+        var builder = new StringBuilder("** Permission Request**");
         builder.AppendLine()
             .AppendLine()
             .Append("_The agent is blocked until this permission request is resolved._");
@@ -2101,7 +2141,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var builder = new StringBuilder("**Action Required · User Input Request** · 󰞋");
+        var builder = new StringBuilder("**󰞋 User Input Request**");
         builder.AppendLine()
             .AppendLine()
             .Append(
@@ -2181,13 +2221,13 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         if (string.IsNullOrWhiteSpace(interaction.Message))
         {
             return string.IsNullOrWhiteSpace(detailsMarkdown)
-                ? $"**{label}** · "
-                : $"**{label}** · \n\n{detailsMarkdown}";
+                ? $"** {label}**"
+                : $"** {label}**\n\n{detailsMarkdown}";
         }
 
         return string.IsNullOrWhiteSpace(detailsMarkdown)
-            ? $"**{label}** · \n\n{interaction.Message}"
-            : $"**{label}** · \n\n{interaction.Message}\n\n{detailsMarkdown}";
+            ? $"** {label}**\n\n{interaction.Message}"
+            : $"** {label}**\n\n{interaction.Message}\n\n{detailsMarkdown}";
     }
 
     internal static string FormatChatImmediatePermissionDecisionMarkdown(
@@ -2313,7 +2353,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             AgentActivityKind.WebSearch => "󰖟",
             AgentActivityKind.ImageGeneration => "󰘨",
             AgentActivityKind.Turn => "󰆍",
-            _ => "•",
+            _ => "",
         };
     }
 
@@ -2344,20 +2384,20 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     {
         if (string.IsNullOrWhiteSpace(content))
         {
-            return $"**{title}** · {icon}";
+            return $"**{icon} {title}**";
         }
 
-        return $"**{title}** · {icon}\n\n{content}";
+        return $"**{icon} {title}**\n\n{content}";
     }
 
     private static string FormatChatOutputMarkdown(string icon, string title, string content)
     {
         if (string.IsNullOrWhiteSpace(content))
         {
-            return $"**{title}** · {icon}";
+            return $"**{icon} {title}**";
         }
 
-        return $"**{title}** · {icon}\n\n{FormatChatCodeFence(content, "text")}";
+        return $"**{icon} {title}**\n\n{FormatChatCodeFence(content, "text")}";
     }
 
     private static string FormatChatCodeFence(string content, string language)
@@ -2761,6 +2801,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
     private enum ChatTimelineTone
     {
+        User,
         Assistant,
         Reasoning,
         Activity,
