@@ -1390,6 +1390,9 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 
         switch (@event)
         {
+            case AgentRawEvent raw:
+                RenderChatRawEvent(raw);
+                break;
             case AgentContentDeltaEvent delta:
                 AppendChatContent(delta);
                 break;
@@ -1424,6 +1427,14 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
                 RenderChatError(error);
                 break;
         }
+    }
+
+    private void RenderChatRawEvent(AgentRawEvent raw)
+    {
+        AppendChatTimelineItem(
+            CreateChatMarkdownItem(
+                FormatChatRawEventMarkdown(raw),
+                ChatTimelineTone.Notice).Item);
     }
 
     private void AppendChatContent(AgentContentDeltaEvent delta)
@@ -2013,6 +2024,26 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
                 builder.AppendLine().AppendLine().Append("- Kind: ").Append(request.Kind);
                 break;
         }
+
+        return builder.ToString();
+    }
+
+    internal static string FormatChatRawEventMarkdown(AgentRawEvent raw)
+    {
+        ArgumentNullException.ThrowIfNull(raw);
+
+        var builder = new StringBuilder()
+            .AppendLine($"**󰒓 Raw Event** `{raw.BackendEventType}`");
+
+        var payload = raw.Raw.ValueKind == JsonValueKind.Undefined
+            ? "{}"
+            : raw.Raw.GetRawText();
+
+        builder
+            .AppendLine()
+            .AppendLine("```json")
+            .AppendLine(payload)
+            .Append("```");
 
         return builder.ToString();
     }

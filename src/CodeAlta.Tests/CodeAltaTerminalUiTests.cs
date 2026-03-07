@@ -70,6 +70,24 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
+    public void FormatChatRawEventMarkdown_RendersBackendEventTypeAndPayload()
+    {
+        using var payloadJson = JsonDocument.Parse("""{"kind":"shell","toolCallId":"call-1"}""");
+        var markdown = CodeAltaTerminalUi.FormatChatRawEventMarkdown(
+            new AgentRawEvent(
+                AgentBackendIds.Copilot,
+                "session-1",
+                DateTimeOffset.UtcNow,
+                "permission.request",
+                payloadJson.RootElement.Clone()));
+
+        StringAssert.Contains(markdown, "Raw Event");
+        StringAssert.Contains(markdown, "permission.request");
+        StringAssert.Contains(markdown, "\"kind\":\"shell\"");
+        StringAssert.Contains(markdown, "\"toolCallId\":\"call-1\"");
+    }
+
+    [TestMethod]
     public void FormatChatPermissionRequestMarkdown_RendersTypedAndGenericDetails()
     {
         var typedMarkdown = CodeAltaTerminalUi.FormatChatPermissionRequestMarkdown(
