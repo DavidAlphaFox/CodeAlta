@@ -368,6 +368,18 @@ internal static class CodexAgentMapper
                 AgentSessionUpdateKind.Started,
                 "Thread started."),
 
+            CodexNotification.ThreadArchived => CreateSessionUpdate(
+                sessionId,
+                timestamp,
+                AgentSessionUpdateKind.Info,
+                "Thread archived."),
+
+            CodexNotification.ThreadUnarchived => CreateSessionUpdate(
+                sessionId,
+                timestamp,
+                AgentSessionUpdateKind.Info,
+                "Thread unarchived."),
+
             CodexNotification.ThreadNameUpdated nameUpdated => CreateSessionUpdate(
                 sessionId,
                 timestamp,
@@ -396,6 +408,14 @@ internal static class CodexAgentMapper
                 null,
                 "turn",
                 null),
+
+            CodexNotification.TurnDiffUpdated turnDiffUpdated => CreateSessionUpdate(
+                sessionId,
+                timestamp,
+                AgentSessionUpdateKind.DiffUpdated,
+                "Turn diff updated.",
+                new AgentRunId(turnDiffUpdated.Data.TurnId),
+                CreateDiffDetails(turnDiffUpdated.Data.Diff)),
 
             CodexNotification.AgentMessageDelta delta => new AgentContentDeltaEvent(
                 AgentBackendIds.Codex,
@@ -500,6 +520,11 @@ internal static class CodexAgentMapper
             CodexNotification.ItemStarted itemStarted => ToItemStartedEvent(sessionId, itemStarted.Data, timestamp),
 
             CodexNotification.ItemCompleted itemCompleted => ToItemCompletedEvent(sessionId, itemCompleted.Data, timestamp),
+
+            CodexNotification.RawResponseItemCompleted rawResponseItemCompleted => ToRawResponseItemCompletedEvent(
+                sessionId,
+                rawResponseItemCompleted.Data,
+                timestamp),
 
             CodexNotification.TurnCompleted turnCompleted => new AgentSessionUpdateEvent(
                 AgentBackendIds.Codex,
@@ -612,7 +637,8 @@ internal static class CodexAgentMapper
         DateTimeOffset timestamp,
         AgentSessionUpdateKind kind,
         string? message,
-        AgentRunId? runId = null)
+        AgentRunId? runId = null,
+        JsonElement? details = null)
     {
         return new AgentSessionUpdateEvent(
             AgentBackendIds.Codex,
@@ -620,7 +646,8 @@ internal static class CodexAgentMapper
             timestamp,
             runId,
             kind,
-            message);
+            message,
+            details);
     }
 
     private static AgentActivityEvent CreateActivity(
@@ -632,7 +659,8 @@ internal static class CodexAgentMapper
         string activityId,
         string? parentActivityId,
         string? name,
-        string? message)
+        string? message,
+        JsonElement? details = null)
     {
         return new AgentActivityEvent(
             AgentBackendIds.Codex,
@@ -644,7 +672,8 @@ internal static class CodexAgentMapper
             activityId,
             parentActivityId,
             name,
-            message);
+            message,
+            details);
     }
 
     private static AgentEvent ToItemStartedEvent(
@@ -664,7 +693,8 @@ internal static class CodexAgentMapper
                 commandExecution.Id,
                 notification.TurnId,
                 commandExecution.Command,
-                commandExecution.Cwd),
+                commandExecution.Cwd,
+                CreateCommandExecutionDetails(commandExecution)),
 
             ThreadItem.FileChangeThreadItem fileChange => CreateActivity(
                 sessionId,
@@ -675,7 +705,8 @@ internal static class CodexAgentMapper
                 fileChange.Id,
                 notification.TurnId,
                 "file change",
-                null),
+                null,
+                CreateFileChangeDetails(fileChange)),
 
             ThreadItem.McpToolCallThreadItem mcpToolCall => CreateActivity(
                 sessionId,
@@ -686,7 +717,8 @@ internal static class CodexAgentMapper
                 mcpToolCall.Id,
                 notification.TurnId,
                 mcpToolCall.Tool,
-                mcpToolCall.Server),
+                mcpToolCall.Server,
+                CreateMcpToolCallDetails(mcpToolCall)),
 
             ThreadItem.DynamicToolCallThreadItem dynamicToolCall => CreateActivity(
                 sessionId,
@@ -697,7 +729,8 @@ internal static class CodexAgentMapper
                 dynamicToolCall.Id,
                 notification.TurnId,
                 dynamicToolCall.Tool,
-                null),
+                null,
+                CreateDynamicToolCallDetails(dynamicToolCall)),
 
             ThreadItem.CollabAgentToolCallThreadItem collabAgentToolCall => CreateActivity(
                 sessionId,
@@ -708,7 +741,57 @@ internal static class CodexAgentMapper
                 collabAgentToolCall.Id,
                 notification.TurnId,
                 collabAgentToolCall.Tool.ToString(),
-                collabAgentToolCall.Prompt),
+                collabAgentToolCall.Prompt,
+                CreateCollabAgentToolCallDetails(collabAgentToolCall)),
+
+            ThreadItem.WebSearchThreadItem webSearch => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.WebSearch,
+                AgentActivityPhase.Started,
+                webSearch.Id,
+                notification.TurnId,
+                DescribeWebSearchAction(webSearch.Action, webSearch.Query),
+                webSearch.Query,
+                CreateWebSearchDetails(webSearch)),
+
+            ThreadItem.ImageGenerationThreadItem imageGeneration => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.ImageGeneration,
+                ToImageGenerationPhase(imageGeneration.Status, AgentActivityPhase.Started),
+                imageGeneration.Id,
+                notification.TurnId,
+                "image generation",
+                imageGeneration.RevisedPrompt,
+                CreateImageGenerationDetails(imageGeneration)),
+
+            ThreadItem.ContextCompactionThreadItem contextCompaction => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.Compaction,
+                AgentActivityPhase.Started,
+                contextCompaction.Id,
+                notification.TurnId,
+                "context compaction",
+                null),
+
+            ThreadItem.EnteredReviewModeThreadItem enteredReviewMode => CreateSessionUpdate(
+                sessionId,
+                timestamp,
+                AgentSessionUpdateKind.ModeChanged,
+                $"Entered review mode: {enteredReviewMode.Review}.",
+                runId),
+
+            ThreadItem.ExitedReviewModeThreadItem exitedReviewMode => CreateSessionUpdate(
+                sessionId,
+                timestamp,
+                AgentSessionUpdateKind.ModeChanged,
+                $"Exited review mode: {exitedReviewMode.Review}.",
+                runId),
 
             _ => new AgentRawEvent(
                 AgentBackendIds.Codex,
@@ -769,7 +852,8 @@ internal static class CodexAgentMapper
                 commandExecution.Id,
                 notification.TurnId,
                 commandExecution.Command,
-                commandExecution.AggregatedOutput),
+                commandExecution.AggregatedOutput,
+                CreateCommandExecutionDetails(commandExecution)),
 
             ThreadItem.FileChangeThreadItem fileChange => CreateActivity(
                 sessionId,
@@ -780,7 +864,8 @@ internal static class CodexAgentMapper
                 fileChange.Id,
                 notification.TurnId,
                 "file change",
-                fileChange.Changes.Count == 0 ? null : $"{fileChange.Changes.Count} change(s)"),
+                fileChange.Changes.Count == 0 ? null : $"{fileChange.Changes.Count} change(s)",
+                CreateFileChangeDetails(fileChange)),
 
             ThreadItem.McpToolCallThreadItem mcpToolCall => CreateActivity(
                 sessionId,
@@ -791,7 +876,8 @@ internal static class CodexAgentMapper
                 mcpToolCall.Id,
                 notification.TurnId,
                 mcpToolCall.Tool,
-                mcpToolCall.Error?.Message),
+                mcpToolCall.Error?.Message,
+                CreateMcpToolCallDetails(mcpToolCall)),
 
             ThreadItem.DynamicToolCallThreadItem dynamicToolCall => CreateActivity(
                 sessionId,
@@ -804,7 +890,8 @@ internal static class CodexAgentMapper
                 dynamicToolCall.Tool,
                 dynamicToolCall.Success is { } success
                     ? success ? "Dynamic tool call succeeded." : "Dynamic tool call failed."
-                    : null),
+                    : null,
+                CreateDynamicToolCallDetails(dynamicToolCall)),
 
             ThreadItem.CollabAgentToolCallThreadItem collabAgentToolCall => CreateActivity(
                 sessionId,
@@ -815,7 +902,57 @@ internal static class CodexAgentMapper
                 collabAgentToolCall.Id,
                 notification.TurnId,
                 collabAgentToolCall.Tool.ToString(),
-                collabAgentToolCall.Prompt),
+                collabAgentToolCall.Prompt,
+                CreateCollabAgentToolCallDetails(collabAgentToolCall)),
+
+            ThreadItem.WebSearchThreadItem webSearch => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.WebSearch,
+                AgentActivityPhase.Completed,
+                webSearch.Id,
+                notification.TurnId,
+                DescribeWebSearchAction(webSearch.Action, webSearch.Query),
+                webSearch.Query,
+                CreateWebSearchDetails(webSearch)),
+
+            ThreadItem.ImageGenerationThreadItem imageGeneration => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.ImageGeneration,
+                ToImageGenerationPhase(imageGeneration.Status, AgentActivityPhase.Completed),
+                imageGeneration.Id,
+                notification.TurnId,
+                "image generation",
+                imageGeneration.RevisedPrompt,
+                CreateImageGenerationDetails(imageGeneration)),
+
+            ThreadItem.ContextCompactionThreadItem contextCompaction => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.Compaction,
+                AgentActivityPhase.Completed,
+                contextCompaction.Id,
+                notification.TurnId,
+                "context compaction",
+                null),
+
+            ThreadItem.EnteredReviewModeThreadItem enteredReviewMode => CreateSessionUpdate(
+                sessionId,
+                timestamp,
+                AgentSessionUpdateKind.ModeChanged,
+                $"Entered review mode: {enteredReviewMode.Review}.",
+                runId),
+
+            ThreadItem.ExitedReviewModeThreadItem exitedReviewMode => CreateSessionUpdate(
+                sessionId,
+                timestamp,
+                AgentSessionUpdateKind.ModeChanged,
+                $"Exited review mode: {exitedReviewMode.Review}.",
+                runId),
 
             _ => new AgentRawEvent(
                 AgentBackendIds.Codex,
@@ -823,6 +960,122 @@ internal static class CodexAgentMapper
                 timestamp,
                 nameof(CodexNotification.ItemCompleted),
                 SerializeNotification(new CodexNotification.ItemCompleted(notification)),
+                runId)
+        };
+    }
+
+    private static AgentEvent ToRawResponseItemCompletedEvent(
+        string sessionId,
+        RawResponseItemCompletedNotification notification,
+        DateTimeOffset timestamp)
+    {
+        var runId = new AgentRunId(notification.TurnId);
+        return notification.Item switch
+        {
+            ResponseItem.LocalShellCallResponseItem localShellCall => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.CommandExecution,
+                ToActivityPhase(localShellCall.Status),
+                localShellCall.CallId ?? localShellCall.Id ?? $"local-shell:{notification.TurnId}",
+                notification.TurnId,
+                DescribeLocalShellAction(localShellCall.Action),
+                null,
+                CreateLocalShellCallDetails(localShellCall)),
+
+            ResponseItem.FunctionCallResponseItem functionCall => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.ToolCall,
+                AgentActivityPhase.Requested,
+                functionCall.CallId,
+                notification.TurnId,
+                functionCall.Name,
+                null,
+                CreateFunctionCallDetails(functionCall)),
+
+            ResponseItem.FunctionCallOutputResponseItem functionCallOutput => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.ToolCall,
+                ToFunctionCallOutputPhase(functionCallOutput.Output),
+                functionCallOutput.CallId,
+                notification.TurnId,
+                "function call output",
+                GetFunctionCallOutputMessage(functionCallOutput.Output),
+                CreateFunctionCallOutputDetails(functionCallOutput)),
+
+            ResponseItem.CustomToolCallResponseItem customToolCall => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.DynamicToolCall,
+                ToCustomToolCallPhase(customToolCall.Status),
+                customToolCall.CallId,
+                notification.TurnId,
+                customToolCall.Name,
+                null,
+                CreateCustomToolCallDetails(customToolCall)),
+
+            ResponseItem.CustomToolCallOutputResponseItem customToolCallOutput => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.DynamicToolCall,
+                ToFunctionCallOutputPhase(customToolCallOutput.Output),
+                customToolCallOutput.CallId,
+                notification.TurnId,
+                "custom tool output",
+                GetFunctionCallOutputMessage(customToolCallOutput.Output),
+                CreateCustomToolCallOutputDetails(customToolCallOutput)),
+
+            ResponseItem.WebSearchCallResponseItem webSearchCall => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.WebSearch,
+                ToStatusPhase(webSearchCall.Status, AgentActivityPhase.Completed),
+                webSearchCall.Id ?? $"web-search:{notification.TurnId}",
+                notification.TurnId,
+                DescribeWebSearchAction(webSearchCall.Action, fallbackQuery: null),
+                null,
+                CreateWebSearchCallDetails(webSearchCall)),
+
+            ResponseItem.ImageGenerationCallResponseItem imageGenerationCall => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.ImageGeneration,
+                ToImageGenerationPhase(imageGenerationCall.Status, AgentActivityPhase.Completed),
+                imageGenerationCall.Id,
+                notification.TurnId,
+                "image generation",
+                imageGenerationCall.RevisedPrompt,
+                CreateImageGenerationCallDetails(imageGenerationCall)),
+
+            ResponseItem.CompactionResponseItem => CreateActivity(
+                sessionId,
+                timestamp,
+                runId,
+                AgentActivityKind.Compaction,
+                AgentActivityPhase.Completed,
+                $"compaction:{notification.TurnId}",
+                notification.TurnId,
+                "context compaction",
+                null),
+
+            _ => new AgentRawEvent(
+                AgentBackendIds.Codex,
+                sessionId,
+                timestamp,
+                nameof(CodexNotification.RawResponseItemCompleted),
+                CreateRawElement(
+                    notification.Item.GetType().Name,
+                    notification.ThreadId,
+                    notification.TurnId),
                 runId)
         };
     }
@@ -881,6 +1134,61 @@ internal static class CodexAgentMapper
             CollabAgentToolCallStatus.Completed => AgentActivityPhase.Completed,
             CollabAgentToolCallStatus.Failed => AgentActivityPhase.Failed,
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unsupported collaboration status.")
+        };
+    }
+
+    private static AgentActivityPhase ToActivityPhase(LocalShellStatus status)
+    {
+        return status switch
+        {
+            LocalShellStatus.InProgress => AgentActivityPhase.Progressed,
+            LocalShellStatus.Completed => AgentActivityPhase.Completed,
+            LocalShellStatus.Incomplete => AgentActivityPhase.Failed,
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unsupported local shell status.")
+        };
+    }
+
+    private static AgentActivityPhase ToStatusPhase(string? status, AgentActivityPhase defaultPhase)
+    {
+        return status?.Trim().ToLowerInvariant() switch
+        {
+            null or "" => defaultPhase,
+            "requested" => AgentActivityPhase.Requested,
+            "started" or "in_progress" or "in-progress" => AgentActivityPhase.Started,
+            "completed" or "succeeded" or "success" => AgentActivityPhase.Completed,
+            "failed" or "error" => AgentActivityPhase.Failed,
+            "cancelled" or "canceled" or "declined" or "incomplete" => AgentActivityPhase.Canceled,
+            _ => defaultPhase
+        };
+    }
+
+    private static AgentActivityPhase ToImageGenerationPhase(string? status, AgentActivityPhase defaultPhase)
+        => ToStatusPhase(status, defaultPhase);
+
+    private static AgentActivityPhase ToCustomToolCallPhase(string? status)
+        => ToStatusPhase(status, AgentActivityPhase.Requested);
+
+    private static AgentActivityPhase ToFunctionCallOutputPhase(FunctionCallOutputPayload payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+
+        return payload.Success switch
+        {
+            false => AgentActivityPhase.Failed,
+            true => AgentActivityPhase.Completed,
+            null => AgentActivityPhase.Completed
+        };
+    }
+
+    private static string? GetFunctionCallOutputMessage(FunctionCallOutputPayload payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+
+        return payload.Success switch
+        {
+            false => "Tool call failed.",
+            true => "Tool call completed.",
+            null => null
         };
     }
 
@@ -1125,6 +1433,303 @@ internal static class CodexAgentMapper
 
         using var document = JsonDocument.Parse(stream.ToArray());
         return document.RootElement.Clone();
+    }
+
+    private static JsonElement CreateDiffDetails(string diff)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("diff", diff);
+        });
+    }
+
+    private static JsonElement CreateCommandExecutionDetails(ThreadItem.CommandExecutionThreadItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("command", item.Command);
+            writer.WriteString("cwd", item.Cwd);
+            writer.WriteString("status", item.Status.ToString());
+            if (item.ProcessId is not null)
+                writer.WriteString("processId", item.ProcessId);
+            if (item.ExitCode is not null)
+                writer.WriteNumber("exitCode", item.ExitCode.Value);
+            if (item.DurationMs is not null)
+                writer.WriteNumber("durationMs", item.DurationMs.Value);
+        });
+    }
+
+    private static JsonElement CreateFileChangeDetails(ThreadItem.FileChangeThreadItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("status", item.Status.ToString());
+            writer.WriteNumber("changeCount", item.Changes.Count);
+        });
+    }
+
+    private static JsonElement CreateMcpToolCallDetails(ThreadItem.McpToolCallThreadItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("tool", item.Tool);
+            writer.WriteString("server", item.Server);
+            writer.WriteString("status", item.Status.ToString());
+            if (item.DurationMs is not null)
+                writer.WriteNumber("durationMs", item.DurationMs.Value);
+            writer.WritePropertyName("arguments");
+            item.Arguments.WriteTo(writer);
+            if (item.Error?.Message is not null)
+                writer.WriteString("error", item.Error.Message);
+        });
+    }
+
+    private static JsonElement CreateDynamicToolCallDetails(ThreadItem.DynamicToolCallThreadItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("tool", item.Tool);
+            writer.WriteString("status", item.Status.ToString());
+            if (item.Success is not null)
+                writer.WriteBoolean("success", item.Success.Value);
+            if (item.DurationMs is not null)
+                writer.WriteNumber("durationMs", item.DurationMs.Value);
+            writer.WritePropertyName("arguments");
+            item.Arguments.WriteTo(writer);
+        });
+    }
+
+    private static JsonElement CreateCollabAgentToolCallDetails(ThreadItem.CollabAgentToolCallThreadItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("tool", item.Tool.ToString());
+            writer.WriteString("status", item.Status.ToString());
+            writer.WriteString("senderThreadId", item.SenderThreadId);
+            writer.WritePropertyName("receiverThreadIds");
+            writer.WriteStartArray();
+            foreach (var receiverThreadId in item.ReceiverThreadIds)
+            {
+                writer.WriteStringValue(receiverThreadId);
+            }
+
+            writer.WriteEndArray();
+        });
+    }
+
+    private static JsonElement CreateWebSearchDetails(ThreadItem.WebSearchThreadItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("query", item.Query);
+            if (item.Action is not null)
+            {
+                writer.WriteString("action", DescribeWebSearchAction(item.Action, item.Query));
+            }
+        });
+    }
+
+    private static JsonElement CreateImageGenerationDetails(ThreadItem.ImageGenerationThreadItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("status", item.Status);
+            if (item.RevisedPrompt is not null)
+                writer.WriteString("revisedPrompt", item.RevisedPrompt);
+            if (!string.IsNullOrWhiteSpace(item.Result))
+                writer.WriteString("result", item.Result);
+        });
+    }
+
+    private static JsonElement CreateLocalShellCallDetails(ResponseItem.LocalShellCallResponseItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("status", item.Status.ToString());
+            if (item.CallId is not null)
+                writer.WriteString("callId", item.CallId);
+            if (item.Id is not null)
+                writer.WriteString("id", item.Id);
+            writer.WritePropertyName("action");
+            item.Action.WriteTo(writer);
+        });
+    }
+
+    private static JsonElement CreateFunctionCallDetails(ResponseItem.FunctionCallResponseItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("name", item.Name);
+            writer.WriteString("callId", item.CallId);
+            writer.WriteString("arguments", item.Arguments);
+        });
+    }
+
+    private static JsonElement CreateFunctionCallOutputDetails(ResponseItem.FunctionCallOutputResponseItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("callId", item.CallId);
+            if (item.Output.Success is not null)
+                writer.WriteBoolean("success", item.Output.Success.Value);
+            writer.WritePropertyName("output");
+            WriteFunctionCallOutputPayload(writer, item.Output);
+        });
+    }
+
+    private static JsonElement CreateCustomToolCallDetails(ResponseItem.CustomToolCallResponseItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("name", item.Name);
+            writer.WriteString("callId", item.CallId);
+            writer.WriteString("input", item.Input);
+            if (item.Status is not null)
+                writer.WriteString("status", item.Status);
+        });
+    }
+
+    private static JsonElement CreateCustomToolCallOutputDetails(ResponseItem.CustomToolCallOutputResponseItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("callId", item.CallId);
+            if (item.Output.Success is not null)
+                writer.WriteBoolean("success", item.Output.Success.Value);
+            writer.WritePropertyName("output");
+            WriteFunctionCallOutputPayload(writer, item.Output);
+        });
+    }
+
+    private static JsonElement CreateWebSearchCallDetails(ResponseItem.WebSearchCallResponseItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            if (item.Id is not null)
+                writer.WriteString("id", item.Id);
+            if (item.Status is not null)
+                writer.WriteString("status", item.Status);
+            if (item.Action is not null)
+            {
+                writer.WriteString("action", DescribeWebSearchAction(item.Action, fallbackQuery: null));
+            }
+        });
+    }
+
+    private static JsonElement CreateImageGenerationCallDetails(ResponseItem.ImageGenerationCallResponseItem item)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("status", item.Status);
+            if (item.RevisedPrompt is not null)
+                writer.WriteString("revisedPrompt", item.RevisedPrompt);
+            if (!string.IsNullOrWhiteSpace(item.Result))
+                writer.WriteString("result", item.Result);
+        });
+    }
+
+    private static string DescribeLocalShellAction(JsonElement action)
+    {
+        if (action.ValueKind == JsonValueKind.Object)
+        {
+            if (TryGetStringProperty(action, "command") is { } command)
+                return command;
+            if (TryGetStringProperty(action, "text") is { } text)
+                return text;
+            if (TryGetStringProperty(action, "type") is { } type)
+                return type;
+        }
+
+        return action.GetRawText();
+    }
+
+    private static string DescribeWebSearchAction(WebSearchAction? action, string? fallbackQuery)
+    {
+        return action switch
+        {
+            WebSearchAction.SearchWebSearchAction search => search.Query
+                ?? search.Queries?.FirstOrDefault()
+                ?? fallbackQuery
+                ?? "web search",
+            WebSearchAction.OpenPageWebSearchAction openPage => openPage.Url ?? "open page",
+            WebSearchAction.FindInPageWebSearchAction findInPage => findInPage.Pattern ?? findInPage.Url ?? "find in page",
+            WebSearchAction.OtherWebSearchAction => fallbackQuery ?? "web search",
+            null => fallbackQuery ?? "web search",
+            _ => fallbackQuery ?? "web search"
+        };
+    }
+
+    private static string? TryGetStringProperty(JsonElement element, string propertyName)
+    {
+        return element.ValueKind == JsonValueKind.Object &&
+               element.TryGetProperty(propertyName, out var property) &&
+               property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+    }
+
+    private static JsonElement CreateObjectElement(Action<Utf8JsonWriter> writeProperties)
+    {
+        ArgumentNullException.ThrowIfNull(writeProperties);
+
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writeProperties(writer);
+            writer.WriteEndObject();
+        }
+
+        using var document = JsonDocument.Parse(stream.ToArray());
+        return document.RootElement.Clone();
+    }
+
+    private static void WriteFunctionCallOutputPayload(Utf8JsonWriter writer, FunctionCallOutputPayload payload)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(payload);
+
+        writer.WriteStartObject();
+        if (payload.Success is not null)
+            writer.WriteBoolean("success", payload.Success.Value);
+
+        writer.WritePropertyName("body");
+        switch (payload.Body)
+        {
+            case FunctionCallOutputBody.StringValue stringValue:
+                writer.WriteStringValue(stringValue.Value);
+                break;
+            case FunctionCallOutputBody.ArrayValue arrayValue:
+                writer.WriteStartArray();
+                foreach (var item in arrayValue.Value)
+                {
+                    switch (item)
+                    {
+                        case FunctionCallOutputContentItem.InputTextFunctionCallOutputContentItem text:
+                            writer.WriteStartObject();
+                            writer.WriteString("type", "input_text");
+                            writer.WriteString("text", text.Text);
+                            writer.WriteEndObject();
+                            break;
+                        case FunctionCallOutputContentItem.InputImageFunctionCallOutputContentItem image:
+                            writer.WriteStartObject();
+                            writer.WriteString("type", "input_image");
+                            writer.WriteString("image_url", image.ImageUrl);
+                            if (image.Detail is not null)
+                                writer.WriteString("detail", image.Detail.ToString());
+                            writer.WriteEndObject();
+                            break;
+                    }
+                }
+
+                writer.WriteEndArray();
+                break;
+            default:
+                writer.WriteNullValue();
+                break;
+        }
+
+        writer.WriteEndObject();
     }
 
     private static AgentCommandPreviewAction ToAgentCommandPreviewAction(CommandAction action)

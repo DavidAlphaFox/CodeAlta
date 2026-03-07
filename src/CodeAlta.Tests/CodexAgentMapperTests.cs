@@ -1,6 +1,7 @@
 using CodeAlta.Agent;
 using CodeAlta.Agent.Codex;
 using CodeAlta.CodexSdk;
+using System.Text.Json;
 using V2ReasoningEffort = CodeAlta.CodexSdk.ReasoningEffort;
 using V2UserInput = CodeAlta.CodexSdk.UserInput;
 
@@ -310,6 +311,109 @@ public sealed class CodexAgentMapperTests
         Assert.AreEqual(AgentActivityPhase.Started, activity.Phase);
         Assert.AreEqual("cmd-1", activity.ActivityId);
         Assert.AreEqual("dotnet test", activity.Name);
+    }
+
+    [TestMethod]
+    public void ToAgentEvent_MapsTurnDiffUpdated()
+    {
+        var timestamp = DateTimeOffset.Parse("2026-02-25T10:00:00+00:00");
+        var notification = new CodexNotification.TurnDiffUpdated(
+            new TurnDiffUpdatedNotification
+            {
+                ThreadId = "thread-1",
+                TurnId = "turn-1",
+                Diff = "--- a/file.txt"
+            });
+
+        var @event = CodexAgentMapper.ToAgentEvent("thread-1", notification, timestamp);
+
+        Assert.IsInstanceOfType<AgentSessionUpdateEvent>(@event);
+        var update = (AgentSessionUpdateEvent)@event;
+        Assert.AreEqual(AgentSessionUpdateKind.DiffUpdated, update.Kind);
+        Assert.AreEqual("--- a/file.txt", update.Details?.GetProperty("diff").GetString());
+        Assert.AreEqual("turn-1", update.RunId?.Value);
+    }
+
+    [TestMethod]
+    public void ToAgentEvent_MapsWebSearchItemLifecycle()
+    {
+        var timestamp = DateTimeOffset.Parse("2026-02-25T10:00:00+00:00");
+        var startedNotification = new CodexNotification.ItemStarted(
+            new ItemStartedNotification
+            {
+                ThreadId = "thread-1",
+                TurnId = "turn-1",
+                Item = new ThreadItem.WebSearchThreadItem
+                {
+                    Id = "search-1",
+                    Query = "tomlyn project",
+                    Action = new WebSearchAction.SearchWebSearchAction
+                    {
+                        Query = "tomlyn project"
+                    }
+                }
+            });
+
+        var startedEvent = CodexAgentMapper.ToAgentEvent("thread-1", startedNotification, timestamp);
+
+        Assert.IsInstanceOfType<AgentActivityEvent>(startedEvent);
+        var started = (AgentActivityEvent)startedEvent;
+        Assert.AreEqual(AgentActivityKind.WebSearch, started.Kind);
+        Assert.AreEqual(AgentActivityPhase.Started, started.Phase);
+        Assert.AreEqual("tomlyn project", started.Name);
+
+        var completedNotification = new CodexNotification.ItemCompleted(
+            new ItemCompletedNotification
+            {
+                ThreadId = "thread-1",
+                TurnId = "turn-1",
+                Item = new ThreadItem.WebSearchThreadItem
+                {
+                    Id = "search-1",
+                    Query = "tomlyn project",
+                    Action = new WebSearchAction.OpenPageWebSearchAction
+                    {
+                        Url = "https://github.com/xoofx/Tomlyn"
+                    }
+                }
+            });
+
+        var completedEvent = CodexAgentMapper.ToAgentEvent("thread-1", completedNotification, timestamp);
+
+        Assert.IsInstanceOfType<AgentActivityEvent>(completedEvent);
+        var completed = (AgentActivityEvent)completedEvent;
+        Assert.AreEqual(AgentActivityKind.WebSearch, completed.Kind);
+        Assert.AreEqual(AgentActivityPhase.Completed, completed.Phase);
+        Assert.AreEqual("https://github.com/xoofx/Tomlyn", completed.Name);
+    }
+
+    [TestMethod]
+    public void ToAgentEvent_MapsRawResponseLocalShellCall()
+    {
+        var timestamp = DateTimeOffset.Parse("2026-02-25T10:00:00+00:00");
+        using var actionDocument = JsonDocument.Parse("""{"command":"Get-ChildItem -Path C:\\code\\Tomlyn"}""");
+        var notification = new CodexNotification.RawResponseItemCompleted(
+            new RawResponseItemCompletedNotification
+            {
+                ThreadId = "thread-1",
+                TurnId = "turn-1",
+                Item = new ResponseItem.LocalShellCallResponseItem
+                {
+                    CallId = "call-1",
+                    Status = LocalShellStatus.Completed,
+                    Action = actionDocument.RootElement.Clone()
+                }
+            });
+
+        var @event = CodexAgentMapper.ToAgentEvent("thread-1", notification, timestamp);
+
+        Assert.IsInstanceOfType<AgentActivityEvent>(@event);
+        var activity = (AgentActivityEvent)@event;
+        Assert.AreEqual(AgentActivityKind.CommandExecution, activity.Kind);
+        Assert.AreEqual(AgentActivityPhase.Completed, activity.Phase);
+        Assert.AreEqual("call-1", activity.ActivityId);
+        Assert.AreEqual("Get-ChildItem -Path C:\\code\\Tomlyn", activity.Name);
+        Assert.AreEqual("completed", activity.Details?.GetProperty("status").GetString()?.ToLowerInvariant());
     }
 
     [TestMethod]
