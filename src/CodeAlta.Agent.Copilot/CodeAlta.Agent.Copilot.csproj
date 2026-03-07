@@ -18,7 +18,7 @@
 
   <ItemGroup>
     <PackageReference Include="GitHub.Copilot.SDK" />
+    <PackageReference Include="XenoAtom.Logging" />
   </ItemGroup>
 
 </Project>
-

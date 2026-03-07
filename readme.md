@@ -16,6 +16,7 @@ An agentic AI coding CLI assistant developed in .NET.
 - .NET first-class services for workspace discovery, symbol indexing, context snippets, diagnostics, and index refresh (`CodeAlta.DotNet`)
 - Interactive terminal host wired to workspace/task/search/.NET/MCP services, including rich agent timelines plus chat backend/model/reasoning selectors with automatic Codex/Copilot probing (`CodeAlta`)
 - Codex backend sessions default to no sandbox in CodeAlta, so prompts can inspect sibling projects outside the current working directory without requiring the session cwd to be moved first
+- CodeAlta writes a persistent diagnostic log to `~/.codealta/logs/codealta.log` for chat/backend troubleshooting
 - In-memory MCP transport tests for tool discovery and roundtrip tool calls
 
 ## 📖 User Guide

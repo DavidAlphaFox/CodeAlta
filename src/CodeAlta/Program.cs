@@ -13,6 +13,7 @@ using CodeAlta.Workspaces.Bootstrap;
 using CodeAlta.Workspaces.Roles;
 using CodeAlta.Workspaces.Skills;
 using Microsoft.Extensions.DependencyInjection;
+using XenoAtom.Logging;
 
 var cancellationTokenSource = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -26,6 +27,7 @@ await app.RunAsync(cancellationTokenSource.Token).ConfigureAwait(false);
 
 internal sealed class TerminalHost : IAsyncDisposable
 {
+    private readonly bool _ownsLogging;
     private readonly IServiceProvider _mcpServices;
     private readonly CodeAltaMcpServerFactory _mcpFactory;
     private readonly WorkspaceCatalog _workspaceCatalog;
@@ -39,6 +41,7 @@ internal sealed class TerminalHost : IAsyncDisposable
     private readonly AgentHub _agentHub;
 
     private TerminalHost(
+        bool ownsLogging,
         IServiceProvider mcpServices,
         CodeAltaMcpServerFactory mcpFactory,
         WorkspaceCatalog workspaceCatalog,
@@ -51,6 +54,7 @@ internal sealed class TerminalHost : IAsyncDisposable
         McpToolBridge mcpToolBridge,
         AgentHub agentHub)
     {
+        _ownsLogging = ownsLogging;
         _mcpServices = mcpServices;
         _mcpFactory = mcpFactory;
         _workspaceCatalog = workspaceCatalog;
@@ -70,6 +74,7 @@ internal sealed class TerminalHost : IAsyncDisposable
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".codealta");
         Directory.CreateDirectory(homeRoot);
+        var ownsLogging = CodeAltaLogging.Initialize(homeRoot);
 
         var db = new CodeAltaDb(
             new CodeAltaDbOptions
@@ -162,6 +167,7 @@ internal sealed class TerminalHost : IAsyncDisposable
         var mcpToolBridge = new McpToolBridge(mcpFactory);
 
         return new TerminalHost(
+            ownsLogging,
             mcpServices,
             mcpFactory,
             workspaceCatalog,
@@ -207,6 +213,11 @@ internal sealed class TerminalHost : IAsyncDisposable
                 break;
             default:
                 break;
+        }
+
+        if (_ownsLogging)
+        {
+            LogManager.Shutdown();
         }
     }
 

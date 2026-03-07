@@ -17,9 +17,11 @@ using XenoAtom.Terminal.UI.Geometry;
 using XenoAtom.Terminal.UI.Styling;
 using XenoAtom.Terminal.UI.Text;
 using XenoAtom.Terminal.UI.Threading;
+using XenoAtom.Logging;
 
 internal sealed class CodeAltaTerminalUi : IAsyncDisposable
 {
+    private static readonly Logger ChatLogger = LogManager.GetLogger("CodeAlta.Chat");
     private readonly WorkspaceCatalog _workspaceCatalog;
     private readonly WorkspaceResolver _workspaceResolver;
     private readonly TaskRepository _taskRepository;
@@ -1155,6 +1157,9 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
             return;
         }
 
+        LogChatDebug(
+            $"SendChatMessage backend={_chatBackendId.Value} model={_chatBackendStates[_chatBackendId.Value].SelectedModelId ?? "<default>"} reasoning={_chatBackendStates[_chatBackendId.Value].SelectedReasoningEffort?.ToString() ?? "<default>"} autoApprove={_chatAutoApproveState.Value} text={text}");
+
         var pendingChatMessage = CreatePendingChatMessage(text);
         PostToUi(() =>
         {
@@ -1182,6 +1187,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         }
         catch (Exception ex)
         {
+            LogChatError($"Failed to ensure chat session for backend={_chatBackendId.Value}", ex);
             RenderRunFailure($"**Failed to start agent session:** {ex.Message}");
             return;
         }
@@ -1193,9 +1199,11 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
                 agentId,
                 new AgentSendOptions { Input = AgentInput.Text(text) },
                 CancellationToken.None).ConfigureAwait(false);
+            LogChatDebug($"Run submitted agentId={agentId.Value} backend={_chatBackendId.Value}");
         }
         catch (Exception ex)
         {
+            LogChatError($"Agent run failed agentId={agentId.Value} backend={_chatBackendId.Value}", ex);
             RenderRunFailure($"**Agent run failed:** {ex.Message}");
             SetStatus($"Agent run failed: {ex.Message}");
         }
@@ -1302,6 +1310,8 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         var tools = backendId == AgentBackendIds.Copilot
             ? await _mcpToolBridge.GetToolsAsync().ConfigureAwait(false)
             : null;
+        LogChatDebug(
+            $"EnsureChatSession backend={backendId.Value} model={selectedModelId ?? "<default>"} reasoning={selectedReasoningEffort?.ToString() ?? "<default>"} autoApprove={_chatAutoApproveState.Value} tools={FormatToolNames(tools)}");
 
         var agentId = await connection.EnsureConnectedAsync(
                 backendId,
@@ -1328,6 +1338,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         _ = cancellationToken;
+        LogChatDebug($"Permission request received backend={request.BackendId.Value} payload={request.ToJson()}");
 
         AgentPermissionDecision decision;
         if (_chatAutoApproveState.Value)
@@ -1355,6 +1366,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
                     showSpinner: true);
             },
             "permission request");
+        LogChatDebug($"Permission request resolved interactionId={request.InteractionId} decision={decision.ToJson()}");
 
         return Task.FromResult(decision);
     }
@@ -1364,6 +1376,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         _ = cancellationToken;
+        LogChatDebug($"User input request received backend={request.BackendId.Value} payload={request.ToJson()}");
 
         var response = CreateChatUserInputResponse(request, _chatAutoApproveState.Value);
         var hasMeaningfulAnswer = response.Answers.Values.Any(static value => !string.IsNullOrWhiteSpace(value));
@@ -1385,13 +1398,16 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
                     showSpinner: true);
             },
             "user input request");
+        LogChatDebug($"User input request resolved interactionId={request.InteractionId} response={response.ToJson()}");
         return Task.FromResult(response);
     }
 
     private void HandleChatAgentEvent(AgentEvent @event)
     {
+        LogChatDebug($"Agent event backend={@event.BackendId.Value} selectedBackend={_chatBackendId.Value} type={@event.GetType().Name} payload={@event.ToJson()}");
         if (!string.Equals(@event.BackendId.Value, _chatBackendId.Value, StringComparison.OrdinalIgnoreCase))
         {
+            LogChatDebug($"Ignoring event for non-selected backend eventBackend={@event.BackendId.Value} selectedBackend={_chatBackendId.Value}");
             return;
         }
 
@@ -1628,6 +1644,7 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
         }
         catch (Exception ex)
         {
+            LogChatError($"Failed to render chat {context}", ex);
             SetStatus($"Failed to render chat {context}: {ex.Message}", showSpinner: true);
         }
     }
@@ -2622,6 +2639,32 @@ internal sealed class CodeAltaTerminalUi : IAsyncDisposable
     private void PostToUi(Action action)
     {
         (_dispatcher ?? Dispatcher.Current).Post(action);
+    }
+
+    private static void LogChatDebug(string message)
+    {
+        if (LogManager.IsInitialized && ChatLogger.IsEnabled(LogLevel.Debug))
+        {
+            ChatLogger.Debug(message);
+        }
+    }
+
+    private static void LogChatError(string message, Exception exception)
+    {
+        if (LogManager.IsInitialized && ChatLogger.IsEnabled(LogLevel.Error))
+        {
+            ChatLogger.Error(exception, message);
+        }
+    }
+
+    private static string FormatToolNames(IReadOnlyList<AgentToolDefinition>? tools)
+    {
+        if (tools is not { Count: > 0 })
+        {
+            return "<none>";
+        }
+
+        return string.Join(", ", tools.Select(static tool => tool.Spec.Name));
     }
 
     private enum TerminalScreen

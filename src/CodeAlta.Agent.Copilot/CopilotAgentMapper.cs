@@ -2,11 +2,14 @@ using System.Text;
 using System.Text.Json;
 using GitHub.Copilot.SDK;
 using Microsoft.Extensions.AI;
+using XenoAtom.Logging;
 
 namespace CodeAlta.Agent.Copilot;
 
 internal static class CopilotAgentMapper
 {
+    private static readonly Logger CallbackLogger = LogManager.GetLogger("CodeAlta.Agent.Copilot.Callbacks");
+
     public static AgentModelInfo ToAgentModelInfo(ModelInfo model)
     {
         ArgumentNullException.ThrowIfNull(model);
@@ -591,6 +594,7 @@ internal static class CopilotAgentMapper
         return async (request, invocation) =>
         {
             var mappedRequest = ToPermissionRequest(invocation.SessionId, request);
+            LogCallbackDebug($"Permission request session={invocation.SessionId} payload={mappedRequest.ToJson()}");
             callbackBridge.Publish(mappedRequest);
 
             AgentPermissionDecision decision;
@@ -600,10 +604,12 @@ internal static class CopilotAgentMapper
             }
             catch (Exception ex)
             {
+                LogCallbackError($"Permission request handler failed session={invocation.SessionId}", ex);
                 callbackBridge.Publish(CreateHandlerErrorEvent(invocation.SessionId, $"permission request: {ex.Message}", ex));
                 decision = new AgentPermissionDecision(AgentPermissionDecisionKind.Deny);
             }
 
+            LogCallbackDebug($"Permission request result session={invocation.SessionId} decision={decision.ToJson()}");
             callbackBridge.Publish(CreatePermissionResolvedEvent(mappedRequest, decision));
             return ToPermissionResult(decision);
         };
@@ -619,6 +625,7 @@ internal static class CopilotAgentMapper
         return async (request, invocation) =>
         {
             var mappedRequest = ToUserInputRequest(invocation.SessionId, request);
+            LogCallbackDebug($"User input request session={invocation.SessionId} payload={mappedRequest.ToJson()}");
             callbackBridge.Publish(mappedRequest);
 
             AgentUserInputResponse response;
@@ -628,10 +635,12 @@ internal static class CopilotAgentMapper
             }
             catch (Exception ex)
             {
+                LogCallbackError($"User input request handler failed session={invocation.SessionId}", ex);
                 callbackBridge.Publish(CreateHandlerErrorEvent(invocation.SessionId, $"user input request: {ex.Message}", ex));
                 throw;
             }
 
+            LogCallbackDebug($"User input request result session={invocation.SessionId} response={response.ToJson()}");
             callbackBridge.Publish(CreateUserInputResolvedEvent(mappedRequest, response));
             var answer = response.Answers.TryGetValue("answer", out var value)
                 ? value
@@ -644,6 +653,22 @@ internal static class CopilotAgentMapper
                 WasFreeform = wasFreeform
             };
         };
+    }
+
+    private static void LogCallbackDebug(string message)
+    {
+        if (LogManager.IsInitialized && CallbackLogger.IsEnabled(LogLevel.Debug))
+        {
+            CallbackLogger.Debug(message);
+        }
+    }
+
+    private static void LogCallbackError(string message, Exception exception)
+    {
+        if (LogManager.IsInitialized && CallbackLogger.IsEnabled(LogLevel.Error))
+        {
+            CallbackLogger.Error(exception, message);
+        }
     }
 
     private static PermissionRequestResult ToPermissionResult(AgentPermissionDecision decision)

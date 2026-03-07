@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using GitHub.Copilot.SDK;
+using XenoAtom.Logging;
 
 namespace CodeAlta.Agent.Copilot;
 
@@ -9,6 +10,7 @@ namespace CodeAlta.Agent.Copilot;
 /// </summary>
 public sealed class CopilotAgentSession : ICopilotAgentSession
 {
+    private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.Agent.Copilot.Session");
     private readonly CopilotAgentBackend _backend;
     private readonly Channel<AgentEvent> _eventChannel;
     private readonly ConcurrentDictionary<Guid, Action<AgentEvent>> _subscribers = new();
@@ -126,11 +128,14 @@ public sealed class CopilotAgentSession : ICopilotAgentSession
     {
         try
         {
+            LogDebug($"Raw Copilot session event session={SessionId} type={sessionEvent.Type} payload={SafeToJson(sessionEvent)}");
             var eventData = CopilotAgentMapper.ToAgentEvent(SessionId, sessionEvent);
+            LogDebug($"Mapped Copilot agent event session={SessionId} type={eventData.GetType().Name} payload={eventData.ToJson()}");
             Publish(eventData);
         }
         catch (Exception ex)
         {
+            LogError($"Failed to map Copilot session event session={SessionId} type={sessionEvent.Type}", ex);
             Publish(
                 new AgentErrorEvent(
                     AgentBackendIds.Copilot,
@@ -144,6 +149,34 @@ public sealed class CopilotAgentSession : ICopilotAgentSession
     private void CompleteEventStream()
     {
         _eventChannel.Writer.TryComplete();
+    }
+
+    private static void LogDebug(string message)
+    {
+        if (LogManager.IsInitialized && Logger.IsEnabled(LogLevel.Debug))
+        {
+            Logger.Debug(message);
+        }
+    }
+
+    private static void LogError(string message, Exception exception)
+    {
+        if (LogManager.IsInitialized && Logger.IsEnabled(LogLevel.Error))
+        {
+            Logger.Error(exception, message);
+        }
+    }
+
+    private static string SafeToJson(SessionEvent sessionEvent)
+    {
+        try
+        {
+            return sessionEvent.ToJson();
+        }
+        catch (Exception ex)
+        {
+            return $"<failed to serialize raw session event: {ex.Message}>";
+        }
     }
 
     private sealed class Unsubscriber(Action unsubscribe) : IDisposable

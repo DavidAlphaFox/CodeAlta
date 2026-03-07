@@ -2,9 +2,11 @@ using CodeAlta.Agent;
 using CodeAlta.Orchestration;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Persistence;
+using XenoAtom.Logging;
 
 internal sealed class ChatAgentConnection : IAsyncDisposable
 {
+    private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.ChatAgentConnection");
     private readonly AgentHub _agentHub;
     private readonly Action<AgentEvent> _eventHandler;
 
@@ -49,6 +51,9 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
         ArgumentNullException.ThrowIfNull(permissionRequestHandler);
 
+        LogDebug(
+            $"EnsureConnected backend={backendId.Value} workdir={workingDirectory} model={model ?? "<default>"} reasoning={reasoningEffort?.ToString() ?? "<default>"} tools={tools?.Count ?? 0}");
+
         if (IsConnected &&
             _connectedAgentId is { } connectedAgentId &&
             _connectedBackendId is { } connectedBackendId &&
@@ -56,6 +61,7 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
             string.Equals(_connectedModel, model, StringComparison.Ordinal) &&
             _connectedReasoningEffort == reasoningEffort)
         {
+            LogDebug($"Reusing existing chat connection agentId={connectedAgentId.Value} backend={backendId.Value}");
             return connectedAgentId;
         }
 
@@ -64,6 +70,7 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
             _connectedBackendId is { } existingBackendId &&
             string.Equals(existingBackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase))
         {
+            LogDebug($"Restarting existing chat session agentId={existingAgentId.Value} backend={backendId.Value}");
             _eventSubscription?.Dispose();
             _eventSubscription = null;
             await _agentHub.StopSessionAsync(existingAgentId, cancellationToken).ConfigureAwait(false);
@@ -73,6 +80,7 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
         {
             if (_connectedAgentId is { } previousAgentId)
             {
+                LogDebug($"Stopping previous chat session agentId={previousAgentId.Value}");
                 _eventSubscription?.Dispose();
                 _eventSubscription = null;
                 await _agentHub.StopSessionAsync(previousAgentId, cancellationToken).ConfigureAwait(false);
@@ -85,6 +93,7 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
                     cancellationToken)
                 .ConfigureAwait(false);
             agentId = identity.AgentId;
+            LogDebug($"Registered chat agent agentId={agentId.Value} backend={backendId.Value}");
         }
 
         IDisposable? newSubscription = null;
@@ -106,12 +115,14 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
                     },
                     cancellationToken)
                 .ConfigureAwait(false);
+            LogDebug($"Started chat session agentId={agentId.Value} backend={backendId.Value}");
 
             newSubscription = await _agentHub.SubscribeSessionEventsAsync(
                     agentId,
                     _eventHandler,
                     cancellationToken)
                 .ConfigureAwait(false);
+            LogDebug($"Subscribed to chat session events agentId={agentId.Value} backend={backendId.Value}");
         }
         catch
         {
@@ -125,6 +136,7 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
         _connectedBackendId = backendId;
         _connectedModel = model;
         _connectedReasoningEffort = reasoningEffort;
+        LogDebug($"Chat connection ready agentId={agentId.Value} backend={backendId.Value}");
         return agentId;
     }
 
@@ -135,6 +147,7 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
             return;
         }
 
+        LogDebug($"Aborting chat session agentId={agentId.Value}");
         await _agentHub.AbortAsync(agentId, cancellationToken).ConfigureAwait(false);
     }
 
@@ -151,5 +164,13 @@ internal sealed class ChatAgentConnection : IAsyncDisposable
         _connectedBackendId = null;
         _connectedModel = null;
         _connectedReasoningEffort = null;
+    }
+
+    private static void LogDebug(string message)
+    {
+        if (LogManager.IsInitialized && Logger.IsEnabled(LogLevel.Debug))
+        {
+            Logger.Debug(message);
+        }
     }
 }
