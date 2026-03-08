@@ -7,6 +7,7 @@ This document is the high-level blueprint for **CodeAlta**: a local-first, multi
 This is a “why/what” blueprint, not a full protocol spec. Detailed designs live in the companion documents:
 
 - `doc/specs/agent_api_specs.md` (shared backend/session API for Codex + Copilot)
+- `doc/specs/agent_configuration_spec.md` (file format and compatibility rules for agent definitions)
 - `doc/specs/blueprint_agentic_coding_specs.md` (agent hierarchy, orchestration, memory/context strategy)
 - `doc/specs/blueprint_mcp_server_specs.md` (built-in MCP server: agent registry, tasks DB, semantic search, skills)
 
@@ -118,7 +119,7 @@ Projects are the unit for:
 
 An agent is a long-lived unit of work with an identity and scope.
 
-- `agentId` (UUID v7, generated via `Guid.CreateVersion7()`)
+- `agentKey` (stable textual key, typically derived from the `.agent.md` filename)
 - `role` (knowledge / planner / builder / reviewer / …)
 - `scope` (global / workspace / project)
 - `backend` (Codex/Copilot) + backend session/thread id
@@ -135,17 +136,18 @@ Compatibility goal:
 Suggested discovery locations (highest precedence first):
 
 - Repo: `.github/agents/*.md` (Copilot-compatible)
-- Repo: `<projectRoot>/.codealta/agents/*.md` (CodeAlta-specific)
-- User: `$HOME/.codealta/agents/*.md`
-- Workspace home/repo (optional): `<workspaceHome>/agents/*.md`
+- Repo: `<projectRoot>/.codealta/agents/*.agent.md` (CodeAlta-specific)
+- User: `$HOME/.codealta/agents/*.agent.md`
+- Workspace home/repo (optional): `<workspaceHome>/agents/*.agent.md`
 
 Suggested format (compatible superset):
 
 - Markdown file with YAML frontmatter
-- Required: `name`, `description`
+- Preferred filename: `<agent-key>.agent.md`
+- Required: `description`
 - Body: the role prompt/instructions
 - Optional (Copilot-compatible): `tools`, `mcp-server`
-- Optional (CodeAlta extensions): `id` (UUID v7, generated via `Guid.CreateVersion7()`), `defaultScope`, `capabilities`, `metadata`
+- Optional (CodeAlta extensions): `name`, `defaultScope`, `capabilities`, `metadata`
 
 Built-in roles (knowledge/planner/builder/…) should ship as built-in profiles but remain overrideable by repo/workspace/user profiles.
 

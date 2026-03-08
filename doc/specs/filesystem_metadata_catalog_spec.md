@@ -3,6 +3,9 @@
 Status: **Proposal**  
 Audience: implementers of `CodeAlta.Workspaces`, `CodeAlta.Persistence`, `CodeAlta.Orchestration`, MCP services, and future bootstrap/sync flows.
 
+Related specs:
+- `doc/specs/agent_configuration_spec.md`
+
 ## 1. Problem
 
 CodeAlta currently leans too much on SQLite for durable metadata such as:
@@ -152,24 +155,29 @@ Recommended initial `.gitignore`:
 
 ## 7.1 General rules
 
-Each durable entity gets its own folder.
-
-Inside the folder:
-
-- one primary markdown file with YAML frontmatter
-- optional child folders for artifacts, activity logs, notes, attachments, or sub-entities
+Most durable entities get their own folder.
 
 Preferred convention:
 
 - workspace/project folders use `readme.md`
-- agent folders use `agent.md`
+- agent definitions use single files named `<agent-key>.agent.md`
 - skill folders keep `SKILL.md`
+
+Folder-owned entities can contain:
+
+- one primary markdown file with YAML frontmatter
+- optional child folders for artifacts, activity logs, notes, attachments, or sub-entities
+
+Single-file entities can use an optional sidecar folder when they need owned artifacts or logs:
+
+- definition file: `agents/security-expert.agent.md`
+- sidecar folder: `agents/security-expert/`
 
 Examples:
 
 - `~/.codealta/workspaces/<workspace-slug>/readme.md`
 - `~/.codealta/projects/<project-slug>/readme.md`
-- `~/.codealta/agents/<agent-slug>/agent.md`
+- `~/.codealta/agents/security-expert.agent.md`
 - `~/.codealta/skills/<skill-slug>/SKILL.md`
 
 The markdown body is free text intended for humans.
@@ -179,6 +187,7 @@ Rationale:
 
 - `readme.md` makes workspace/project folders easier to browse in default git hosting views
 - workspace/project folders are primarily human-facing catalog entries
+- `.agent.md` aligns better with Copilot and Claude conventions than a nested `agent.md` file
 - agents and skills remain explicit because those files behave more like executable/config definitions than folder landing pages
 
 ## 7.2 Workspace folders
@@ -232,22 +241,34 @@ The project folder can also contain:
 - `artifacts/`
 - optional local notes
 
-## 7.4 Agent folders
+## 7.4 Agent files
 
 Agents should be catalog entities, including built-in agents.
 
-Example:
+Canonical definition shape:
 
-- `~/.codealta/agents/architect/agent.md`
-- `~/.codealta/agents/builtin/planner/agent.md`
+- one file per agent
+- filename pattern: `<agent-key>.agent.md`
+
+Examples:
+
+- `~/.codealta/agents/security-expert.agent.md`
+- `~/.codealta/agents/builtin/planner.agent.md`
+- sidecar folder when needed: `~/.codealta/agents/security-expert/`
 
 This is a major architectural rule:
 
 - built-in agents should not be special-case code-only definitions
 - CodeAlta should be able to discover agents from files and instantiate them
-- the app can seed builtin agent folders on first run, but afterwards they are just catalog entries
+- the app can seed builtin agent files on first run, but afterwards they are just catalog entries
 
 This is the foundation for CodeAlta creating its own configurable “team”.
+
+Identity rule:
+
+- agents do **not** use GUIDs or UUIDs as their canonical identifier
+- the canonical identifier is the `agent-key`, derived from the filename stem before `.agent.md`
+- if frontmatter includes `name`, it must match the filename-derived `agent-key`
 
 ## 7.5 Skill folders
 
@@ -292,7 +313,7 @@ version: 1
 project_refs:
   - "01963b36-0d70-7a11-b3c2-1f2e3d4c5b6a"
 default_agent_refs:
-  - "01963b36-0d71-7f22-8d33-abcdef012345"
+  - "security-expert"
 tags: ["dotnet", "shared-infra"]
 ---
 
@@ -305,22 +326,21 @@ Example agent file:
 
 ```md
 ---
-uid: "01963b36-0d71-7f22-8d33-abcdef012345"
 kind: "agent"
-slug: "architect"
-display_name: "Architect"
-version: 1
-scope_kind: "workspace"
-default_backend: "codex"
-default_model: "gpt-5.3-codex"
-default_reasoning_effort: "high"
-capabilities: ["planning", "review", "delegation"]
-is_builtin: false
+name: security-expert
+description: Reviews code and plans with a focus on security issues and threat modeling.
+tools: [read, grep, search]
+model: gpt-5.3-codex
+codealta:
+  default_backend: codex
+  scope: workspace
+  is_builtin: false
+  tags: [security, review]
 ---
 
-# Architect
+# Security Expert
 
-Defines the default architecture/planning agent for workspace-level work.
+Use this agent for security reviews, threat modeling, and hardening plans.
 ```
 
 ## 8.2 Frontmatter rules
@@ -340,26 +360,33 @@ Entity-specific fields live alongside them.
 
 Rules:
 
-- `uid` is the stable cross-reference key
+- `uid` is the stable cross-reference key for workspaces, projects, artifacts, and similar folder-owned entities
 - `slug` is human-friendly and used for folder names
 - the markdown body is descriptive, not required for strict machine parsing
 
+Exception for agents:
+
+- agents should not carry `uid`
+- agents use `name` / filename-derived `agent-key` as identity
+- any references to agents should use that stable textual key
+
 ## 9. References Between Entities
 
-Cross-entity references should use stable UIDs.
+Cross-entity references should use stable identifiers.
 
 Examples:
 
 - workspace -> project: `project_refs`
 - workspace -> agent: `default_agent_refs`
 - agent -> skill: `skill_refs`
-- artifact -> workspace/project/agent: `owner_uid`
+- artifact -> workspace/project/agent: `owner_ref`
 
 Rules:
 
 - references should not depend on physical paths
 - physical folder nesting is used for containment, not identity
-- moving folders should not invalidate UID-based references
+- moving folders should not invalidate stable-id references
+- agent references are the exception: they use textual `agent-key`, not UUID
 
 ## 10. Artifacts
 
@@ -372,7 +399,7 @@ Preferred layout:
 - project artifacts:
   - `~/.codealta/projects/<slug>/artifacts/...`
 - agent artifacts:
-  - `~/.codealta/agents/<slug>/artifacts/...`
+  - `~/.codealta/agents/<agent-key>/artifacts/...`
 
 Use the top-level shared folder only for artifacts that have no clear owner:
 
@@ -394,6 +421,7 @@ Examples:
 - `~/.codealta/workspaces/platform/activity/2026-03.jsonl`
 - `~/.codealta/projects/tomlyn/activity/2026-03.jsonl`
 - `~/.codealta/agents/architect/activity/2026-03.jsonl`
+  - owned by `~/.codealta/agents/architect.agent.md`
 
 Why JSONL:
 
@@ -442,7 +470,7 @@ Built-in agents should be represented the same way as custom agents.
 Recommended rule:
 
 - CodeAlta ships seed templates for builtin agent files
-- on first run, those files are materialized into `~/.codealta/agents/builtin/...`
+- on first run, those files are materialized into `~/.codealta/agents/builtin/*.agent.md`
 - discovery treats them exactly like user-defined catalog agents
 
 This gives CodeAlta a file-defined team model:
@@ -460,7 +488,7 @@ Suggested discovery order:
 
 1. `workspaces/**/readme.md`
 2. `projects/**/readme.md`
-3. `agents/**/agent.md`
+3. `agents/**/*.agent.md`
 4. `skills/**/SKILL.md`
 
 Discovery output:

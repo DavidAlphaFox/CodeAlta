@@ -47,7 +47,8 @@ Proposed layout:
 - `projects/`
   - `<projectKey>/readme.md`
 - `agents/`
-  - `<agentKey>/agent.md`
+  - `<agentKey>.agent.md`
+  - `<agentKey>/` (optional sidecar folder for agent-owned artifacts/logs)
 - `skills/`
   - `<skillKey>/SKILL.md`
 - `machine/`

@@ -64,7 +64,7 @@ project_id: "01963b36-0d70-7a11-b3c2-1f2e3d4c5b6a" # optional
 project_key: "prj-..." # optional convenience for humans
 source:
   kind: "generated"
-  agent_id: "01963b36-0d71-7f22-8d33-abcdef012345"
+  agent_key: "security-expert"
 tags: ["architecture", "indexable"]
 links:
   tasks: ["task-..."]
@@ -118,16 +118,9 @@ We keep the first schema small, and add tables only when we have a consumer.
   - `repo_url TEXT`
   - `checkout_path TEXT` (resolved local path)
   - `git_root TEXT` (detected)
-- `agents`
-  - `agent_id TEXT PRIMARY KEY` (UUID v7, generated via `Guid.CreateVersion7()`)
-  - `role TEXT` (global/knowledge/planner/builder/custom)
-  - `scope_kind TEXT` (global/workspace/project)
-  - `scope_id TEXT NULL`
-  - `backend_id TEXT` (codex/copilot/…)
-  - `created_at TEXT`
 - `agent_sessions`
   - `session_id TEXT PRIMARY KEY`
-  - `agent_id TEXT NOT NULL`
+  - `agent_key TEXT NOT NULL`
   - `backend_session_id TEXT` (codex thread id, copilot session id)
   - `created_at TEXT`
   - `last_used_at TEXT`
@@ -138,7 +131,7 @@ We keep the first schema small, and add tables only when we have a consumer.
   - `parent_task_id TEXT NULL`
   - `title TEXT NOT NULL`
   - `status TEXT NOT NULL` (pending/in_progress/completed/blocked/cancelled)
-  - `assigned_agent_id TEXT NULL`
+  - `assigned_agent_key TEXT NULL`
   - `created_at TEXT`
   - `updated_at TEXT`
 - `task_events`
