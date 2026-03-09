@@ -184,6 +184,10 @@ internal sealed class AgentObjectDictionaryJsonConverter : JsonConverter<IReadOn
 [JsonSerializable(typeof(AgentInput))]
 [JsonSerializable(typeof(AgentSendOptions))]
 [JsonSerializable(typeof(AgentSteerOptions))]
+[JsonSerializable(typeof(AgentMcpServerConfig))]
+[JsonSerializable(typeof(AgentLocalMcpServerConfig))]
+[JsonSerializable(typeof(AgentRemoteMcpServerConfig))]
+[JsonSerializable(typeof(AgentMcpRemoteTransport))]
 [JsonSerializable(typeof(AgentInputItem))]
 [JsonSerializable(typeof(AgentInputItem.Text), TypeInfoPropertyName = "AgentInputItemText")]
 [JsonSerializable(typeof(AgentInputItem.ImageUrl), TypeInfoPropertyName = "AgentInputItemImageUrl")]
@@ -232,6 +236,10 @@ internal partial class AgentJsonSerializerContext : JsonSerializerContext;
 [JsonSerializable(typeof(AgentInput))]
 [JsonSerializable(typeof(AgentSendOptions))]
 [JsonSerializable(typeof(AgentSteerOptions))]
+[JsonSerializable(typeof(AgentMcpServerConfig))]
+[JsonSerializable(typeof(AgentLocalMcpServerConfig))]
+[JsonSerializable(typeof(AgentRemoteMcpServerConfig))]
+[JsonSerializable(typeof(AgentMcpRemoteTransport))]
 [JsonSerializable(typeof(AgentInputItem))]
 [JsonSerializable(typeof(AgentInputItem.Text), TypeInfoPropertyName = "IndentedAgentInputItemText")]
 [JsonSerializable(typeof(AgentInputItem.ImageUrl), TypeInfoPropertyName = "IndentedAgentInputItemImageUrl")]
@@ -317,6 +325,15 @@ public static class AgentJsonExtensions
     /// <returns>The JSON representation.</returns>
     public static string ToJson(this AgentSteerOptions value, bool indented = false)
         => Serialize(value, AgentJsonSerializerContext.Default.AgentSteerOptions, AgentIndentedJsonSerializerContext.Default.AgentSteerOptions, indented);
+
+    /// <summary>
+    /// Serializes the MCP server configuration to JSON.
+    /// </summary>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="indented">Whether to use indented formatting.</param>
+    /// <returns>The JSON representation.</returns>
+    public static string ToJson(this AgentMcpServerConfig value, bool indented = false)
+        => Serialize(value, AgentJsonSerializerContext.Default.AgentMcpServerConfig, AgentIndentedJsonSerializerContext.Default.AgentMcpServerConfig, indented);
 
     /// <summary>
     /// Serializes the session metadata to JSON.

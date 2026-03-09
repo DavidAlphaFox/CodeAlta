@@ -100,7 +100,7 @@ internal static class CodexAgentMapper
         {
             ApprovalPolicy = approvalPolicy,
             BaseInstructions = options.SystemMessage,
-            Config = CreateThreadConfig(options.ReasoningEffort),
+            Config = CreateThreadConfig(options.ReasoningEffort, options.McpServers),
             DeveloperInstructions = options.DeveloperInstructions,
             Cwd = options.WorkingDirectory,
             Model = options.Model,
@@ -122,7 +122,7 @@ internal static class CodexAgentMapper
             ThreadId = threadId,
             ApprovalPolicy = approvalPolicy,
             BaseInstructions = options.SystemMessage,
-            Config = CreateThreadConfig(options.ReasoningEffort),
+            Config = CreateThreadConfig(options.ReasoningEffort, options.McpServers),
             DeveloperInstructions = options.DeveloperInstructions,
             Cwd = options.WorkingDirectory,
             Model = options.Model,
@@ -1828,19 +1828,107 @@ internal static class CodexAgentMapper
         };
     }
 
-    private static Dictionary<string, JsonElement>? CreateThreadConfig(AgentReasoningEffort? reasoningEffort)
+    private static Dictionary<string, JsonElement>? CreateThreadConfig(
+        AgentReasoningEffort? reasoningEffort,
+        IReadOnlyDictionary<string, AgentMcpServerConfig>? mcpServers)
     {
+        Dictionary<string, JsonElement>? config = null;
+
         var mappedReasoningEffort = ToCodexReasoningEffort(reasoningEffort);
-        if (mappedReasoningEffort is null)
+        if (mappedReasoningEffort is not null)
         {
-            return null;
+            config = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+            {
+                ["model_reasoning_effort"] = CreateStringElement(
+                    mappedReasoningEffort.Value.ToString().ToLowerInvariant())
+            };
         }
 
-        return new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+        if (mcpServers is not { Count: > 0 })
         {
-            ["model_reasoning_effort"] = CreateStringElement(
-                mappedReasoningEffort.Value.ToString().ToLowerInvariant())
-        };
+            return config;
+        }
+
+        config ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var pair in mcpServers)
+        {
+            AddCodexMcpServerConfig(config, pair.Key, pair.Value);
+        }
+
+        return config;
+    }
+
+    private static void AddCodexMcpServerConfig(
+        IDictionary<string, JsonElement> config,
+        string serverName,
+        AgentMcpServerConfig server)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serverName);
+        ArgumentNullException.ThrowIfNull(server);
+
+        var prefix = $"mcp_servers.{serverName}.";
+
+        config[prefix + "enabled"] = CreateBoolElement(server.Enabled);
+        config[prefix + "required"] = CreateBoolElement(server.Required);
+        if (server.ToolTimeout is { } toolTimeout)
+        {
+            config[prefix + "tool_timeout_sec"] = CreateNumberElement(toolTimeout.TotalSeconds);
+        }
+
+        if (server.EnabledTools is { Count: > 0 } enabledTools)
+        {
+            config[prefix + "enabled_tools"] = CreateStringArrayElement(enabledTools);
+        }
+
+        switch (server)
+        {
+            case AgentLocalMcpServerConfig local:
+                config[prefix + "command"] = CreateStringElement(local.Command);
+                if (local.Arguments is { Count: > 0 } arguments)
+                {
+                    config[prefix + "args"] = CreateStringArrayElement(arguments);
+                }
+
+                if (local.EnvironmentVariables is { Count: > 0 } environmentVariables)
+                {
+                    config[prefix + "env"] = CreateStringDictionaryElement(environmentVariables);
+                }
+
+                if (!string.IsNullOrWhiteSpace(local.WorkingDirectory))
+                {
+                    config[prefix + "cwd"] = CreateStringElement(local.WorkingDirectory);
+                }
+
+                break;
+
+            case AgentRemoteMcpServerConfig remote:
+                if (remote.Transport == AgentMcpRemoteTransport.Sse)
+                {
+                    throw new NotSupportedException("Codex MCP configuration currently supports streamable HTTP servers, not SSE.");
+                }
+
+                config[prefix + "url"] = CreateStringElement(remote.Url);
+                if (remote.Headers is { Count: > 0 } headers)
+                {
+                    config[prefix + "http_headers"] = CreateStringDictionaryElement(headers);
+                }
+
+                if (!string.IsNullOrWhiteSpace(remote.BearerTokenEnvironmentVariable))
+                {
+                    config[prefix + "bearer_token_env_var"] = CreateStringElement(remote.BearerTokenEnvironmentVariable);
+                }
+
+                if (remote.EnvironmentHeaders is { Count: > 0 } environmentHeaders)
+                {
+                    config[prefix + "env_http_headers"] = CreateStringDictionaryElement(environmentHeaders);
+                }
+
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(server), server, "Unsupported MCP server config.");
+        }
     }
 
     private static V2ReasoningEffort? ToCodexReasoningEffort(AgentReasoningEffort? reasoningEffort)
@@ -1887,6 +1975,70 @@ internal static class CodexAgentMapper
         using (var writer = new Utf8JsonWriter(stream))
         {
             writer.WriteStringValue(value);
+        }
+
+        using var document = JsonDocument.Parse(stream.ToArray());
+        return document.RootElement.Clone();
+    }
+
+    private static JsonElement CreateBoolElement(bool value)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteBooleanValue(value);
+        }
+
+        using var document = JsonDocument.Parse(stream.ToArray());
+        return document.RootElement.Clone();
+    }
+
+    private static JsonElement CreateNumberElement(double value)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteNumberValue(value);
+        }
+
+        using var document = JsonDocument.Parse(stream.ToArray());
+        return document.RootElement.Clone();
+    }
+
+    private static JsonElement CreateStringArrayElement(IReadOnlyList<string> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartArray();
+            foreach (var value in values)
+            {
+                writer.WriteStringValue(value);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        using var document = JsonDocument.Parse(stream.ToArray());
+        return document.RootElement.Clone();
+    }
+
+    private static JsonElement CreateStringDictionaryElement(IReadOnlyDictionary<string, string> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            foreach (var pair in values)
+            {
+                writer.WriteString(pair.Key, pair.Value);
+            }
+
+            writer.WriteEndObject();
         }
 
         using var document = JsonDocument.Parse(stream.ToArray());

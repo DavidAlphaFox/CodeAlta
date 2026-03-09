@@ -69,6 +69,7 @@ internal static class CopilotAgentMapper
             WorkingDirectory = options.WorkingDirectory,
             Streaming = options.Streaming,
             ReasoningEffort = ToCopilotReasoningEffort(options.ReasoningEffort),
+            McpServers = ToCopilotMcpServers(options.McpServers),
             OnPermissionRequest = CreatePermissionHandler(options.OnPermissionRequest, callbackBridge),
             OnUserInputRequest = CreateUserInputHandler(options.OnUserInputRequest, callbackBridge),
             SystemMessage = systemMessage,
@@ -92,6 +93,7 @@ internal static class CopilotAgentMapper
             WorkingDirectory = options.WorkingDirectory,
             Streaming = options.Streaming,
             ReasoningEffort = ToCopilotReasoningEffort(options.ReasoningEffort),
+            McpServers = ToCopilotMcpServers(options.McpServers),
             OnPermissionRequest = CreatePermissionHandler(options.OnPermissionRequest, callbackBridge),
             OnUserInputRequest = CreateUserInputHandler(options.OnUserInputRequest, callbackBridge),
             SystemMessage = systemMessage,
@@ -968,6 +970,88 @@ internal static class CopilotAgentMapper
         return tools
             .Select(tool => ToCopilotTool(tool, GetCopilotToolName(tool.Spec.Name, usedNames)))
             .ToArray();
+    }
+
+    private static Dictionary<string, object>? ToCopilotMcpServers(IReadOnlyDictionary<string, AgentMcpServerConfig>? servers)
+    {
+        if (servers is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var mapped = new Dictionary<string, object>(servers.Count, StringComparer.Ordinal);
+        foreach (var pair in servers)
+        {
+            mapped[pair.Key] = pair.Value switch
+            {
+                AgentLocalMcpServerConfig local => ToCopilotLocalMcpServerConfig(local),
+                AgentRemoteMcpServerConfig remote => ToCopilotRemoteMcpServerConfig(remote),
+                _ => throw new ArgumentOutOfRangeException(nameof(servers), pair.Value, "Unsupported MCP server config."),
+            };
+        }
+
+        return mapped;
+    }
+
+    private static McpLocalServerConfig ToCopilotLocalMcpServerConfig(AgentLocalMcpServerConfig config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        ArgumentException.ThrowIfNullOrWhiteSpace(config.Command);
+
+        return new McpLocalServerConfig
+        {
+            Command = config.Command,
+            Args = config.Arguments?.ToList() ?? [],
+            Cwd = config.WorkingDirectory,
+            Env = config.EnvironmentVariables is null
+                ? null
+                : new Dictionary<string, string>(config.EnvironmentVariables, StringComparer.Ordinal),
+            Timeout = ToCopilotTimeoutMilliseconds(config.ToolTimeout),
+            Tools = ToCopilotToolFilter(config.EnabledTools),
+            Type = "local"
+        };
+    }
+
+    private static McpRemoteServerConfig ToCopilotRemoteMcpServerConfig(AgentRemoteMcpServerConfig config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        ArgumentException.ThrowIfNullOrWhiteSpace(config.Url);
+
+        if (config.BearerTokenEnvironmentVariable is not null || config.EnvironmentHeaders is not null)
+        {
+            throw new NotSupportedException(
+                "Copilot MCP server configuration does not support environment-derived HTTP credentials through this adapter.");
+        }
+
+        return new McpRemoteServerConfig
+        {
+            Url = config.Url,
+            Type = config.Transport == AgentMcpRemoteTransport.Sse ? "sse" : "http",
+            Headers = config.Headers is null
+                ? null
+                : new Dictionary<string, string>(config.Headers, StringComparer.Ordinal),
+            Timeout = ToCopilotTimeoutMilliseconds(config.ToolTimeout),
+            Tools = ToCopilotToolFilter(config.EnabledTools)
+        };
+    }
+
+    private static List<string> ToCopilotToolFilter(IReadOnlyList<string>? tools)
+        => tools is { Count: > 0 } ? [.. tools] : ["*"];
+
+    private static int? ToCopilotTimeoutMilliseconds(TimeSpan? timeout)
+    {
+        if (timeout is null)
+        {
+            return null;
+        }
+
+        var milliseconds = checked((long)Math.Ceiling(timeout.Value.TotalMilliseconds));
+        return milliseconds switch
+        {
+            <= 0 => 1,
+            > int.MaxValue => int.MaxValue,
+            _ => (int)milliseconds,
+        };
     }
 
     private static AIFunction ToCopilotTool(AgentToolDefinition tool, string registeredToolName)

@@ -79,6 +79,31 @@ public sealed class AgentJsonSerializationTests
     }
 
     [TestMethod]
+    public void AgentMcpServerConfig_ToJson_SerializesDerivedRemoteConfig()
+    {
+        AgentMcpServerConfig config = new AgentRemoteMcpServerConfig("https://example.com/mcp")
+        {
+            Headers = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["X-Test"] = "42"
+            },
+            EnabledTools = ["lookup"],
+            ToolTimeout = TimeSpan.FromSeconds(12),
+            Required = true
+        };
+
+        using var document = JsonDocument.Parse(config.ToJson());
+        var root = document.RootElement;
+
+        Assert.AreEqual("remote", root.GetProperty("$type").GetString());
+        Assert.AreEqual("https://example.com/mcp", root.GetProperty("url").GetString());
+        Assert.AreEqual("Http", root.GetProperty("transport").GetString());
+        Assert.AreEqual("42", root.GetProperty("headers").GetProperty("X-Test").GetString());
+        Assert.AreEqual("lookup", root.GetProperty("enabledTools")[0].GetString());
+        Assert.IsTrue(root.GetProperty("required").GetBoolean());
+    }
+
+    [TestMethod]
     public void AgentToolResult_ToJson_SerializesDerivedItems()
     {
         var result = new AgentToolResult(

@@ -131,6 +131,80 @@ public sealed class CodexAgentMapperTests
     }
 
     [TestMethod]
+    public void ToThreadStartParams_MapsMcpServerConfigurationIntoConfig()
+    {
+        var parameters = CodexAgentMapper.ToThreadStartParams(
+            new AgentSessionCreateOptions
+            {
+                Model = "gpt-5-mini",
+                OnPermissionRequest = static (_, _) =>
+                    Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                McpServers = new Dictionary<string, AgentMcpServerConfig>(StringComparer.Ordinal)
+                {
+                    ["local"] = new AgentLocalMcpServerConfig("dotnet")
+                    {
+                        Arguments = ["run", "--server"],
+                        EnvironmentVariables = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["DOTNET_ENVIRONMENT"] = "Development"
+                        },
+                        WorkingDirectory = @"C:\repo\mcp",
+                        EnabledTools = ["hello_world"],
+                        ToolTimeout = TimeSpan.FromSeconds(15),
+                        Required = true
+                    },
+                    ["remote"] = new AgentRemoteMcpServerConfig("https://example.com/mcp")
+                    {
+                        Headers = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["X-Test"] = "42"
+                        },
+                        BearerTokenEnvironmentVariable = "MCP_TOKEN",
+                        EnvironmentHeaders = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["Authorization"] = "MCP_AUTH_HEADER"
+                        }
+                    }
+                }
+            },
+            new AskForApproval.OnRequest(),
+            SandboxMode.DangerFullAccess);
+
+        Assert.IsNotNull(parameters.Config);
+        Assert.AreEqual("dotnet", parameters.Config["mcp_servers.local.command"].GetString());
+        Assert.AreEqual("run", parameters.Config["mcp_servers.local.args"][0].GetString());
+        Assert.AreEqual("Development", parameters.Config["mcp_servers.local.env"].GetProperty("DOTNET_ENVIRONMENT").GetString());
+        Assert.AreEqual(@"C:\repo\mcp", parameters.Config["mcp_servers.local.cwd"].GetString());
+        Assert.AreEqual("hello_world", parameters.Config["mcp_servers.local.enabled_tools"][0].GetString());
+        Assert.IsTrue(parameters.Config["mcp_servers.local.required"].GetBoolean());
+        Assert.AreEqual("https://example.com/mcp", parameters.Config["mcp_servers.remote.url"].GetString());
+        Assert.AreEqual("42", parameters.Config["mcp_servers.remote.http_headers"].GetProperty("X-Test").GetString());
+        Assert.AreEqual("MCP_TOKEN", parameters.Config["mcp_servers.remote.bearer_token_env_var"].GetString());
+        Assert.AreEqual("MCP_AUTH_HEADER", parameters.Config["mcp_servers.remote.env_http_headers"].GetProperty("Authorization").GetString());
+    }
+
+    [TestMethod]
+    public void ToThreadStartParams_ThrowsForSseRemoteMcpServer()
+    {
+        Assert.ThrowsExactly<NotSupportedException>(() =>
+            CodexAgentMapper.ToThreadStartParams(
+                new AgentSessionCreateOptions
+                {
+                    OnPermissionRequest = static (_, _) =>
+                        Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                    McpServers = new Dictionary<string, AgentMcpServerConfig>(StringComparer.Ordinal)
+                    {
+                        ["remote"] = new AgentRemoteMcpServerConfig("https://example.com/sse")
+                        {
+                            Transport = AgentMcpRemoteTransport.Sse
+                        }
+                    }
+                },
+                new AskForApproval.OnRequest(),
+                SandboxMode.DangerFullAccess));
+    }
+
+    [TestMethod]
     public void ToTurnStartParams_MapsReasoningEffortOverrides()
     {
         var parameters = CodexAgentMapper.ToTurnStartParams(

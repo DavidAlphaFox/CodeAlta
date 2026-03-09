@@ -197,6 +197,9 @@ public class AgentSessionCreateOptions
     // Custom tools callable by the backend.
     public IReadOnlyList<AgentToolDefinition>? Tools { get; init; }
 
+    // MCP servers available to the session.
+    public IReadOnlyDictionary<string, AgentMcpServerConfig>? McpServers { get; init; }
+
     // Required for safety (Copilot enforces this; Codex can also use it).
     public required AgentPermissionRequestHandler OnPermissionRequest { get; init; }
 
@@ -206,6 +209,33 @@ public class AgentSessionCreateOptions
 
 public sealed class AgentSessionResumeOptions : AgentSessionCreateOptions
 {
+}
+
+[JsonDerivedType(typeof(AgentLocalMcpServerConfig), typeDiscriminator: "local")]
+[JsonDerivedType(typeof(AgentRemoteMcpServerConfig), typeDiscriminator: "remote")]
+public abstract record AgentMcpServerConfig
+{
+    public IReadOnlyList<string>? EnabledTools { get; init; }
+    public TimeSpan? ToolTimeout { get; init; }
+    public bool Enabled { get; init; } = true;
+    public bool Required { get; init; }
+}
+
+public sealed record AgentLocalMcpServerConfig(string Command) : AgentMcpServerConfig
+{
+    public IReadOnlyList<string>? Arguments { get; init; }
+    public IReadOnlyDictionary<string, string>? EnvironmentVariables { get; init; }
+    public string? WorkingDirectory { get; init; }
+}
+
+public enum AgentMcpRemoteTransport { Http, Sse }
+
+public sealed record AgentRemoteMcpServerConfig(string Url) : AgentMcpServerConfig
+{
+    public AgentMcpRemoteTransport Transport { get; init; } = AgentMcpRemoteTransport.Http;
+    public IReadOnlyDictionary<string, string>? Headers { get; init; }
+    public string? BearerTokenEnvironmentVariable { get; init; }
+    public IReadOnlyDictionary<string, string>? EnvironmentHeaders { get; init; }
 }
 ```
 
@@ -449,6 +479,7 @@ Mapping notes:
 - `AgentSessionCreateOptions.OnPermissionRequest` → required `SessionConfig.OnPermissionRequest`.
 - `AgentSessionCreateOptions.OnUserInputRequest` → `SessionConfig.OnUserInputRequest`.
 - `Model`, `WorkingDirectory`, `Streaming`, `ReasoningEffort`, `SystemMessage` map directly.
+- `McpServers` maps to `SessionConfig.McpServers`.
 - `Tools`:
   - Create `AIFunction` wrappers that call `AgentToolHandler` and return a tool result (prefer returning a string or JSON).
 
@@ -482,6 +513,11 @@ Steering notes:
 - Copilot uses `MessageOptions.Mode = "enqueue"` for regular sends, including the backend-managed queueing behavior.
 - Copilot uses `MessageOptions.Mode = "immediate"` for steering/priority delivery against the current session flow.
 - `AgentSteerOptions.ExpectedRunId` is currently advisory only for Copilot; the SDK only exposes the mode switch, not an explicit target run id parameter.
+- MCP server mapping:
+  - `AgentLocalMcpServerConfig` → `McpLocalServerConfig`
+  - `AgentRemoteMcpServerConfig` → `McpRemoteServerConfig`
+  - when `EnabledTools` is omitted, the adapter uses `["*"]` so Copilot exposes all tools from that server by default
+  - environment-derived HTTP credentials are not supported by the Copilot adapter; use static headers instead
 
 ### 6.5 Abort
 
@@ -529,6 +565,7 @@ Mapping notes (Codex):
 - `Model` → `ThreadStartParams.Model`.
 - `WorkingDirectory` → `ThreadStartParams.Cwd`.
 - `DeveloperInstructions` → `ThreadStartParams.DeveloperInstructions` (when supported by schema/version).
+- `McpServers` → flattened `ThreadStartParams.Config` entries under `mcp_servers.<serverName>.*`.
 - `SystemMessage`:
   - Codex does not expose the same “systemMessage” field as Copilot; emulate by prepending the system message into `baseInstructions` or `developerInstructions`.
 - Tools:
@@ -555,6 +592,10 @@ Steering mapping notes:
 - `AgentSteerOptions.ExpectedRunId` maps to `TurnSteerParams.ExpectedTurnId`.
 - When `ExpectedRunId` is omitted, the Codex adapter uses the most recent active run id it knows about.
 - If there is no active run to steer, the adapter throws `InvalidOperationException`.
+- MCP server mapping:
+  - `AgentLocalMcpServerConfig` maps to `mcp_servers.<name>.command`, `.args`, `.env`, `.cwd`, `.enabled`, `.required`, `.tool_timeout_sec`, and `.enabled_tools`
+  - `AgentRemoteMcpServerConfig` maps to `mcp_servers.<name>.url`, `.http_headers`, `.bearer_token_env_var`, `.env_http_headers`, `.enabled`, `.required`, `.tool_timeout_sec`, and `.enabled_tools`
+  - Codex currently supports streamable HTTP and stdio MCP servers through this adapter; `AgentMcpRemoteTransport.Sse` throws `NotSupportedException`
 
 Model mapping notes (Codex):
 - `AgentModelInfo.Description` maps from `Model.Description`.

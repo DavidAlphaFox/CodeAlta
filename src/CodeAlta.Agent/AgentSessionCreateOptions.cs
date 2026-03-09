@@ -41,6 +41,11 @@ public class AgentSessionCreateOptions
     public IReadOnlyList<AgentToolDefinition>? Tools { get; init; }
 
     /// <summary>
+    /// Gets or initializes MCP server configurations available to this session.
+    /// </summary>
+    public IReadOnlyDictionary<string, AgentMcpServerConfig>? McpServers { get; init; }
+
+    /// <summary>
     /// Gets or initializes the permission request handler (required; deny-by-default if you provide a handler that denies).
     /// </summary>
     public required AgentPermissionRequestHandler OnPermissionRequest { get; init; }

@@ -18,6 +18,19 @@ public sealed class CopilotAgentMapperTests
             WorkingDirectory = @"C:\repo",
             Streaming = true,
             ReasoningEffort = AgentReasoningEffort.High,
+            McpServers = new Dictionary<string, AgentMcpServerConfig>(StringComparer.Ordinal)
+            {
+                ["local-docs"] = new AgentLocalMcpServerConfig("dotnet")
+                {
+                    Arguments = ["run", "--server"],
+                    EnvironmentVariables = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["DOTNET_ENVIRONMENT"] = "Development"
+                    },
+                    WorkingDirectory = @"C:\repo\mcp",
+                    ToolTimeout = TimeSpan.FromSeconds(30)
+                }
+            },
             SystemMessage = "System guidance",
             DeveloperInstructions = "Developer guidance",
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
@@ -45,6 +58,47 @@ public sealed class CopilotAgentMapperTests
         Assert.IsNotNull(config.OnPermissionRequest);
         Assert.IsNotNull(config.Tools);
         Assert.AreEqual(1, config.Tools.Count);
+        Assert.IsNotNull(config.McpServers);
+        var mcpConfig = (McpLocalServerConfig)config.McpServers["local-docs"];
+        Assert.AreEqual("dotnet", mcpConfig.Command);
+        CollectionAssert.AreEqual(new[] { "run", "--server" }, mcpConfig.Args);
+        Assert.AreEqual(@"C:\repo\mcp", mcpConfig.Cwd);
+        Assert.AreEqual("Development", mcpConfig.Env!["DOTNET_ENVIRONMENT"]);
+        Assert.AreEqual(30000, mcpConfig.Timeout);
+        CollectionAssert.AreEqual(new[] { "*" }, mcpConfig.Tools);
+    }
+
+    [TestMethod]
+    public void ToResumeSessionConfig_MapsRemoteMcpServerConfiguration()
+    {
+        var options = new AgentSessionResumeOptions
+        {
+            OnPermissionRequest = static (_, _) =>
+                Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+            McpServers = new Dictionary<string, AgentMcpServerConfig>(StringComparer.Ordinal)
+            {
+                ["remote-docs"] = new AgentRemoteMcpServerConfig("https://example.com/mcp")
+                {
+                    Transport = AgentMcpRemoteTransport.Sse,
+                    Headers = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["X-Test"] = "42"
+                    },
+                    EnabledTools = ["lookup", "search"],
+                    ToolTimeout = TimeSpan.FromSeconds(5)
+                }
+            }
+        };
+
+        var config = CopilotAgentMapper.ToResumeSessionConfig(options);
+
+        Assert.IsNotNull(config.McpServers);
+        var mcpConfig = (McpRemoteServerConfig)config.McpServers["remote-docs"];
+        Assert.AreEqual("https://example.com/mcp", mcpConfig.Url);
+        Assert.AreEqual("sse", mcpConfig.Type);
+        Assert.AreEqual("42", mcpConfig.Headers!["X-Test"]);
+        CollectionAssert.AreEqual(new[] { "lookup", "search" }, mcpConfig.Tools);
+        Assert.AreEqual(5000, mcpConfig.Timeout);
     }
 
     [TestMethod]
