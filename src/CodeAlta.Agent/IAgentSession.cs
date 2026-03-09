@@ -44,6 +44,17 @@ public interface IAgentSession : IAsyncDisposable
     Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Steers the currently active run without starting a new one.
+    /// </summary>
+    /// <param name="options">Steering options.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The backend run identifier that accepted the steering input.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the backend does not support steering.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when there is no active run to steer.</exception>
+    Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Aborts/cancels the currently running work in this session (best effort).
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
@@ -55,4 +66,3 @@ public interface IAgentSession : IAsyncDisposable
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(CancellationToken cancellationToken = default);
 }
-

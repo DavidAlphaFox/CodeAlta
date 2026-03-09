@@ -152,6 +152,23 @@ internal static class CodexAgentMapper
         };
     }
 
+    public static TurnSteerParams ToTurnSteerParams(
+        string threadId,
+        AgentRunId expectedRunId,
+        AgentInput input)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedRunId.Value);
+        ArgumentNullException.ThrowIfNull(input);
+
+        return new TurnSteerParams
+        {
+            ThreadId = threadId,
+            ExpectedTurnId = expectedRunId.Value,
+            Input = ToTurnInput(input)
+        };
+    }
+
     public static List<V2UserInput> ToTurnInput(AgentInput input)
     {
         ArgumentNullException.ThrowIfNull(input);

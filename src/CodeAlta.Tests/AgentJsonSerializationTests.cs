@@ -63,6 +63,22 @@ public sealed class AgentJsonSerializationTests
     }
 
     [TestMethod]
+    public void AgentSteerOptions_ToJson_SerializesExpectedRunId()
+    {
+        var options = new AgentSteerOptions
+        {
+            Input = AgentInput.Text("continue"),
+            ExpectedRunId = new AgentRunId("turn-7")
+        };
+
+        using var document = JsonDocument.Parse(options.ToJson());
+        var root = document.RootElement;
+
+        Assert.AreEqual("turn-7", root.GetProperty("expectedRunId").GetString());
+        Assert.AreEqual("text", root.GetProperty("input").GetProperty("items")[0].GetProperty("$type").GetString());
+    }
+
+    [TestMethod]
     public void AgentToolResult_ToJson_SerializesDerivedItems()
     {
         var result = new AgentToolResult(

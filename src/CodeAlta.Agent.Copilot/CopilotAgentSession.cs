@@ -73,7 +73,18 @@ public sealed class CopilotAgentSession : ICopilotAgentSession
         ArgumentNullException.ThrowIfNull(options);
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var messageOptions = CopilotAgentMapper.ToMessageOptions(options);
+        var messageOptions = CopilotAgentMapper.ToSendMessageOptions(options);
+        var messageId = await Session.SendAsync(messageOptions, cancellationToken).ConfigureAwait(false);
+        return new AgentRunId(messageId);
+    }
+
+    /// <inheritdoc />
+    public async Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        var messageOptions = CopilotAgentMapper.ToSteerMessageOptions(options);
         var messageId = await Session.SendAsync(messageOptions, cancellationToken).ConfigureAwait(false);
         return new AgentRunId(messageId);
     }

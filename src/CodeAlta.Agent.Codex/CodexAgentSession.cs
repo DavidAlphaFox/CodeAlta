@@ -122,6 +122,35 @@ public sealed class CodexAgentSession : ICodexAgentSession
     }
 
     /// <inheritdoc />
+    public async Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        AgentRunId? activeRunId;
+        lock (_handlerLock)
+        {
+            activeRunId = _activeRunId;
+        }
+
+        var expectedRunId = options.ExpectedRunId ?? activeRunId;
+        if (expectedRunId is null)
+        {
+            throw new InvalidOperationException("Codex steering requires an active run id.");
+        }
+
+        var parameters = CodexAgentMapper.ToTurnSteerParams(ThreadId, expectedRunId.Value, options.Input);
+        var response = await _backend.Client.TurnSteerAsync(parameters, cancellationToken).ConfigureAwait(false);
+        var runId = new AgentRunId(response.TurnId);
+        lock (_handlerLock)
+        {
+            _activeRunId = runId;
+        }
+
+        return runId;
+    }
+
+    /// <inheritdoc />
     public async Task AbortAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

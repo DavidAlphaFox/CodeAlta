@@ -1,7 +1,7 @@
 # Agent API Specs (Copilot SDK + Codex)
 
 Status: **Draft** (implemented in `CodeAlta.Agent`, `CodeAlta.Agent.Codex`, `CodeAlta.Agent.Copilot`)  
-Last updated: **2026-02-26**  
+Last updated: **2026-03-09**  
 Primary references (local):
 - GitHub Copilot SDK (.NET): `C:\code\github\copilot-sdk\dotnet\src`
 - GitHub Copilot SDK docs: `C:\code\github\copilot-sdk\docs`
@@ -126,6 +126,9 @@ public interface IAgentSession : IAsyncDisposable
     /// Sends user input; returns the backend run identifier (turn/message id).
     Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default);
 
+    /// Steers an already active run without starting a new run.
+    Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default);
+
     /// Abort/cancel in-flight work for this session (best effort).
     Task AbortAsync(CancellationToken cancellationToken = default);
 
@@ -212,9 +215,12 @@ public sealed class AgentSessionResumeOptions : AgentSessionCreateOptions
 public sealed class AgentSendOptions
 {
     public required AgentInput Input { get; init; }
+}
 
-    /// Optional backend-specific mode (Copilot supports `mode`).
-    public string? Mode { get; init; }
+public sealed class AgentSteerOptions
+{
+    public required AgentInput Input { get; init; }
+    public AgentRunId? ExpectedRunId { get; init; }
 }
 
 public sealed record AgentInput(IReadOnlyList<AgentInputItem> Items)
@@ -461,7 +467,8 @@ Model mapping notes (Copilot):
 
 | Shared API | Copilot API |
 |---|---|
-| `SendAsync(AgentSendOptions)` | `CopilotSession.SendAsync(MessageOptions)` |
+| `SendAsync(AgentSendOptions)` | `CopilotSession.SendAsync(MessageOptions { Mode = "enqueue" })` |
+| `SteerAsync(AgentSteerOptions)` | `CopilotSession.SendAsync(MessageOptions { Mode = "immediate" })` |
 
 Input item mapping:
 - `AgentInputItem.Text` → `MessageOptions.Prompt` (concatenate multiple text items with `\n\n`).
@@ -470,6 +477,11 @@ Input item mapping:
 
 RunId mapping:
 - `AgentRunId` = `SendAsync` return value (`messageId`).
+
+Steering notes:
+- Copilot uses `MessageOptions.Mode = "enqueue"` for regular sends, including the backend-managed queueing behavior.
+- Copilot uses `MessageOptions.Mode = "immediate"` for steering/priority delivery against the current session flow.
+- `AgentSteerOptions.ExpectedRunId` is currently advisory only for Copilot; the SDK only exposes the mode switch, not an explicit target run id parameter.
 
 ### 6.5 Abort
 
@@ -529,6 +541,7 @@ Mapping notes (Codex):
 | Shared API | Codex API |
 |---|---|
 | `SendAsync(AgentSendOptions)` | `turn/start` → `CodexClient.TurnStartAsync(TurnStartParams)` |
+| `SteerAsync(AgentSteerOptions)` | `turn/steer` → `CodexClient.TurnSteerAsync(TurnSteerParams)` |
 | RunId | Codex `turn.id` |
 
 Input item mapping:
@@ -537,6 +550,11 @@ Input item mapping:
 - `LocalImage` → `UserInput.LocalImageUserInput`
 - `Skill` / `Mention` → `UserInput.SkillUserInput` / `UserInput.MentionUserInput`
 - `File/Directory/Selection` → not supported as structured input; emulate by inlining the content in the text input (see §9).
+
+Steering mapping notes:
+- `AgentSteerOptions.ExpectedRunId` maps to `TurnSteerParams.ExpectedTurnId`.
+- When `ExpectedRunId` is omitted, the Codex adapter uses the most recent active run id it knows about.
+- If there is no active run to steer, the adapter throws `InvalidOperationException`.
 
 Model mapping notes (Codex):
 - `AgentModelInfo.Description` maps from `Model.Description`.

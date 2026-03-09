@@ -265,6 +265,12 @@ public sealed class ChatAgentConnectionTests
                 return Task.FromResult(runId);
             }
 
+            public Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
+            {
+                ArgumentNullException.ThrowIfNull(options);
+                throw new NotSupportedException();
+            }
+
             public Task AbortAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
             public Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(CancellationToken cancellationToken = default)

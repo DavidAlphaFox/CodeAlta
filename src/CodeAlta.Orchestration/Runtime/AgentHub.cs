@@ -243,6 +243,54 @@ public sealed class AgentHub : IAsyncDisposable
     }
 
     /// <summary>
+    /// Steers an active agent run without starting a new one.
+    /// </summary>
+    /// <param name="agentId">Agent id.</param>
+    /// <param name="options">Steering options.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The backend run id that accepted the steering input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the agent has no active session.</exception>
+    public async Task<AgentRunId> SteerAsync(
+        AgentId agentId,
+        AgentSteerOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        SessionEntry entry;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_sessions.TryGetValue(agentId, out entry!))
+            {
+                throw new InvalidOperationException($"Agent '{agentId}' does not have an active session.");
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        await entry.RunGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var runId = await entry.Session.SteerAsync(options, cancellationToken).ConfigureAwait(false);
+            _events.Writer.TryWrite(new RunStartedEvent(DateTimeOffset.UtcNow, agentId, runId));
+            _events.Writer.TryWrite(new RunCompletedEvent(DateTimeOffset.UtcNow, agentId, runId));
+            return runId;
+        }
+        catch (Exception ex)
+        {
+            _events.Writer.TryWrite(new RunFailedEvent(DateTimeOffset.UtcNow, agentId, ex.Message));
+            throw;
+        }
+        finally
+        {
+            entry.RunGate.Release();
+        }
+    }
+
+    /// <summary>
     /// Subscribes to normalized agent events from the active agent session.
     /// </summary>
     /// <param name="agentId">Agent id.</param>

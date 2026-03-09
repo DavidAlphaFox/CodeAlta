@@ -193,11 +193,10 @@ public sealed class CopilotAgentMapperTests
     }
 
     [TestMethod]
-    public void ToMessageOptions_MapsAttachmentsAndPromptFallbacks()
+    public void ToSendMessageOptions_MapsAttachmentsAndPromptFallbacks()
     {
         var options = new AgentSendOptions
         {
-            Mode = "edit",
             Input = new AgentInput(
             [
                 new AgentInputItem.Text("Review these files"),
@@ -217,9 +216,9 @@ public sealed class CopilotAgentMapperTests
             ])
         };
 
-        var mapped = CopilotAgentMapper.ToMessageOptions(options);
+        var mapped = CopilotAgentMapper.ToSendMessageOptions(options);
 
-        Assert.AreEqual("edit", mapped.Mode);
+        Assert.AreEqual("enqueue", mapped.Mode);
         Assert.IsNotNull(mapped.Attachments);
         Assert.AreEqual(3, mapped.Attachments.Count);
 
@@ -238,6 +237,20 @@ public sealed class CopilotAgentMapperTests
         Assert.IsTrue(mapped.Prompt.Contains(@"[local-image] C:\img\local.png", StringComparison.Ordinal));
         Assert.IsTrue(mapped.Prompt.Contains("[skill] name=linter path=/skills/linter", StringComparison.Ordinal));
         Assert.IsTrue(mapped.Prompt.Contains("[mention] name=workspace path=/mentions/workspace", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void ToSteerMessageOptions_UsesImmediateMode()
+    {
+        var options = new AgentSteerOptions
+        {
+            Input = AgentInput.Text("continue")
+        };
+
+        var mapped = CopilotAgentMapper.ToSteerMessageOptions(options);
+
+        Assert.AreEqual("immediate", mapped.Mode);
+        Assert.AreEqual("continue", mapped.Prompt);
     }
 
     [TestMethod]

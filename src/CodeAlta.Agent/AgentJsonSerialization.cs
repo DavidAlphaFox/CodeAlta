@@ -182,6 +182,8 @@ internal sealed class AgentObjectDictionaryJsonConverter : JsonConverter<IReadOn
 [JsonSerializable(typeof(AgentEvent))]
 [JsonSerializable(typeof(AgentPermissionRequest))]
 [JsonSerializable(typeof(AgentInput))]
+[JsonSerializable(typeof(AgentSendOptions))]
+[JsonSerializable(typeof(AgentSteerOptions))]
 [JsonSerializable(typeof(AgentInputItem))]
 [JsonSerializable(typeof(AgentInputItem.Text), TypeInfoPropertyName = "AgentInputItemText")]
 [JsonSerializable(typeof(AgentInputItem.ImageUrl), TypeInfoPropertyName = "AgentInputItemImageUrl")]
@@ -228,6 +230,8 @@ internal partial class AgentJsonSerializerContext : JsonSerializerContext;
 [JsonSerializable(typeof(AgentEvent))]
 [JsonSerializable(typeof(AgentPermissionRequest))]
 [JsonSerializable(typeof(AgentInput))]
+[JsonSerializable(typeof(AgentSendOptions))]
+[JsonSerializable(typeof(AgentSteerOptions))]
 [JsonSerializable(typeof(AgentInputItem))]
 [JsonSerializable(typeof(AgentInputItem.Text), TypeInfoPropertyName = "IndentedAgentInputItemText")]
 [JsonSerializable(typeof(AgentInputItem.ImageUrl), TypeInfoPropertyName = "IndentedAgentInputItemImageUrl")]
@@ -295,6 +299,24 @@ public static class AgentJsonExtensions
     /// <returns>The JSON representation.</returns>
     public static string ToJson(this AgentInput value, bool indented = false)
         => Serialize(value, AgentJsonSerializerContext.Default.AgentInput, AgentIndentedJsonSerializerContext.Default.AgentInput, indented);
+
+    /// <summary>
+    /// Serializes the send options to JSON.
+    /// </summary>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="indented">Whether to use indented formatting.</param>
+    /// <returns>The JSON representation.</returns>
+    public static string ToJson(this AgentSendOptions value, bool indented = false)
+        => Serialize(value, AgentJsonSerializerContext.Default.AgentSendOptions, AgentIndentedJsonSerializerContext.Default.AgentSendOptions, indented);
+
+    /// <summary>
+    /// Serializes the steer options to JSON.
+    /// </summary>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="indented">Whether to use indented formatting.</param>
+    /// <returns>The JSON representation.</returns>
+    public static string ToJson(this AgentSteerOptions value, bool indented = false)
+        => Serialize(value, AgentJsonSerializerContext.Default.AgentSteerOptions, AgentIndentedJsonSerializerContext.Default.AgentSteerOptions, indented);
 
     /// <summary>
     /// Serializes the session metadata to JSON.

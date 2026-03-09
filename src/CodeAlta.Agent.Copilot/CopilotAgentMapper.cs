@@ -101,14 +101,28 @@ internal static class CopilotAgentMapper
         return config;
     }
 
-    public static MessageOptions ToMessageOptions(AgentSendOptions options)
+    public static MessageOptions ToSendMessageOptions(AgentSendOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+
+        return ToMessageOptions(options.Input, "enqueue");
+    }
+
+    public static MessageOptions ToSteerMessageOptions(AgentSteerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        return ToMessageOptions(options.Input, "immediate");
+    }
+
+    private static MessageOptions ToMessageOptions(AgentInput input, string mode)
+    {
+        ArgumentNullException.ThrowIfNull(input);
 
         var attachments = new List<UserMessageDataAttachmentsItem>();
         var promptBuilder = new StringBuilder();
 
-        foreach (var item in options.Input.Items)
+        foreach (var item in input.Items)
         {
             switch (item)
             {
@@ -193,7 +207,7 @@ internal static class CopilotAgentMapper
         {
             Prompt = promptBuilder.ToString(),
             Attachments = attachments.Count == 0 ? null : attachments,
-            Mode = options.Mode
+            Mode = mode
         };
     }
 

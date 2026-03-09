@@ -1,7 +1,7 @@
 namespace CodeAlta.Agent;
 
 /// <summary>
-/// Options for sending user input to a session.
+/// Options for starting a new run in a session.
 /// </summary>
 public sealed class AgentSendOptions
 {
@@ -9,10 +9,4 @@ public sealed class AgentSendOptions
     /// Gets or initializes the input to send.
     /// </summary>
     public required AgentInput Input { get; init; }
-
-    /// <summary>
-    /// Gets or initializes an optional backend-specific mode.
-    /// </summary>
-    public string? Mode { get; init; }
 }
-

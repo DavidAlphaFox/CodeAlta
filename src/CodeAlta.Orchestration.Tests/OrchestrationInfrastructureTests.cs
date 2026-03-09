@@ -230,6 +230,41 @@ public sealed class OrchestrationInfrastructureTests
     }
 
     [TestMethod]
+    public async Task AgentHub_SteerAsync_UsesSessionSteerWhenSupported()
+    {
+        using var temp = TempDirectory.Create();
+        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
+        var repository = new AgentRepository(db);
+
+        var backendFactory = new AgentBackendFactory();
+        backendFactory.Register("fake", static () => new FakeBackend());
+
+        await using var hub = new AgentHub(backendFactory, repository);
+        var identity = await hub.RegisterAgentAsync(
+            "builder.project",
+            new AgentScope { Kind = AgentScopeKind.Project, Id = "project-1" },
+            new AgentBackendId("fake")).ConfigureAwait(false);
+
+        await hub.StartSessionAsync(
+            identity.AgentId,
+            new AgentSessionCreateOptions
+            {
+                OnPermissionRequest = static (_, _) =>
+                    Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+            }).ConfigureAwait(false);
+
+        var runId = await hub.SteerAsync(
+            identity.AgentId,
+            new AgentSteerOptions
+            {
+                Input = AgentInput.Text("continue"),
+                ExpectedRunId = new AgentRunId("fake-run-1")
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual("fake-run-1", runId.Value);
+    }
+
+    [TestMethod]
     public async Task AgentHub_ListModelsAsync_ReturnsBackendModels()
     {
         using var temp = TempDirectory.Create();
@@ -409,6 +444,12 @@ public sealed class OrchestrationInfrastructureTests
                 Publish(message);
                 Publish(idle);
                 return Task.FromResult(runId);
+            }
+
+            public Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
+            {
+                ArgumentNullException.ThrowIfNull(options);
+                return Task.FromResult(options.ExpectedRunId ?? new AgentRunId("fake-run-1"));
             }
 
             private void Publish(AgentEvent @event)

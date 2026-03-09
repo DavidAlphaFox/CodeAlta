@@ -150,6 +150,20 @@ public sealed class CodexAgentMapperTests
     }
 
     [TestMethod]
+    public void ToTurnSteerParams_MapsExpectedRunIdAndInput()
+    {
+        var parameters = CodexAgentMapper.ToTurnSteerParams(
+            "thread-1",
+            new AgentRunId("turn-1"),
+            AgentInput.Text("continue"));
+
+        Assert.AreEqual("thread-1", parameters.ThreadId);
+        Assert.AreEqual("turn-1", parameters.ExpectedTurnId);
+        Assert.AreEqual(1, parameters.Input.Count);
+        Assert.AreEqual("continue", ((V2UserInput.TextUserInput)parameters.Input[0]).Text);
+    }
+
+    [TestMethod]
     public void ToTurnStartParams_MapsWorkspaceWriteSandboxPolicyWithFullReadAccess()
     {
         var parameters = CodexAgentMapper.ToTurnStartParams(
