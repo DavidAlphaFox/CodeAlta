@@ -10,6 +10,8 @@ References:
   - `https://docs.claude.com/en/docs/claude-code/sub-agents`
 - Session instruction templates:
   - `doc/specs/agent_instruction_templates_spec.md`
+- Template system:
+  - `doc/specs/template_system_spec.md`
 
 ## 1. Goal
 
@@ -260,3 +262,4 @@ Adopt the following:
 - `agent-key` replaces GUID/UUID identity for catalog agents
 - frontmatter is Copilot-shaped first, with CodeAlta extensions under `codealta:`
 - built-in agents use the same file model
+- user-defined agent templates should be handled by the template system in `doc/specs/template_system_spec.md`

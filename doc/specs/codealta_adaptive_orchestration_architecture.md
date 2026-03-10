@@ -8,6 +8,7 @@ Related specs:
 - `doc/specs/agent_api_specs.md`
 - `doc/specs/agent_configuration_spec.md`
 - `doc/specs/agent_instruction_templates_spec.md`
+- `doc/specs/template_system_spec.md`
 
 ## 1. Why this document exists
 
@@ -271,6 +272,7 @@ From `~/.codealta/`, CodeAlta should be able to:
 - resolve local checkout paths through machine overrides
 - pick the active workspace/project scope
 - load global agents and skills that apply across workspaces
+- load global templates that can scaffold agents, skills, and other catalog files
 
 ## 4.2 Machine state
 
@@ -739,6 +741,10 @@ CodeAlta should support agents from both:
 
 Global agents manage cross-workspace and cross-project concerns. Project-local agents are repository-specific specializations or overrides.
 
+Authoring and scaffold generation for these agent files should follow:
+
+- `doc/specs/template_system_spec.md`
+
 ## 5.4 Skill
 
 A skill is a reusable instruction or capability pack that can be loaded on demand.
@@ -749,6 +755,10 @@ CodeAlta should support skills from both:
 - project-local overlays under `{projectPath}/.codealta/skills/`
 
 Project-local skills allow repository-specific behavior without polluting the global catalog.
+
+Authoring and scaffold generation for these skill files should follow:
+
+- `doc/specs/template_system_spec.md`
 
 ## 5.5 User profile
 

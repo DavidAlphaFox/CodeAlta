@@ -7,6 +7,7 @@ Related specs:
 - `doc/specs/codealta_adaptive_orchestration_architecture.md`
 - `doc/specs/agent_api_specs.md`
 - `doc/specs/agent_configuration_spec.md`
+- `doc/specs/template_system_spec.md`
 
 ## 1. Goal
 

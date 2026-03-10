@@ -7,6 +7,7 @@ Related specs:
 - `doc/specs/codealta_adaptive_orchestration_architecture.md`
 - `doc/specs/filesystem_metadata_catalog_spec.md`
 - `doc/specs/agent_instruction_templates_spec.md`
+- `doc/specs/template_system_spec.md`
 
 ## 1. Goal
 
@@ -86,6 +87,10 @@ Make `~/.codealta/` the canonical portable catalog root and `~/.codealta/machine
   - agents
   - skills
   - user profile
+- Introduce template discovery and deterministic scaffold expansion for:
+  - agents
+  - skills
+  - other catalog entities as needed
 - Implement project-local overlay loaders for:
   - `{projectPath}/.codealta/agents/`
   - `{projectPath}/.codealta/skills/`
@@ -146,6 +151,7 @@ The orchestrator should not depend on backend-native tool orchestration for its 
 - run model and session-graph model
 - coordinator prompt contract based on the canonical instruction template spec
 - general-agent template integration for lower-level sessions
+- role/scaffold enrichment contract for agent-assisted template expansion
 - schedule fenced-block extractor
 - schedule YAML parser/deserializer (SharpYaml)
 - schedule envelope validator
