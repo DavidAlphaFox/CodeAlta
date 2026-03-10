@@ -8,6 +8,9 @@ Primary references (local):
 - Codex app-server protocol docs: `C:\code\codex\codex-rs\app-server\README.md`
 - CodeAlta Codex SDK wrapper: `src/CodeAlta.CodexSdk/`
 
+Related specs:
+- `doc/specs/agent_instruction_templates_spec.md`
+
 ## 1. Problem statement
 
 CodeAlta currently talks to the Codex app-server via `CodeAlta.CodexSdk`. Separately, GitHub offers an agentic runtime via `GitHub.Copilot.SDK` (Copilot CLI JSON-RPC).
@@ -17,6 +20,10 @@ We want a **shared .NET API** so that a single application can host multiple bac
 When a feature is backend-specific (or cannot be emulated efficiently), the design must:
 - Expose a clear “escape hatch” to access the underlying backend objects.
 - Document the mismatch and the recommended approach.
+
+Instruction-template behavior for created sessions is defined separately in:
+
+- `doc/specs/agent_instruction_templates_spec.md`
 
 ## 2. Goals / non-goals
 
@@ -238,6 +245,12 @@ public sealed record AgentRemoteMcpServerConfig(string Url) : AgentMcpServerConf
     public IReadOnlyDictionary<string, string>? EnvironmentHeaders { get; init; }
 }
 ```
+
+Instruction-building recommendation:
+
+- session creation should not rely on callers manually constructing long ad hoc system prompts
+- instead, the effective instructions for a session should be composed from the canonical templates in `doc/specs/agent_instruction_templates_spec.md`
+- callers may still provide run-specific additions, but the base and role instructions should come from a central provider
 
 #### Sending user input
 

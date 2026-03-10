@@ -8,6 +8,8 @@ References:
   - `https://raw.githubusercontent.com/github/docs/refs/heads/main/content/copilot/reference/custom-agents-configuration.md`
 - Claude Code sub-agents:
   - `https://docs.claude.com/en/docs/claude-code/sub-agents`
+- Session instruction templates:
+  - `doc/specs/agent_instruction_templates_spec.md`
 
 ## 1. Goal
 

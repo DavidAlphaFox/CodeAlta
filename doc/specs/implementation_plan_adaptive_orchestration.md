@@ -6,6 +6,7 @@ Audience: maintainers of `CodeAlta`, `CodeAlta.Agent*`, `CodeAlta.Orchestration`
 Related specs:
 - `doc/specs/codealta_adaptive_orchestration_architecture.md`
 - `doc/specs/filesystem_metadata_catalog_spec.md`
+- `doc/specs/agent_instruction_templates_spec.md`
 
 ## 1. Goal
 
@@ -116,6 +117,9 @@ Make orchestration host-owned and explicit.
 ## Work
 
 - Introduce typed route decision objects.
+- Introduce an explicit prompt ingress model:
+  - host-side pre-routing inside the orchestrator
+  - one coordinator session when model planning is needed
 - Introduce typed execution requests:
   - send
   - steer
@@ -123,6 +127,7 @@ Make orchestration host-owned and explicit.
 - Introduce explicit plan/task orchestration types where missing.
 - Centralize dispatch logic in `CodeAlta.Orchestration`.
 - Keep UI and backend adapters thin.
+- Define and implement the coordinator structured output envelope as a fenced `codealta_schedule` YAML block, including parser and validator.
 
 ## Important design rule
 
@@ -134,6 +139,19 @@ The orchestrator should be able to:
 - dispatch it itself
 
 The orchestrator should not depend on backend-native tool orchestration for its main routing model.
+
+### Required deliverables in this phase
+
+- host pre-routing component
+- run model and session-graph model
+- coordinator prompt contract based on the canonical instruction template spec
+- general-agent template integration for lower-level sessions
+- schedule fenced-block extractor
+- schedule YAML parser/deserializer (SharpYaml)
+- schedule envelope validator
+- host-side conversion from coordinator schedule -> route/dispatch/task objects
+- UI filtering so raw coordinator schedule blocks are not rendered as ordinary assistant text
+- host-side synthesis loop from worker outcomes -> final coordinator summary
 
 ## Code impact
 

@@ -7,6 +7,7 @@ Related specs:
 - `doc/specs/filesystem_metadata_catalog_spec.md`
 - `doc/specs/agent_api_specs.md`
 - `doc/specs/agent_configuration_spec.md`
+- `doc/specs/agent_instruction_templates_spec.md`
 
 ## 1. Why this document exists
 
@@ -152,6 +153,96 @@ Language-specific intelligence can remain available, but should not dominate cur
 
 CodeAlta should be understood as six connected layers.
 
+## 4.0 System overview diagram
+
+The following diagram shows the intended high-level structure and boundaries.
+
+```mermaid
+flowchart LR
+    U[User]
+    UI[CodeAlta UI]
+    COORD[Coordinator]
+    HOST[Host Orchestrator]
+
+    subgraph CATALOG[Portable Catalog]
+        ROOT["~/.codealta/"]
+        WS[Workspaces]
+        PRJ[Projects]
+        AGG[Global Agents]
+        SKG[Global Skills]
+        PROF[User Profile]
+        ACT[Durable Activity]
+    end
+
+    subgraph PROJECT[Project Overlay]
+        PROOT["{projectPath}/.codealta/"]
+        AGL[Project Agents]
+        SKL[Project Skills]
+        ART[Project Artifacts]
+    end
+
+    subgraph MACHINE[Machine State]
+        MROOT["~/.codealta/machine/"]
+        DB[(codealta.db)]
+        IDX[Index / Embeddings]
+        LOGS[Logs / Cache / Overrides]
+    end
+
+    subgraph EXEC[Execution Backends]
+        COP[Copilot Session]
+        COD[Codex Session]
+    end
+
+    subgraph INTEG[Tool / Integration Layer]
+        MCP[MCP / External Tools]
+        SEARCH[Search Services]
+        TASKS[Task / Plan Services]
+    end
+
+    U --> UI
+    UI --> HOST
+    HOST -->|needs planning| COORD
+    COORD -->|codealta_schedule| HOST
+
+    HOST --> COP
+    HOST --> COD
+    HOST --> MCP
+    HOST --> SEARCH
+    HOST --> TASKS
+
+    COORD --> ROOT
+    HOST --> ROOT
+    HOST --> PROOT
+    HOST --> MROOT
+
+    ROOT --> WS
+    ROOT --> PRJ
+    ROOT --> AGG
+    ROOT --> SKG
+    ROOT --> PROF
+    ROOT --> ACT
+
+    PROOT --> AGL
+    PROOT --> SKL
+    PROOT --> ART
+
+    MROOT --> DB
+    MROOT --> IDX
+    MROOT --> LOGS
+
+    SEARCH --> DB
+    SEARCH --> IDX
+    TASKS --> DB
+```
+
+Key reading:
+
+- `~/.codealta/` is the global durable root
+- `{projectPath}/.codealta/` is the project-local overlay
+- `~/.codealta/machine/` is the local runtime/index/cache root
+- UI does not dispatch work directly to agents; it goes into the host orchestrator, which either handles the request directly or sends it to the coordinator session
+- backends, MCP, search, and task services are all downstream of host orchestration
+
 ## 4.1 Portable catalog
 
 Location:
@@ -257,6 +348,343 @@ Purpose:
 Important rule:
 
 - the UI should present orchestration state, not own orchestration behavior
+
+---
+
+## 4.7 Prompt ingress and control flow
+
+One missing clarification is how a user prompt actually enters the system.
+
+CodeAlta should use a **single named planning session** plus host-side pre-routing logic.
+
+That means:
+
+- there is **no separate intake agent/session**
+- the host orchestrator receives the prompt first
+- the host performs a small amount of non-model pre-routing logic
+- only then, if planning/routing is needed, the host sends the request to the coordinator session
+
+### Host-side pre-routing
+
+Before invoking the coordinator, the host orchestrator should handle cheap or mandatory cases directly in code.
+
+Responsibilities:
+
+- capture the raw user prompt
+- attach active scope and recent-focus context
+- resolve pending interactive flows
+- detect direct host commands
+- decide whether the prompt:
+  - can be handled directly by the host
+  - should resume an existing flow
+  - should be sent to the coordinator
+
+Examples of host-side pre-routing decisions:
+
+- switching workspace/project
+- accepting or rejecting a pending approval
+- answering “continue previous task?” prompts
+- resuming an interrupted run
+- handling direct UI/system commands
+
+This is not a separate agent. It is ordinary orchestrator logic.
+
+### Coordinator
+
+The coordinator is the planning and routing authority.
+
+The coordinator is the **single top-level planning session** used when the host needs model help to decide what happens next.
+
+The host creates or reuses a coordinator session through the same shared Agent API used elsewhere, with coordinator-specific system instructions such as:
+
+- scope awareness
+- routing policy
+- scheduling contract
+- allowed structured output format
+- constraints about not directly launching agents
+
+The canonical coordinator instruction template is defined in:
+
+- `doc/specs/agent_instruction_templates_spec.md`
+
+The coordinator receives a normalized request from the host plus the relevant context:
+
+- active scope
+- recent focus
+- unfinished plan/task state
+- available agents
+- policy constraints
+- optional retrieval snippets
+
+The coordinator then produces a **structured scheduling decision** that the host parses and executes.
+
+### Worker/reviewer agents
+
+Worker, reviewer, challenger, and verification agents should not be directly coordinated by the UI.
+
+They are launched, steered, and monitored by the host orchestrator after the coordinator produces a validated scheduling decision.
+
+### Prompt flow diagram
+
+```mermaid
+flowchart TD
+    U[User Prompt] --> HOST[Host Orchestrator]
+    HOST -->|direct host command / pending flow| SYS[Host Action]
+    HOST -->|needs planning| ORG[Coordinator Session]
+    ORG -->|structured schedule| HOST
+    HOST --> W1[Worker Agent]
+    HOST --> W2[Reviewer Agent]
+    HOST --> W3[Verifier / Challenger]
+    W1 --> HOST
+    W2 --> HOST
+    W3 --> HOST
+    HOST --> UI[UI Timeline / Suggestions / State]
+```
+
+### Key rule
+
+The user prompt is **not** connected directly to worker agents.
+
+Normal path:
+
+- user prompt -> host orchestrator -> coordinator session -> host orchestrator -> worker agents
+
+This keeps routing, parallelism, retries, and unfinished-work recovery under host control.
+
+### Naming recommendation
+
+The recommended canonical term is:
+
+- **Coordinator**
+
+Reason:
+
+- it is explicit about its job
+- it maps well to routing/scheduling behavior
+- it avoids inventing a second pseudo-agent layer
+
+If CodeAlta later wants a more productized display name in the UI, it can alias the coordinator visually without changing the architecture. For example:
+
+- internal/spec name: `Coordinator`
+- optional UI display name: `Conductor`
+
+But the spec should keep the precise name.
+
+### Why this is the best setup
+
+This is the most efficient setup because:
+
+- only one planning session exists at the top
+- there is no ambiguity about how prompts “move” between layers
+- all interception happens in host code
+- all agent creation still goes through the same Agent API
+- the host remains the place where special instructions are extracted and executed
+
+In practice:
+
+1. UI sends prompt to host orchestrator
+2. host either handles it directly or sends it to the coordinator session
+3. coordinator responds with normal text plus a fenced `codealta_schedule` block
+4. host intercepts that block from the coordinator output stream or final content
+5. host validates and strips the block from normal UI rendering
+6. host launches or steers worker sessions through the Agent API
+
+That is the cleanest model and avoids an unnecessary extra layer.
+
+### Instruction source of truth
+
+The effective instructions for coordinator and worker sessions should come from the canonical template spec:
+
+- `doc/specs/agent_instruction_templates_spec.md`
+
+That document defines:
+
+- the shared base instructions for general agents
+- the coordinator instructions
+- composition rules for backend/session creation
+
+---
+
+## 4.8 Run model and session graph
+
+The missing formalization is the distinction between:
+
+- a **user-visible run**
+- a **session**
+
+These are not the same thing.
+
+### Run
+
+A **run** is the top-level unit of user work.
+
+Example:
+
+- user prompt: “Review all pull requests for project XYZ, validate them, and merge them.”
+
+That prompt creates one run:
+
+- one run id
+- one top-level timeline in the UI
+- one coordinator planning cycle
+- zero or more worker sessions
+- one eventual completion, pause, or failure state
+
+### Session
+
+A **session** is one execution primitive created through the shared Agent API.
+
+Session types:
+
+- coordinator session
+- worker session
+- reviewer/verifier/challenger session
+
+Sessions are children of a run. A run can own multiple sessions.
+
+### Recommended topology
+
+Do **not** model the runtime as an arbitrary DAG of sessions talking directly to each other.
+
+Use a simpler star topology:
+
+- the **host orchestrator** is the hub
+- all sessions communicate only with the host
+- the host can send synthetic follow-up input to any session
+- workers do not message each other directly
+- workers do not message the coordinator directly
+
+This keeps the system understandable and observable.
+
+### Session graph diagram
+
+```mermaid
+flowchart TD
+    RUN[User Run]
+    HOST[Host Orchestrator]
+    COORD[Coordinator Session]
+    W1[Worker Session A]
+    W2[Worker Session B]
+    W3[Reviewer / Verifier Session]
+
+    RUN --> HOST
+    HOST --> COORD
+    HOST --> W1
+    HOST --> W2
+    HOST --> W3
+    COORD --> HOST
+    W1 --> HOST
+    W2 --> HOST
+    W3 --> HOST
+```
+
+This is the key simplification:
+
+- user conversation is a run
+- sessions are execution nodes inside the run
+- host orchestrator owns all edges
+
+### Coordinator responsibilities inside a run
+
+The coordinator is responsible for:
+
+- proposing the schedule
+- optionally giving the user an immediate visible acknowledgment
+- optionally synthesizing the final result from worker outputs
+
+The coordinator is **not** responsible for:
+
+- directly supervising worker sessions
+- directly receiving worker-to-worker traffic
+- directly launching or stopping sessions
+
+### Host orchestrator responsibilities inside a run
+
+The host is responsible for:
+
+- creating the run
+- invoking the coordinator
+- parsing `codealta_schedule`
+- launching worker sessions
+- collecting worker outputs
+- deciding whether to:
+  - update the UI directly with activity
+  - re-invoke the coordinator for synthesis
+  - request user input/approval
+  - mark the run complete
+
+### UI timeline model
+
+The UI should not pretend that every visible item comes from a single assistant session.
+
+The timeline for a run can contain:
+
+- user messages
+- coordinator messages
+- host-generated activity/status cards
+- worker-derived activity cards
+- approval/input cards
+- final coordinator summary
+
+This is still one coherent top-level run from the user's perspective.
+
+### Practical example
+
+User prompt:
+
+- “Review all pull requests for project XYZ, validate them, and merge them.”
+
+Recommended flow:
+
+1. UI appends the user prompt to the run timeline.
+2. Host sends the prompt plus context to the coordinator session.
+3. Coordinator returns:
+   - a short visible acknowledgement
+   - a `codealta_schedule` block
+4. Host strips the schedule block from normal chat display.
+5. UI shows the coordinator acknowledgement.
+6. Host launches worker sessions for review/validation/merge steps.
+7. Worker progress and tool activity appear as host-managed timeline cards.
+8. When work is complete, host asks the coordinator for a final synthesis using structured worker outcomes/artifact references.
+9. Coordinator returns the final user-visible summary.
+10. Host marks the run completed.
+
+### Sequence diagram
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI
+    participant Host
+    participant Coord as Coordinator Session
+    participant Worker as Worker Sessions
+
+    User->>UI: Prompt
+    UI->>Host: Start run
+    Host->>Coord: User prompt + scope + context
+    Coord-->>Host: Visible text + codealta_schedule
+    Host-->>UI: Show coordinator visible text
+    Host->>Worker: Launch/steer worker sessions
+    Worker-->>Host: Results / tool activity / artifacts
+    Host-->>UI: Show activity cards
+    Host->>Coord: Synthesize final answer from worker outcomes
+    Coord-->>Host: Final summary
+    Host-->>UI: Show final coordinator answer
+```
+
+### Interception boundary
+
+The important interception points are:
+
+- coordinator output -> host extracts `codealta_schedule`
+- worker output -> host extracts structured outcomes and activity
+- host decides what becomes:
+  - timeline activity
+  - new task state
+  - follow-up coordinator input
+  - final user-visible answer
+
+This is how the system stays simple while still using only basic session primitives.
 
 ---
 
@@ -410,6 +838,8 @@ A route decision should answer:
 
 The orchestrator may ask a model to suggest this, but the result should be normalized into a typed structure before execution.
 
+The coordinator should not emit free-form scheduling prose as the primary contract. It should emit a structured scheduling envelope.
+
 ## 6.2 Parsed-output orchestration is preferred over tool-driven orchestration
 
 The default orchestration strategy should be:
@@ -429,6 +859,102 @@ This is preferred because it gives CodeAlta control over:
 - recovery of unfinished work
 
 This is stronger than relying on backend-native subagent/tool orchestration to decide those behaviors.
+
+## 6.2.1 Coordinator output envelope
+
+The coordinator needs an output format that is:
+
+- easy to parse
+- easy to validate
+- easy to discard from the visible assistant transcript when needed
+- expressive enough for routing and scheduling
+
+Recommended v1 format:
+
+- a named Markdown fenced code block
+- YAML payload inside the fenced block
+- one top-level scheduling block per coordinator response
+- optional human-visible explanation outside the block
+
+Preferred shape:
+
+```codealta_schedule
+version: 1
+decision:
+  mode: parallel
+  scope: project
+summary: User-visible summary of what will happen
+dispatches:
+  - agent: planner
+    action: send
+    priority: normal
+    goal: Break the work into tasks
+  - agent: builder
+    action: enqueue
+    dependsOn: planner
+    goal: Implement approved task set
+  - agent: reviewer
+    action: enqueue
+    dependsOn: builder
+    goal: Review changes and challenge gaps
+checks:
+  - kind: unfinished_work
+  - kind: pr_review
+    project: tomlyn
+    optional: true
+notes:
+  - Continue previous work if matching task is still active.
+```
+
+### Why a fenced YAML block is a good fit
+
+- it is easy to delimit and strip from UI-visible assistant content
+- YAML is easier to read and author than XML-like tags
+- SharpYaml can deserialize it into typed records cleanly
+- the host can validate required fields before execution
+- coordinator prompts can explicitly demand “only one schedule block”
+
+### UI behavior
+
+The UI should not render the raw ```` ```codealta_schedule ```` block as a normal assistant message.
+
+Instead, the host should:
+
+1. parse the block
+2. validate it
+3. convert it into:
+   - route decision objects
+   - task/dispatch records
+   - user-visible timeline/status cards
+
+Any explanation outside the schedule block can still be shown as human-visible coordinator text if useful.
+
+### Host validation rules
+
+Before execution, the host should validate:
+
+- exactly one `codealta_schedule` fenced block
+- known version
+- valid dispatch agent keys
+- valid action kinds
+- valid dependency graph
+- scope consistency
+- policy compliance
+- successful YAML deserialization into the typed scheduling model
+
+If validation fails, the host should:
+
+- reject the schedule
+- optionally ask the coordinator for a corrected schedule
+- or fall back to a safer direct/single-agent route
+
+### Important boundary
+
+The coordinator proposes the schedule.
+
+The host executes the schedule.
+
+The coordinator does not directly launch agents.
 
 ## 6.3 Direct send, steer, enqueue
 
