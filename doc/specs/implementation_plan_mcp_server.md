@@ -1,5 +1,9 @@
 # Implementation Plan: In-process MCP Server (Draft)
 
+Deferred until after the MVP core experience is working.
+
+Read `doc/specs/implementation_plan.md` first for the current product priority.
+
 This document details how CodeAlta will implement the built-in MCP server using the C# MCP SDK (`ModelContextProtocol`) and run it **in-process**.
 
 Related specs:

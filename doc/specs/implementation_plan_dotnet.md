@@ -1,5 +1,9 @@
 # Implementation Plan: .NET First-class Support (Draft)
 
+Deferred until after the MVP core experience is working.
+
+Read `doc/specs/implementation_plan.md` first for the current product priority.
+
 CodeAlta is language-agnostic, but v1.0 should provide first-class support for .NET repositories (C#, F#, VB) to enable higher-quality knowledge extraction, planning, and building.
 
 Related specs:
@@ -135,4 +139,3 @@ Use small fixture projects under `src/CodeAlta.Tests/Fixtures/`:
 - load a tiny solution
 - build symbol index
 - verify symbol lookups return correct file paths and line ranges
-

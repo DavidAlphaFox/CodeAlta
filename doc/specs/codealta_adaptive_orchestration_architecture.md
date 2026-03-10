@@ -4,6 +4,7 @@ Status: **Proposal**
 Audience: `CodeAlta`, `CodeAlta.Agent*`, `CodeAlta.Orchestration`, `CodeAlta.Workspaces`, `CodeAlta.Persistence`, UI, and future bootstrap/sync work.
 
 Related specs:
+- `doc/specs/readme.md`
 - `doc/specs/filesystem_metadata_catalog_spec.md`
 - `doc/specs/agent_api_specs.md`
 - `doc/specs/agent_configuration_spec.md`
@@ -26,6 +27,29 @@ The analysis reinforced two conclusions:
 2. the strongest implementation choice is to keep orchestration in **host code**, not to delegate it entirely to model-native tool orchestration
 
 This document reframes CodeAlta around those conclusions.
+
+## 1.1 MVP focus for now
+
+This document describes the long-term architecture direction, but not every section should drive immediate implementation.
+
+The current MVP should focus on:
+
+- workspaces
+- projects
+- durable work threads
+- host-owned orchestration
+- thread-scoped coordinator flow
+- multiple tabs / thread restoration
+- Copilot/Codex as execution backends
+
+The following topics are valid but should be treated as **later work**:
+
+- adaptive memory and proactive behavior
+- semantic search
+- MCP-first product flows
+- .NET-specific product capabilities
+
+When this document presents both MVP and later-state ideas, MVP should win implementation priority.
 
 ---
 

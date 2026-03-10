@@ -1,236 +1,317 @@
-# Implementation Plan: CodeAlta Infrastructure (Draft)
+# Implementation Plan: CodeAlta MVP Core Experience
 
-This document proposes an implementation plan for the CodeAlta “infrastructure first” roadmap. The terminal UI is intentionally last.
+This document is the current implementation entry point for CodeAlta.
+
+It replaces the earlier “infrastructure first” emphasis with an **MVP-first** plan centered on the core user experience.
 
 Related specs:
-- `doc/specs/blueprint_codealta_specs.md`
-- `doc/specs/blueprint_agentic_coding_specs.md`
-- `doc/specs/blueprint_mcp_server_specs.md`
+- `doc/specs/readme.md`
+- `doc/specs/codealta_adaptive_orchestration_architecture.md`
+- `doc/specs/filesystem_metadata_catalog_spec.md`
 - `doc/specs/agent_api_specs.md`
+- `doc/specs/agent_configuration_spec.md`
+- `doc/specs/agent_instruction_templates_spec.md`
 
-Detailed implementation plans:
+Deferred/follow-up plans:
+- adaptive behavior: `doc/specs/implementation_plan_adaptive_orchestration.md`
 - MCP server: `doc/specs/implementation_plan_mcp_server.md`
-- Storage + indexing + search: `doc/specs/implementation_plan_storage_search.md`
-- Workspaces + bootstrap + global repo: `doc/specs/implementation_plan_workspaces_bootstrap.md`
-- Agent orchestration + roles: `doc/specs/implementation_plan_agent_orchestration.md`
-- .NET first-class support: `doc/specs/implementation_plan_dotnet.md`
+- storage + indexing + search: `doc/specs/implementation_plan_storage_search.md`
+- .NET support: `doc/specs/implementation_plan_dotnet.md`
+- older workspace/bootstrap plan: `doc/specs/implementation_plan_workspaces_bootstrap.md`
+- older agent-orchestration plan: `doc/specs/implementation_plan_agent_orchestration.md`
 
-## 1. Constraints / technology choices
+## 1. Goal
 
-Hard choices (requested):
-- MCP server: in-process, using the C# MCP SDK (`ModelContextProtocol`) and its “modern” hosting patterns.
-- Embeddings: LLamaSharp (see commented example in `src/CodeAlta/Program.cs`).
-- Database: SQLite via `Microsoft.Data.Sqlite`.
-- Vector search: `sqlite-vec` (native extension) for vector similarity search.
-- Full-text search: SQLite FTS5.
-- Markdown: Markdig.
-- YAML: SharpYaml (frontmatter).
-- Logging: XenoAtom.Logging (bridge where other libs expect `Microsoft.Extensions.Logging`).
-- Identifiers: all generated GUID identifiers use UUID v7 via `Guid.CreateVersion7()`.
+Deliver a minimal but solid coding-agent product that feels close to a raw Copilot/Codex CLI while adding CodeAlta’s own structure for:
 
-Non-functional constraints:
+- workspaces
+- projects
+- durable work threads
+- multiple tabs / sessions
+- agent configuration
+- host-owned orchestration
+
+The MVP should let a user:
+
+1. create/select a workspace
+2. configure/select projects inside that workspace
+3. create a work thread
+4. send prompts and continue work in that thread
+5. manage multiple concurrent work threads
+6. restore those threads after restart
+
+## 2. What is explicitly not MVP
+
+The following areas should be postponed or disabled for now:
+
+- semantic search and indexing
+- MCP-centered product flows
+- adaptive/proactive orchestration
+- background suggestions
+- .NET-specific product features
+- ambitious knowledge/memory automation beyond what is needed to restore work threads and scope
+
+Those areas remain valid future directions, but they should not block or complicate the first product slice.
+
+## 3. Product shape
+
+The MVP product should be organized around:
+
+- one **Global Thread**
+- multiple **Workspace Threads**
+- workspace/project-first navigation
+- one workspace per non-global thread
+- Copilot/Codex as pluggable execution backends
+- a host orchestrator that owns thread routing, dispatch, and restoration
+
+The MVP should not require semantic infrastructure in order to feel useful.
+
+## 4. Implementation order
+
+Proceed in these ordered slices.
+
+## 4.1 MVP implementation checklist
+
+Use the list below as the concrete step-by-step checklist for implementation.
+
+The list is intentionally ordered, but it is not rigid in the wrong way:
+
+- an implementer may split a step into smaller steps
+- an implementer may add new steps when they simplify the MVP or remove ambiguity
+- an implementer should not expand scope into deferred areas unless a step is truly required for the MVP
+
+- [ ] Keep `doc/specs/readme.md` as the clear start-here document for the spec set.
+- [ ] Keep `doc/specs/implementation_plan.md` aligned with the actual MVP scope and sequence.
+- [ ] Finalize the workspace metadata model, identity rules, and loading rules.
+- [ ] Finalize project descriptors and project-to-workspace attachment rules.
+- [ ] Implement catalog loading for workspaces, projects, and agents from `~/.codealta/` and project overlays.
+- [ ] Introduce `WorkThread` as the primary user-facing unit.
+- [ ] Support both `Global Thread` and `Workspace Thread`.
+- [ ] Enforce workspace selection before the first prompt in a workspace thread.
+- [ ] Enforce workspace lock after the first prompt in a workspace thread.
+- [ ] Allow project focus to evolve only within the owning workspace.
+- [ ] Persist durable thread metadata, summaries, and status.
+- [ ] Restore open threads/tabs and their scope after restart.
+- [ ] Load file-based global and project-local agents.
+- [ ] Compose coordinator and general-agent instructions consistently across Copilot and Codex.
+- [ ] Keep Copilot and Codex sessions usable as thread execution backends.
+- [ ] Give each work thread one coordinator session.
+- [ ] Implement minimal host-owned orchestration for send, steer, dispatch, and explicit thread handoff.
+- [ ] Project backend/coordinator/host activity into a curated thread timeline.
+- [ ] Hide raw schedule payloads from the normal user timeline.
+- [ ] Implement workspace/project-first sidebar navigation with threads and activity under scope.
+- [ ] Implement thread creation UX for selecting a workspace and initial project scope.
+- [ ] Implement multi-thread UX so several concurrent threads can be continued and steered without confusion.
+- [ ] Make the global thread the cross-workspace overview and delegation surface.
+- [ ] Add regression coverage for workspace/project/thread/orchestration basics before expanding scope.
+
+### Phase 1 — Clarify and simplify the active specs
+
+Work:
+
+- keep `doc/specs/readme.md` as the entry point
+- make the MVP-driving specs obvious
+- mark search, MCP, .NET, and adaptive behavior as deferred
+- remove conflicting “infrastructure first” guidance from active planning docs
+
+Exit criteria:
+
+- a new contributor can tell where to start
+- the MVP story is clearer than the long-term vision
+
+### Phase 2 — Workspace and project catalog
+
+Work:
+
+- finalize the durable file model for:
+  - workspaces
+  - projects
+  - global agents
+  - project-local agents/skills
+- make `~/.codealta/` the clear global root
+- keep machine-only state under `~/.codealta/machine/`
+- define how a user creates/selects a workspace and configures projects
+
+Exit criteria:
+
+- CodeAlta can load workspaces and projects from the catalog
+- the scope model is understandable from the filesystem alone
+
+### Phase 3 — Work thread model
+
+Work:
+
+- implement `WorkThread` as the primary user-facing unit
+- support:
+  - global thread
+  - workspace thread
+- lock the workspace after the first prompt
+- allow project focus to evolve within that workspace
+- add durable thread metadata and summaries
+- map tabs directly to work threads
+
+Exit criteria:
+
+- a user can create and reopen multiple threads cleanly
+- the relationship between workspace, project, and thread is clear
+
+### Phase 4 — Minimal orchestration
+
+Work:
+
+- keep orchestration host-owned
+- give each thread one coordinator session
+- support:
+  - send
+  - steer
+  - thread restoration
+  - explicit cross-thread/global handoff
+- avoid bringing in adaptive/proactive orchestration yet
+
+Exit criteria:
+
+- one thread can run like a clean coding-agent conversation
+- multiple threads can coexist without ambiguity
+
+### Phase 5 — Minimal agent configuration
+
+Work:
+
+- finalize file-based agent definitions
+- load global and project-local agents
+- compose instructions consistently for Copilot and Codex
+- keep custom-agent behavior simple and predictable
+
+Exit criteria:
+
+- CodeAlta can instantiate usable agents from files
+- agent configuration is understandable without backend-specific knowledge
+
+### Phase 6 — Core UI experience
+
+Work:
+
+- make the sidebar workspace/project-first
+- let the user:
+  - create/select workspaces
+  - create/select threads
+  - see recent thread activity
+  - continue and steer work
+- restore all open tabs/threads on restart
+
+Exit criteria:
+
+- the UI makes the scope model obvious
+- the user can manage multiple threads without confusion
+
+## 5. Technical constraints
+
+Keep these near-term constraints:
+
 - Async-first, cancellation-first, non-blocking; UI must remain responsive.
 - Multi-thread aware (multiple agents and sessions running concurrently).
 - Pluggable but not over-engineered (clear scopes, minimal dependencies, predictable layering).
-- Language-agnostic overall, with first-class .NET support in v1.0.
+- Language-agnostic overall.
+- Markdown + YAML frontmatter remain the preferred durable metadata format.
+- Copilot and Codex remain the execution backends for the MVP.
 
-## 2. Delivery strategy (vertical slices)
+## 6. Project focus
 
-We implement in “thin vertical slices” that are individually testable and useful:
+For now, the spec and implementation focus should stay on:
 
-1) **Durable state + artifacts** (SQLite + file store)  
-2) **In-process MCP surface** exposing that state  
-3) **Indexing + search** (FTS5 + sqlite-vec + embeddings)  
-4) **Agent orchestration** (roles, scopes, context packs) built on the above  
-5) **.NET-first services** (Roslyn-backed)  
-6) **Terminal UI** (TUI) built on stable services
-
-Each slice should produce:
-- A small set of unit tests in `src/CodeAlta.Tests/`.
-- A minimal runnable “headless” entry point (even if the final UX is a TUI).
-- Persisted artifacts on disk for compaction-safe recovery.
-
-## 3. Proposed projects (assemblies) and dependencies
-
-Existing (already in repo):
-- `CodeAlta` (exe): currently a playground; will become the TUI host later.
-- `CodeAlta.Agent`: backend-agnostic agent API (Codex + Copilot adapters already exist).
-- `CodeAlta.Agent.Codex`: Codex adapter.
-- `CodeAlta.Agent.Copilot`: Copilot adapter.
-- `CodeAlta.CodexSdk`: codex app-server client.
-- `CodeAlta.CodexSdk.Generator`: codex schema generator.
-- `CodeAlta.Tests`: MSTest.
-
-Planned new projects (in recommended creation order):
-
-### 3.1 `CodeAlta.Workspaces`
-
-Scope:
-- Workspace/project configuration model.
-- Loading/saving workspace descriptors from disk (global repo) and per-machine overrides.
-- Repo-local `.codealta/` discovery (project knowledge, roles, skills, artifacts).
-
-Key namespaces / types:
-- `CodeAlta.Workspaces`
-  - `WorkspaceId`, `ProjectId`
-  - `WorkspaceDescriptor`, `ProjectDescriptor`, `CheckoutRule`, `MachineProfile`
-  - `WorkspaceCatalog` (loads all known workspaces)
-  - `WorkspaceResolver` (resolves “active scope” into concrete repo roots)
-
-Dependencies:
-- SharpYaml (for YAML config), optional Markdig (if descriptors in markdown).
-
-### 3.2 `CodeAlta.Persistence`
-
-Scope:
-- SQLite schema + migrations + repository-style APIs for:
-  - tasks/plans
-  - agents/sessions/runs
-  - knowledge records and artifact metadata
-- File-backed “artifact store” (markdown + YAML frontmatter) with stable URIs and links into SQLite.
-
-Key namespaces / types:
-- `CodeAlta.Persistence`
-  - `CodeAltaDb` (connection factory + migration runner)
-  - `TaskRepository`, `ArtifactRepository`, `KnowledgeRepository`, `AgentRepository`
-  - `ArtifactStore` (disk IO; creates/reads markdown files)
-  - `ArtifactId`, `KnowledgeRecordId`, etc.
-
-Dependencies:
-- `Microsoft.Data.Sqlite`
-- Markdig + SharpYaml (artifact parsing/format)
-
-### 3.3 `CodeAlta.Search`
-
-Scope:
-- Indexing pipeline (sources → documents → FTS5 + embeddings).
-- `sqlite-vec` integration and vector similarity queries.
-- Embedding generation via LLamaSharp.
-
-Key namespaces / types:
-- `CodeAlta.Search`
-  - `IndexingJob`, `IndexingQueue`, `Indexer`
-  - `EmbeddingModelManager` (download/cache local GGUF, load weights)
-  - `Embedder` (wraps `LLamaEmbedder`)
-  - `SearchService` (FTS + vector hybrid retrieval)
-
-Dependencies:
-- LLamaSharp (+ chosen backend package)
-- `Microsoft.Data.Sqlite` + sqlite-vec native loading
-
-### 3.4 `CodeAlta.Mcp`
-
-Scope:
-- In-process MCP server “surface” and tool/resource/prompt implementations.
-- Bridges MCP tool calls to internal services (tasks, artifacts, search, workspaces, roles, skills).
-- Test-friendly in-memory transport wiring.
-
-Key namespaces / types:
-- `CodeAlta.Mcp`
-  - `CodeAltaMcpServerFactory` (creates `McpServer` on a pair of streams)
-  - `InProcessMcpConnection` (pipes + `McpClient` + server runner)
-- `CodeAlta.Mcp.Tools` (tool types, attribute-based)
-- `CodeAlta.Mcp.Resources` (resource types; optional in v1)
-- `CodeAlta.Mcp.Prompts` (prompt types; optional in v1)
-
-Dependencies:
-- `ModelContextProtocol` (server + client)
-- `Microsoft.Extensions.DependencyInjection` (DI)
-
-### 3.5 `CodeAlta.Orchestration`
-
-Scope:
-- Global agent orchestration: roles, scopes, context pack builder, task-driven coordination.
-- Bridges `CodeAlta.Agent` backends to MCP tools and durable state.
-- Captures “agent work products” to disk artifacts for compaction-safe recovery.
-
-Key namespaces / types:
-- `CodeAlta.Orchestration`
-  - `AgentRole` / `AgentScope` / `AgentIdentity`
-  - `AgentHub` (creates/owns backend sessions; routes tool calls)
-  - `ContextPackBuilder` (builds a bounded context for a run)
-  - `PlannerService`, `KnowledgeService`, `BuilderService`
-  - `RoleProfileStore` (loads role profiles from disk)
-
-Dependencies:
+- `CodeAlta`
 - `CodeAlta.Agent`
-- `CodeAlta.Mcp`, `CodeAlta.Persistence`, `CodeAlta.Workspaces`, `CodeAlta.Search`
+- `CodeAlta.Agent.Codex`
+- `CodeAlta.Agent.Copilot`
+- `CodeAlta.CodexSdk`
+- `CodeAlta.CodexSdk.Generator`
+- `CodeAlta.Workspaces`
+- `CodeAlta.Orchestration`
+- `CodeAlta.Persistence` only for the minimum durable thread/workspace state needed by the MVP
 
-### 3.6 `CodeAlta.DotNet`
+Deferred from active product scope for now:
 
-Scope:
-- Roslyn-backed .NET “first-class” services: solution/project graph, symbol search, diagnostics.
-- Produces knowledge artifacts suitable for indexing and agent consumption.
-
-Key namespaces / types:
+- `CodeAlta.Search`
+- `CodeAlta.Mcp`
 - `CodeAlta.DotNet`
-  - `DotNetWorkspaceService` (loads solution, manages `MSBuildWorkspace`)
-  - `SymbolIndexService` (namespaces/types/methods → index records)
-  - `DotNetContextProvider` (builds compact code context snippets)
 
-Dependencies:
-- `Microsoft.CodeAnalysis.*` (Roslyn)
-- `CodeAlta.Persistence` / `CodeAlta.Search` for durable storage and retrieval
+These projects may remain in the repo, but they should not drive product design or implementation priority until the MVP core experience is solid.
 
-## 4. Cross-cutting implementation notes
+## 7. MVP acceptance criteria
 
-### 4.1 Async model and threading
+The MVP is successful when:
 
-- Every service API should be `async` (or return `ValueTask`) even if underlying libraries are synchronous (SQLite, filesystem).  
-  The calling layer (eventually the TUI) must not block.
+- a user can create/select a workspace
+- a user can create/select/configure projects
+- a user can start a new thread in a workspace
+- a thread can target one, many, or all projects in that workspace
+- a user can keep multiple work threads open at once
+- each thread can send prompts and receive results through Copilot or Codex
+- the workspace/thread model is understandable from the UI
+- restart restores the open threads and their scopes
+
+The MVP is not blocked on:
+
+- semantic search
+- MCP tools
+- adaptive suggestions
+- .NET-specific capabilities
+
+## 8. Deferred follow-up work
+
+After the MVP core experience is working, the next layers can be resumed in this order:
+
+1. adaptive orchestration and durable suggestions
+2. search/indexing/semantic retrieval
+3. MCP integration as a product feature
+4. language-specific intelligence such as .NET support
+
+## 9. Cross-cutting implementation notes
+
+### 9.1 Async model and threading
+
+- Every service API should be `async` (or return `ValueTask`) even if underlying libraries are synchronous.
 - Use cancellation tokens in all long-running operations.
-- For SQLite write contention, prefer serialized write pipelines:
-  - one writer queue (background) for mutations
-  - concurrent readers with separate connections
-- For CPU-heavy work (embedding generation, Roslyn analysis), run on background tasks with explicit concurrency limits.
+- Keep orchestration, UI, and backend execution separated cleanly.
 
-### 4.2 Logging
+### 9.2 Logging
 
-We standardize on XenoAtom.Logging for application logs.
+- Keep logging clear and host-owned.
+- Logging should help explain:
+  - thread selection
+  - scope resolution
+  - coordinator dispatch
+  - restoration behavior
 
-When consuming libraries that depend on `Microsoft.Extensions.Logging` (e.g. MCP SDK), we add a small bridge:
-- `XenoAtomLoggerProvider : ILoggerProvider` forwarding to `LogManager.GetLogger(categoryName)`.
+### 9.3 Durable user-visible state
 
-### 4.3 “Compaction-safe” durability
+Anything needed to restore the user’s work should be persisted as files:
 
-Anything not trivially reconstructible from the repo working tree must be persisted as files:
-- planner outputs
-- knowledge summaries and extracted info
-- decisions / rationale
-- task and plan snapshots (human readable)
+- workspace/project metadata
+- thread summaries
+- decisions/rationale that matter to resumed work
+- task and plan snapshots when they become part of the MVP restoration model
 
-SQLite indexes and links these artifacts but should not be the only copy of “meaningful knowledge”.
+Machine-local state should not be the only copy of meaningful user-visible state.
 
-## 5. Milestones (suggested)
+### 9.4 UI implementation references
 
-Milestone 1 — Workspaces + persistence foundation
-- Create `CodeAlta.Workspaces` and `CodeAlta.Persistence`.
-- Define on-disk locations (`~/.codealta/...` and repo `.codealta/...`) and YAML frontmatter conventions.
-- Implement SQLite migrations + repositories + artifact store.
-- Add tests for migrations and artifact read/write.
+When implementing or refining the terminal UI, use the local XenoAtom.Terminal.UI materials as the primary reference:
 
-Milestone 2 — In-process MCP server surface
-- Create `CodeAlta.Mcp`.
-- Add minimal tool sets: tasks, artifacts, workspaces, agent registry.
-- Add in-memory transport tests (pipes) that call tools and verify results.
+- docs: `C:\code\XenoAtom\XenoAtom.Terminal.UI\site\docs`
+- samples: `C:\code\XenoAtom\XenoAtom.Terminal.UI\samples`
+- source: `C:\code\XenoAtom\XenoAtom.Terminal.UI\src`
 
-Milestone 3 — Indexing + search
-- Create `CodeAlta.Search`.
-- Implement FTS5 indexing + sqlite-vec embedding storage + LLamaSharp embedder wrapper.
-- Provide hybrid search (FTS prefilter + vector rerank) and tests with a tiny fixture set.
+The expectation is that an implementer should consult those local materials first instead of inferring behavior from compiled .NET assemblies.
 
-Milestone 4 — Agent orchestration (headless)
-- Create `CodeAlta.Orchestration`.
-- Implement role profiles, scope resolution, context pack builder.
-- Integrate with `CodeAlta.Agent` backends and route tool calls to MCP tools.
-- Persist planner/knowledge outputs to artifacts.
+## 10. Summary
 
-Milestone 5 — .NET-first services
-- Create `CodeAlta.DotNet`.
-- Add Roslyn graph/symbol services and index them.
-- Expose .NET services both as MCP tools and as orchestration “context providers”.
+The project should now optimize for:
 
-Milestone 6 — Terminal UI
-- Replace `src/CodeAlta/Program.cs` playground with a real TUI host.
-- Add responsive UI loops, background job views, and scope selection UX.
-- Keep everything else reusable without the UI.
+- clarity
+- scope ownership
+- thread restoration
+- predictable orchestration
+- a minimal but strong coding-agent UX
+
+The architectural extras remain valuable, but they should stay out of the critical path until the core experience is solid.

@@ -1,5 +1,7 @@
 # Implementation Plan: Adaptive Orchestration Rework
 
+Deferred until after the MVP core experience is working.
+
 Status: **Proposal**  
 Audience: maintainers of `CodeAlta`, `CodeAlta.Agent*`, `CodeAlta.Orchestration`, `CodeAlta.Workspaces`, `CodeAlta.Persistence`, and UI.
 
@@ -21,7 +23,14 @@ Evolve the current CodeAlta codebase toward:
 
 This plan intentionally prioritizes the core product loop over advanced specialization.
 
-Near-term priority is **not** deeper .NET-specific intelligence. Near-term priority is the core orchestration and durable-state model.
+This plan is no longer the implementation entry point.
+
+Near-term priority is the MVP core experience defined in:
+
+- `doc/specs/readme.md`
+- `doc/specs/implementation_plan.md`
+
+This document should be read as a **follow-up roadmap** once the core workspace/project/thread experience is solid.
 
 ---
 
