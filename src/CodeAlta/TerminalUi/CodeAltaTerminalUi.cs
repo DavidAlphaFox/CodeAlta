@@ -61,6 +61,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
     private IReadOnlyList<SidebarSelectionTarget> _sidebarVisibleTargets = [];
     private string? _selectedProjectId;
     private string? _selectedThreadId;
+    private string? _pendingStartupThreadRestoreId;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CodeAltaTerminalUi"/> class.
@@ -122,6 +123,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                 root,
                 () =>
                 {
+                    TrySchedulePendingStartupThreadRestore(cancellationToken);
                     SyncSidebarSelection();
                     return TerminalLoopResult.Continue;
                 },
@@ -162,25 +164,28 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             _viewState.SelectedThreadId = null;
         }
 
-        foreach (var threadId in _viewState.OpenThreadIds.ToArray())
-        {
-            var thread = FindThread(threadId);
-            if (thread is null)
-            {
-                continue;
-            }
-
-            EnsureThreadTab(thread);
-        }
-
-        _selectedThreadId = _viewState.SelectedThreadId ?? _viewState.OpenThreadIds.FirstOrDefault();
+        var selection = ResolveInitialSelection(_viewState, _threads);
+        _selectedThreadId = selection.SelectedThreadId;
+        _pendingStartupThreadRestoreId = selection.StartupThreadRestoreId;
         var selectedThread = GetSelectedThread();
         _selectedProjectId = selectedThread?.ProjectRef ?? _projects.FirstOrDefault()?.Id;
+    }
 
-        if (selectedThread is not null)
-        {
-            await EnsureThreadHistoryLoadedAsync(selectedThread, cancellationToken).ConfigureAwait(false);
-        }
+    internal static InitialThreadSelection ResolveInitialSelection(
+        WorkThreadViewState viewState,
+        IReadOnlyList<WorkThreadDescriptor> threads)
+    {
+        ArgumentNullException.ThrowIfNull(viewState);
+        ArgumentNullException.ThrowIfNull(threads);
+
+        var selectedThreadId = viewState.SelectedThreadId ?? viewState.OpenThreadIds.FirstOrDefault();
+        var selectedThread = string.IsNullOrWhiteSpace(selectedThreadId)
+            ? null
+            : threads.FirstOrDefault(thread => string.Equals(thread.ThreadId, selectedThreadId, StringComparison.OrdinalIgnoreCase));
+
+        return new InitialThreadSelection(
+            selectedThread?.ThreadId,
+            selectedThread?.ThreadId);
     }
 
     private async Task InitializeChatBackendsAsync(CancellationToken cancellationToken)
@@ -222,6 +227,29 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         catch (OperationCanceledException)
         {
         }
+    }
+
+    private void TrySchedulePendingStartupThreadRestore(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_pendingStartupThreadRestoreId))
+        {
+            return;
+        }
+
+        var threadId = _pendingStartupThreadRestoreId;
+        _pendingStartupThreadRestoreId = null;
+        _ = RestoreStartupThreadHistoryAsync(threadId, cancellationToken);
+    }
+
+    private async Task RestoreStartupThreadHistoryAsync(string? threadId, CancellationToken cancellationToken)
+    {
+        var thread = FindThread(threadId);
+        if (thread is null)
+        {
+            return;
+        }
+
+        await EnsureThreadHistoryLoadedAsync(thread, cancellationToken).ConfigureAwait(false);
     }
 
     private Visual BuildMainView()
@@ -2302,4 +2330,6 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         public static SidebarSelectionTarget Thread(string threadId)
             => new(SidebarSelectionKind.Thread, null, threadId);
     }
+
+    internal sealed record InitialThreadSelection(string? SelectedThreadId, string? StartupThreadRestoreId);
 }

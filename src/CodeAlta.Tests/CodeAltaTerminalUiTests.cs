@@ -132,6 +132,36 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
+    public void ResolveInitialSelection_DefersSelectedThreadRestoreUntilUiLoopStarts()
+    {
+        var thread = new WorkThreadDescriptor
+        {
+            ThreadId = "thread-1",
+            Kind = WorkThreadKind.ProjectThread,
+            BackendId = AgentBackendIds.Codex.Value,
+            BackendSessionId = "backend-thread-1",
+            ProjectRef = "project-1",
+            WorkingDirectory = @"C:\code\CodeAlta",
+            Title = "Investigate startup",
+            Status = WorkThreadStatus.Active,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            LastActiveAt = DateTimeOffset.UtcNow,
+        };
+
+        var selection = CodeAltaTerminalUi.ResolveInitialSelection(
+            new WorkThreadViewState
+            {
+                OpenThreadIds = ["thread-1"],
+                SelectedThreadId = "thread-1",
+            },
+            [thread]);
+
+        Assert.AreEqual("thread-1", selection.SelectedThreadId);
+        Assert.AreEqual("thread-1", selection.StartupThreadRestoreId);
+    }
+
+    [TestMethod]
     public void FormatChatRawEventMarkdown_RendersBackendEventTypeAndPayload()
     {
         using var payloadJson = JsonDocument.Parse("""{"kind":"shell","toolCallId":"call-1"}""");
