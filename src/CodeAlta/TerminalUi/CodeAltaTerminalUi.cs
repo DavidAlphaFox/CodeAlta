@@ -6,6 +6,7 @@ using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
 using XenoAtom.Terminal.UI.Geometry;
+using XenoAtom.Terminal.UI.Layout;
 using XenoAtom.Terminal.UI.Styling;
 using XenoAtom.Terminal.UI.Threading;
 using XenoAtom.Logging;
@@ -24,6 +25,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
     private readonly Dictionary<string, CheckBox> _projectScopeCheckBoxes = new(StringComparer.OrdinalIgnoreCase);
     private readonly CancellationTokenSource _runtimeEventsCts = new();
     private readonly State<bool> _chatAutoApproveState = new(true);
+    private readonly State<int> _viewRefreshState = new(0);
     private bool _chatBindingEventsSubscribed;
     private volatile bool _chatAutoApproveEnabled = true;
     private IReadOnlyList<WorkspaceDescriptor> _workspaces = [];
@@ -52,6 +54,11 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
     private TextBox? _newProjectBranchInput;
     private TextBox? _newThreadTitleInput;
     private CheckBox? _allProjectsCheckBox;
+    private ComputedVisual? _projectScopeVisual;
+    private ComputedVisual? _threadListVisual;
+    private ComputedVisual? _threadTopVisual;
+    private DockLayout? _threadPaneLayout;
+    private VStack? _threadBottomPanel;
     private Task? _runtimeEventsTask;
     private bool _chatSelectorsRefreshing;
     private string? _selectedWorkspaceId;
@@ -238,6 +245,8 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         _newProjectRepoInput ??= new TextBox { Text = string.Empty };
         _newProjectBranchInput ??= new TextBox { Text = "main" };
         _newThreadTitleInput ??= new TextBox { Text = string.Empty };
+        _projectScopeVisual ??= CreateComputedVisual(BuildProjectScopeContent);
+        _threadListVisual ??= CreateComputedVisual(BuildThreadListContent);
 
         RefreshScopeSelectors();
 
@@ -271,8 +280,38 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                     {
                         Spacing = 1,
                     }),
-                CreateSectionGroup("Projects", BuildProjectSection()),
-                CreateSectionGroup("Threads", BuildThreadListSection()),
+                CreateSectionGroup(
+                    "Projects",
+                    new VStack(
+                        [
+                            new TextBlock("Filter"),
+                            _projectFilterSelect,
+                            _projectScopeVisual,
+                            new TextBlock("Project Key"),
+                            _newProjectKeyInput,
+                            new TextBlock("Project Name"),
+                            _newProjectNameInput,
+                            new TextBlock("Repo URL"),
+                            _newProjectRepoInput,
+                            new TextBlock("Default Branch"),
+                            _newProjectBranchInput,
+                            new Button(new TextBlock("Add Project")).Click(() => _ = CreateProjectAsync()),
+                        ])
+                    {
+                        Spacing = 1,
+                    }),
+                CreateSectionGroup(
+                    "Threads",
+                    new VStack(
+                        [
+                            _threadListVisual,
+                            new TextBlock("Thread Title"),
+                            _newThreadTitleInput,
+                            new Button(new TextBlock("Create Thread")).Click(() => _ = CreateThreadAsync()),
+                        ])
+                    {
+                        Spacing = 1,
+                    }),
             ])
         {
             Spacing = 1,
@@ -281,41 +320,44 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         };
     }
 
-    private Visual BuildProjectSection()
+    private Visual BuildProjectScopeContent()
     {
         var selectedWorkspace = GetSelectedWorkspace();
-        var children = new List<Visual>
-        {
-            new TextBlock("Filter"),
-            _projectFilterSelect ?? new Select<ProjectFilterOption>(),
-        };
-
         if (selectedWorkspace is null)
         {
-            children.Add(new TextBlock("Create or select a workspace before configuring projects."));
-            return new VStack([.. children]) { Spacing = 1 };
+            _projectScopeCheckBoxes.Clear();
+            if (_allProjectsCheckBox is not null)
+            {
+                _allProjectsCheckBox.IsChecked = false;
+            }
+
+            return new TextBlock("Create or select a workspace before configuring projects.");
         }
 
-        children.Add(new TextBlock("Initial Thread Scope"));
-        children.Add(_allProjectsCheckBox ?? new CheckBox("All Projects"));
+        var previousSelections = _projectScopeCheckBoxes
+            .Where(static entry => entry.Value.IsChecked)
+            .Select(static entry => entry.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var checkBoxes = CreateProjectScopeCheckBoxes(selectedWorkspace.Projects, previousSelections);
+        _projectScopeCheckBoxes.Clear();
+
+        var children = new List<Visual>
+        {
+            new TextBlock("Initial Thread Scope"),
+            _allProjectsCheckBox ?? new CheckBox("All Projects"),
+        };
+
         foreach (var project in selectedWorkspace.Projects.OrderBy(static project => project.DisplayName, StringComparer.OrdinalIgnoreCase))
         {
-            children.Add(GetOrCreateProjectScopeCheckBox(project));
+            var checkBox = checkBoxes[project.Id];
+            _projectScopeCheckBoxes[project.Id] = checkBox;
+            children.Add(checkBox);
         }
 
-        children.Add(new TextBlock("Project Key"));
-        children.Add(_newProjectKeyInput ?? new TextBox());
-        children.Add(new TextBlock("Project Name"));
-        children.Add(_newProjectNameInput ?? new TextBox());
-        children.Add(new TextBlock("Repo URL"));
-        children.Add(_newProjectRepoInput ?? new TextBox());
-        children.Add(new TextBlock("Default Branch"));
-        children.Add(_newProjectBranchInput ?? new TextBox());
-        children.Add(new Button(new TextBlock("Add Project")).Click(() => _ = CreateProjectAsync()));
         return new VStack([.. children]) { Spacing = 1 };
     }
 
-    private Visual BuildThreadListSection()
+    private Visual BuildThreadListContent()
     {
         var threadButtons = new List<Visual>();
         foreach (var thread in FilterThreadsForSidebar(_threads, _selectedWorkspaceId, _selectedProjectId))
@@ -328,23 +370,11 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             threadButtons.Add(new TextBlock("No threads in the current scope."));
         }
 
-        threadButtons.Add(new TextBlock("Thread Title"));
-        threadButtons.Add(_newThreadTitleInput ?? new TextBox());
-        threadButtons.Add(new Button(new TextBlock("Create Thread")).Click(() => _ = CreateThreadAsync()));
         return new VStack([.. threadButtons]) { Spacing = 1 };
     }
 
     private Visual BuildThreadPane()
     {
-        var selectedThread = GetSelectedThread();
-        if (selectedThread is null)
-        {
-            return CreateSectionGroup(
-                "Thread",
-                new TextBlock("Open a thread from the sidebar or create a new workspace thread."));
-        }
-
-        var tabState = EnsureThreadTab(selectedThread);
         _threadInput ??= CreatePromptEditor();
         _threadInputView ??= _threadInput.Scrollable();
         _chatBackendSelect ??= new Select<ChatBackendOption>()
@@ -365,35 +395,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         {
             Wrap = true,
         };
-
-        RefreshChatSelectorsForThread(tabState);
-
-        var topChildren = new List<Visual>
-        {
-            CreateSectionGroup(
-                "Open Threads",
-                new WrapHStack([.. BuildOpenThreadButtons()])
-                {
-                    Spacing = 1,
-                    RunSpacing = 1,
-                }),
-            CreateSectionGroup(
-                "Selected Thread",
-                new VStack(
-                    [
-                        new TextBlock(selectedThread.Title),
-                        new TextBlock(BuildThreadScopeSummary(selectedThread, _workspaces)),
-                        new TextBlock($"Status: {selectedThread.Status}"),
-                    ])
-                {
-                    Spacing = 1,
-                }),
-        };
-
-        if (selectedThread.Kind == WorkThreadKind.Global)
-        {
-            topChildren.Add(CreateSectionGroup("Recent Workspace Threads", BuildGlobalOverviewSection()));
-        }
+        _threadTopVisual ??= CreateComputedVisual(BuildThreadTopContent);
 
         var controls = new WrapHStack(
             [
@@ -428,10 +430,54 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             Spacing = 1,
         };
 
-        return new DockLayout(
-            top: new VStack([.. topChildren]) { Spacing = 1 },
-            content: tabState.Flow,
+        _threadBottomPanel = bottom;
+        _threadPaneLayout = new DockLayout(
+            top: _threadTopVisual,
+            content: new TextBlock("Open a thread from the sidebar or create a new workspace thread."),
             bottom: bottom);
+        RefreshThreadPaneContent();
+        return _threadPaneLayout;
+    }
+
+    private Visual BuildThreadTopContent()
+    {
+        var _ = _viewRefreshState.Value;
+        var selectedThread = GetSelectedThread();
+        if (selectedThread is null)
+        {
+            return CreateSectionGroup(
+                "Thread",
+                new TextBlock("Open a thread from the sidebar or create a new workspace thread."));
+        }
+
+        var topChildren = new List<Visual>
+        {
+            CreateSectionGroup(
+                "Open Threads",
+                new WrapHStack([.. BuildOpenThreadButtons()])
+                {
+                    Spacing = 1,
+                    RunSpacing = 1,
+                }),
+            CreateSectionGroup(
+                "Selected Thread",
+                new VStack(
+                    [
+                        new TextBlock(selectedThread.Title),
+                        new TextBlock(BuildThreadScopeSummary(selectedThread, _workspaces)),
+                        new TextBlock($"Status: {selectedThread.Status}"),
+                    ])
+                {
+                    Spacing = 1,
+                }),
+        };
+
+        if (selectedThread.Kind == WorkThreadKind.Global)
+        {
+            topChildren.Add(CreateSectionGroup("Recent Workspace Threads", BuildGlobalOverviewSection()));
+        }
+
+        return new VStack([.. topChildren]) { Spacing = 1 };
     }
 
     private Visual BuildGlobalOverviewSection()
@@ -1617,15 +1663,49 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             () =>
             {
                 EnsureScopeDefaults();
+                RefreshScopeSelectors();
                 if (_header is not null)
                 {
                     _header.Text = BuildHeaderText();
                 }
 
-                if (_root is not null)
-                {
-                    _root.Content = BuildMainView();
-                }
+                _viewRefreshState.Value++;
+                RefreshThreadPaneContent();
+            });
+    }
+
+    private void RefreshThreadPaneContent()
+    {
+        var selectedThread = GetSelectedThread();
+        if (_threadBottomPanel is not null)
+        {
+            _threadBottomPanel.IsVisible = selectedThread is not null;
+        }
+
+        if (_threadPaneLayout is null)
+        {
+            return;
+        }
+
+        if (selectedThread is null)
+        {
+            _threadPaneLayout.Content = new TextBlock("Open a thread from the sidebar or create a new workspace thread.");
+            return;
+        }
+
+        var tabState = EnsureThreadTab(selectedThread);
+        RefreshChatSelectorsForThread(tabState);
+        _threadPaneLayout.Content = tabState.Flow;
+    }
+
+    private ComputedVisual CreateComputedVisual(Func<Visual> build)
+    {
+        ArgumentNullException.ThrowIfNull(build);
+        return new ComputedVisual(
+            () =>
+            {
+                var _ = _viewRefreshState.Value;
+                return build();
             });
     }
 
@@ -1680,17 +1760,23 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         _allProjectsCheckBox = new CheckBox("All Projects");
     }
 
-    private CheckBox GetOrCreateProjectScopeCheckBox(ProjectDescriptor project)
+    internal static Dictionary<string, CheckBox> CreateProjectScopeCheckBoxes(
+        IReadOnlyList<ProjectDescriptor> projects,
+        IReadOnlySet<string> selectedProjectIds)
     {
-        if (_projectScopeCheckBoxes.TryGetValue(project.Id, out var existing))
+        ArgumentNullException.ThrowIfNull(projects);
+        ArgumentNullException.ThrowIfNull(selectedProjectIds);
+
+        var checkBoxes = new Dictionary<string, CheckBox>(StringComparer.OrdinalIgnoreCase);
+        foreach (var project in projects.OrderBy(static project => project.DisplayName, StringComparer.OrdinalIgnoreCase))
         {
-            existing.Text = new TextBlock(project.DisplayName);
-            return existing;
+            checkBoxes[project.Id] = new CheckBox(project.DisplayName)
+            {
+                IsChecked = selectedProjectIds.Contains(project.Id),
+            };
         }
 
-        var checkBox = new CheckBox(project.DisplayName);
-        _projectScopeCheckBoxes[project.Id] = checkBox;
-        return checkBox;
+        return checkBoxes;
     }
 
     private string BuildHeaderText()

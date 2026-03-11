@@ -122,6 +122,39 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
+    public void CreateProjectScopeCheckBoxes_RecreatesCheckboxesAndPreservesSelection()
+    {
+        IReadOnlyList<ProjectDescriptor> projects =
+        [
+            new ProjectDescriptor
+            {
+                Id = "alpha",
+                Key = "alpha",
+                DisplayName = "Alpha",
+            },
+            new ProjectDescriptor
+            {
+                Id = "beta",
+                Key = "beta",
+                DisplayName = "Beta",
+            },
+        ];
+
+        var first = CodeAltaTerminalUi.CreateProjectScopeCheckBoxes(
+            projects,
+            new HashSet<string>(["beta"], StringComparer.OrdinalIgnoreCase));
+        var second = CodeAltaTerminalUi.CreateProjectScopeCheckBoxes(
+            projects,
+            new HashSet<string>(["beta"], StringComparer.OrdinalIgnoreCase));
+
+        Assert.AreEqual(2, first.Count);
+        Assert.AreEqual(2, second.Count);
+        Assert.AreNotSame(first["alpha"], second["alpha"]);
+        Assert.IsFalse(first["alpha"].IsChecked);
+        Assert.IsTrue(first["beta"].IsChecked);
+    }
+
+    [TestMethod]
     public void FormatChatPermissionRequestMarkdown_RendersTypedAndGenericDetails()
     {
         var typedMarkdown = CodeAltaTerminalUi.FormatChatPermissionRequestMarkdown(
