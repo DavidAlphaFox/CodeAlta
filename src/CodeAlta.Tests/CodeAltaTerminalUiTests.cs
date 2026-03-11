@@ -94,6 +94,44 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
+    public void BuildHeaderText_UsesDraftScopeWhenNoThreadIsSelected()
+    {
+        var project = new ProjectDescriptor
+        {
+            Id = "project-1",
+            Slug = "codealta",
+            DisplayName = "CodeAlta",
+            ProjectPath = @"C:\code\CodeAlta",
+            DefaultBranch = "main",
+            MarkdownBody = "# CodeAlta",
+        };
+
+        var globalHeader = CodeAltaTerminalUi.BuildHeaderText(
+            thread: null,
+            selectedProject: null,
+            globalRoot: @"C:\Users\alexa\.codealta",
+            preferredBackendId: AgentBackendIds.Codex.Value,
+            globalScopeSelected: true);
+
+        var projectHeader = CodeAltaTerminalUi.BuildHeaderText(
+            thread: null,
+            selectedProject: project,
+            globalRoot: @"C:\Users\alexa\.codealta",
+            preferredBackendId: AgentBackendIds.Copilot.Value,
+            globalScopeSelected: false);
+
+        Assert.AreEqual(@"CodeAlta | backend=codex | scope=global-draft | cwd=C:\Users\alexa\.codealta", globalHeader);
+        Assert.AreEqual("CodeAlta | backend=copilot | project=codealta | scope=draft", projectHeader);
+    }
+
+    [TestMethod]
+    public void BuildDraftPromptMessage_ReflectsSelectedScope()
+    {
+        Assert.AreEqual("Send the first prompt to start a global thread.", CodeAltaTerminalUi.BuildDraftPromptMessage(globalScopeSelected: true));
+        Assert.AreEqual("Send the first prompt to start a thread for the selected project.", CodeAltaTerminalUi.BuildDraftPromptMessage(globalScopeSelected: false));
+    }
+
+    [TestMethod]
     public void FormatChatRawEventMarkdown_RendersBackendEventTypeAndPayload()
     {
         using var payloadJson = JsonDocument.Parse("""{"kind":"shell","toolCallId":"call-1"}""");

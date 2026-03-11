@@ -75,6 +75,57 @@ public sealed class WorkspaceInfrastructureTests
     }
 
     [TestMethod]
+    public async Task ProjectCatalog_LoadAsync_DeduplicatesProjectsByNormalizedPath()
+    {
+        using var root = TempDirectory.Create();
+        var catalogRoot = Path.Combine(root.Path, ".codealta");
+        var projectsRoot = Path.Combine(catalogRoot, "projects");
+        Directory.CreateDirectory(Path.Combine(projectsRoot, "codealta"));
+        Directory.CreateDirectory(Path.Combine(projectsRoot, "codealta-copy"));
+
+        var projectPath = Path.Combine(root.Path, "CodeAlta");
+        Directory.CreateDirectory(projectPath);
+
+        const string projectTemplate = """
+            ---
+            kind: "project"
+            id: "{0}"
+            slug: "{1}"
+            display_name: "CodeAlta"
+            path: "{2}"
+            default_branch: "main"
+            ---
+
+            # CodeAlta
+            """;
+
+        await File.WriteAllTextAsync(
+            Path.Combine(projectsRoot, "codealta", "readme.md"),
+            string.Format(
+                projectTemplate,
+                ProjectId.NewVersion7(),
+                "codealta",
+                projectPath.Replace("\\", "\\\\"))).ConfigureAwait(false);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(projectsRoot, "codealta-copy", "readme.md"),
+            string.Format(
+                projectTemplate,
+                ProjectId.NewVersion7(),
+                "codealta-copy",
+                (projectPath + Path.DirectorySeparatorChar).Replace("\\", "\\\\"))).ConfigureAwait(false);
+
+        var catalog = new ProjectCatalog(new CatalogOptions { GlobalRoot = catalogRoot });
+        var loaded = await catalog.LoadAsync().ConfigureAwait(false);
+
+        Assert.AreEqual(1, loaded.Count);
+        Assert.AreEqual("CodeAlta", loaded[0].DisplayName);
+        Assert.AreEqual(
+            Path.GetFullPath(projectPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(loaded[0].ProjectPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    }
+
+    [TestMethod]
     public void WorkspaceYamlSerializer_RoundTrip_Works()
     {
         var serializer = new WorkspaceYamlSerializer();

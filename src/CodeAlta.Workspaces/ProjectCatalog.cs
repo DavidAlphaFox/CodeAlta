@@ -55,6 +55,10 @@ public sealed partial class ProjectCatalog
         }
 
         return results
+            .GroupBy(static project => NormalizePath(project.ProjectPath), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group
+                .OrderBy(static project => project.SourcePath, StringComparer.OrdinalIgnoreCase)
+                .First())
             .OrderBy(static project => project.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }

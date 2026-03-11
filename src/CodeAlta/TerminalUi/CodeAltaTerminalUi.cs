@@ -2,6 +2,7 @@ using CodeAlta.Agent;
 using CodeAlta.Catalog;
 using CodeAlta.Orchestration.Runtime;
 using XenoAtom.Logging;
+using XenoAtom.Ansi;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
@@ -41,15 +42,17 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
     private Select<ChatReasoningOption>? _chatReasoningSelect;
     private CheckBox? _chatAutoApproveCheckBox;
     private Markup? _chatBackendStatusMarkup;
-    private ComputedVisual? _projectsVisual;
-    private ComputedVisual? _globalThreadsVisual;
-    private ComputedVisual? _projectThreadsVisual;
+    private TreeView? _sidebarTree;
     private ComputedVisual? _tabStripVisual;
     private ComputedVisual? _threadHeaderVisual;
     private Task? _runtimeEventsTask;
     private bool _chatSelectorsRefreshing;
     private bool _chatBindingEventsSubscribed;
     private volatile bool _chatAutoApproveEnabled = true;
+    private bool _globalScopeSelected = true;
+    private bool _sidebarSelectionSyncEnabled = true;
+    private int _lastSidebarSelectedIndex = -1;
+    private IReadOnlyList<SidebarSelectionTarget> _sidebarVisibleTargets = [];
     private string? _selectedProjectId;
     private string? _selectedThreadId;
 
@@ -118,7 +121,15 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             bottom: statusBar);
 
         _runtimeEventsTask = Task.Run(() => PumpRuntimeEventsAsync(_runtimeEventsCts.Token), CancellationToken.None);
-        await Terminal.RunAsync(root, () => TerminalLoopResult.Continue, cancellationToken).ConfigureAwait(false);
+        await Terminal.RunAsync(
+                root,
+                () =>
+                {
+                    SyncSidebarSelection();
+                    return TerminalLoopResult.Continue;
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -218,137 +229,282 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
 
     private Visual BuildMainView()
     {
-        return new HStack(
-            [
-                BuildSidebar(),
-                BuildThreadPane(),
-            ])
+        return new HSplitter(BuildSidebar(), BuildThreadPane())
         {
-            Spacing = 2,
+            Ratio = 0.26,
+            MinFirst = 24,
+            MinSecond = 40,
         };
     }
 
     private Visual BuildSidebar()
     {
         _newThreadTitleInput ??= new TextBox { Text = string.Empty };
-        _projectsVisual ??= CreateComputedVisual(BuildProjectsContent);
-        _globalThreadsVisual ??= CreateComputedVisual(BuildGlobalThreadsContent);
-        _projectThreadsVisual ??= CreateComputedVisual(BuildProjectThreadsContent);
+        _sidebarTree ??= new TreeView
+        {
+            HorizontalAlignment = Align.Stretch,
+            VerticalAlignment = Align.Stretch,
+        };
 
-        return new VStack(
+        RebuildSidebarTree();
+
+        var treeHost = new ScrollViewer(_sidebarTree)
+            .HorizontalScrollEnabled(false)
+            .VerticalScrollEnabled(true);
+
+        var footer = new VStack(
             [
-                CreateSectionGroup(
-                    "Global Threads",
-                    new VStack(
-                        [
-                            new Button(new TextBlock("New Global Thread")).Click(() => _ = CreateGlobalThreadAsync()),
-                            _globalThreadsVisual,
-                        ])
-                    {
-                        Spacing = 1,
-                    }),
-                CreateSectionGroup("Projects", _projectsVisual),
-                CreateSectionGroup(
-                    "Selected Project",
-                    new VStack(
-                        [
-                            new TextBlock("Thread Title (optional)"),
-                            _newThreadTitleInput,
-                            new Button(new TextBlock("New Project Thread")).Click(() => _ = CreateProjectThreadAsync()),
-                            _projectThreadsVisual,
-                        ])
-                    {
-                        Spacing = 1,
-                    }),
-                CreateSectionGroup(
-                    "Catalog",
-                    new VStack(
-                        [
-                            new Button(new TextBlock("Refresh")).Click(() => _ = ReloadCatalogAsync()),
-                        ])
-                    {
-                        Spacing = 1,
-                    }),
+                new TextBlock("Thread Title (optional)"),
+                _newThreadTitleInput,
+                new Button(new TextBlock("Refresh Catalog")).Click(() => _ = ReloadCatalogAsync()),
             ])
         {
             Spacing = 1,
+        };
+
+        return new Group(
+            new Markup($"[bold]{NerdFont.FaFolderTree} Navigator[/]"),
+            new DockLayout(
+                null,
+                treeHost,
+                footer)
+            {
+                HorizontalAlignment = Align.Stretch,
+                VerticalAlignment = Align.Stretch,
+            })
+        {
             HorizontalAlignment = Align.Stretch,
             VerticalAlignment = Align.Stretch,
         };
     }
 
-    private Visual BuildProjectsContent()
+    private void RebuildSidebarTree()
     {
-        var children = new List<Visual>();
-        foreach (var project in _projects.OrderBy(static project => project.DisplayName, StringComparer.OrdinalIgnoreCase))
+        if (_sidebarTree is null)
         {
-            var isSelected = string.Equals(project.Id, _selectedProjectId, StringComparison.OrdinalIgnoreCase);
-            var label = isSelected ? $"> {project.DisplayName}" : project.DisplayName;
-            children.Add(new Button(new TextBlock(label)).Click(() => SelectProject(project.Id)));
+            return;
         }
 
-        if (children.Count == 0)
+        var roots = new List<TreeNode>
         {
-            children.Add(new TextBlock("No projects discovered yet."));
-        }
-
-        return new VStack([.. children]) { Spacing = 1 };
-    }
-
-    private Visual BuildGlobalThreadsContent()
-    {
-        var globalThreads = _threads
-            .Where(static thread => thread.Kind == WorkThreadKind.GlobalThread)
-            .OrderByDescending(static thread => thread.LastActiveAt)
-            .ToArray();
-
-        if (globalThreads.Length == 0)
-        {
-            return new TextBlock("No global threads yet.");
-        }
-
-        return new VStack([.. globalThreads.Select(CreateThreadOpenButton)]) { Spacing = 1 };
-    }
-
-    private Visual BuildProjectThreadsContent()
-    {
-        var project = GetSelectedProject();
-        if (project is null)
-        {
-            return new TextBlock("Select a project to view and continue its threads.");
-        }
-
-        var children = new List<Visual>
-        {
-            new TextBlock($"Project: {project.DisplayName}"),
+            CreateSidebarGlobalNode(),
+            CreateSidebarProjectsNode(),
         };
 
-        var projectThreads = GetThreadsForProject(project.Id, includeInternal: false);
-        if (projectThreads.Length == 0)
+        _sidebarSelectionSyncEnabled = false;
+        try
         {
-            children.Add(new TextBlock("No project threads yet."));
-        }
-        else
-        {
-            children.AddRange(projectThreads.Select(CreateThreadOpenButton));
-        }
+            _sidebarTree.Roots.Clear();
+            foreach (var root in roots)
+            {
+                _sidebarTree.Roots.Add(root);
+            }
 
-        var internalThreads = GetThreadsForProject(project.Id, includeInternal: true)
-            .Where(static thread => thread.Kind == WorkThreadKind.InternalThread)
-            .ToArray();
-        if (internalThreads.Length > 0)
-        {
-            children.Add(new TextBlock("Internal Threads"));
-            children.AddRange(internalThreads.Select(CreateThreadOpenButton));
+            _sidebarVisibleTargets = FlattenSidebarTargets(_sidebarTree.Roots);
+            _sidebarTree.SelectedIndex = ResolveSidebarSelectedIndex(_sidebarVisibleTargets);
+            _lastSidebarSelectedIndex = _sidebarTree.SelectedIndex;
         }
-
-        return new VStack([.. children]) { Spacing = 1 };
+        finally
+        {
+            _sidebarSelectionSyncEnabled = true;
+        }
     }
 
-    private Button CreateThreadOpenButton(WorkThreadDescriptor thread)
+    private TreeNode CreateSidebarGlobalNode()
     {
-        return new Button(new TextBlock(BuildThreadSidebarLabel(thread)))
-            .Click(() => OpenThread(thread.ThreadId));
+        var globalNode = new TreeNode(CreateSidebarHeader(
+            $"{NerdFont.MdHome} Global",
+            "Cross-project overview and delegation"))
+        {
+            Icon = NerdFont.MdHome,
+            Data = SidebarSelectionTarget.Global(),
+            IsExpanded = true,
+        };
+
+        foreach (var thread in _threads
+                     .Where(static item => item.Kind == WorkThreadKind.GlobalThread)
+                     .OrderByDescending(static item => item.LastActiveAt)
+                     .Take(3))
+        {
+            globalNode.Children.Add(CreateThreadNode(thread));
+        }
+
+        return globalNode;
+    }
+
+    private TreeNode CreateSidebarProjectsNode()
+    {
+        var projectsNode = new TreeNode(CreateSidebarHeader(
+            $"{NerdFont.FaFolderTree} Projects",
+            $"{_projects.Count} known"))
+        {
+            Icon = NerdFont.FaFolderTree,
+            IsExpanded = true,
+        };
+
+        foreach (var project in _projects.OrderBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase))
+        {
+            projectsNode.Children.Add(CreateProjectNode(project));
+        }
+
+        return projectsNode;
+    }
+
+    private TreeNode CreateProjectNode(ProjectDescriptor project)
+    {
+        var threads = FilterThreadsForProject(_threads, project.Id, includeInternal: true)
+            .Take(3)
+            .ToArray();
+        var projectNode = new TreeNode(CreateSidebarHeader(
+            $"{NerdFont.FaFolderOpen} {project.DisplayName}",
+            threads.Length == 0 ? project.Slug : $"{threads.Length} recent"))
+        {
+            Icon = NerdFont.FaFolderOpen,
+            Data = SidebarSelectionTarget.Project(project.Id),
+            IsExpanded = string.Equals(project.Id, _selectedProjectId, StringComparison.OrdinalIgnoreCase),
+        };
+
+        foreach (var thread in threads)
+        {
+            projectNode.Children.Add(CreateThreadNode(thread));
+        }
+
+        return projectNode;
+    }
+
+    private TreeNode CreateThreadNode(WorkThreadDescriptor thread)
+    {
+        var icon = thread.Kind switch
+        {
+            WorkThreadKind.GlobalThread => NerdFont.PlBranch,
+            WorkThreadKind.ProjectThread => NerdFont.FaTerminal,
+            WorkThreadKind.InternalThread => NerdFont.CodDebug,
+            _ => NerdFont.FaTerminal,
+        };
+
+        return new TreeNode(CreateSidebarHeader(
+            $"{icon} {thread.Title}",
+            string.IsNullOrWhiteSpace(thread.LatestSummary) ? thread.Status.ToString() : thread.LatestSummary!))
+        {
+            Icon = icon,
+            Data = SidebarSelectionTarget.Thread(thread.ThreadId),
+        };
+    }
+
+    private static Visual CreateSidebarHeader(string title, string? subtitle)
+    {
+        if (string.IsNullOrWhiteSpace(subtitle))
+        {
+            return new Markup($"[bold]{AnsiMarkup.Escape(title)}[/]");
+        }
+
+        return new VStack(
+            [
+                new Markup($"[bold]{AnsiMarkup.Escape(title)}[/]"),
+                new Markup($"[muted]{AnsiMarkup.Escape(subtitle)}[/]"),
+            ])
+        {
+            Spacing = 0,
+        };
+    }
+
+    private static IReadOnlyList<SidebarSelectionTarget> FlattenSidebarTargets(IEnumerable<TreeNode> roots)
+    {
+        var results = new List<SidebarSelectionTarget>();
+        foreach (var root in roots)
+        {
+            AppendVisibleSidebarTargets(root, results);
+        }
+
+        return results;
+    }
+
+    private static void AppendVisibleSidebarTargets(TreeNode node, List<SidebarSelectionTarget> results)
+    {
+        if (node.Data is SidebarSelectionTarget target)
+        {
+            results.Add(target);
+        }
+
+        if (!node.IsExpanded)
+        {
+            return;
+        }
+
+        foreach (var child in node.Children)
+        {
+            AppendVisibleSidebarTargets(child, results);
+        }
+    }
+
+    private int ResolveSidebarSelectedIndex(IReadOnlyList<SidebarSelectionTarget> visibleTargets)
+    {
+        for (var index = 0; index < visibleTargets.Count; index++)
+        {
+            var target = visibleTargets[index];
+            if (target.Kind == SidebarSelectionKind.Thread &&
+                string.Equals(target.ThreadId, _selectedThreadId, StringComparison.OrdinalIgnoreCase))
+            {
+                return index;
+            }
+
+            if (target.Kind == SidebarSelectionKind.GlobalScope && _selectedThreadId is null && _globalScopeSelected)
+            {
+                return index;
+            }
+
+            if (target.Kind == SidebarSelectionKind.ProjectScope &&
+                _selectedThreadId is null &&
+                !_globalScopeSelected &&
+                string.Equals(target.ProjectId, _selectedProjectId, StringComparison.OrdinalIgnoreCase))
+            {
+                return index;
+            }
+        }
+
+        for (var index = 0; index < visibleTargets.Count; index++)
+        {
+            if (visibleTargets[index].Kind == SidebarSelectionKind.GlobalScope)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private void SyncSidebarSelection()
+    {
+        if (!_sidebarSelectionSyncEnabled || _sidebarTree is null)
+        {
+            return;
+        }
+
+        var selectedIndex = _sidebarTree.SelectedIndex;
+        if (selectedIndex == _lastSidebarSelectedIndex)
+        {
+            return;
+        }
+
+        _lastSidebarSelectedIndex = selectedIndex;
+        if ((uint)selectedIndex >= (uint)_sidebarVisibleTargets.Count)
+        {
+            return;
+        }
+
+        var target = _sidebarVisibleTargets[selectedIndex];
+        switch (target.Kind)
+        {
+            case SidebarSelectionKind.GlobalScope:
+                SelectGlobalScope();
+                break;
+            case SidebarSelectionKind.ProjectScope when target.ProjectId is not null:
+                SelectProjectScope(target.ProjectId);
+                break;
+            case SidebarSelectionKind.Thread when target.ThreadId is not null:
+                OpenThread(target.ThreadId);
+                break;
+        }
     }
 
     private Visual BuildThreadPane()
@@ -467,7 +623,29 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         var thread = GetSelectedThread();
         if (thread is null)
         {
-            return CreateSectionGroup("Thread", new TextBlock("No thread selected."));
+            var selectedProject = GetSelectedProject();
+            var title = _globalScopeSelected ? "Global Draft" : "Project Draft";
+            var content = _globalScopeSelected
+                ? new VStack(
+                    [
+                        new TextBlock("Global scope"),
+                        new TextBlock(_catalogOptions.GlobalRoot),
+                        new TextBlock("Send the first prompt to create a global thread."),
+                    ])
+                {
+                    Spacing = 1,
+                }
+                : new VStack(
+                    [
+                        new TextBlock(selectedProject?.DisplayName ?? "Project scope"),
+                        new TextBlock(selectedProject?.ProjectPath ?? "Select a project in the sidebar."),
+                        new TextBlock("Send the first prompt to create a project thread."),
+                    ])
+                {
+                    Spacing = 1,
+                };
+
+            return CreateSectionGroup(title, content);
         }
 
         return CreateSectionGroup(
@@ -500,7 +678,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         }
     }
 
-    private async Task CreateGlobalThreadAsync()
+    private async Task<WorkThreadDescriptor?> CreateGlobalThreadAsync()
     {
         try
         {
@@ -514,20 +692,22 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             await RegisterCreatedThreadAsync(thread).ConfigureAwait(false);
             ClearThreadTitleDraft();
             SetStatus($"Created global thread '{thread.Title}'.");
+            return thread;
         }
         catch (Exception ex)
         {
             SetStatus($"Failed to create global thread: {ex.Message}");
+            return null;
         }
     }
 
-    private async Task CreateProjectThreadAsync()
+    private async Task<WorkThreadDescriptor?> CreateProjectThreadAsync()
     {
         var project = GetSelectedProject();
         if (project is null)
         {
             SetStatus("Select a project before creating a project thread.");
-            return;
+            return null;
         }
 
         try
@@ -542,10 +722,12 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             await RegisterCreatedThreadAsync(thread).ConfigureAwait(false);
             ClearThreadTitleDraft();
             SetStatus($"Created thread '{thread.Title}'.");
+            return thread;
         }
         catch (Exception ex)
         {
             SetStatus($"Failed to create project thread: {ex.Message}");
+            return null;
         }
     }
 
@@ -580,6 +762,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         _viewState.SelectedThreadId = threadId;
         _viewState.UpdatedAt = DateTimeOffset.UtcNow;
         _selectedThreadId = threadId;
+        _globalScopeSelected = thread.Kind == WorkThreadKind.GlobalThread;
         _selectedProjectId = thread.ProjectRef ?? _selectedProjectId;
         _ = PersistViewStateAsync();
         RefreshView();
@@ -651,8 +834,19 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         var thread = GetSelectedThread();
         if (thread is null)
         {
-            SetStatus("Open a thread before sending a prompt.");
-            return;
+            if (steer)
+            {
+                SetStatus("Send the first prompt before steering a thread.");
+                return;
+            }
+
+            thread = _globalScopeSelected
+                ? await CreateGlobalThreadAsync().ConfigureAwait(false)
+                : await CreateProjectThreadAsync().ConfigureAwait(false);
+            if (thread is null)
+            {
+                return;
+            }
         }
 
         var prompt = ReadUiValue(() => _threadInput?.Text?.Trim());
@@ -1505,20 +1699,70 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         }
 
         var selectedThread = GetSelectedThread();
-        if (_threadBottomPanel is not null)
-        {
-            _threadBottomPanel.IsVisible = selectedThread is not null;
-        }
-
         if (selectedThread is null)
         {
-            _threadPaneLayout.Content = new TextBlock("Open or create a thread to start working.");
+            RefreshChatSelectorsForDraftScope();
+            _threadPaneLayout.Content = CreateSectionGroup(
+                "Prompt",
+                new TextBlock(BuildDraftPromptMessage(_globalScopeSelected)));
             return;
         }
 
         var tab = EnsureThreadTab(selectedThread);
         RefreshChatSelectorsForThread(tab);
         _threadPaneLayout.Content = tab.Flow;
+    }
+
+    private void RefreshChatSelectorsForDraftScope(AgentBackendId? preferredBackendId = null)
+    {
+        _chatSelectorsRefreshing = true;
+        try
+        {
+            var backendSelect = _chatBackendSelect!;
+            var modelSelect = _chatModelSelect!;
+            var reasoningSelect = _chatReasoningSelect!;
+            var backendOptions = BuildChatBackendOptions();
+            ReplaceSelectItems(backendSelect, backendOptions);
+
+            var backendId = preferredBackendId ?? GetPreferredDraftBackendId(backendOptions);
+            var backendIndex = Math.Max(0, backendOptions.FindIndex(option => string.Equals(option.BackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase)));
+            backendSelect.SelectedIndex = backendIndex;
+            backendSelect.IsEnabled = true;
+
+            var backendState = _chatBackendStates[backendOptions[backendIndex].BackendId.Value];
+            var modelOptions = BuildChatModelOptions(backendState);
+            ReplaceSelectItems(modelSelect, modelOptions);
+            modelSelect.SelectedIndex = Math.Clamp(
+                modelOptions.FindIndex(option => string.Equals(option.ModelId, backendState.SelectedModelId, StringComparison.Ordinal)),
+                0,
+                Math.Max(0, modelOptions.Count - 1));
+
+            var selectedModel = backendState.Models.FirstOrDefault(model => string.Equals(model.Id, backendState.SelectedModelId, StringComparison.Ordinal))
+                ?? GetSelectedModel(backendState);
+            var reasoningOptions = BuildChatReasoningOptions(selectedModel);
+            ReplaceSelectItems(reasoningSelect, reasoningOptions);
+            reasoningSelect.SelectedIndex = Math.Clamp(
+                reasoningOptions.FindIndex(option => option.Effort == backendState.SelectedReasoningEffort),
+                0,
+                Math.Max(0, reasoningOptions.Count - 1));
+
+            _chatBackendStatusMarkup!.Text = BuildChatBackendStatusMarkup(_chatBackendStates.Values, backendOptions[backendIndex].BackendId, isInitializing: false);
+        }
+        finally
+        {
+            _chatSelectorsRefreshing = false;
+        }
+    }
+
+    private AgentBackendId GetPreferredDraftBackendId(IReadOnlyList<ChatBackendOption> backendOptions)
+    {
+        if (_chatBackendSelect is not null &&
+            (uint)_chatBackendSelect.SelectedIndex < (uint)backendOptions.Count)
+        {
+            return backendOptions[_chatBackendSelect.SelectedIndex].BackendId;
+        }
+
+        return backendOptions.FirstOrDefault()?.BackendId ?? AgentBackendIds.Codex;
     }
 
     private void RefreshChatSelectorsForThread(ThreadTabState tab)
@@ -1576,14 +1820,20 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             return;
         }
 
-        var thread = GetSelectedThread();
-        if (thread is null || thread.IsBackendLocked)
+        var options = BuildChatBackendOptions();
+        if ((uint)newIndex >= (uint)options.Count)
         {
             return;
         }
 
-        var options = BuildChatBackendOptions();
-        if ((uint)newIndex >= (uint)options.Count)
+        var thread = GetSelectedThread();
+        if (thread is null)
+        {
+            RefreshChatSelectorsForDraftScope(options[newIndex].BackendId);
+            return;
+        }
+
+        if (thread.IsBackendLocked)
         {
             return;
         }
@@ -1603,6 +1853,16 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         var thread = GetSelectedThread();
         if (thread is null)
         {
+            var backendId = GetPreferredBackendId();
+            var draftBackendState = _chatBackendStates[backendId.Value];
+            var draftOptions = BuildChatModelOptions(draftBackendState);
+            if ((uint)newIndex >= (uint)draftOptions.Count)
+            {
+                return;
+            }
+
+            draftBackendState.SelectedModelId = draftOptions[newIndex].ModelId;
+            RefreshChatSelectorsForDraftScope(backendId);
             return;
         }
 
@@ -1627,6 +1887,16 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         var thread = GetSelectedThread();
         if (thread is null)
         {
+            var backendId = GetPreferredBackendId();
+            var draftBackendState = _chatBackendStates[backendId.Value];
+            var draftSelectedModel = draftBackendState.Models.FirstOrDefault(model => string.Equals(model.Id, draftBackendState.SelectedModelId, StringComparison.Ordinal));
+            var draftOptions = BuildChatReasoningOptions(draftSelectedModel);
+            if ((uint)newIndex >= (uint)draftOptions.Count)
+            {
+                return;
+            }
+
+            draftBackendState.SelectedReasoningEffort = draftOptions[newIndex].Effort;
             return;
         }
 
@@ -1658,9 +1928,24 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             });
     }
 
-    private void SelectProject(string projectId)
+    private void SelectGlobalScope()
     {
+        _globalScopeSelected = true;
+        _selectedThreadId = null;
+        _viewState.SelectedThreadId = null;
+        _viewState.UpdatedAt = DateTimeOffset.UtcNow;
+        _ = PersistViewStateAsync();
+        RefreshView();
+    }
+
+    private void SelectProjectScope(string projectId)
+    {
+        _globalScopeSelected = false;
         _selectedProjectId = projectId;
+        _selectedThreadId = null;
+        _viewState.SelectedThreadId = null;
+        _viewState.UpdatedAt = DateTimeOffset.UtcNow;
+        _ = PersistViewStateAsync();
         RefreshView();
     }
 
@@ -1678,28 +1963,65 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             _selectedProjectId = _projects.FirstOrDefault()?.Id;
         }
 
-        if (_selectedThreadId is not null && FindThread(_selectedThreadId) is { ProjectRef: { } projectRef })
+        if (_selectedThreadId is not null && FindThread(_selectedThreadId) is { } thread)
         {
-            _selectedProjectId = projectRef;
+            _globalScopeSelected = thread.Kind == WorkThreadKind.GlobalThread;
+            if (thread.ProjectRef is not null)
+            {
+                _selectedProjectId = thread.ProjectRef;
+            }
+        }
+        else if (!_globalScopeSelected && _selectedProjectId is null)
+        {
+            _globalScopeSelected = true;
         }
     }
 
     private string BuildHeaderText()
     {
-        var thread = GetSelectedThread();
+        return BuildHeaderText(
+            GetSelectedThread(),
+            GetSelectedProject(),
+            _catalogOptions.GlobalRoot,
+            GetPreferredBackendId().Value,
+            _globalScopeSelected);
+    }
+
+    internal static string BuildHeaderText(
+        WorkThreadDescriptor? thread,
+        ProjectDescriptor? selectedProject,
+        string globalRoot,
+        string preferredBackendId,
+        bool globalScopeSelected)
+    {
         if (thread is null)
         {
+            if (globalScopeSelected)
+            {
+                return $"CodeAlta | backend={preferredBackendId} | scope=global-draft | cwd={globalRoot}";
+            }
+
+            if (selectedProject is not null)
+            {
+                return $"CodeAlta | backend={preferredBackendId} | project={selectedProject.Slug} | scope=draft";
+            }
+
             return "CodeAlta | no thread selected";
         }
 
         return thread.Kind switch
         {
             WorkThreadKind.GlobalThread => $"CodeAlta | backend={thread.BackendId} | thread={thread.Title} | scope=global",
-            WorkThreadKind.ProjectThread => $"CodeAlta | backend={thread.BackendId} | project={GetProjectById(thread.ProjectRef)?.Slug ?? "?"} | thread={thread.Title}",
+            WorkThreadKind.ProjectThread => $"CodeAlta | backend={thread.BackendId} | project={selectedProject?.Slug ?? "?"} | thread={thread.Title}",
             WorkThreadKind.InternalThread => $"CodeAlta | backend={thread.BackendId} | internal={thread.Title}",
             _ => $"CodeAlta | thread={thread.Title}",
         };
     }
+
+    internal static string BuildDraftPromptMessage(bool globalScopeSelected)
+        => globalScopeSelected
+            ? "Send the first prompt to start a global thread."
+            : "Send the first prompt to start a thread for the selected project.";
 
     private void SetStatus(string message, bool showSpinner = false)
     {
@@ -1874,5 +2196,27 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         public Dictionary<string, AgentPermissionRequest> PermissionRequests { get; } = new(StringComparer.Ordinal);
 
         public Dictionary<string, AgentUserInputRequest> UserInputRequests { get; } = new(StringComparer.Ordinal);
+    }
+
+    private enum SidebarSelectionKind
+    {
+        GlobalScope,
+        ProjectScope,
+        Thread,
+    }
+
+    private sealed record SidebarSelectionTarget(
+        SidebarSelectionKind Kind,
+        string? ProjectId,
+        string? ThreadId)
+    {
+        public static SidebarSelectionTarget Global()
+            => new(SidebarSelectionKind.GlobalScope, null, null);
+
+        public static SidebarSelectionTarget Project(string projectId)
+            => new(SidebarSelectionKind.ProjectScope, projectId, null);
+
+        public static SidebarSelectionTarget Thread(string threadId)
+            => new(SidebarSelectionKind.Thread, null, threadId);
     }
 }
