@@ -1684,6 +1684,22 @@ internal static class CodexAgentMapper
         };
     }
 
+    private static string DescribeWebSearchAction(ResponsesApiWebSearchAction? action, string? fallbackQuery)
+    {
+        return action switch
+        {
+            ResponsesApiWebSearchAction.SearchResponsesApiWebSearchAction search => search.Query
+                ?? search.Queries?.FirstOrDefault()
+                ?? fallbackQuery
+                ?? "web search",
+            ResponsesApiWebSearchAction.OpenPageResponsesApiWebSearchAction openPage => openPage.Url ?? "open page",
+            ResponsesApiWebSearchAction.FindInPageResponsesApiWebSearchAction findInPage => findInPage.Pattern ?? findInPage.Url ?? "find in page",
+            ResponsesApiWebSearchAction.OtherResponsesApiWebSearchAction => fallbackQuery ?? "web search",
+            null => fallbackQuery ?? "web search",
+            _ => fallbackQuery ?? "web search"
+        };
+    }
+
     private static string? TryGetStringProperty(JsonElement element, string propertyName)
     {
         return element.ValueKind == JsonValueKind.Object &&

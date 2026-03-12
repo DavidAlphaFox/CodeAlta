@@ -1155,38 +1155,42 @@ public class CSharpEmitter
 
     private string FullyQualifyTypeName(string shortName, string contextNs)
     {
+        var isNullable = shortName.EndsWith("?", StringComparison.Ordinal);
+        var baseName = isNullable ? shortName[..^1] : shortName;
+
         // Already fully qualified
-        if (shortName.Contains('.'))
-            return shortName;
+        if (baseName.Contains('.'))
+            return isNullable ? baseName + "?" : baseName;
 
         // Primitives / well-known types
-        if (shortName is "string" or "bool" or "int" or "long" or "short"
+        if (baseName is "string" or "bool" or "int" or "long" or "short"
             or "uint" or "ulong" or "ushort" or "float" or "double"
             or "decimal" or "byte" or "sbyte" or "char" or "object")
-            return shortName;
+            return isNullable ? baseName + "?" : baseName;
 
-        if (shortName == "JsonElement")
-            return "System.Text.Json.JsonElement";
+        if (baseName == "JsonElement")
+            return isNullable ? "System.Text.Json.JsonElement?" : "System.Text.Json.JsonElement";
 
         // Look up in known type defs, preferring the one in the context namespace
         // (mirrors C# short-name resolution: same-namespace type wins).
         string? fallback = null;
         foreach (var (_, def) in _pointerToTypeDef)
         {
-            if (def.Name != shortName)
+            if (def.Name != baseName)
                 continue;
 
             if (def.CsNamespace == contextNs)
-                return $"{def.CsNamespace}.{def.Name}";
+                return isNullable ? $"{def.CsNamespace}.{def.Name}?" : $"{def.CsNamespace}.{def.Name}";
 
             fallback ??= $"{def.CsNamespace}.{def.Name}";
         }
 
         if (fallback != null)
-            return fallback;
+            return isNullable ? fallback + "?" : fallback;
 
         // Fallback: assume it's in the current context namespace
-        return $"{contextNs}.{shortName}";
+        var assumed = $"{contextNs}.{baseName}";
+        return isNullable ? assumed + "?" : assumed;
     }
 
     private static List<string> SplitGenericArgs(string args)
@@ -1240,8 +1244,28 @@ public class CSharpEmitter
 
     private static string ToCsPropertyName(string jsonName)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(jsonName);
+
+        // Remove leading characters that cannot start an identifier (for example "$schema")
+        // while preserving word boundaries for the remaining content.
+        var sanitized = new string(jsonName.Where(ch => char.IsLetterOrDigit(ch) || ch is '_' or '-' or '/' or '.').ToArray());
+        if (string.IsNullOrEmpty(sanitized))
+        {
+            sanitized = "Value";
+        }
+
         // Convert snake_case/camelCase to PascalCase
-        var pascal = SchemaWalker.ToPascalCase(jsonName);
+        var pascal = SchemaWalker.ToPascalCase(sanitized);
+        if (string.IsNullOrEmpty(pascal))
+        {
+            pascal = "Value";
+        }
+
+        if (!char.IsLetter(pascal[0]) && pascal[0] != '_')
+        {
+            pascal = "_" + pascal;
+        }
+
         // Avoid C# keywords
         return pascal switch
         {
@@ -1402,12 +1426,16 @@ public class CSharpEmitter
     /// </summary>
     private static string CollectionTypeToPropName(string collectionType)
     {
-        // Strip namespace dots and angle brackets to produce a valid C# identifier.
+        // Strip punctuation and preserve nullable markers as a stable suffix so
+        // `Dictionary<string, string>` and `Dictionary<string, string?>` remain distinct.
         return collectionType
+            .Replace("?", "Nullable", StringComparison.Ordinal)
             .Replace(".", string.Empty)
             .Replace("<", string.Empty)
             .Replace(">", string.Empty)
             .Replace(",", string.Empty)
+            .Replace("[", string.Empty)
+            .Replace("]", string.Empty)
             .Replace(" ", string.Empty);
     }
 

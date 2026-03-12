@@ -17,7 +17,8 @@ public sealed partial record McpElicitationSchema
     public Dictionary<string, McpElicitationPrimitiveSchema> Properties { get; set; } = [];
     [JsonPropertyName("type")]
     public McpElicitationObjectType Type { get; set; } = default!;
-    public string? $schema { get; set; }
     [JsonPropertyName("required")]
     public List<string>? Required { get; set; }
+    [JsonPropertyName("$schema")]
+    public string? Schema { get; set; }
 }

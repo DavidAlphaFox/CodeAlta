@@ -1,4 +1,5 @@
 using CodeAlta.CodexSdk.Generator;
+using NJsonSchema;
 
 namespace CodeAlta.Tests;
 
@@ -322,5 +323,33 @@ public sealed class CodexSdkGeneratorTests
             {
             }
         }
+    }
+
+    [TestMethod]
+    public void EmitSerializerContext_DictionaryWithNullablePrimitive_UsesPrimitiveTypeAndSanitizedPropertyName()
+    {
+        var schema = new JsonSchema();
+        var defs = new List<TypeDef>
+        {
+            new(
+                "Dummy",
+                "CodeAlta.CodexSdk",
+                schema,
+                "#/definitions/Dummy"),
+        };
+
+        var emitter = new CSharpEmitter(defs, "CodeAlta.CodexSdk");
+        var trackCollectionType = typeof(CSharpEmitter).GetMethod("TrackCollectionType", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.IsNotNull(trackCollectionType);
+
+        trackCollectionType.Invoke(emitter, ["Dictionary<string, string?>", "CodeAlta.CodexSdk"]);
+
+        var contextCode = emitter.EmitSerializerContext("CodexJsonSerializerContext");
+
+        StringAssert.Contains(
+            contextCode,
+            "[JsonSerializable(typeof(Dictionary<string, string?>), TypeInfoPropertyName = \"DictionarystringstringNullable\")]");
+        Assert.IsFalse(contextCode.Contains("CodeAlta.CodexSdk.string?", StringComparison.Ordinal));
+        Assert.IsFalse(contextCode.Contains("Dictionarystringstring?", StringComparison.Ordinal));
     }
 }
