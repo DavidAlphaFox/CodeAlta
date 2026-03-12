@@ -182,6 +182,17 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
+    public async Task ApplyChatCardTimestamp_CanBeCalledFromWorkerThread()
+    {
+        var timestamp = new DateTimeOffset(2026, 03, 12, 14, 5, 6, TimeSpan.FromHours(1));
+        var markup = new Markup();
+
+        await Task.Run(() => CodeAltaTerminalUi.ApplyChatCardTimestamp(markup, timestamp));
+
+        Assert.AreEqual("[dim]2026-03-12 14:05:06 +01:00[/]", markup.Text);
+    }
+
+    [TestMethod]
     public void ShouldRunInlineOnCurrentThread_AllowsBootstrapThreadBeforeTerminalStarts()
     {
         Assert.IsTrue(CodeAltaTerminalUi.ShouldRunInlineOnCurrentThread(

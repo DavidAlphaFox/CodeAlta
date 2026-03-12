@@ -1255,7 +1255,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         if (kind == AgentContentKind.Assistant && tab.PendingAssistant is { ContentId: null } pending)
         {
             pending.ContentId = contentId;
-            pending.TimestampText.Text = $"[dim]{FormatChatCardTimestamp(timestamp)}[/]";
+            ApplyChatCardTimestamp(pending.TimestampText, timestamp);
             tab.PendingAssistant = null;
             var pendingState = new ChatContentState(pending.Item, pending.Markdown, pending.TimestampText, pending.Buffer, kind);
             tab.ContentStates[key] = pendingState;
@@ -1266,7 +1266,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             FormatChatContentMarkdown(kind, string.Empty),
             GetContentTone(kind),
             headerOverride: GetContentHeader(kind));
-        entry.TimestampText.Text = $"[dim]{FormatChatCardTimestamp(timestamp)}[/]";
+        ApplyChatCardTimestamp(entry.TimestampText, timestamp);
         var state = new ChatContentState(entry.Item, entry.Markdown, entry.TimestampText, new System.Text.StringBuilder(), kind);
         tab.ContentStates[key] = state;
         AppendThreadTimelineItem(tab, entry.Item);
@@ -1300,6 +1300,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         stateEntry.BaseMarkdown = markdown;
         PostToUi(() =>
         {
+            ApplyChatCardTimestamp(stateEntry.TimestampText, timestamp);
             stateEntry.Markdown.Markdown = stateEntry.MarkdownValue;
             tab.Flow.ScrollToTail();
         });
@@ -1334,6 +1335,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
 
         PostToUi(() =>
         {
+            ApplyChatCardTimestamp(state.TimestampText, timestamp);
             state.Markdown.Markdown = state.MarkdownValue;
             tab.Flow.ScrollToTail();
         });
@@ -1347,7 +1349,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         string? headerSecondary = null)
     {
         var entry = CreateChatMarkdownItem(markdown, tone, headerOverride, headerSecondary);
-        entry.TimestampText.Text = $"[dim]{FormatChatCardTimestamp(timestamp)}[/]";
+        ApplyChatCardTimestamp(entry.TimestampText, timestamp);
         return new ChatStatusState(entry.Item, entry.Markdown, entry.TimestampText)
         {
             BaseMarkdown = markdown,
@@ -1362,7 +1364,13 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             return;
         }
 
-        pendingAssistant.Markdown.Markdown = "_No assistant content was returned._";
+        RunOnUiThread(
+            static state =>
+            {
+                state.pendingAssistant.Markdown.Markdown = "_No assistant content was returned._";
+                return 0;
+            },
+            new { pendingAssistant });
         tab.PendingAssistant = null;
     }
 
@@ -1372,15 +1380,27 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         if (pendingAssistant is not null)
         {
             pendingAssistant.Buffer.Append(message);
-            pendingAssistant.Markdown.Markdown = message;
-            pendingAssistant.TimestampText.Text = $"[dim]{FormatChatCardTimestamp(timestamp)}[/]";
+            RunOnUiThread(
+                static state =>
+                {
+                    state.pendingAssistant.Markdown.Markdown = state.message;
+                    ApplyChatCardTimestamp(state.pendingAssistant.TimestampText, state.timestamp);
+                    return 0;
+                },
+                (pendingAssistant: pendingAssistant, message, timestamp));
             tab.PendingAssistant = null;
             return;
         }
 
         var entry = CreateChatMarkdownItem(message, ChatTimelineTone.Interaction, headerOverride: "Error");
-        entry.TimestampText.Text = $"[dim]{FormatChatCardTimestamp(timestamp)}[/]";
-        tab.Flow.Items.Add(entry.Item);
+        ApplyChatCardTimestamp(entry.TimestampText, timestamp);
+        RunOnUiThread(
+            static state =>
+            {
+                state.tab.Flow.Items.Add(state.entry.Item);
+                return 0;
+            },
+            (tab: tab, entry));
     }
 
     private static void RenderThreadFailure(ThreadTabState tab, string markdown)
@@ -1389,12 +1409,25 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         if (pendingAssistant is not null)
         {
             pendingAssistant.Buffer.Append(markdown);
-            pendingAssistant.Markdown.Markdown = markdown;
+            RunOnUiThread(
+                static state =>
+                {
+                    state.pendingAssistant.Markdown.Markdown = state.markdown;
+                    return 0;
+                },
+                (pendingAssistant: pendingAssistant, markdown));
             tab.PendingAssistant = null;
             return;
         }
 
-        tab.Flow.Items.Add(CreateChatMarkdownItem(markdown, ChatTimelineTone.Interaction, headerOverride: "Error").Item);
+        var entry = CreateChatMarkdownItem(markdown, ChatTimelineTone.Interaction, headerOverride: "Error");
+        RunOnUiThread(
+            static state =>
+            {
+                state.tab.Flow.Items.Add(state.entry.Item);
+                return 0;
+            },
+            (tab: tab, entry));
     }
 
     private void TryRenderThreadInteraction(ThreadTabState tab, Action action, string context)

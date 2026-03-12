@@ -188,6 +188,19 @@ internal sealed partial class CodeAltaTerminalUi
     internal static string FormatChatCardTimestamp(DateTimeOffset timestamp)
         => timestamp.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture);
 
+    internal static void ApplyChatCardTimestamp(Markup timestampText, DateTimeOffset timestamp)
+    {
+        ArgumentNullException.ThrowIfNull(timestampText);
+
+        RunOnUiThread(
+            static state =>
+            {
+                state.timestampText.Text = $"[dim]{FormatChatCardTimestamp(state.timestamp)}[/]";
+                return 0;
+            },
+            (timestampText, timestamp));
+    }
+
     private static Dictionary<string, ChatBackendState> CreateChatBackendStates()
     {
         return new Dictionary<string, ChatBackendState>(StringComparer.OrdinalIgnoreCase)
