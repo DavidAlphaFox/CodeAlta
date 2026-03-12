@@ -904,7 +904,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         var pending = CreatePendingChatMessage(prompt);
         AppendThreadTimelineItem(tab, pending.UserItem);
         AppendThreadTimelineItem(tab, pending.AssistantItem);
-        tab.PendingAssistant = new PendingAssistantState(pending.AssistantItem, pending.StreamingMarkdown);
+        tab.PendingAssistant = new PendingAssistantState(pending.AssistantItem, pending.StreamingMarkdown, pending.TimestampText);
 
         try
         {
@@ -1081,6 +1081,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                             hostTab,
                             dictionary: null,
                             key: null,
+                            hostEvent.Timestamp,
                             markdown: hostEvent.Message,
                             tone: ChatTimelineTone.Notice,
                             headerOverride: "Notice",
@@ -1116,6 +1117,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                     tab,
                     tab.PlanStates,
                     "plan",
+                    planEvent.Timestamp,
                     FormatChatPlanMarkdown(planEvent.Snapshot),
                     ChatTimelineTone.Notice,
                     headerOverride: "Plan");
@@ -1126,6 +1128,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                     tab,
                     tab.ActivityStates,
                     activity.ActivityId,
+                    activity.Timestamp,
                     FormatChatActivityMarkdown(activity),
                     ChatTimelineTone.Activity,
                     headerOverride: GetActivityHeadline(activity.Kind, activity.Phase));
@@ -1136,6 +1139,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                     tab,
                     dictionary: null,
                     key: null,
+                    raw.Timestamp,
                     markdown: FormatChatRawEventMarkdown(raw),
                     tone: ChatTimelineTone.Activity,
                     headerOverride: "Raw Event");
@@ -1146,6 +1150,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                 UpsertThreadInteraction(
                     tab,
                     permissionRequest.InteractionId,
+                    permissionRequest.Timestamp,
                     FormatChatPermissionRequestMarkdown(permissionRequest),
                     null,
                     ChatTimelineTone.Interaction,
@@ -1158,6 +1163,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                 UpsertThreadInteraction(
                     tab,
                     userInputRequest.InteractionId,
+                    userInputRequest.Timestamp,
                     FormatChatUserInputRequestMarkdown(userInputRequest, _chatAutoApproveEnabled),
                     null,
                     ChatTimelineTone.Interaction,
@@ -1169,6 +1175,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                 UpsertThreadInteraction(
                     tab,
                     interaction.InteractionId,
+                    interaction.Timestamp,
                     null,
                     FormatChatInteractionResolutionMarkdown(interaction, includeHeading: false),
                     ChatTimelineTone.Interaction);
@@ -1188,6 +1195,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                     tab,
                     dictionary: null,
                     key: null,
+                    update.Timestamp,
                     markdown: FormatChatSessionUpdateMarkdown(update),
                     tone: update.Kind == AgentSessionUpdateKind.Warning ? ChatTimelineTone.Interaction : ChatTimelineTone.Notice,
                     headerOverride: "Notice",
@@ -1200,7 +1208,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                 break;
 
             case AgentErrorEvent error:
-                RenderThreadError(tab, error.Message);
+                RenderThreadError(tab, error.Message, error.Timestamp);
                 thread.LatestSummary = SummarizeThreadContent(error.Message);
                 break;
         }
@@ -1213,7 +1221,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
             return;
         }
 
-        var state = GetOrCreateThreadContentState(tab, delta.Kind, delta.ContentId);
+        var state = GetOrCreateThreadContentState(tab, delta.Kind, delta.ContentId, delta.Timestamp);
         state.Buffer.Append(delta.Delta);
         var markdown = FormatChatContentMarkdown(delta.Kind, state.Buffer.ToString());
         PostToUi(() =>
@@ -1225,7 +1233,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
 
     private void FinalizeThreadContent(ThreadTabState tab, AgentContentCompletedEvent completed)
     {
-        var state = GetOrCreateThreadContentState(tab, completed.Kind, completed.ContentId);
+        var state = GetOrCreateThreadContentState(tab, completed.Kind, completed.ContentId, completed.Timestamp);
         state.Buffer.Clear();
         state.Buffer.Append(completed.Content);
         var markdown = FormatChatContentMarkdown(completed.Kind, completed.Content);
@@ -1236,7 +1244,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         });
     }
 
-    private ChatContentState GetOrCreateThreadContentState(ThreadTabState tab, AgentContentKind kind, string contentId)
+    private ChatContentState GetOrCreateThreadContentState(ThreadTabState tab, AgentContentKind kind, string contentId, DateTimeOffset timestamp)
     {
         var key = CreateChatContentKey(kind, contentId);
         if (tab.ContentStates.TryGetValue(key, out var existing))
@@ -1247,19 +1255,21 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         if (kind == AgentContentKind.Assistant && tab.PendingAssistant is { ContentId: null } pending)
         {
             pending.ContentId = contentId;
+            pending.TimestampText.Text = $"[dim]{FormatChatCardTimestamp(timestamp)}[/]";
             tab.PendingAssistant = null;
-            var pendingState = new ChatContentState(pending.Item, pending.Markdown, pending.Buffer, kind);
+            var pendingState = new ChatContentState(pending.Item, pending.Markdown, pending.TimestampText, pending.Buffer, kind);
             tab.ContentStates[key] = pendingState;
             return pendingState;
         }
 
-        var (item, markdown) = CreateChatMarkdownItem(
+        var entry = CreateChatMarkdownItem(
             FormatChatContentMarkdown(kind, string.Empty),
             GetContentTone(kind),
             headerOverride: GetContentHeader(kind));
-        var state = new ChatContentState(item, markdown, new System.Text.StringBuilder(), kind);
+        entry.TimestampText.Text = $"[dim]{FormatChatCardTimestamp(timestamp)}[/]";
+        var state = new ChatContentState(entry.Item, entry.Markdown, entry.TimestampText, new System.Text.StringBuilder(), kind);
         tab.ContentStates[key] = state;
-        AppendThreadTimelineItem(tab, item);
+        AppendThreadTimelineItem(tab, entry.Item);
         return state;
     }
 
@@ -1267,6 +1277,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         ThreadTabState tab,
         Dictionary<string, ChatStatusState>? dictionary,
         string? key,
+        DateTimeOffset timestamp,
         string markdown,
         ChatTimelineTone tone,
         string? headerOverride = null,
@@ -1274,14 +1285,14 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
     {
         if (dictionary is null || key is null)
         {
-            var state = CreateChatStatusState(markdown, tone, headerOverride, headerSecondary);
+            var state = CreateChatStatusState(markdown, tone, timestamp, headerOverride, headerSecondary);
             AppendThreadTimelineItem(tab, state.Item);
             return;
         }
 
         if (!dictionary.TryGetValue(key, out var stateEntry))
         {
-            stateEntry = CreateChatStatusState(markdown, tone, headerOverride, headerSecondary);
+            stateEntry = CreateChatStatusState(markdown, tone, timestamp, headerOverride, headerSecondary);
             dictionary[key] = stateEntry;
             AppendThreadTimelineItem(tab, stateEntry.Item);
         }
@@ -1297,6 +1308,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
     private void UpsertThreadInteraction(
         ThreadTabState tab,
         string interactionId,
+        DateTimeOffset timestamp,
         string? baseMarkdown,
         string? statusMarkdown,
         ChatTimelineTone tone,
@@ -1305,7 +1317,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
     {
         if (!tab.InteractionStates.TryGetValue(interactionId, out var state))
         {
-            state = CreateChatStatusState(baseMarkdown ?? statusMarkdown ?? string.Empty, tone, headerOverride, headerSecondary);
+            state = CreateChatStatusState(baseMarkdown ?? statusMarkdown ?? string.Empty, tone, timestamp, headerOverride, headerSecondary);
             tab.InteractionStates[interactionId] = state;
             AppendThreadTimelineItem(tab, state.Item);
         }
@@ -1330,11 +1342,13 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
     private static ChatStatusState CreateChatStatusState(
         string markdown,
         ChatTimelineTone tone,
+        DateTimeOffset timestamp,
         string? headerOverride = null,
         string? headerSecondary = null)
     {
-        var (item, control) = CreateChatMarkdownItem(markdown, tone, headerOverride, headerSecondary);
-        return new ChatStatusState(item, control)
+        var entry = CreateChatMarkdownItem(markdown, tone, headerOverride, headerSecondary);
+        entry.TimestampText.Text = $"[dim]{FormatChatCardTimestamp(timestamp)}[/]";
+        return new ChatStatusState(entry.Item, entry.Markdown, entry.TimestampText)
         {
             BaseMarkdown = markdown,
         };
@@ -1352,18 +1366,21 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         tab.PendingAssistant = null;
     }
 
-    private static void RenderThreadError(ThreadTabState tab, string message)
+    private static void RenderThreadError(ThreadTabState tab, string message, DateTimeOffset timestamp)
     {
         var pendingAssistant = tab.PendingAssistant;
         if (pendingAssistant is not null)
         {
             pendingAssistant.Buffer.Append(message);
             pendingAssistant.Markdown.Markdown = message;
+            pendingAssistant.TimestampText.Text = $"[dim]{FormatChatCardTimestamp(timestamp)}[/]";
             tab.PendingAssistant = null;
             return;
         }
 
-        tab.Flow.Items.Add(CreateChatMarkdownItem(message, ChatTimelineTone.Interaction, headerOverride: "Error").Item);
+        var entry = CreateChatMarkdownItem(message, ChatTimelineTone.Interaction, headerOverride: "Error");
+        entry.TimestampText.Text = $"[dim]{FormatChatCardTimestamp(timestamp)}[/]";
+        tab.Flow.Items.Add(entry.Item);
     }
 
     private static void RenderThreadFailure(ThreadTabState tab, string markdown)
@@ -1418,6 +1435,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                     UpsertThreadInteraction(
                         tab,
                         request.InteractionId,
+                        request.Timestamp,
                         FormatChatPermissionRequestMarkdown(request),
                         FormatChatImmediatePermissionDecisionMarkdown(decision, _chatAutoApproveEnabled),
                         ChatTimelineTone.Interaction,
@@ -1447,6 +1465,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
                     UpsertThreadInteraction(
                         tab,
                         request.InteractionId,
+                        request.Timestamp,
                         FormatChatUserInputRequestMarkdown(request, _chatAutoApproveEnabled),
                         FormatChatImmediateUserInputResponseMarkdown(response, _chatAutoApproveEnabled),
                         ChatTimelineTone.Interaction,

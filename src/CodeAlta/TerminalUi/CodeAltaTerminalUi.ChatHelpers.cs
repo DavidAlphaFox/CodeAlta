@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Globalization;
 using CodeAlta.Agent;
 using XenoAtom.Ansi;
 using XenoAtom.Terminal;
@@ -167,11 +168,12 @@ internal sealed partial class CodeAltaTerminalUi
             headerOverride: "User Prompt",
             maxCodeBlockHeight: 10).Item;
 
-    private static DocumentFlowItem CreateAssistantStreamingChatItem(out MarkdownControl markdownControl)
+    private static DocumentFlowItem CreateAssistantStreamingChatItem(out MarkdownControl markdownControl, out Markup timestampText)
     {
-        var (item, control) = CreateChatMarkdownItem(string.Empty, ChatTimelineTone.Assistant);
-        markdownControl = control;
-        return item;
+        var entry = CreateChatMarkdownItem(string.Empty, ChatTimelineTone.Assistant);
+        markdownControl = entry.Markdown;
+        timestampText = entry.TimestampText;
+        return entry.Item;
     }
 
     internal static PendingChatMessage CreatePendingChatMessage(string userMarkdown)
@@ -179,9 +181,12 @@ internal sealed partial class CodeAltaTerminalUi
         ArgumentException.ThrowIfNullOrWhiteSpace(userMarkdown);
 
         var userItem = CreateUserChatItem(userMarkdown);
-        var assistantItem = CreateAssistantStreamingChatItem(out var streamingMarkdown);
-        return new PendingChatMessage(userItem, assistantItem, streamingMarkdown);
+        var assistantItem = CreateAssistantStreamingChatItem(out var streamingMarkdown, out var timestampText);
+        return new PendingChatMessage(userItem, assistantItem, streamingMarkdown, timestampText);
     }
+
+    internal static string FormatChatCardTimestamp(DateTimeOffset timestamp)
+        => timestamp.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture);
 
     private static Dictionary<string, ChatBackendState> CreateChatBackendStates()
     {
@@ -285,8 +290,11 @@ internal sealed partial class CodeAltaTerminalUi
         var copyButton = new Button(new TextBlock($"{NerdFont.MdContentCopy} Copy"))
             .Click(() => markdownControl.App?.Terminal.Clipboard.TrySetText(markdownControl.Markdown));
 
+        var timestampText = new Markup(string.Empty);
+
         var group = new Group(CreateChatCardHeader(tone, headerOverride, headerSecondary), markdownControl)
             .TopRightText(copyButton)
+            .BottomRightText(timestampText)
             .Padding(1)
             .Style(CreateChatGroupStyle(tone))
             .HorizontalAlignment(Align.Stretch)
@@ -298,7 +306,8 @@ internal sealed partial class CodeAltaTerminalUi
                 Content = new FlowDocument().Add(group),
                 Alignment = DocumentFlowAlignment.Stretch,
             },
-            markdownControl);
+            markdownControl,
+            timestampText);
     }
 
     internal static string FormatChatContentMarkdown(AgentContentKind kind, string content)
@@ -1016,7 +1025,8 @@ internal sealed partial class CodeAltaTerminalUi
     internal sealed record PendingChatMessage(
         DocumentFlowItem UserItem,
         DocumentFlowItem AssistantItem,
-        MarkdownControl StreamingMarkdown);
+        MarkdownControl StreamingMarkdown,
+        Markup TimestampText);
 
     internal enum ChatBackendAvailability
     {
@@ -1052,7 +1062,7 @@ internal sealed partial class CodeAltaTerminalUi
         public override string ToString() => Label;
     }
 
-    private sealed record ChatMarkdownEntry(DocumentFlowItem Item, MarkdownControl Markdown);
+    private sealed record ChatMarkdownEntry(DocumentFlowItem Item, MarkdownControl Markdown, Markup TimestampText);
 
     internal sealed class ChatBackendState(AgentBackendId backendId, string displayName)
     {
@@ -1074,6 +1084,7 @@ internal sealed partial class CodeAltaTerminalUi
     private sealed class ChatContentState(
         DocumentFlowItem item,
         MarkdownControl markdown,
+        Markup timestampText,
         StringBuilder buffer,
         AgentContentKind kind)
     {
@@ -1081,27 +1092,33 @@ internal sealed partial class CodeAltaTerminalUi
 
         public MarkdownControl Markdown { get; } = markdown;
 
+        public Markup TimestampText { get; } = timestampText;
+
         public StringBuilder Buffer { get; } = buffer;
 
         public AgentContentKind Kind { get; } = kind;
     }
 
-    private sealed class PendingAssistantState(DocumentFlowItem item, MarkdownControl markdown)
+    private sealed class PendingAssistantState(DocumentFlowItem item, MarkdownControl markdown, Markup timestampText)
     {
         public DocumentFlowItem Item { get; } = item;
 
         public MarkdownControl Markdown { get; } = markdown;
+
+        public Markup TimestampText { get; } = timestampText;
 
         public StringBuilder Buffer { get; } = new();
 
         public string? ContentId { get; set; }
     }
 
-    private sealed class ChatStatusState(DocumentFlowItem item, MarkdownControl markdown)
+    private sealed class ChatStatusState(DocumentFlowItem item, MarkdownControl markdown, Markup timestampText)
     {
         public DocumentFlowItem Item { get; } = item;
 
         public MarkdownControl Markdown { get; } = markdown;
+
+        public Markup TimestampText { get; } = timestampText;
 
         public string BaseMarkdown { get; set; } = string.Empty;
 
