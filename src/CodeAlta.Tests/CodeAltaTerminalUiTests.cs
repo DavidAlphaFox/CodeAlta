@@ -193,6 +193,26 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
+    public void ResolveCompletedThreadContent_PreservesBufferedDeltaWhenCompletedPayloadIsEmpty()
+    {
+        var buffer = new System.Text.StringBuilder("Streaming assistant reply");
+
+        var content = CodeAltaTerminalUi.ResolveCompletedThreadContent(string.Empty, buffer);
+
+        Assert.AreEqual("Streaming assistant reply", content);
+    }
+
+    [TestMethod]
+    public void ResolveCompletedThreadContent_PrefersCompletedPayloadWhenPresent()
+    {
+        var buffer = new System.Text.StringBuilder("Older delta text");
+
+        var content = CodeAltaTerminalUi.ResolveCompletedThreadContent("Final assistant reply", buffer);
+
+        Assert.AreEqual("Final assistant reply", content);
+    }
+
+    [TestMethod]
     public void ShouldRunInlineOnCurrentThread_AllowsBootstrapThreadBeforeTerminalStarts()
     {
         Assert.IsTrue(CodeAltaTerminalUi.ShouldRunInlineOnCurrentThread(

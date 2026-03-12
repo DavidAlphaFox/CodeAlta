@@ -245,11 +245,44 @@ internal sealed partial class CodeAltaTerminalUi
     private async Task EnsureThreadHistoryLoadedAsync(WorkThreadDescriptor thread, CancellationToken cancellationToken = default)
     {
         var tab = EnsureThreadTab(thread);
-        if (tab.HistoryLoaded || tab.HistoryLoading)
+        var loadTask = GetOrStartThreadHistoryLoadTask(
+            tab,
+            thread,
+            static (self, currentThread, currentTab, token) => self.LoadThreadHistoryCoreAsync(currentThread, currentTab, token),
+            cancellationToken);
+        await loadTask.ConfigureAwait(false);
+    }
+
+    private Task GetOrStartThreadHistoryLoadTask(
+        ThreadTabState tab,
+        WorkThreadDescriptor thread,
+        Func<CodeAltaTerminalUi, WorkThreadDescriptor, ThreadTabState, CancellationToken, Task> loadAsync,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(loadAsync);
+
+        if (tab.HistoryLoaded)
         {
-            return;
+            return Task.CompletedTask;
         }
 
+        if (tab.HistoryLoadTask is { } existingTask)
+        {
+            return existingTask.WaitAsync(cancellationToken);
+        }
+
+        var loadTask = loadAsync(this, thread, tab, cancellationToken);
+        tab.HistoryLoadTask = loadTask;
+        return loadTask.WaitAsync(cancellationToken);
+    }
+
+    private async Task LoadThreadHistoryCoreAsync(
+        WorkThreadDescriptor thread,
+        ThreadTabState tab,
+        CancellationToken cancellationToken)
+    {
         tab.HistoryLoading = true;
         try
         {
@@ -274,6 +307,7 @@ internal sealed partial class CodeAltaTerminalUi
         finally
         {
             tab.HistoryLoading = false;
+            tab.HistoryLoadTask = null;
         }
     }
 
@@ -304,6 +338,7 @@ internal sealed partial class CodeAltaTerminalUi
         }
 
         var tab = EnsureThreadTab(thread);
+        await EnsureThreadHistoryLoadedAsync(thread).ConfigureAwait(false);
         ClearThreadInput();
         var pending = CreatePendingChatMessage(prompt);
         AppendThreadTimelineItem(tab, pending.UserItem);
@@ -639,14 +674,24 @@ internal sealed partial class CodeAltaTerminalUi
     private void FinalizeThreadContent(ThreadTabState tab, AgentContentCompletedEvent completed)
     {
         var state = GetOrCreateThreadContentState(tab, completed.Kind, completed.ContentId, completed.Timestamp);
+        var content = ResolveCompletedThreadContent(completed.Content, state.Buffer);
         state.Buffer.Clear();
-        state.Buffer.Append(completed.Content);
-        var markdown = FormatChatContentMarkdown(completed.Kind, completed.Content);
+        state.Buffer.Append(content);
+        var markdown = FormatChatContentMarkdown(completed.Kind, content);
         PostToUi(() =>
         {
             state.Markdown.Markdown = markdown;
             tab.Flow.ScrollToTail();
         });
+    }
+
+    internal static string ResolveCompletedThreadContent(string completedContent, System.Text.StringBuilder bufferedContent)
+    {
+        ArgumentNullException.ThrowIfNull(bufferedContent);
+
+        return completedContent.Length > 0
+            ? completedContent
+            : bufferedContent.ToString();
     }
 
     private ChatContentState GetOrCreateThreadContentState(ThreadTabState tab, AgentContentKind kind, string contentId, DateTimeOffset timestamp)

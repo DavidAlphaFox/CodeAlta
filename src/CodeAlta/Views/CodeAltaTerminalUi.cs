@@ -164,6 +164,8 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
 
         public bool HistoryLoading { get; set; }
 
+        public Task? HistoryLoadTask { get; set; }
+
         public PendingAssistantState? PendingAssistant { get; set; }
 
         public Dictionary<string, ChatContentState> ContentStates { get; } = new(StringComparer.Ordinal);
