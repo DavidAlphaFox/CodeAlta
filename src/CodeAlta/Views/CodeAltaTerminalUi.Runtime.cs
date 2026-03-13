@@ -1130,7 +1130,8 @@ internal sealed partial class CodeAltaTerminalUi
             {
                 HorizontalAlignment = Align.Stretch,
                 VerticalAlignment = Align.Stretch,
-                ItemPadding = new Thickness(1, 1, 0, 0),
+                ItemPadding = new Thickness(1, 0, 0, 0),
+                ItemSpacing = 0,
             });
 
         var state = new ThreadTabState(thread, flow)

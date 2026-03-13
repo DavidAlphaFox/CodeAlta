@@ -186,7 +186,7 @@ internal sealed partial class CodeAltaTerminalUi
     }
 
     internal static string FormatChatCardTimestamp(DateTimeOffset timestamp)
-        => timestamp.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture);
+        => timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     internal static void ApplyChatCardTimestamp(Markup timestampText, DateTimeOffset timestamp)
     {
@@ -289,7 +289,7 @@ internal sealed partial class CodeAltaTerminalUi
         string? headerSecondary,
         int maxCodeBlockHeight)
     {
-        var markdownControl = new MarkdownControl(markdown)
+        var markdownControl = new MarkdownControl(markdown.Trim())
         {
             HorizontalAlignment = Align.Stretch,
             VerticalAlignment = Align.Stretch,
@@ -308,7 +308,6 @@ internal sealed partial class CodeAltaTerminalUi
         var group = new Group(CreateChatCardHeader(tone, headerOverride, headerSecondary), markdownControl)
             .TopRightText(copyButton)
             .BottomRightText(timestampText)
-            .Padding(1)
             .Style(CreateChatGroupStyle(tone))
             .HorizontalAlignment(Align.Stretch)
             .VerticalAlignment(Align.Stretch);
