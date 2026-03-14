@@ -200,7 +200,7 @@ public sealed class CodeAltaTerminalUiTests
 
         var text = CodeAltaTerminalUi.FormatChatCardTimestamp(timestamp);
 
-        Assert.AreEqual("2026-03-12 14:05:06 +01:00", text);
+        Assert.AreEqual("2026-03-12 14:05:06", text);
     }
 
     [TestMethod]
@@ -211,7 +211,7 @@ public sealed class CodeAltaTerminalUiTests
 
         await Task.Run(() => CodeAltaTerminalUi.ApplyChatCardTimestamp(markup, timestamp));
 
-        Assert.AreEqual("[dim]2026-03-12 14:05:06 +01:00[/]", markup.Text);
+        Assert.AreEqual("[dim]2026-03-12 14:05:06[/]", markup.Text);
     }
 
     [TestMethod]
@@ -458,6 +458,38 @@ public sealed class CodeAltaTerminalUiTests
         Assert.IsFalse(CodeAltaTerminalUi.ShouldDisplaySessionUpdate(copilotResumed));
         Assert.IsTrue(CodeAltaTerminalUi.ShouldDisplaySessionUpdate(copilotWarning));
         Assert.IsTrue(CodeAltaTerminalUi.ShouldDisplaySessionUpdate(codexUsage));
+    }
+
+    [TestMethod]
+    public void ShouldDisplayPermissionRequest_HidesAutoApprovedPermissions()
+    {
+        Assert.IsFalse(CodeAltaTerminalUi.ShouldDisplayPermissionRequest(autoApproveEnabled: true));
+        Assert.IsTrue(CodeAltaTerminalUi.ShouldDisplayPermissionRequest(autoApproveEnabled: false));
+    }
+
+    [TestMethod]
+    public void ShouldDisplayInteraction_HidesAutoApprovedPermissionResolutions()
+    {
+        var permissionResolved = new AgentInteractionEvent(
+            AgentBackendIds.Copilot,
+            "session-1",
+            DateTimeOffset.UtcNow,
+            null,
+            AgentInteractionKind.PermissionResolved,
+            "interaction-1",
+            "Permission resolved.");
+        var userInputResolved = new AgentInteractionEvent(
+            AgentBackendIds.Copilot,
+            "session-1",
+            DateTimeOffset.UtcNow,
+            null,
+            AgentInteractionKind.UserInputResolved,
+            "interaction-2",
+            "Input resolved.");
+
+        Assert.IsFalse(CodeAltaTerminalUi.ShouldDisplayInteraction(permissionResolved, autoApproveEnabled: true));
+        Assert.IsTrue(CodeAltaTerminalUi.ShouldDisplayInteraction(permissionResolved, autoApproveEnabled: false));
+        Assert.IsTrue(CodeAltaTerminalUi.ShouldDisplayInteraction(userInputResolved, autoApproveEnabled: true));
     }
 
     [TestMethod]

@@ -595,6 +595,11 @@ internal sealed partial class CodeAltaTerminalUi
                 break;
 
             case AgentPermissionRequest permissionRequest:
+                if (!ShouldDisplayPermissionRequest(GetAutoApproveEnabled()))
+                {
+                    break;
+                }
+
                 tab.PermissionRequests[permissionRequest.InteractionId] = permissionRequest;
                 UpsertThreadInteraction(
                     tab,
@@ -622,6 +627,13 @@ internal sealed partial class CodeAltaTerminalUi
                 break;
 
             case AgentInteractionEvent interaction:
+                if (!ShouldDisplayInteraction(interaction, GetAutoApproveEnabled()))
+                {
+                    tab.PermissionRequests.Remove(interaction.InteractionId);
+                    tab.UserInputRequests.Remove(interaction.InteractionId);
+                    break;
+                }
+
                 UpsertThreadInteraction(
                     tab,
                     interaction.InteractionId,
@@ -925,7 +937,7 @@ internal sealed partial class CodeAltaTerminalUi
             ? new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)
             : new AgentPermissionDecision(AgentPermissionDecisionKind.Deny);
 
-        if (_threadTabs.TryGetValue(threadId, out var tab))
+        if (ShouldDisplayPermissionRequest(autoApproveEnabled) && _threadTabs.TryGetValue(threadId, out var tab))
         {
             TryRenderThreadInteraction(
                 tab,

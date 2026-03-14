@@ -186,7 +186,7 @@ internal sealed partial class CodeAltaTerminalUi
     }
 
     internal static string FormatChatCardTimestamp(DateTimeOffset timestamp)
-        => timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        => timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     internal static void ApplyChatCardTimestamp(Markup timestampText, DateTimeOffset timestamp)
     {
@@ -301,7 +301,7 @@ internal sealed partial class CodeAltaTerminalUi
         };
 
         var copyButton = new Button(new TextBlock($"{NerdFont.MdContentCopy} Copy"))
-            .Click(() => markdownControl.App?.Terminal.Clipboard.TrySetText(markdownControl.Markdown));
+            .Click(() => markdownControl.App?.Terminal.Clipboard.TrySetText(markdown));
 
         var timestampText = new Markup(string.Empty);
 
@@ -570,6 +570,21 @@ internal sealed partial class CodeAltaTerminalUi
         }
 
         return update.Kind != AgentSessionUpdateKind.Idle;
+    }
+
+    internal static bool ShouldDisplayPermissionRequest(bool autoApproveEnabled)
+        => !autoApproveEnabled;
+
+    internal static bool ShouldDisplayInteraction(AgentInteractionEvent interaction, bool autoApproveEnabled)
+    {
+        ArgumentNullException.ThrowIfNull(interaction);
+
+        if (interaction.Kind == AgentInteractionKind.PermissionResolved && autoApproveEnabled)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     internal static string FormatChatUserInputRequestMarkdown(AgentUserInputRequest request)
