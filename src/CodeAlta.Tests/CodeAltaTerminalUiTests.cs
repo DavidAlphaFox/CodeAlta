@@ -29,6 +29,13 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
+    public void ShouldCreateOptimisticPendingMessage_DisablesOptimisticCardsForCopilot()
+    {
+        Assert.IsFalse(CodeAltaTerminalUi.ShouldCreateOptimisticPendingMessage(AgentBackendIds.Copilot));
+        Assert.IsTrue(CodeAltaTerminalUi.ShouldCreateOptimisticPendingMessage(AgentBackendIds.Codex));
+    }
+
+    [TestMethod]
     public void FormatChatContentMarkdown_PrefixesReasoningContent()
     {
         var markdown = CodeAltaTerminalUi.FormatChatContentMarkdown(AgentContentKind.Reasoning, "Inspecting the project.");

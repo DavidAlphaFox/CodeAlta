@@ -613,7 +613,7 @@ internal static class CopilotAgentMapper
         return events.Select(sessionEvent => ToAgentEvent(sessionId, sessionEvent)).ToArray();
     }
 
-    private static AgentContentKind GetAssistantMessageContentKind(string? phase)
+    internal static AgentContentKind GetAssistantMessageContentKind(string? phase)
         => phase switch
         {
             "final_answer" => AgentContentKind.Assistant,

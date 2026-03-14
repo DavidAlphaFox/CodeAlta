@@ -15,6 +15,7 @@ public sealed class CopilotAgentSession : ICopilotAgentSession
     private readonly Channel<AgentEvent> _eventChannel;
     private readonly ConcurrentDictionary<Guid, Action<AgentEvent>> _subscribers = new();
     private readonly IDisposable _subscription;
+    private readonly CopilotInteractionTracker _interactionTracker = new();
     private bool _disposed;
 
     internal CopilotAgentSession(CopilotAgentBackend backend, CopilotSession session)
@@ -140,9 +141,12 @@ public sealed class CopilotAgentSession : ICopilotAgentSession
         try
         {
             LogDebug($"Raw Copilot session event session={SessionId} type={sessionEvent.Type} payload={SafeToJson(sessionEvent)}");
-            var eventData = CopilotAgentMapper.ToAgentEvent(SessionId, sessionEvent);
-            LogDebug($"Mapped Copilot agent event session={SessionId} type={eventData.GetType().Name} payload={eventData.ToJson()}");
-            Publish(eventData);
+            var projectedEvents = ProjectSessionEvents(SessionId, sessionEvent, _interactionTracker);
+            foreach (var eventData in projectedEvents)
+            {
+                LogDebug($"Mapped Copilot agent event session={SessionId} type={eventData.GetType().Name} payload={eventData.ToJson()}");
+                Publish(eventData);
+            }
         }
         catch (Exception ex)
         {
@@ -155,6 +159,27 @@ public sealed class CopilotAgentSession : ICopilotAgentSession
                     ex.Message,
                     ex));
         }
+    }
+
+    internal static IReadOnlyList<AgentEvent> ProjectSessionEvents(
+        string sessionId,
+        SessionEvent sessionEvent,
+        CopilotInteractionTracker tracker)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        ArgumentNullException.ThrowIfNull(sessionEvent);
+        ArgumentNullException.ThrowIfNull(tracker);
+
+        var mappedEvent = CopilotAgentMapper.ToAgentEvent(sessionId, sessionEvent);
+        var projection = tracker.Project(sessionId, sessionEvent, mappedEvent);
+        if (projection.SyntheticEvent is null)
+        {
+            return projection.PublishMappedEvent ? [mappedEvent] : [];
+        }
+
+        return projection.PublishMappedEvent
+            ? [mappedEvent, projection.SyntheticEvent]
+            : [projection.SyntheticEvent];
     }
 
     private void CompleteEventStream()
@@ -198,5 +223,99 @@ public sealed class CopilotAgentSession : ICopilotAgentSession
         {
             Interlocked.Exchange(ref _unsubscribe, null)?.Invoke();
         }
+    }
+
+    internal sealed class CopilotInteractionTracker
+    {
+        private readonly Dictionary<string, InteractionState> _states = new(StringComparer.Ordinal);
+        private string? _activeInteractionId;
+
+        public SessionEventProjection Project(string sessionId, SessionEvent sessionEvent, AgentEvent mappedEvent)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+            ArgumentNullException.ThrowIfNull(sessionEvent);
+            ArgumentNullException.ThrowIfNull(mappedEvent);
+
+            switch (sessionEvent)
+            {
+                case UserMessageEvent userMessage when !string.IsNullOrWhiteSpace(userMessage.Data.InteractionId):
+                    GetOrCreate(userMessage.Data.InteractionId!).HasUserMessage = true;
+                    _activeInteractionId = userMessage.Data.InteractionId;
+                    return SessionEventProjection.PublishMapped;
+
+                case AssistantTurnStartEvent turnStart when !string.IsNullOrWhiteSpace(turnStart.Data.InteractionId):
+                    GetOrCreate(turnStart.Data.InteractionId!).HasAssistantTurn = true;
+                    _activeInteractionId = turnStart.Data.InteractionId;
+                    return SessionEventProjection.PublishMapped;
+
+                case AssistantMessageEvent assistantMessage
+                    when !string.IsNullOrWhiteSpace(assistantMessage.Data.InteractionId)
+                         && CopilotAgentMapper.GetAssistantMessageContentKind(assistantMessage.Data.Phase) == AgentContentKind.Assistant:
+                    GetOrCreate(assistantMessage.Data.InteractionId!).FinalAnswerSeen = true;
+                    _activeInteractionId = assistantMessage.Data.InteractionId;
+                    return SessionEventProjection.PublishMapped;
+
+                case AssistantTurnEndEvent turnEnd:
+                    if (_activeInteractionId is not null &&
+                        _states.TryGetValue(_activeInteractionId, out var state) &&
+                        state.FinalAnswerSeen)
+                    {
+                        _states.Remove(_activeInteractionId);
+                        _activeInteractionId = null;
+                        return new SessionEventProjection(
+                            PublishMappedEvent: true,
+                            SyntheticEvent: new AgentSessionUpdateEvent(
+                                AgentBackendIds.Copilot,
+                                sessionId,
+                                turnEnd.Timestamp,
+                                null,
+                                AgentSessionUpdateKind.Idle,
+                                null));
+                    }
+
+                    return SessionEventProjection.PublishMapped;
+
+                case SessionIdleEvent:
+                    return new SessionEventProjection(PublishMappedEvent: !HasPendingInteraction(), SyntheticEvent: null);
+
+                case AbortEvent:
+                case SessionErrorEvent:
+                case SessionShutdownEvent:
+                    _states.Clear();
+                    _activeInteractionId = null;
+                    return SessionEventProjection.PublishMapped;
+
+                default:
+                    return SessionEventProjection.PublishMapped;
+            }
+        }
+
+        private bool HasPendingInteraction()
+            => _states.Count > 0;
+
+        private InteractionState GetOrCreate(string interactionId)
+        {
+            if (!_states.TryGetValue(interactionId, out var state))
+            {
+                state = new InteractionState();
+                _states[interactionId] = state;
+            }
+
+            return state;
+        }
+
+        private sealed class InteractionState
+        {
+            public bool HasUserMessage { get; set; }
+
+            public bool HasAssistantTurn { get; set; }
+
+            public bool FinalAnswerSeen { get; set; }
+        }
+    }
+
+    internal readonly record struct SessionEventProjection(bool PublishMappedEvent, AgentEvent? SyntheticEvent)
+    {
+        public static SessionEventProjection PublishMapped => new(PublishMappedEvent: true, SyntheticEvent: null);
     }
 }

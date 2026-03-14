@@ -340,10 +340,13 @@ internal sealed partial class CodeAltaTerminalUi
         var tab = EnsureThreadTab(thread);
         await EnsureThreadHistoryLoadedAsync(thread).ConfigureAwait(false);
         ClearThreadInput();
-        var pending = CreatePendingChatMessage(prompt);
-        AppendThreadTimelineItem(tab, pending.UserItem);
-        AppendThreadTimelineItem(tab, pending.AssistantItem);
-        tab.PendingAssistant = new PendingAssistantState(pending.AssistantItem, pending.StreamingMarkdown, pending.TimestampText);
+        if (ShouldCreateOptimisticPendingMessage(tab.BackendId))
+        {
+            var pending = CreatePendingChatMessage(prompt);
+            AppendThreadTimelineItem(tab, pending.UserItem);
+            AppendThreadTimelineItem(tab, pending.AssistantItem);
+            tab.PendingAssistant = new PendingAssistantState(pending.AssistantItem, pending.StreamingMarkdown, pending.TimestampText);
+        }
 
         try
         {

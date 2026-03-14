@@ -185,6 +185,9 @@ internal sealed partial class CodeAltaTerminalUi
         return new PendingChatMessage(userItem, assistantItem, streamingMarkdown, timestampText);
     }
 
+    internal static bool ShouldCreateOptimisticPendingMessage(AgentBackendId backendId)
+        => !string.Equals(backendId.Value, AgentBackendIds.Copilot.Value, StringComparison.OrdinalIgnoreCase);
+
     internal static string FormatChatCardTimestamp(DateTimeOffset timestamp)
         => timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
