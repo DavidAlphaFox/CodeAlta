@@ -502,6 +502,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                 CreatedAt = session.CreatedAt,
                 UpdatedAt = session.UpdatedAt,
                 LastActiveAt = session.UpdatedAt,
+                StartedAt = session.CreatedAt,
                 LatestSummary = session.Summary,
             };
         }
@@ -526,6 +527,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             CreatedAt = session.CreatedAt,
             UpdatedAt = session.UpdatedAt,
             LastActiveAt = session.UpdatedAt,
+            StartedAt = session.CreatedAt,
             LatestSummary = session.Summary,
         };
     }

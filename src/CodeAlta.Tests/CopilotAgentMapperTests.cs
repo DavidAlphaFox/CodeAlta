@@ -627,6 +627,8 @@ public sealed class CopilotAgentMapperTests
         Assert.AreEqual(AgentActivityPhase.Progressed, toolProgress.Phase);
         Assert.AreEqual("tool-1", toolProgress.ActivityId);
         Assert.AreEqual("running", toolProgress.Message);
+        Assert.IsTrue(toolProgress.Details.HasValue);
+        Assert.AreEqual("tool-1", toolProgress.Details.Value.GetProperty("toolCallId").GetString());
 
         var subagentStartedEvent = new SubagentStartedEvent
         {
@@ -647,5 +649,7 @@ public sealed class CopilotAgentMapperTests
         Assert.AreEqual(AgentActivityPhase.Started, subagent.Phase);
         Assert.AreEqual("tool-2", subagent.ActivityId);
         Assert.AreEqual("Worker", subagent.Name);
+        Assert.IsTrue(subagent.Details.HasValue);
+        Assert.AreEqual("Executes the task", subagent.Details.Value.GetProperty("agentDescription").GetString());
     }
 }

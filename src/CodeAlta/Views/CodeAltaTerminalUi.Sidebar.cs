@@ -97,7 +97,7 @@ internal sealed partial class CodeAltaTerminalUi
             _catalogOptions.GlobalRoot))
         {
             Icon = NerdFont.MdHomeOutline,
-            IconStyle = Style.None.WithForeground(Colors.Goldenrod),
+            IconStyle = UiPalette.GetSidebarIconStyle(SidebarAccent.Global),
             Data = SidebarSelectionTarget.Global(),
             IsExpanded = true,
         };
@@ -120,7 +120,7 @@ internal sealed partial class CodeAltaTerminalUi
             $"{_projects.Count} known projects"))
         {
             Icon = NerdFont.MdFolderMultipleOutline,
-            IconStyle = Style.None.WithForeground(Colors.DeepSkyBlue),
+            IconStyle = UiPalette.GetSidebarIconStyle(SidebarAccent.Projects),
             IsExpanded = true,
         };
 
@@ -142,7 +142,7 @@ internal sealed partial class CodeAltaTerminalUi
             project.ProjectPath))
         {
             Icon = NerdFont.MdFolderOutline,
-            IconStyle = Style.None.WithForeground(Colors.DeepSkyBlue),
+            IconStyle = UiPalette.GetSidebarIconStyle(SidebarAccent.Projects),
             Data = SidebarSelectionTarget.Project(project.Id),
             IsExpanded = string.Equals(project.Id, _selectedProjectId, StringComparison.OrdinalIgnoreCase),
         };
@@ -194,10 +194,10 @@ internal sealed partial class CodeAltaTerminalUi
     {
         return kind switch
         {
-            WorkThreadKind.GlobalThread => Style.None.WithForeground(Colors.Goldenrod),
-            WorkThreadKind.ProjectThread => Style.None.WithForeground(Colors.MediumSeaGreen),
-            WorkThreadKind.InternalThread => Style.None.WithForeground(Colors.MediumPurple),
-            _ => Style.None.WithForeground(Colors.White),
+            WorkThreadKind.GlobalThread => UiPalette.GetSidebarIconStyle(SidebarAccent.Global),
+            WorkThreadKind.ProjectThread => UiPalette.GetSidebarIconStyle(SidebarAccent.ProjectThread),
+            WorkThreadKind.InternalThread => UiPalette.GetSidebarIconStyle(SidebarAccent.InternalThread),
+            _ => UiPalette.GetSidebarIconStyle(SidebarAccent.Fallback),
         };
     }
 

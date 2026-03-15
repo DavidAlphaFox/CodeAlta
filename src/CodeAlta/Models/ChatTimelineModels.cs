@@ -1,5 +1,7 @@
 using System.Text;
+using System.Text.Json;
 using CodeAlta.Agent;
+using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
 
 internal sealed record PendingChatMessage(
@@ -42,7 +44,7 @@ internal sealed record ChatReasoningOption(AgentReasoningEffort? Effort, string 
     public override string ToString() => Label;
 }
 
-internal sealed record ChatMarkdownEntry(DocumentFlowItem Item, MarkdownControl Markdown, Markup TimestampText);
+internal sealed record ChatMarkdownEntry(DocumentFlowItem Item, MarkdownControl Markdown, Markup TimestampText, Markup HeaderText);
 
 internal sealed class ChatBackendState(AgentBackendId backendId, string displayName)
 {
@@ -65,6 +67,7 @@ internal sealed class ChatContentState(
     DocumentFlowItem item,
     MarkdownControl markdown,
     Markup timestampText,
+    Markup headerText,
     StringBuilder buffer,
     AgentContentKind kind)
 {
@@ -74,18 +77,22 @@ internal sealed class ChatContentState(
 
     public Markup TimestampText { get; } = timestampText;
 
+    public Markup HeaderText { get; } = headerText;
+
     public StringBuilder Buffer { get; } = buffer;
 
     public AgentContentKind Kind { get; } = kind;
 }
 
-internal sealed class PendingAssistantState(DocumentFlowItem item, MarkdownControl markdown, Markup timestampText)
+internal sealed class PendingAssistantState(DocumentFlowItem item, MarkdownControl markdown, Markup timestampText, Markup headerText)
 {
     public DocumentFlowItem Item { get; } = item;
 
     public MarkdownControl Markdown { get; } = markdown;
 
     public Markup TimestampText { get; } = timestampText;
+
+    public Markup HeaderText { get; } = headerText;
 
     public StringBuilder Buffer { get; } = new();
 
@@ -108,4 +115,86 @@ internal sealed class ChatStatusState(DocumentFlowItem item, MarkdownControl mar
         string.IsNullOrWhiteSpace(StatusMarkdown)
             ? BaseMarkdown
             : $"{BaseMarkdown}\n\n{StatusMarkdown}";
+}
+
+internal enum ToolCallDisplayStatus
+{
+    Pending,
+    Running,
+    Completed,
+    Failed,
+    Canceled,
+}
+
+internal sealed class ToolCallEntryState(string toolCallId, Button button, Markup summaryText)
+{
+    public string ToolCallId { get; } = toolCallId;
+
+    public Button Button { get; } = button;
+
+    public Markup SummaryText { get; } = summaryText;
+
+    public ToolCallGroupState? Group { get; set; }
+
+    public AgentActivityKind ActivityKind { get; set; } = AgentActivityKind.ToolCall;
+
+    public ToolCallDisplayStatus Status { get; set; } = ToolCallDisplayStatus.Pending;
+
+    public string DisplayName { get; set; } = "Tool";
+
+    public string? ArgumentPreview { get; set; }
+
+    public string? OutputPreview { get; set; }
+
+    public string? ParentToolCallId { get; set; }
+
+    public string? CommandText { get; set; }
+
+    public string? ArgumentText { get; set; }
+
+    public string? StatusMessage { get; set; }
+
+    public JsonElement? Details { get; set; }
+
+    public StringBuilder OutputBuffer { get; } = new();
+
+    public int OutputLineCount { get; set; }
+
+    public int OutputByteCount { get; set; }
+
+    public DateTimeOffset FirstSeenAt { get; set; }
+
+    public DateTimeOffset LastUpdatedAt { get; set; }
+
+    public DateTimeOffset? CompletedAt { get; set; }
+
+    public Dialog? DetailDialog { get; set; }
+
+    public MarkdownControl? DetailMetadata { get; set; }
+
+    public LogControl? DetailLog { get; set; }
+
+    public Markup? DetailStatsText { get; set; }
+}
+
+internal sealed class ToolCallGroupState(
+    DocumentFlowItem item,
+    WrapHStack itemsHost,
+    Markup headerText,
+    Markup summaryText,
+    Markup timestampText)
+{
+    public DocumentFlowItem Item { get; } = item;
+
+    public WrapHStack ItemsHost { get; } = itemsHost;
+
+    public Markup HeaderText { get; } = headerText;
+
+    public Markup SummaryText { get; } = summaryText;
+
+    public Markup TimestampText { get; } = timestampText;
+
+    public Dictionary<string, ToolCallEntryState> ToolCalls { get; } = new(StringComparer.Ordinal);
+
+    public DateTimeOffset LastUpdatedAt { get; set; }
 }

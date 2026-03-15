@@ -539,6 +539,63 @@ public sealed class OrchestrationInfrastructureTests
         Assert.AreEqual(project.Id, recoverable[0].ProjectRef);
     }
 
+    [TestMethod]
+    public async Task WorkThreadRuntimeService_ListRecoverableThreadsAsync_SetsStartedAtFromSessionMetadata()
+    {
+        using var temp = TempDirectory.Create();
+        var catalogOptions = new CatalogOptions { GlobalRoot = temp.Path };
+        var projectCatalog = new ProjectCatalog(catalogOptions);
+        var threadCatalog = new WorkThreadCatalog(catalogOptions);
+        var roleStore = new RoleProfileStore();
+        var instructionProvider = new AgentInstructionTemplateProvider();
+
+        var project = new ProjectDescriptor
+        {
+            Id = ProjectId.NewVersion7().ToString(),
+            Slug = "repo-main",
+            DisplayName = "Main Repo",
+            ProjectPath = Path.Combine(temp.Path, "repo-main"),
+            DefaultBranch = "main",
+        };
+        Directory.CreateDirectory(project.ProjectPath);
+        await projectCatalog.SaveAsync(project).ConfigureAwait(false);
+
+        var createdAt = DateTimeOffset.UtcNow.AddMinutes(-12);
+        var updatedAt = DateTimeOffset.UtcNow.AddMinutes(-2);
+        var backendFactory = new AgentBackendFactory();
+        backendFactory.Register(
+            AgentBackendIds.Copilot.Value,
+            () => new FakeBackend(
+                backendId: AgentBackendIds.Copilot,
+                sessions:
+                [
+                    new AgentSessionMetadata(
+                        "session-1",
+                        createdAt,
+                        updatedAt,
+                        "Recovered review",
+                        Context: new AgentSessionContext(project.ProjectPath, project.ProjectPath, "repo-main", "main"),
+                        WorkspacePath: null)
+                ]));
+
+        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
+        var repository = new AgentRepository(db);
+        await using var hub = new AgentHub(backendFactory, repository);
+        await using var runtime = new WorkThreadRuntimeService(
+            hub,
+            projectCatalog,
+            threadCatalog,
+            roleStore,
+            instructionProvider,
+            catalogOptions);
+
+        var recoverable = await runtime.ListRecoverableThreadsAsync().ConfigureAwait(false);
+
+        Assert.AreEqual(1, recoverable.Count);
+        Assert.AreEqual(createdAt, recoverable[0].StartedAt);
+        Assert.AreEqual(updatedAt, recoverable[0].LastActiveAt);
+    }
+
     private static WorkThreadExecutionOptions CreateExecutionOptions(string workingDirectory)
     {
         return new WorkThreadExecutionOptions

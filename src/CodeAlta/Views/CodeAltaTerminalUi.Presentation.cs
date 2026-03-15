@@ -551,10 +551,10 @@ internal sealed partial class CodeAltaTerminalUi
     {
         return tone switch
         {
-            StatusTone.Ready => $"[green]{NerdFont.MdCheckCircleOutline}[/]",
-            StatusTone.Warning => $"[gold]{NerdFont.MdAlertOutline}[/]",
-            StatusTone.Error => $"[red]{NerdFont.MdAlertCircleOutline}[/]",
-            _ => $"[deepskyblue]{NerdFont.OctInfo}[/]",
+            StatusTone.Ready => $"[{UiPalette.GetStatusToneMarkup(StatusTone.Ready)}]{NerdFont.MdCheckCircleOutline}[/]",
+            StatusTone.Warning => $"[{UiPalette.GetStatusToneMarkup(StatusTone.Warning)}]{NerdFont.MdAlertOutline}[/]",
+            StatusTone.Error => $"[{UiPalette.GetStatusToneMarkup(StatusTone.Error)}]{NerdFont.MdAlertCircleOutline}[/]",
+            _ => $"[{UiPalette.GetStatusToneMarkup(StatusTone.Info)}]{NerdFont.OctInfo}[/]",
         };
     }
 
@@ -724,7 +724,7 @@ internal sealed partial class CodeAltaTerminalUi
             .MinHeight(3)
             .Style(PromptEditorStyle.Default with
             {
-                PlaceholderForeground = Colors.SlateGray,
+                PlaceholderForeground = UiPalette.PromptPlaceholderColor,
             });
 
         editor.AddCommand(new Command

@@ -176,9 +176,13 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
 
         public Dictionary<string, ChatStatusState> PlanStates { get; } = new(StringComparer.Ordinal);
 
+        public Dictionary<string, ToolCallEntryState> ToolCallStates { get; } = new(StringComparer.Ordinal);
+
         public Dictionary<string, AgentPermissionRequest> PermissionRequests { get; } = new(StringComparer.Ordinal);
 
         public Dictionary<string, AgentUserInputRequest> UserInputRequests { get; } = new(StringComparer.Ordinal);
+
+        public ToolCallGroupState? ActiveToolCallGroup { get; set; }
     }
 
     private enum SidebarSelectionKind

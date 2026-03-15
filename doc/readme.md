@@ -104,6 +104,7 @@ Current terminal host capabilities:
   - Backend, model, and reasoning-effort selectors are shown under the prompt and are kept in-memory for the current UI session.
   - Copilot sessions are started with `codealta.*` MCP tools bridged into the backend via `McpToolBridge` (tool calls execute against the in-process MCP server, with MCP tool ids normalized to Copilot-compatible function names).
   - "Auto-Approve" in the Chat screen now auto-approves backend permission requests and auto-resolves `ask_user` prompts by preferring continue/inspect-style choices (or a neutral fallback for freeform prompts). When disabled, permission requests are denied and question prompts currently resolve to empty answers.
+  - Sequential Codex/Copilot tool activity is grouped into compact "Tool Calls" timeline cards so verbose command/tool logs stay out of the main document flow; each chip shows a live status icon, inferred tool/command label, compact context, and an expandable `LogControl` detail dialog with full output, wrapping toggle, and compact execution stats.
   - The terminal host writes a persistent diagnostic log to `~/.codealta/logs/codealta.log`, including chat prompt submission, selected backend/model/tool set, normalized agent events, and Copilot permission/user-input callback traffic.
 - Workspace operations:
   - list discovered workspaces

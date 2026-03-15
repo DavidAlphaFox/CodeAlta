@@ -210,44 +210,16 @@ internal sealed partial class CodeAltaTerminalUi
         };
     }
 
-    private static Visual CreateChatCardHeader(ChatTimelineTone tone, string? headerOverride, string? headerSecondary)
+    private static Markup CreateChatCardHeader(ChatTimelineTone tone, string? headerOverride, string? headerSecondary)
     {
         var (icon, title, toneName) = GetChatCardHeaderParts(tone, headerOverride);
-        if (string.IsNullOrWhiteSpace(headerSecondary))
-        {
-            return new Markup($"[{toneName}]{icon}[/] [bold]{AnsiMarkup.Escape(title)}[/]");
-        }
-
-        return new HStack(
-            [
-                new Markup($"[{toneName}]{icon}[/] [bold]{AnsiMarkup.Escape(title)}[/]"),
-                new Markup($"[dim]- {AnsiMarkup.Escape(headerSecondary)}[/]"),
-            ])
-        {
-            Spacing = 1,
-        };
+        return string.IsNullOrWhiteSpace(headerSecondary)
+            ? new Markup($"[{toneName}]{icon}[/] [bold]{AnsiMarkup.Escape(title)}[/]")
+            : new Markup($"[{toneName}]{icon}[/] [bold]{AnsiMarkup.Escape(title)}[/] [dim]- {AnsiMarkup.Escape(headerSecondary)}[/]");
     }
 
     private static GroupStyle CreateChatGroupStyle(ChatTimelineTone tone)
-    {
-        var (border, background) = tone switch
-        {
-            ChatTimelineTone.User => (Color.Rgb(0xB2, 0x8D, 0xFF), Color.RgbA(0xB2, 0x8D, 0xFF, 0x08)),
-            ChatTimelineTone.Assistant => (Color.Rgb(0x7D, 0xD3, 0xFC), Color.RgbA(0x7D, 0xD3, 0xFC, 0x06)),
-            ChatTimelineTone.Reasoning => (Color.Rgb(0x6B, 0xB8, 0xFF), Color.RgbA(0x6B, 0xB8, 0xFF, 0x10)),
-            ChatTimelineTone.Activity => (Color.Rgb(0xA0, 0xA0, 0xA0), Color.RgbA(0xC0, 0xC0, 0xC0, 0x08)),
-            ChatTimelineTone.Notice => (Color.Rgb(0x8F, 0xD7, 0xB2), Color.RgbA(0x8F, 0xD7, 0xB2, 0x0A)),
-            ChatTimelineTone.Interaction => (Color.Rgb(0xFF, 0xC8, 0x66), Color.RgbA(0xFF, 0xC8, 0x66, 0x0E)),
-            _ => (Color.Rgb(0x7D, 0xD3, 0xFC), Color.RgbA(0x7D, 0xD3, 0xFC, 0x06)),
-        };
-
-        return GroupStyle.Rounded with
-        {
-            BorderCellStyle = Style.None.WithForeground(border),
-            FocusedBorderCellStyle = Style.None.WithForeground(border) | TextStyle.Bold,
-            BackgroundStyle = Style.None.WithBackground(background),
-        };
-    }
+        => UiPalette.GetChatGroupStyle(tone);
 
     private static (string Icon, string Title, string ToneName) GetChatCardHeaderParts(ChatTimelineTone tone, string? headerOverride)
     {
@@ -289,6 +261,7 @@ internal sealed partial class CodeAltaTerminalUi
         string? headerSecondary,
         int maxCodeBlockHeight)
     {
+        var headerText = CreateChatCardHeader(tone, headerOverride, headerSecondary);
         var markdownControl = new MarkdownControl(markdown.Trim())
         {
             HorizontalAlignment = Align.Stretch,
@@ -305,7 +278,7 @@ internal sealed partial class CodeAltaTerminalUi
 
         var timestampText = new Markup(string.Empty);
 
-        var group = new Group(CreateChatCardHeader(tone, headerOverride, headerSecondary), markdownControl)
+        var group = new Group(headerText, markdownControl)
             .TopRightText(copyButton)
             .BottomRightText(timestampText)
             .Style(CreateChatGroupStyle(tone))
@@ -319,7 +292,8 @@ internal sealed partial class CodeAltaTerminalUi
                 Alignment = DocumentFlowAlignment.Stretch,
             },
             markdownControl,
-            timestampText);
+            timestampText,
+            headerText);
     }
 
     internal static string FormatChatContentMarkdown(AgentContentKind kind, string content)
@@ -330,9 +304,32 @@ internal sealed partial class CodeAltaTerminalUi
         {
             AgentContentKind.User => content,
             AgentContentKind.Assistant => content,
+            AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary => TrimReasoningContent(content),
             AgentContentKind.CommandOutput or AgentContentKind.FileChangeOutput or AgentContentKind.ToolOutput => FormatChatOutputMarkdown(content),
             _ => content,
         };
+    }
+
+    internal static string? GetChatContentHeaderSecondary(AgentContentKind kind, string content)
+    {
+        return kind switch
+        {
+            AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary => BuildReasoningSummary(content),
+            _ => null,
+        };
+    }
+
+    internal static void ApplyChatCardHeader(Markup headerText, ChatTimelineTone tone, string? headerOverride, string? headerSecondary)
+    {
+        ArgumentNullException.ThrowIfNull(headerText);
+
+        RunOnUiThread(
+            static state =>
+            {
+                state.headerText.Text = CreateChatCardHeader(state.tone, state.headerOverride, state.headerSecondary).Text;
+                return 0;
+            },
+            (headerText, tone, headerOverride, headerSecondary));
     }
 
     internal static string FormatChatPlanMarkdown(AgentPlanSnapshot snapshot)
@@ -541,8 +538,11 @@ internal sealed partial class CodeAltaTerminalUi
             or AgentActivityKind.McpToolCall
             or AgentActivityKind.DynamicToolCall
             or AgentActivityKind.CollabAgentToolCall
+            or AgentActivityKind.Subagent
             or AgentActivityKind.Hook
-            or AgentActivityKind.Skill)
+            or AgentActivityKind.Skill
+            or AgentActivityKind.WebSearch
+            or AgentActivityKind.ImageGeneration)
         {
             return false;
         }
@@ -766,6 +766,86 @@ internal sealed partial class CodeAltaTerminalUi
             AgentContentKind.Notice => "Notice",
             _ => SplitPascalCase(kind.ToString()),
         };
+
+    private static string TrimReasoningContent(string content)
+    {
+        var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return string.Empty;
+        }
+
+        if (TryExtractReasoningHeading(normalized, out _, out var remainder) && remainder is not null)
+        {
+            return remainder;
+        }
+
+        return normalized;
+    }
+
+    private static string? BuildReasoningSummary(string content)
+    {
+        var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        if (TryExtractReasoningHeading(normalized, out var heading, out _))
+        {
+            return TrimSummaryText(heading);
+        }
+
+        var firstSentenceEnd = normalized.IndexOf('.');
+        var firstLineEnd = normalized.IndexOf('\n');
+        var end = firstSentenceEnd >= 0 && firstLineEnd >= 0
+            ? Math.Min(firstSentenceEnd, firstLineEnd)
+            : Math.Max(firstSentenceEnd, firstLineEnd);
+        var summary = end >= 0 ? normalized[..end] : normalized;
+        return TrimSummaryText(summary);
+    }
+
+    private static bool TryExtractReasoningHeading(string content, out string? heading, out string? remainder)
+    {
+        heading = null;
+        remainder = null;
+        var normalized = content.TrimStart();
+        if (normalized.StartsWith("**", StringComparison.Ordinal))
+        {
+            var closingIndex = normalized.IndexOf("**", 2, StringComparison.Ordinal);
+            if (closingIndex > 2)
+            {
+                heading = normalized[2..closingIndex].Trim();
+                remainder = normalized[(closingIndex + 2)..].TrimStart('\n', '\r', ' ');
+                return !string.IsNullOrWhiteSpace(heading);
+            }
+        }
+
+        if (normalized.StartsWith("#", StringComparison.Ordinal))
+        {
+            var lineEnd = normalized.IndexOf('\n');
+            var line = (lineEnd >= 0 ? normalized[..lineEnd] : normalized).Trim();
+            heading = line.TrimStart('#', ' ').Trim();
+            remainder = lineEnd >= 0 ? normalized[(lineEnd + 1)..].TrimStart() : string.Empty;
+            return !string.IsNullOrWhiteSpace(heading);
+        }
+
+        return false;
+    }
+
+    private static string? TrimSummaryText(string? summary)
+    {
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            return null;
+        }
+
+        var normalized = summary.Trim();
+        const int maxLength = 44;
+        return normalized.Length <= maxLength
+            ? normalized
+            : normalized[..maxLength].TrimEnd() + "...";
+    }
 
     private static string FormatPlanStepStatus(AgentPlanStepStatus? status)
     {

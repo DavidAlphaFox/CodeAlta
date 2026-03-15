@@ -244,7 +244,7 @@ internal sealed partial class CodeAltaTerminalUi
 
     private async Task EnsureThreadHistoryLoadedAsync(WorkThreadDescriptor thread, CancellationToken cancellationToken = default)
     {
-        if (thread.StartedAt is null)
+        if (!CanLoadThreadHistory(thread))
         {
             return;
         }
@@ -256,6 +256,19 @@ internal sealed partial class CodeAltaTerminalUi
             static (self, currentThread, currentTab, token) => self.LoadThreadHistoryCoreAsync(currentThread, currentTab, token),
             cancellationToken);
         await loadTask.ConfigureAwait(false);
+    }
+
+    internal static bool CanLoadThreadHistory(WorkThreadDescriptor thread)
+    {
+        ArgumentNullException.ThrowIfNull(thread);
+
+        if (thread.StartedAt is not null)
+        {
+            return true;
+        }
+
+        return thread.Status != WorkThreadStatus.Draft &&
+               !string.IsNullOrWhiteSpace(thread.BackendSessionId);
     }
 
     private Task GetOrStartThreadHistoryLoadTask(
@@ -539,6 +552,11 @@ internal sealed partial class CodeAltaTerminalUi
         switch (@event)
         {
             case AgentContentDeltaEvent delta:
+                if (TryHandleToolTimelineContent(tab, delta))
+                {
+                    break;
+                }
+
                 if (!ShouldDisplayContentDelta(delta))
                 {
                     break;
@@ -548,6 +566,11 @@ internal sealed partial class CodeAltaTerminalUi
                 break;
 
             case AgentContentCompletedEvent completed:
+                if (TryHandleToolTimelineContent(tab, completed))
+                {
+                    break;
+                }
+
                 if (ShouldSkipEmptyAssistantCompletion(tab, completed))
                 {
                     break;
@@ -578,6 +601,11 @@ internal sealed partial class CodeAltaTerminalUi
                 break;
 
             case AgentActivityEvent activity:
+                if (TryHandleToolTimelineActivity(tab, activity))
+                {
+                    break;
+                }
+
                 if (!ShouldDisplayActivity(activity))
                 {
                     break;
@@ -704,9 +732,12 @@ internal sealed partial class CodeAltaTerminalUi
 
         var state = GetOrCreateThreadContentState(tab, delta.Kind, delta.ContentId, delta.Timestamp);
         state.Buffer.Append(delta.Delta);
-        var markdown = FormatChatContentMarkdown(delta.Kind, state.Buffer.ToString());
+        var content = state.Buffer.ToString();
+        var markdown = FormatChatContentMarkdown(delta.Kind, content);
+        var headerSecondary = GetChatContentHeaderSecondary(delta.Kind, content);
         PostToUi(() =>
         {
+            ApplyChatCardHeader(state.HeaderText, GetContentTone(delta.Kind), GetContentHeader(delta.Kind), headerSecondary);
             state.Markdown.Markdown = markdown;
             tab.Flow.ScrollToTail();
         });
@@ -719,8 +750,10 @@ internal sealed partial class CodeAltaTerminalUi
         state.Buffer.Clear();
         state.Buffer.Append(content);
         var markdown = FormatChatContentMarkdown(completed.Kind, content);
+        var headerSecondary = GetChatContentHeaderSecondary(completed.Kind, content);
         PostToUi(() =>
         {
+            ApplyChatCardHeader(state.HeaderText, GetContentTone(completed.Kind), GetContentHeader(completed.Kind), headerSecondary);
             state.Markdown.Markdown = markdown;
             tab.Flow.ScrollToTail();
         });
@@ -767,7 +800,7 @@ internal sealed partial class CodeAltaTerminalUi
             pending.ContentId = contentId;
             ApplyChatCardTimestamp(pending.TimestampText, timestamp);
             tab.PendingAssistant = null;
-            var pendingState = new ChatContentState(pending.Item, pending.Markdown, pending.TimestampText, pending.Buffer, kind);
+            var pendingState = new ChatContentState(pending.Item, pending.Markdown, pending.TimestampText, pending.HeaderText, pending.Buffer, kind);
             tab.ContentStates[key] = pendingState;
             return pendingState;
         }
@@ -775,9 +808,10 @@ internal sealed partial class CodeAltaTerminalUi
         var entry = CreateChatMarkdownItem(
             FormatChatContentMarkdown(kind, string.Empty),
             GetContentTone(kind),
-            headerOverride: GetContentHeader(kind));
+            headerOverride: GetContentHeader(kind),
+            headerSecondary: GetChatContentHeaderSecondary(kind, string.Empty));
         ApplyChatCardTimestamp(entry.TimestampText, timestamp);
-        var state = new ChatContentState(entry.Item, entry.Markdown, entry.TimestampText, new System.Text.StringBuilder(), kind);
+        var state = new ChatContentState(entry.Item, entry.Markdown, entry.TimestampText, entry.HeaderText, new System.Text.StringBuilder(), kind);
         tab.ContentStates[key] = state;
         AppendThreadTimelineItem(tab, entry.Item);
         return state;
@@ -1196,18 +1230,22 @@ internal sealed partial class CodeAltaTerminalUi
 
     private void ResetThreadTab(ThreadTabState tab)
     {
+        CloseToolCallDialogs(tab);
         PostToUi(() => tab.Flow.Items.Clear());
         tab.ContentStates.Clear();
         tab.ActivityStates.Clear();
         tab.InteractionStates.Clear();
         tab.PlanStates.Clear();
+        tab.ToolCallStates.Clear();
         tab.PermissionRequests.Clear();
         tab.UserInputRequests.Clear();
         tab.PendingAssistant = null;
+        tab.ActiveToolCallGroup = null;
     }
 
     private void AppendThreadTimelineItem(ThreadTabState tab, DocumentFlowItem item)
     {
+        tab.ActiveToolCallGroup = null;
         PostToUi(() =>
         {
             tab.Flow.Items.Add(item);

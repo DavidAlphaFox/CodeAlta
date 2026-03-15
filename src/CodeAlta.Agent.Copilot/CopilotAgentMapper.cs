@@ -444,7 +444,8 @@ internal static class CopilotAgentMapper
                 toolRequested.Data.ToolCallId,
                 null,
                 toolRequested.Data.ToolName,
-                "Tool requested."),
+                "Tool requested.",
+                CreateSessionEventDetails(toolRequested)),
 
             ToolExecutionStartEvent toolStart => CreateActivityEvent(
                 sessionId,
@@ -455,7 +456,8 @@ internal static class CopilotAgentMapper
                 toolStart.Data.ToolCallId,
                 toolStart.Data.ParentToolCallId,
                 toolStart.Data.McpToolName ?? toolStart.Data.ToolName,
-                toolStart.Data.McpServerName),
+                toolStart.Data.McpServerName,
+                CreateSessionEventDetails(toolStart)),
 
             ToolExecutionProgressEvent toolProgress => CreateActivityEvent(
                 sessionId,
@@ -466,7 +468,8 @@ internal static class CopilotAgentMapper
                 toolProgress.Data.ToolCallId,
                 null,
                 null,
-                toolProgress.Data.ProgressMessage),
+                toolProgress.Data.ProgressMessage,
+                CreateSessionEventDetails(toolProgress)),
 
             ToolExecutionPartialResultEvent toolPartialResult => new AgentContentDeltaEvent(
                 AgentBackendIds.Copilot,
@@ -489,7 +492,8 @@ internal static class CopilotAgentMapper
                 null,
                 toolComplete.Data.Success
                     ? toolComplete.Data.Result?.Content
-                    : toolComplete.Data.Error?.Message),
+                    : toolComplete.Data.Error?.Message,
+                CreateSessionEventDetails(toolComplete)),
 
             SkillInvokedEvent skillInvoked => CreateActivityEvent(
                 sessionId,
@@ -500,7 +504,8 @@ internal static class CopilotAgentMapper
                 skillInvoked.Data.Path,
                 null,
                 skillInvoked.Data.Name,
-                skillInvoked.Data.Path),
+                skillInvoked.Data.Path,
+                CreateSessionEventDetails(skillInvoked)),
 
             SubagentSelectedEvent subagentSelected => CreateActivityEvent(
                 sessionId,
@@ -522,7 +527,8 @@ internal static class CopilotAgentMapper
                 subagentStarted.Data.ToolCallId,
                 null,
                 subagentStarted.Data.AgentDisplayName,
-                subagentStarted.Data.AgentDescription),
+                subagentStarted.Data.AgentDescription,
+                CreateSessionEventDetails(subagentStarted)),
 
             SubagentCompletedEvent subagentCompleted => CreateActivityEvent(
                 sessionId,
@@ -533,7 +539,8 @@ internal static class CopilotAgentMapper
                 subagentCompleted.Data.ToolCallId,
                 null,
                 subagentCompleted.Data.AgentDisplayName,
-                null),
+                null,
+                CreateSessionEventDetails(subagentCompleted)),
 
             SubagentFailedEvent subagentFailed => CreateActivityEvent(
                 sessionId,
@@ -544,7 +551,8 @@ internal static class CopilotAgentMapper
                 subagentFailed.Data.ToolCallId,
                 null,
                 subagentFailed.Data.AgentDisplayName,
-                subagentFailed.Data.Error),
+                subagentFailed.Data.Error,
+                CreateSessionEventDetails(subagentFailed)),
 
             SubagentDeselectedEvent => CreateActivityEvent(
                 sessionId,
@@ -566,7 +574,8 @@ internal static class CopilotAgentMapper
                 hookStart.Data.HookInvocationId,
                 null,
                 hookStart.Data.HookType,
-                null),
+                null,
+                CreateSessionEventDetails(hookStart)),
 
             HookEndEvent hookEnd => CreateActivityEvent(
                 sessionId,
@@ -577,7 +586,8 @@ internal static class CopilotAgentMapper
                 hookEnd.Data.HookInvocationId,
                 null,
                 hookEnd.Data.HookType,
-                hookEnd.Data.Error?.Message),
+                hookEnd.Data.Error?.Message,
+                CreateSessionEventDetails(hookEnd)),
 
             SystemMessageEvent systemMessage => new AgentContentCompletedEvent(
                 AgentBackendIds.Copilot,
@@ -919,7 +929,8 @@ internal static class CopilotAgentMapper
         string activityId,
         string? parentActivityId,
         string? name,
-        string? message)
+        string? message,
+        JsonElement? details = null)
     {
         return new AgentActivityEvent(
             AgentBackendIds.Copilot,
@@ -931,7 +942,8 @@ internal static class CopilotAgentMapper
             activityId,
             parentActivityId,
             name,
-            message);
+            message,
+            details);
     }
 
     private static JsonElement CreatePermissionResolutionDetails(AgentPermissionDecision decision)
@@ -1307,6 +1319,24 @@ internal static class CopilotAgentMapper
 
         using var document = JsonDocument.Parse(stream.ToArray());
         return document.RootElement.Clone();
+    }
+
+    private static JsonElement? CreateSessionEventDetails(SessionEvent sessionEvent)
+    {
+        ArgumentNullException.ThrowIfNull(sessionEvent);
+
+        var raw = ToRawElement(sessionEvent);
+        if (raw.ValueKind != JsonValueKind.Object)
+        {
+            return raw;
+        }
+
+        if (raw.TryGetProperty("data", out var data))
+        {
+            return data.Clone();
+        }
+
+        return raw;
     }
 
     private static AgentRunId? TryGetRunId(SessionEvent sessionEvent)

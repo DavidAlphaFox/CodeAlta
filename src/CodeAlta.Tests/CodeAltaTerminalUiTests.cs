@@ -1,7 +1,9 @@
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using CodeAlta.Agent;
 using CodeAlta.Catalog;
+using XenoAtom.Ansi;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
 using XenoAtom.Terminal.UI.Geometry;
@@ -36,6 +38,18 @@ public sealed class CodeAltaTerminalUiTests
         var markdown = CodeAltaTerminalUi.FormatChatContentMarkdown(AgentContentKind.Reasoning, "Inspecting the project.");
 
         Assert.AreEqual("Inspecting the project.", markdown);
+    }
+
+    [TestMethod]
+    public void ReasoningContent_PromotesHeadingIntoHeaderAndTrimsBody()
+    {
+        const string content = "**Planning tool utilization**\n\nI should inspect the repository structure first.";
+
+        var markdown = CodeAltaTerminalUi.FormatChatContentMarkdown(AgentContentKind.Reasoning, content);
+        var headerSecondary = CodeAltaTerminalUi.GetChatContentHeaderSecondary(AgentContentKind.Reasoning, content);
+
+        Assert.AreEqual("I should inspect the repository structure first.", markdown);
+        Assert.AreEqual("Planning tool utilization", headerSecondary);
     }
 
     [TestMethod]
@@ -189,10 +203,101 @@ public sealed class CodeAltaTerminalUiTests
     [TestMethod]
     public void BuildStatusIconMarkup_ReturnsColoredIconsPerTone()
     {
-        StringAssert.Contains(CodeAltaTerminalUi.BuildStatusIconMarkup(CodeAltaTerminalUi.StatusTone.Ready), "green");
-        StringAssert.Contains(CodeAltaTerminalUi.BuildStatusIconMarkup(CodeAltaTerminalUi.StatusTone.Warning), "gold");
-        StringAssert.Contains(CodeAltaTerminalUi.BuildStatusIconMarkup(CodeAltaTerminalUi.StatusTone.Error), "red");
-        StringAssert.Contains(CodeAltaTerminalUi.BuildStatusIconMarkup(CodeAltaTerminalUi.StatusTone.Info), "deepskyblue");
+        StringAssert.Contains(CodeAltaTerminalUi.BuildStatusIconMarkup(CodeAltaTerminalUi.StatusTone.Ready), NerdFont.MdCheckCircleOutline.ToString());
+        StringAssert.Contains(CodeAltaTerminalUi.BuildStatusIconMarkup(CodeAltaTerminalUi.StatusTone.Warning), NerdFont.MdAlertOutline.ToString());
+        StringAssert.Contains(CodeAltaTerminalUi.BuildStatusIconMarkup(CodeAltaTerminalUi.StatusTone.Error), NerdFont.MdAlertCircleOutline.ToString());
+        StringAssert.Contains(CodeAltaTerminalUi.BuildStatusIconMarkup(CodeAltaTerminalUi.StatusTone.Info), NerdFont.OctInfo.ToString());
+    }
+
+    [TestMethod]
+    public void CanLoadThreadHistory_AllowsRecoveredActiveSessionsWithoutStartedAt()
+    {
+        var recoverableThread = new WorkThreadDescriptor
+        {
+            ThreadId = "copilot:session-1",
+            Kind = WorkThreadKind.ProjectThread,
+            BackendId = AgentBackendIds.Copilot.Value,
+            BackendSessionId = "session-1",
+            ProjectRef = "project-1",
+            WorkingDirectory = @"C:\code\CodeAlta",
+            Title = "Recovered Session",
+            Status = WorkThreadStatus.Active,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+            UpdatedAt = DateTimeOffset.UtcNow,
+            LastActiveAt = DateTimeOffset.UtcNow,
+            StartedAt = null,
+        };
+
+        Assert.IsTrue(CodeAltaTerminalUi.CanLoadThreadHistory(recoverableThread));
+    }
+
+    [TestMethod]
+    public void TryInferCopilotToolName_InfersReadAndGlobFromCompletionPayload()
+    {
+        var method = typeof(CodeAltaTerminalUi).GetMethod("TryInferCopilotToolName", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(method);
+
+        using var globJson = JsonDocument.Parse(
+            """
+            {
+              "result": {
+                "content": "C:\\code\\Tomlyn\\readme.md\nC:\\code\\Tomlyn\\src\\Tomlyn\\Tomlyn.csproj"
+              }
+            }
+            """);
+        object?[] globArgs = [globJson.RootElement.Clone(), null];
+        var globResult = (bool)method.Invoke(null, globArgs)!;
+
+        Assert.IsTrue(globResult);
+        Assert.AreEqual("glob", globArgs[1]);
+
+        using var readJson = JsonDocument.Parse(
+            """
+            {
+              "result": {
+                "content": "1. <Project>\n2.   <PropertyGroup>\n3.   </PropertyGroup>"
+              }
+            }
+            """);
+        object?[] readArgs = [readJson.RootElement.Clone(), null];
+        var readResult = (bool)method.Invoke(null, readArgs)!;
+
+        Assert.IsTrue(readResult);
+        Assert.AreEqual("read", readArgs[1]);
+    }
+
+    [TestMethod]
+    public void PreferToolDisplayName_KeepsExplicitCopilotStartNameWhenCompletionIsGeneric()
+    {
+        var method = typeof(CodeAltaTerminalUi).GetMethod("PreferToolDisplayName", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(method);
+
+        using var completionJson = JsonDocument.Parse(
+            """
+            {
+              "toolCallId": "call-1",
+              "result": {
+                "content": "C:\\code\\Tomlyn\\readme.md"
+              }
+            }
+            """);
+
+        var completion = new AgentActivityEvent(
+            AgentBackendIds.Copilot,
+            "session-1",
+            DateTimeOffset.UtcNow,
+            null,
+            AgentActivityKind.ToolCall,
+            AgentActivityPhase.Completed,
+            "call-1",
+            null,
+            null,
+            "done",
+            completionJson.RootElement.Clone());
+
+        var chosen = (string?)method.Invoke(null, ["view", "glob", completion]);
+
+        Assert.AreEqual("view", chosen);
     }
 
     [TestMethod]
@@ -381,7 +486,7 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
-    public void ShouldDisplayActivity_KeepsSubagentAndCompactionLifecycle()
+    public void ShouldDisplayActivity_HidesToolGroupedSubagentLifecycleAndKeepsCompaction()
     {
         var subagent = new AgentActivityEvent(
             AgentBackendIds.Codex,
@@ -406,7 +511,7 @@ public sealed class CodeAltaTerminalUiTests
             null,
             "Compaction completed.");
 
-        Assert.IsTrue(CodeAltaTerminalUi.ShouldDisplayActivity(subagent));
+        Assert.IsFalse(CodeAltaTerminalUi.ShouldDisplayActivity(subagent));
         Assert.IsTrue(CodeAltaTerminalUi.ShouldDisplayActivity(compaction));
     }
 
