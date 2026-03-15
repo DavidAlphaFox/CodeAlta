@@ -17,7 +17,7 @@ internal sealed partial class CodeAltaTerminalUi
     {
         private static readonly Color UserBorder = Color.FromOklch(0.74f, 0.16f, 315f);
         private static readonly Color AssistantBorder = Color.FromOklch(0.82f, 0.08f, 245f);
-        private static readonly Color ReasoningBorder = Color.FromOklch(0.76f, 0.10f, 255f);
+        private static readonly Color ReasoningBorder = Color.FromOklch(0.56f, 0.10f, 255f);
         private static readonly Color ActivityBorder = Color.FromOklch(0.68f, 0.02f, 255f);
         private static readonly Color NoticeBorder = Color.FromOklch(0.80f, 0.08f, 155f);
         private static readonly Color InteractionBorder = Color.FromOklch(0.84f, 0.10f, 85f);
@@ -37,7 +37,7 @@ internal sealed partial class CodeAltaTerminalUi
         private static readonly Color ToolChipText = Color.FromOklch(0.90f, 0.01f, 255f);
         private static readonly Color ToolChipNeutral = Color.FromOklch(0.56f, 0.02f, 255f);
         private static readonly Color ToolGroupBorder = Color.Mix(ActivityBorder, AssistantBorder, 0.30f, ColorMixSpace.Oklch);
-        private static readonly Color ToolGroupBackground = Color.Mix(Colors.Black, ToolGroupBorder, 0.08f, ColorMixSpace.Oklch).WithOpacity(0.28f);
+        private static readonly Color ToolGroupBackground = Color.Mix(Colors.Black, ToolGroupBorder, 0.48f, ColorMixSpace.Oklch).WithOpacity(0.28f);
 
         internal static GroupStyle GetChatGroupStyle(ChatTimelineTone tone)
         {
@@ -56,7 +56,7 @@ internal sealed partial class CodeAltaTerminalUi
             {
                 ChatTimelineTone.User => border.WithOpacity(0.08f),
                 ChatTimelineTone.Assistant => border.WithOpacity(0.06f),
-                ChatTimelineTone.Reasoning => border.WithOpacity(0.10f),
+                ChatTimelineTone.Reasoning => border.WithOpacity(0.04f),
                 ChatTimelineTone.Activity => border.WithOpacity(0.06f),
                 ChatTimelineTone.Notice => border.WithOpacity(0.08f),
                 ChatTimelineTone.Interaction => border.WithOpacity(0.10f),
