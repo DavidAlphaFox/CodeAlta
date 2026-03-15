@@ -19,6 +19,7 @@
     <ProjectReference Include="..\CodeAlta.Agent.Copilot\CodeAlta.Agent.Copilot.csproj" />
     <ProjectReference Include="..\CodeAlta.CodexSdk\CodeAlta.CodexSdk.csproj" />
     <ProjectReference Include="..\CodeAlta.CodexSdk.Generator\CodeAlta.CodexSdk.Generator.csproj" />
+    <ProjectReference Include="..\RawCaptureApp\RawCaptureApp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

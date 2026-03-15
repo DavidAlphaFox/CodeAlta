@@ -39,5 +39,6 @@
   <Project Path="CodeAlta.Catalog.Tests/CodeAlta.Catalog.Tests.csproj" />
   <Project Path="CodeAlta.Catalog/CodeAlta.Catalog.csproj" />
   <Project Path="CodeAlta/CodeAlta.csproj" />
+  <Project Path="RawCaptureApp/RawCaptureApp.csproj" />
 </Solution>
 
