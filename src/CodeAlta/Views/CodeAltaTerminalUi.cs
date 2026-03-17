@@ -201,6 +201,14 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         public ToolCallGroupState? ActiveToolCallGroup { get; set; }
 
         public bool HasSeenUserPrompt { get; set; }
+
+        public string? StatusMessage { get; set; }
+
+        public StatusTone StatusTone { get; set; } = StatusTone.Ready;
+
+        public bool StatusBusy { get; set; }
+
+        public bool HasCustomStatus { get; set; }
     }
 
     private enum SidebarSelectionKind
@@ -217,6 +225,8 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         Warning,
         Error,
     }
+
+    internal readonly record struct StatusSnapshot(string Message, bool Busy, StatusTone Tone);
 
     private sealed record SidebarSelectionTarget(
         SidebarSelectionKind Kind,

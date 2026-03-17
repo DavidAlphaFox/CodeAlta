@@ -456,7 +456,7 @@ internal sealed partial class CodeAltaTerminalUi
         tab.HistoryLoading = true;
         try
         {
-            SetStatus($"Loading thread '{thread.Title}'...", showSpinner: true);
+            SetThreadStatus(tab, $"Loading thread '{thread.Title}'...", showSpinner: true);
             var executionOptions = BuildExecutionOptions(thread, tab);
             await _runtimeService.EnsureCoordinatorSessionAsync(thread, executionOptions, cancellationToken).ConfigureAwait(false);
             var history = await _runtimeService.GetHistoryAsync(thread.ThreadId, cancellationToken).ConfigureAwait(false);
@@ -467,7 +467,7 @@ internal sealed partial class CodeAltaTerminalUi
             }
 
             tab.HistoryLoaded = true;
-            SetStatus($"Prompt ready · {thread.Title}", tone: StatusTone.Ready);
+            ClearThreadStatus(tab);
         }
         catch (Exception ex)
         {
@@ -477,7 +477,7 @@ internal sealed partial class CodeAltaTerminalUi
             }
 
             RenderThreadFailure(tab, $"Failed to load history: {ex.Message}");
-            SetStatus($"Failed to load '{thread.Title}': {ex.Message}", tone: StatusTone.Error);
+            SetThreadStatus(tab, $"Failed to load '{thread.Title}': {ex.Message}", tone: StatusTone.Error);
         }
         finally
         {
@@ -527,7 +527,7 @@ internal sealed partial class CodeAltaTerminalUi
         ClearThreadInput();
         try
         {
-            SetStatus($"Running '{thread.Title}'...", showSpinner: true);
+            SetThreadStatus(tab, $"Running '{thread.Title}'...", showSpinner: true);
             var executionOptions = BuildExecutionOptions(thread, tab);
             if (steer)
             {
@@ -558,7 +558,7 @@ internal sealed partial class CodeAltaTerminalUi
             }
 
             RenderThreadFailure(tab, $"Failed to send prompt: {ex.Message}");
-            SetStatus($"Failed to send prompt: {ex.Message}", tone: StatusTone.Error);
+            SetThreadStatus(tab, $"Failed to send prompt: {ex.Message}", tone: StatusTone.Error);
         }
     }
 
@@ -594,7 +594,7 @@ internal sealed partial class CodeAltaTerminalUi
 
         try
         {
-            SetStatus($"Delegating internal work from '{thread.Title}'...", showSpinner: true);
+            SetThreadStatus(tab, $"Delegating internal work from '{thread.Title}'...", showSpinner: true);
             var executionOptions = new WorkThreadExecutionOptions
             {
                 BackendId = tab.BackendId,
@@ -652,14 +652,14 @@ internal sealed partial class CodeAltaTerminalUi
                 .ConfigureAwait(false);
 
             ClearThreadInput();
-            SetStatus($"Delegation started · {child.Title}", tone: StatusTone.Ready);
+            SetThreadStatus(tab, $"Delegation started · {child.Title}", tone: StatusTone.Ready);
             await PersistViewStateAsync().ConfigureAwait(false);
             RefreshView();
         }
         catch (Exception ex)
         {
             UiLogger.Error(ex, "Failed to delegate internal thread.");
-            SetStatus($"Failed to delegate internal thread: {ex.Message}", tone: StatusTone.Error);
+            SetThreadStatus(tab, $"Failed to delegate internal thread: {ex.Message}", tone: StatusTone.Error);
         }
     }
 
@@ -674,11 +674,13 @@ internal sealed partial class CodeAltaTerminalUi
         try
         {
             await _runtimeService.AbortAsync(thread.ThreadId).ConfigureAwait(false);
-            SetStatus($"Stopped · {thread.Title}", tone: StatusTone.Warning);
+            var tab = EnsureThreadTab(thread);
+            SetThreadStatus(tab, $"Stopped · {thread.Title}", tone: StatusTone.Warning);
         }
         catch (Exception ex)
         {
-            SetStatus($"Failed to abort '{thread.Title}': {ex.Message}", tone: StatusTone.Error);
+            var tab = EnsureThreadTab(thread);
+            SetThreadStatus(tab, $"Failed to abort '{thread.Title}': {ex.Message}", tone: StatusTone.Error);
         }
     }
 
@@ -869,7 +871,7 @@ internal sealed partial class CodeAltaTerminalUi
             case AgentSessionUpdateEvent update:
                 if (update.Kind == AgentSessionUpdateKind.Idle)
                 {
-                    SetStatus($"Prompt ready · {thread.Title}", tone: StatusTone.Ready);
+                    ClearThreadStatus(tab);
                     break;
                 }
 
@@ -897,6 +899,7 @@ internal sealed partial class CodeAltaTerminalUi
             case AgentErrorEvent error:
                 RenderThreadError(tab, error.Message, error.Timestamp);
                 thread.LatestSummary = SummarizeThreadContent(error.Message);
+                SetThreadStatus(tab, error.Message, tone: StatusTone.Error);
                 break;
         }
     }
@@ -1405,6 +1408,7 @@ internal sealed partial class CodeAltaTerminalUi
         var state = new ThreadTabState(thread, flow)
         {
             BackendId = new AgentBackendId(thread.BackendId),
+            StatusMessage = BuildReadyStatusText(thread, GetSelectedProject(), globalScopeSelected: false),
         };
 
         if (_chatBackendStates.TryGetValue(thread.BackendId, out var backendState))

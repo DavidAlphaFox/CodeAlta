@@ -202,10 +202,7 @@ internal sealed partial class CodeAltaTerminalUi
             RefreshChatSelectorsForDraftScope();
             UpdatePromptAvailabilityUi();
             _threadBodySplitter.First = new TextBlock("No open tabs.");
-            if (!_statusBusy)
-            {
-                SetReadyStatusForCurrentSelection();
-            }
+            SetReadyStatusForCurrentSelection();
 
             return;
         }
@@ -214,10 +211,7 @@ internal sealed partial class CodeAltaTerminalUi
         RefreshChatSelectorsForThread(tab);
         UpdatePromptAvailabilityUi();
         _threadBodySplitter.First = tab.Flow;
-        if (!_statusBusy)
-        {
-            SetReadyStatusForCurrentSelection();
-        }
+        SetReadyStatusForCurrentSelection();
     }
 
     private void RefreshChatSelectorsForDraftScope(AgentBackendId? preferredBackendId = null)
@@ -753,15 +747,108 @@ internal sealed partial class CodeAltaTerminalUi
             });
     }
 
+    internal static StatusSnapshot ResolveSelectionStatus(
+        string readyMessage,
+        bool hasThreadStatus,
+        string? threadStatusMessage,
+        bool threadStatusBusy,
+        StatusTone threadStatusTone,
+        bool promptUnavailable,
+        string? promptUnavailableMessage,
+        StatusTone promptUnavailableTone)
+    {
+        if (hasThreadStatus && !string.IsNullOrWhiteSpace(threadStatusMessage))
+        {
+            return new StatusSnapshot(threadStatusMessage!, threadStatusBusy, threadStatusTone);
+        }
+
+        if (promptUnavailable && !string.IsNullOrWhiteSpace(promptUnavailableMessage))
+        {
+            return new StatusSnapshot(promptUnavailableMessage!, Busy: false, promptUnavailableTone);
+        }
+
+        return new StatusSnapshot(readyMessage, Busy: false, StatusTone.Ready);
+    }
+
+    private void SetThreadStatus(
+        ThreadTabState tab,
+        string message,
+        bool showSpinner = false,
+        StatusTone tone = StatusTone.Info,
+        bool hasCustomStatus = true)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+
+        var changed =
+            !string.Equals(tab.StatusMessage, message, StringComparison.Ordinal) ||
+            tab.StatusBusy != showSpinner ||
+            tab.StatusTone != tone ||
+            tab.HasCustomStatus != hasCustomStatus;
+
+        tab.StatusMessage = message;
+        tab.StatusBusy = showSpinner;
+        tab.StatusTone = tone;
+        tab.HasCustomStatus = hasCustomStatus;
+
+        if (IsSelectedThread(tab.Thread.ThreadId))
+        {
+            SetReadyStatusForCurrentSelection();
+        }
+
+        if (changed)
+        {
+            InvalidateThreadChrome();
+        }
+    }
+
+    private void ClearThreadStatus(ThreadTabState tab)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        SetThreadStatus(
+            tab,
+            BuildReadyStatusText(tab.Thread, GetSelectedProject(), globalScopeSelected: false),
+            tone: StatusTone.Ready,
+            hasCustomStatus: false);
+    }
+
+    private void InvalidateThreadChrome()
+    {
+        PostToUi(() => _viewRefreshState.Value++);
+    }
+
+    private bool IsSelectedThread(string threadId)
+        => !string.IsNullOrWhiteSpace(threadId) &&
+           string.Equals(_selectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
+
     private void SetReadyStatusForCurrentSelection()
     {
-        if (TryGetPromptUnavailableStatus(out var message, out var tone))
+        var selectedThread = GetSelectedThread();
+        var readyMessage = BuildReadyStatusText(selectedThread, GetSelectedProject(), _globalScopeSelected);
+        var promptUnavailable = TryGetPromptUnavailableStatus(out var promptUnavailableMessage, out var promptUnavailableTone);
+        if (selectedThread is not null &&
+            _threadTabs.TryGetValue(selectedThread.ThreadId, out var selectedTab))
         {
-            SetStatus(message, tone: tone);
+            var snapshot = ResolveSelectionStatus(
+                readyMessage,
+                selectedTab.HasCustomStatus,
+                selectedTab.StatusMessage,
+                selectedTab.StatusBusy,
+                selectedTab.StatusTone,
+                promptUnavailable,
+                promptUnavailableMessage,
+                promptUnavailableTone);
+            SetStatus(snapshot.Message, snapshot.Busy, snapshot.Tone);
             return;
         }
 
-        SetStatus(BuildReadyStatusText(GetSelectedThread(), GetSelectedProject(), _globalScopeSelected), tone: StatusTone.Ready);
+        if (promptUnavailable)
+        {
+            SetStatus(promptUnavailableMessage, tone: promptUnavailableTone);
+            return;
+        }
+
+        SetStatus(readyMessage, tone: StatusTone.Ready);
     }
 
     private void PostToUi(Action action)
