@@ -567,6 +567,52 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
+    public void ExtractCommandDisplayName_PreservesMeaningfulDotnetSubcommand()
+    {
+        var method = typeof(CodeAltaTerminalUi).GetMethod("ExtractCommandDisplayName", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(method);
+
+        var displayName = (string?)method.Invoke(null, ["dotnet test CodeAlta.Tests/CodeAlta.Tests.csproj -c Release"]);
+
+        Assert.AreEqual("dotnet test", displayName);
+    }
+
+    [TestMethod]
+    public void ExtractCommandDisplayName_PreservesMeaningfulGitSubcommand()
+    {
+        var method = typeof(CodeAltaTerminalUi).GetMethod("ExtractCommandDisplayName", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(method);
+
+        var displayName = (string?)method.Invoke(null, ["git status --short"]);
+
+        Assert.AreEqual("git status", displayName);
+    }
+
+    [TestMethod]
+    public void ExtractCommandDisplayName_SkipsFlagsForSecondLevelGitCommand()
+    {
+        var method = typeof(CodeAltaTerminalUi).GetMethod("ExtractCommandDisplayName", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(method);
+
+        var displayName = (string?)method.Invoke(null, ["git remote -v"]);
+
+        Assert.AreEqual("git remote", displayName);
+    }
+
+    [TestMethod]
+    public void ExtractCommandDisplayName_DoesNotTreatFlagsOrPathsAsSubcommands()
+    {
+        var method = typeof(CodeAltaTerminalUi).GetMethod("ExtractCommandDisplayName", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(method);
+
+        var listDisplayName = (string?)method.Invoke(null, ["ls -al"]);
+        var copyDisplayName = (string?)method.Invoke(null, ["cp /mnt/c/source.txt /mnt/c/dest.txt"]);
+
+        Assert.AreEqual("ls", listDisplayName);
+        Assert.AreEqual("cp", copyDisplayName);
+    }
+
+    [TestMethod]
     public void BuildToolCallSummaryMarkup_OmitsRawJsonArgumentPreview()
     {
         var method = typeof(CodeAltaTerminalUi).GetMethod("BuildToolCallSummaryMarkup", BindingFlags.Static | BindingFlags.NonPublic);
@@ -1398,5 +1444,6 @@ public sealed class CodeAltaTerminalUiTests
         Assert.AreEqual(@"CodeAlta · C:\code\CodeAlta", projectSummary);
         Assert.AreEqual("Internal · CodeAlta", internalSummary);
     }
+
 }
 

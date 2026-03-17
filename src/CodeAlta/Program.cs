@@ -7,4 +7,3 @@ Console.CancelKeyPress += (_, e) =>
 
 await using var host = await TerminalHost.CreateAsync(cancellationTokenSource.Token).ConfigureAwait(false);
 await host.RunAsync(cancellationTokenSource.Token).ConfigureAwait(false);
-

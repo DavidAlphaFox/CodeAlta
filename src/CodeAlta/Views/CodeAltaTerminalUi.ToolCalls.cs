@@ -955,10 +955,204 @@ internal sealed partial class CodeAltaTerminalUi
             return "command";
         }
 
-        var firstToken = command.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        return string.IsNullOrWhiteSpace(firstToken)
-            ? command
-            : firstToken;
+        var tokens = TokenizeCommandDisplayName(command);
+        if (tokens.Count == 0)
+        {
+            return "command";
+        }
+
+        var executable = NormalizeCommandToken(tokens[0]);
+        if (string.IsNullOrWhiteSpace(executable))
+        {
+            return "command";
+        }
+
+        if (!ShouldIncludeSubcommand(executable))
+        {
+            return executable;
+        }
+
+        var firstSubcommandIndex = FindDisplayableSubcommandIndex(tokens, startIndex: 1);
+        if (firstSubcommandIndex < 0)
+        {
+            return executable;
+        }
+
+        var firstSubcommand = NormalizeCommandToken(tokens[firstSubcommandIndex]);
+        if (string.IsNullOrWhiteSpace(firstSubcommand))
+        {
+            return executable;
+        }
+
+        var builder = new StringBuilder()
+            .Append(executable)
+            .Append(' ')
+            .Append(firstSubcommand);
+
+        if (ShouldIncludeSecondSubcommand(executable, firstSubcommand))
+        {
+            var secondSubcommandIndex = FindDisplayableSubcommandIndex(tokens, firstSubcommandIndex + 1);
+            if (secondSubcommandIndex >= 0)
+            {
+                var secondSubcommand = NormalizeCommandToken(tokens[secondSubcommandIndex]);
+                if (!string.IsNullOrWhiteSpace(secondSubcommand))
+                {
+                    builder.Append(' ').Append(secondSubcommand);
+                }
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static List<string> TokenizeCommandDisplayName(string command)
+    {
+        var tokens = new List<string>();
+        var current = new StringBuilder();
+        char? quote = null;
+
+        foreach (var ch in command)
+        {
+            if (quote is { } activeQuote)
+            {
+                if (ch == activeQuote)
+                {
+                    quote = null;
+                    continue;
+                }
+
+                current.Append(ch);
+                continue;
+            }
+
+            if (ch is '"' or '\'')
+            {
+                quote = ch;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch))
+            {
+                if (current.Length > 0)
+                {
+                    tokens.Add(current.ToString());
+                    current.Clear();
+                }
+
+                continue;
+            }
+
+            current.Append(ch);
+        }
+
+        if (current.Length > 0)
+        {
+            tokens.Add(current.ToString());
+        }
+
+        return tokens;
+    }
+
+    private static string NormalizeCommandToken(string token)
+    {
+        var trimmed = token.Trim().Trim('"', '\'', '`');
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return string.Empty;
+        }
+
+        if (trimmed.Contains('\\', StringComparison.Ordinal) || trimmed.Contains('/', StringComparison.Ordinal))
+        {
+            trimmed = Path.GetFileName(trimmed);
+        }
+
+        return trimmed.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? trimmed[..^4]
+            : trimmed;
+    }
+
+    private static int FindDisplayableSubcommandIndex(IReadOnlyList<string> tokens, int startIndex)
+    {
+        var skipNext = false;
+        for (var index = startIndex; index < tokens.Count; index++)
+        {
+            var token = tokens[index].Trim();
+            if (skipNext)
+            {
+                skipNext = false;
+                continue;
+            }
+
+            if (IsOptionToken(token))
+            {
+                skipNext = true;
+                continue;
+            }
+
+            if (!IsDisplayableSubcommandToken(token))
+            {
+                continue;
+            }
+
+            return index;
+        }
+
+        return -1;
+    }
+
+    private static bool ShouldIncludeSubcommand(string executable)
+    {
+        return executable switch
+        {
+            "dotnet" or "git" or "cargo" or "npm" or "pnpm" or "yarn" or "bun" or "uv" or "docker" or "kubectl" or "gh" or "brew" => true,
+            _ => false,
+        };
+    }
+
+    private static bool ShouldIncludeSecondSubcommand(string executable, string subcommand)
+    {
+        return executable switch
+        {
+            "dotnet" => subcommand is "tool" or "nuget" or "workload" or "package" or "reference" or "user-secrets",
+            "git" => subcommand is "remote" or "branch" or "stash" or "worktree" or "submodule" or "config",
+            "docker" => subcommand is "compose" or "image" or "container" or "builder" or "buildx" or "volume" or "network" or "system",
+            _ => false,
+        };
+    }
+
+    private static bool IsDisplayableSubcommandToken(string token)
+    {
+        var trimmed = token.Trim().Trim('"', '\'', '`');
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return false;
+        }
+
+        if (trimmed is "|" or "||" or "&&" or ";" or ">" or ">>" or "<")
+        {
+            return false;
+        }
+
+        if (trimmed.Contains('='))
+        {
+            return false;
+        }
+
+        if (trimmed.Contains('\\', StringComparison.Ordinal) ||
+            trimmed.Contains('/', StringComparison.Ordinal) ||
+            trimmed.StartsWith(".", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return !IsOptionToken(trimmed);
+    }
+
+    private static bool IsOptionToken(string token)
+    {
+        var trimmed = token.Trim();
+        return trimmed.StartsWith("-", StringComparison.Ordinal) ||
+               trimmed.StartsWith("/", StringComparison.Ordinal);
     }
 
     private static string? BuildCompactToolContext(ToolCallEntryState entry)
