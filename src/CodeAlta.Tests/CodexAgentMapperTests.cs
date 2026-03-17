@@ -699,6 +699,112 @@ public sealed class CodexAgentMapperTests
     }
 
     [TestMethod]
+    public void ToSessionLogHistoryEvents_MapsExecCommandEventsUsingTypedEventMessages()
+    {
+        var sessionLogPath = CreateSessionLogFile(
+            """{"timestamp":"2026-03-17T10:00:00Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","model_context_window":258400,"collaboration_mode_kind":"default"}}""",
+            """{"timestamp":"2026-03-17T10:00:01Z","type":"event_msg","payload":{"type":"exec_command_begin","call_id":"call-1","command":["C:\\Program Files\\PowerShell\\7\\pwsh.exe","-Command","git remote -v"],"cwd":"C:\\code\\Tomlyn","parsed_cmd":[{"type":"unknown","cmd":"git remote -v"}],"process_id":"1234","source":"agent","turn_id":"turn-1"}}""",
+            """{"timestamp":"2026-03-17T10:00:02Z","type":"event_msg","payload":{"type":"exec_command_output_delta","call_id":"call-1","chunk":"origin\thttps://example.com/repo.git (fetch)","stream":"stdout"}}""",
+            """{"timestamp":"2026-03-17T10:00:03Z","type":"event_msg","payload":{"type":"exec_command_end","aggregated_output":"origin\thttps://example.com/repo.git (fetch)","call_id":"call-1","command":["C:\\Program Files\\PowerShell\\7\\pwsh.exe","-Command","git remote -v"],"cwd":"C:\\code\\Tomlyn","duration":{"secs":1,"nanos":500000000},"exit_code":0,"formatted_output":"origin\thttps://example.com/repo.git (fetch)","parsed_cmd":[{"type":"unknown","cmd":"git remote -v"}],"process_id":"1234","source":"agent","status":"completed","stderr":"","stdout":"origin\thttps://example.com/repo.git (fetch)","turn_id":"turn-1"}}""");
+
+        try
+        {
+            var events = CodexAgentMapper.ToSessionLogHistoryEvents("thread-1", sessionLogPath);
+
+            var started = events.OfType<AgentActivityEvent>().Single(x => x.ActivityId == "call-1" && x.Phase == AgentActivityPhase.Started);
+            Assert.AreEqual(AgentActivityKind.CommandExecution, started.Kind);
+            Assert.AreEqual("git remote -v", started.Name);
+            Assert.IsTrue(started.Details.HasValue);
+            Assert.AreEqual("git remote -v", started.Details.Value.GetProperty("command").GetString());
+            Assert.AreEqual(
+                @"C:\Program Files\PowerShell\7\pwsh.exe",
+                started.Details.Value.GetProperty("rawCommand").EnumerateArray().First().GetString());
+            Assert.AreEqual("1234", started.Details.Value.GetProperty("processId").GetString());
+
+            var output = events.OfType<AgentContentDeltaEvent>().Single(x => x.ContentId == "call-1");
+            Assert.AreEqual(AgentContentKind.CommandOutput, output.Kind);
+            Assert.AreEqual("origin\thttps://example.com/repo.git (fetch)", output.Delta);
+
+            var completed = events.OfType<AgentActivityEvent>().Single(x => x.ActivityId == "call-1" && x.Phase == AgentActivityPhase.Completed);
+            Assert.AreEqual("git remote -v", completed.Name);
+            Assert.AreEqual("origin\thttps://example.com/repo.git (fetch)", completed.Message);
+            Assert.IsTrue(completed.Details.HasValue);
+            Assert.AreEqual(0, completed.Details.Value.GetProperty("exitCode").GetInt32());
+        }
+        finally
+        {
+            File.Delete(sessionLogPath);
+        }
+    }
+
+    [TestMethod]
+    public void ToSessionLogHistoryEvents_MapsTypedResponseItemsWithoutJsonFieldProbing()
+    {
+        var sessionLogPath = CreateSessionLogFile(
+            """{"timestamp":"2026-03-17T10:00:00Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","model_context_window":258400,"collaboration_mode_kind":"default"}}""",
+            """{"timestamp":"2026-03-17T10:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}""",
+            """{"timestamp":"2026-03-17T10:00:02Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"world"}]}}""",
+            """{"timestamp":"2026-03-17T10:00:03Z","type":"response_item","payload":{"type":"function_call","name":"shell_command","arguments":"{\"command\":\"git status\",\"cwd\":\"C:\\\\code\\\\CodeAlta\"}","call_id":"call-1"}}""",
+            """{"timestamp":"2026-03-17T10:00:04Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":{"body":"Exit code: 0"}}}""");
+
+        try
+        {
+            var events = CodexAgentMapper.ToSessionLogHistoryEvents("thread-1", sessionLogPath);
+
+            var contentEvents = events.OfType<AgentContentCompletedEvent>().ToArray();
+            Assert.AreEqual(2, contentEvents.Length);
+            Assert.AreEqual("message:0", contentEvents[0].ContentId);
+            Assert.AreEqual("hello", contentEvents[0].Content);
+            Assert.AreEqual("message:1", contentEvents[1].ContentId);
+            Assert.AreEqual("world", contentEvents[1].Content);
+
+            var functionCall = events.OfType<AgentActivityEvent>().Single(x => x.ActivityId == "call-1" && x.Phase == AgentActivityPhase.Requested);
+            Assert.AreEqual(AgentActivityKind.ToolCall, functionCall.Kind);
+            Assert.AreEqual("shell_command", functionCall.Name);
+            Assert.IsTrue(functionCall.Details.HasValue);
+            Assert.AreEqual("git status", functionCall.Details.Value.GetProperty("arguments").GetProperty("command").GetString());
+
+            var functionCallOutput = events.OfType<AgentActivityEvent>().Single(x => x.ActivityId == "call-1" && x.Phase == AgentActivityPhase.Completed);
+            Assert.IsTrue(functionCallOutput.Details.HasValue);
+            Assert.AreEqual("Exit code: 0", functionCallOutput.Details.Value.GetProperty("output").GetProperty("body").GetString());
+        }
+        finally
+        {
+            File.Delete(sessionLogPath);
+        }
+    }
+
+    [TestMethod]
+    public void ToSessionLogHistoryEvents_MapsPatchApplyEventsUsingTypedEventMessages()
+    {
+        var sessionLogPath = CreateSessionLogFile(
+            """{"timestamp":"2026-03-17T10:00:00Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","model_context_window":258400,"collaboration_mode_kind":"default"}}""",
+            """{"timestamp":"2026-03-17T10:00:01Z","type":"event_msg","payload":{"type":"patch_apply_begin","auto_approved":true,"call_id":"patch-1","changes":{"readme.md":{"type":"update","unified_diff":"@@ -1 +1 @@\\n-old\\n+new"}},"turn_id":"turn-1"}}""",
+            """{"timestamp":"2026-03-17T10:00:02Z","type":"event_msg","payload":{"type":"patch_apply_end","call_id":"patch-1","changes":{"readme.md":{"type":"update","unified_diff":"@@ -1 +1 @@\\n-old\\n+new"}},"status":"completed","stderr":"","stdout":"Applied patch successfully","success":true,"turn_id":"turn-1"}}""");
+
+        try
+        {
+            var events = CodexAgentMapper.ToSessionLogHistoryEvents("thread-1", sessionLogPath);
+
+            var started = events.OfType<AgentActivityEvent>().Single(x => x.ActivityId == "patch-1" && x.Phase == AgentActivityPhase.Started);
+            Assert.AreEqual(AgentActivityKind.FileChange, started.Kind);
+            Assert.IsTrue(started.Details.HasValue);
+            Assert.AreEqual(1, started.Details.Value.GetProperty("changeCount").GetInt32());
+            Assert.IsTrue(started.Details.Value.GetProperty("autoApproved").GetBoolean());
+
+            var completed = events.OfType<AgentActivityEvent>().Single(x => x.ActivityId == "patch-1" && x.Phase == AgentActivityPhase.Completed);
+            Assert.AreEqual("file change", completed.Name);
+            Assert.IsTrue(completed.Details.HasValue);
+            Assert.AreEqual("Completed", completed.Details.Value.GetProperty("status").GetString());
+            Assert.AreEqual("Applied patch successfully", completed.Details.Value.GetProperty("output").GetProperty("body").GetString());
+        }
+        finally
+        {
+            File.Delete(sessionLogPath);
+        }
+    }
+
+    [TestMethod]
     public void ToAgentUserInputRequest_PreservesHeadersDescriptionsAndSecretFlags()
     {
         var request = new ToolRequestUserInputParams
@@ -783,5 +889,12 @@ public sealed class CodexAgentMapperTests
         Assert.AreEqual("api.example.com", command.Network!.Host);
         Assert.AreEqual(AgentNetworkPolicyAction.Allow, command.ProposedNetworkPolicyAmendments![0].Action);
         Assert.AreEqual(AgentCommandPreviewKind.Search, command.Actions![0].Kind);
+    }
+
+    private static string CreateSessionLogFile(params string[] lines)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.jsonl");
+        File.WriteAllLines(path, lines);
+        return path;
     }
 }
