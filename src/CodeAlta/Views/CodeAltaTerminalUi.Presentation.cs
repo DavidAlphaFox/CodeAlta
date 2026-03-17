@@ -182,6 +182,7 @@ internal sealed partial class CodeAltaTerminalUi
             {
                 EnsureSelectionDefaults();
                 _viewModel.HeaderText = BuildHeaderText();
+                RebuildSidebarTree();
 
                 _viewRefreshState.Value++;
                 RefreshThreadPaneContent();
