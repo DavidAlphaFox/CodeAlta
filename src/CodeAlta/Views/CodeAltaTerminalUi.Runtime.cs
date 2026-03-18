@@ -1161,7 +1161,7 @@ internal sealed partial class CodeAltaTerminalUi
         {
             ApplyChatCardHeader(state.HeaderText, GetContentTone(delta.Kind), GetContentHeader(delta.Kind), headerSecondary);
             state.Markdown.Markdown = markdown;
-            tab.Flow.ScrollToTail();
+            tab.Flow.ScrollToTailIfFollowing();
         });
     }
 
@@ -1177,7 +1177,7 @@ internal sealed partial class CodeAltaTerminalUi
         {
             ApplyChatCardHeader(state.HeaderText, GetContentTone(completed.Kind), GetContentHeader(completed.Kind), headerSecondary);
             state.Markdown.Markdown = markdown;
-            tab.Flow.ScrollToTail();
+            tab.Flow.ScrollToTailIfFollowing();
         });
     }
 
@@ -1369,7 +1369,7 @@ internal sealed partial class CodeAltaTerminalUi
         {
             ApplyChatCardTimestamp(stateEntry.TimestampText, timestamp);
             stateEntry.Markdown.Markdown = stateEntry.MarkdownValue;
-            tab.Flow.ScrollToTail();
+            tab.Flow.ScrollToTailIfFollowing();
         });
     }
 
@@ -1404,7 +1404,7 @@ internal sealed partial class CodeAltaTerminalUi
         {
             ApplyChatCardTimestamp(state.TimestampText, timestamp);
             state.Markdown.Markdown = state.MarkdownValue;
-            tab.Flow.ScrollToTail();
+            tab.Flow.ScrollToTailIfFollowing();
         });
     }
 
@@ -1789,7 +1789,7 @@ internal sealed partial class CodeAltaTerminalUi
         PostToUi(() =>
         {
             tab.Flow.Items.Add(item);
-            tab.Flow.ScrollToTail();
+            tab.Flow.ScrollToTailIfFollowing();
         });
     }
 
@@ -1806,7 +1806,7 @@ internal sealed partial class CodeAltaTerminalUi
             () =>
             {
                 tab.Flow.Items.AddRange(items);
-                tab.Flow.ScrollToTail();
+                tab.Flow.ScrollToTailIfFollowing();
             });
     }
 

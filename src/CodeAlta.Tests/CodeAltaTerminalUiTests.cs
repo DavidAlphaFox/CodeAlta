@@ -1805,6 +1805,17 @@ public sealed class CodeAltaTerminalUiTests
         Assert.AreEqual(CodeAltaTerminalUi.SidebarAccent.ProjectThread, accent);
     }
 
+    [TestMethod]
+    public void ScrollToTailIfFollowing_DoesNothingWhenFollowTailIsDisabled()
+    {
+        var flow = new DocumentFlow();
+        SetDocumentFlowFollowTail(flow, followTail: false);
+
+        FlowScrollExtensions.ScrollToTailIfFollowing(flow);
+
+        Assert.IsFalse(flow.FollowTail);
+    }
+
     private static void TickTerminalApp(TerminalApp app)
     {
         var tickMethod = typeof(TerminalApp).GetMethod("Tick", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -1817,6 +1828,13 @@ public sealed class CodeAltaTerminalUiTests
         var method = typeof(TerminalApp).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.IsNotNull(method);
         method.Invoke(app, null);
+    }
+
+    private static void SetDocumentFlowFollowTail(DocumentFlow flow, bool followTail)
+    {
+        var property = typeof(DocumentFlow).GetProperty(nameof(DocumentFlow.FollowTail), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        Assert.IsNotNull(property);
+        property.SetValue(flow, followTail);
     }
 
 }
