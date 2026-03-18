@@ -126,11 +126,12 @@ internal sealed partial class CodeAltaTerminalUi
 
     internal static string BuildSessionUsageIndicatorMarkup(AgentSessionUsage? usage)
     {
-        if (usage?.WindowUsagePercentage is not { } percentage)
+        if (usage is null || !TryGetDisplayWindowUsage(usage, out var currentTokens, out var tokenLimit))
         {
             return "ctx --";
         }
 
+        var percentage = (currentTokens * 100d) / tokenLimit;
         return FormattableString.Invariant($"ctx {Math.Clamp(percentage, 0d, 999d):0}%");
     }
 
@@ -138,11 +139,75 @@ internal sealed partial class CodeAltaTerminalUi
     {
         ArgumentNullException.ThrowIfNull(usage);
 
+        if (TryFormatCodexUsageSummary(usage, out var codexSummary))
+        {
+            return codexSummary;
+        }
+
         var current = FormatNumber(usage.CurrentTokens);
         var limit = FormatNumber(usage.TokenLimit);
-        return usage.WindowUsagePercentage is { } percentage
-            ? FormattableString.Invariant($"{current} / {limit} tokens ({percentage:0.#}%)")
+        return TryGetDisplayWindowUsage(usage, out var currentTokens, out var tokenLimit)
+            ? FormattableString.Invariant($"{FormatNumber(currentTokens)} / {FormatNumber(tokenLimit)} tokens ({(currentTokens * 100d) / tokenLimit:0.#}%)")
             : $"{current} / {limit} tokens";
+    }
+
+    private static bool TryGetDisplayWindowUsage(AgentSessionUsage usage, out long currentTokens, out long tokenLimit)
+    {
+        ArgumentNullException.ThrowIfNull(usage);
+
+        currentTokens = default;
+        tokenLimit = default;
+
+        if (IsCodexThreadTotalUsage(usage) ||
+            usage.CurrentTokens is not { } current ||
+            usage.TokenLimit is not { } limit ||
+            limit <= 0 ||
+            current < 0)
+        {
+            return false;
+        }
+
+        currentTokens = current;
+        tokenLimit = limit;
+        return true;
+    }
+
+    private static bool TryFormatCodexUsageSummary(AgentSessionUsage usage, out string summary)
+    {
+        ArgumentNullException.ThrowIfNull(usage);
+
+        summary = string.Empty;
+        if (usage.Details is not CodexSessionUsageDetails codex || !IsCodexThreadTotalUsage(usage))
+        {
+            return false;
+        }
+
+        var parts = new List<string>();
+        if (codex.TotalUsage is { } totalUsage)
+        {
+            parts.Add($"{FormatNumber(totalUsage.TotalTokens)} total thread tokens");
+        }
+
+        if ((codex.ModelContextWindow ?? usage.TokenLimit) is { } tokenWindow)
+        {
+            parts.Add($"{FormatNumber(tokenWindow)} token window");
+        }
+
+        if (parts.Count == 0)
+        {
+            return false;
+        }
+
+        summary = string.Join(" · ", parts);
+        return true;
+    }
+
+    private static bool IsCodexThreadTotalUsage(AgentSessionUsage usage)
+    {
+        ArgumentNullException.ThrowIfNull(usage);
+
+        return usage.Details is CodexSessionUsageDetails codex &&
+               (codex.TotalUsage is not null || codex.ModelContextWindow is not null);
     }
 
     private static AgentSessionUsageDetails? MergeSessionUsageDetails(AgentSessionUsageDetails? current, AgentSessionUsageDetails? incoming)
@@ -255,12 +320,10 @@ internal sealed partial class CodeAltaTerminalUi
             stack.Add(contextChart);
         }
 
-        if (usage.CurrentTokens is { } current &&
-            usage.TokenLimit is { } limit &&
-            limit > 0 &&
-            current > limit)
+        if (TryGetDisplayWindowUsage(usage, out var currentTokens, out var tokenLimit) &&
+            currentTokens > tokenLimit)
         {
-            stack.Add(new Markup($"[warning]{FormatNumber(current - limit)} tokens over the advertised window.[/]"));
+            stack.Add(new Markup($"[warning]{FormatNumber(currentTokens - tokenLimit)} tokens over the advertised window.[/]"));
         }
 
         if (usage.MessageCount is { } messageCount)
@@ -295,9 +358,7 @@ internal sealed partial class CodeAltaTerminalUi
 
     private static Visual? BuildContextWindowChart(AgentSessionUsage usage)
     {
-        if (usage.CurrentTokens is not { } current ||
-            usage.TokenLimit is not { } limit ||
-            limit <= 0)
+        if (!TryGetDisplayWindowUsage(usage, out var current, out var limit))
         {
             return null;
         }

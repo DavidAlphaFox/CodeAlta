@@ -1065,7 +1065,7 @@ internal static class CodexAgentMapper
         ArgumentNullException.ThrowIfNull(usage);
 
         return new AgentSessionUsage(
-            CurrentTokens: usage.Total.TotalTokens,
+            CurrentTokens: null,
             TokenLimit: usage.ModelContextWindow,
             MessageCount: null,
             UpdatedAt: timestamp,
@@ -1083,7 +1083,7 @@ internal static class CodexAgentMapper
         }
 
         return new AgentSessionUsage(
-            CurrentTokens: info?.TotalTokenUsage.TotalTokens,
+            CurrentTokens: null,
             TokenLimit: info?.ModelContextWindow,
             MessageCount: null,
             UpdatedAt: timestamp,
@@ -1159,12 +1159,23 @@ internal static class CodexAgentMapper
             window.WindowDurationMins);
     }
 
-    private static string BuildCodexUsageMessage(long? currentTokens, long? tokenLimit)
-        => currentTokens is { } current && tokenLimit is > 0
-            ? FormattableString.Invariant($"{current:0}/{tokenLimit:0} tokens")
-            : currentTokens is { } total
-                ? total.ToString("0", CultureInfo.InvariantCulture) + " tokens"
-                : "Token usage updated.";
+    private static string BuildCodexUsageMessage(long? totalThreadTokens, long? modelContextWindow)
+    {
+        var parts = new List<string>();
+        if (totalThreadTokens is { } total)
+        {
+            parts.Add(FormattableString.Invariant($"{total:0} total thread tokens"));
+        }
+
+        if (modelContextWindow is > 0)
+        {
+            parts.Add(FormattableString.Invariant($"{modelContextWindow:0} token window"));
+        }
+
+        return parts.Count > 0
+            ? string.Join(" · ", parts)
+            : "Token usage updated.";
+    }
 
     private static AgentActivityEvent CreateActivity(
         string sessionId,

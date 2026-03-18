@@ -509,7 +509,7 @@ public sealed class CodexAgentMapperTests
         Assert.AreEqual(AgentSessionUpdateKind.UsageUpdated, mappedUsage.Kind);
         Assert.AreEqual("turn-7", mappedUsage.RunId?.Value);
         Assert.IsNotNull(mappedUsage.Usage);
-        Assert.AreEqual(5056L, mappedUsage.Usage.CurrentTokens);
+        Assert.IsNull(mappedUsage.Usage.CurrentTokens);
         Assert.AreEqual(128000L, mappedUsage.Usage.TokenLimit);
         var usageDetails = Assert.IsInstanceOfType<CodexSessionUsageDetails>(mappedUsage.Usage.Details);
         Assert.AreEqual(816L, usageDetails.LastTurnUsage!.TotalTokens);

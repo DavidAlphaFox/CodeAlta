@@ -1662,6 +1662,26 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
+    public void FormatSessionUsageSummary_CodexThreadTotalsDoNotPretendToBeContextUsage()
+    {
+        var usage = new AgentSessionUsage(
+            CurrentTokens: 22697041,
+            TokenLimit: 258400,
+            MessageCount: null,
+            UpdatedAt: DateTimeOffset.Parse("2026-03-18T21:48:22+00:00"),
+            Details: new CodexSessionUsageDetails(
+                LastTurnUsage: new CodexTokenUsage(35712, 35944, 313, 98, 36257),
+                TotalUsage: new CodexTokenUsage(20904320, 22611022, 86019, 39724, 22697041),
+                ModelContextWindow: 258400));
+
+        var indicator = CodeAltaTerminalUi.BuildSessionUsageIndicatorMarkup(usage);
+        var summary = CodeAltaTerminalUi.FormatSessionUsageSummary(usage);
+
+        Assert.AreEqual("ctx --", indicator);
+        Assert.AreEqual("22,697,041 total thread tokens · 258,400 token window", summary);
+    }
+
+    [TestMethod]
     public void MergeSessionUsage_MergesTypedBackendDetails()
     {
         var current = new AgentSessionUsage(
