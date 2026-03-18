@@ -1651,7 +1651,7 @@ public sealed class CodeAltaTerminalUiTests
             var indicator = CodeAltaTerminalUi.BuildSessionUsageIndicatorMarkup(usage);
             var summary = CodeAltaTerminalUi.FormatSessionUsageSummary(usage);
 
-            Assert.AreEqual("[success]ctx 42%[/]", indicator);
+            Assert.AreEqual("ctx 42%", indicator);
             Assert.AreEqual("50,000 / 120,000 tokens (41.7%)", summary);
         }
         finally

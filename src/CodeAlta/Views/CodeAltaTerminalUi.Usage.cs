@@ -22,6 +22,11 @@ internal sealed partial class CodeAltaTerminalUi
             HorizontalAlignment = Align.End,
             VerticalAlignment = Align.Start,
         };
+        button.Style(ButtonStyle.Default with
+        {
+            Normal = Style.None,
+            Padding = Thickness.Zero,
+        });
         button.Click(() => ToggleSessionUsagePopup(button));
 
         return button;
@@ -122,11 +127,10 @@ internal sealed partial class CodeAltaTerminalUi
     {
         if (usage?.WindowUsagePercentage is not { } percentage)
         {
-            return "[dim]ctx --[/]";
+            return "ctx --";
         }
 
-        var tone = GetUsageTone(percentage);
-        return FormattableString.Invariant($"[{tone}]ctx {Math.Clamp(percentage, 0d, 999d):0}%[/]");
+        return FormattableString.Invariant($"ctx {Math.Clamp(percentage, 0d, 999d):0}%");
     }
 
     internal static string FormatSessionUsageSummary(AgentSessionUsage usage)
