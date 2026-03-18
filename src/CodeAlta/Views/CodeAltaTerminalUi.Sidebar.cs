@@ -16,19 +16,28 @@ internal sealed partial class CodeAltaTerminalUi
             HorizontalAlignment = Align.Stretch,
         };
 
-        return new VStack(
+        var layout = new Grid
+        {
+            HorizontalAlignment = Align.Stretch,
+            VerticalAlignment = Align.Stretch,
+        }
+        .Rows(
+            new RowDefinition { Height = GridLength.Star(1) },
+            new RowDefinition { Height = GridLength.Auto })
+        .Columns(
+            new ColumnDefinition { Width = GridLength.Star(1) });
+
+        layout.Cell(
             new HSplitter(BuildSidebar(), BuildThreadPane())
             {
                 Ratio = 0.26,
                 MinFirst = 24,
                 MinSecond = 40,
             },
-            _threadCommandBar)
-        {
-            Spacing = 0,
-            HorizontalAlignment = Align.Stretch,
-            VerticalAlignment = Align.Stretch,
-        };
+            0,
+            0);
+        layout.Cell(_threadCommandBar, 1, 0);
+        return layout;
     }
 
     private Visual BuildSidebar()
@@ -56,16 +65,22 @@ internal sealed partial class CodeAltaTerminalUi
             Spacing = 1,
         };
 
+        var contentGrid = new Grid
+        {
+            HorizontalAlignment = Align.Stretch,
+            VerticalAlignment = Align.Stretch,
+        }
+        .Rows(
+            new RowDefinition { Height = GridLength.Star(1) },
+            new RowDefinition { Height = GridLength.Auto })
+        .Columns(
+            new ColumnDefinition { Width = GridLength.Star(1) });
+        contentGrid.Cell(treeHost, 0, 0);
+        contentGrid.Cell(footer, 1, 0);
+
         return new Group(
             new Markup($"[bold]{NerdFont.FaFolderTree} Navigator[/]"),
-            new VStack(
-                treeHost,
-                footer)
-            {
-                Spacing = 0,
-                HorizontalAlignment = Align.Stretch,
-                VerticalAlignment = Align.Stretch,
-            })
+            contentGrid)
         {
             HorizontalAlignment = Align.Stretch,
             VerticalAlignment = Align.Stretch,

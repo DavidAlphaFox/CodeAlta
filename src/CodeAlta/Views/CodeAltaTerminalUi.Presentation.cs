@@ -97,14 +97,19 @@ internal sealed partial class CodeAltaTerminalUi
             MinSecond = 7,
         };
 
-        _threadPaneLayout = new VStack(
-            _threadTabControl,
-            _threadBodySplitter)
+        var threadPaneLayout = new Grid
         {
-            Spacing = 0,
             HorizontalAlignment = Align.Stretch,
             VerticalAlignment = Align.Stretch,
-        };
+        }
+        .Rows(
+            new RowDefinition { Height = GridLength.Auto },
+            new RowDefinition { Height = GridLength.Star(1) })
+        .Columns(
+            new ColumnDefinition { Width = GridLength.Star(1) });
+        threadPaneLayout.Cell(_threadTabControl.Stretch(), 0, 0);
+        threadPaneLayout.Cell(_threadBodySplitter, 1, 0);
+        _threadPaneLayout = threadPaneLayout;
 
         RefreshThreadPaneContent();
         return _threadPaneLayout;

@@ -355,6 +355,19 @@ internal sealed partial class CodeAltaTerminalUi
                 Tone = ControlTone.Error,
             };
             closeButton.Click(() => CloseToolCallDialog(entry));
+            var dialogContentGrid = new Grid
+            {
+                HorizontalAlignment = Align.Stretch,
+                VerticalAlignment = Align.Stretch,
+            }
+            .Rows(
+                new RowDefinition { Height = GridLength.Auto },
+                new RowDefinition { Height = GridLength.Star(1) })
+            .Columns(
+                new ColumnDefinition { Width = GridLength.Star(1) });
+            dialogContentGrid.Cell(detailsGroup, 0, 0);
+            dialogContentGrid.Cell(outputGroup, 1, 0);
+
             dialog = new Dialog()
                 .Title($"{ResolveToolDisplayName(entry.ActivityKind, entry.DisplayName)}")
                 .TopRightText(closeButton)
@@ -364,14 +377,7 @@ internal sealed partial class CodeAltaTerminalUi
                 .Padding(1)
                 .Width(dialogWidth)
                 .Height(dialogHeight)
-                .Content(new VStack(
-                    detailsGroup,
-                    outputGroup)
-                {
-                    Spacing = 0,
-                    HorizontalAlignment = Align.Stretch,
-                    VerticalAlignment = Align.Stretch,
-                });
+                .Content(dialogContentGrid);
             dialog.AddCommand(new Command
             {
                 Id = "ToolCallDialog.Close",

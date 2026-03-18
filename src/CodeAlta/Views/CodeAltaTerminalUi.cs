@@ -121,17 +121,28 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
 
         SetStatus("Connecting to available backends...", showSpinner: true);
 
-        var root = new VStack(
+        var root = new Grid
+        {
+            HorizontalAlignment = Align.Stretch,
+            VerticalAlignment = Align.Stretch,
+        }
+        .Rows(
+            new RowDefinition { Height = GridLength.Auto },
+            new RowDefinition { Height = GridLength.Star(1) })
+        .Columns(
+            new ColumnDefinition { Width = GridLength.Star(1) });
+
+        root.Cell(
             new TextBlock
             {
                 Wrap = false,
             }.Text(() => _viewModel.HeaderText),
-            BuildMainView())
-        {
-            Spacing = 0,
-            HorizontalAlignment = Align.Stretch,
-            VerticalAlignment = Align.Stretch,
-        };
+            0,
+            0);
+        root.Cell(
+            BuildMainView(),
+            1,
+            0);
 
         _runtimeEventsTask = Task.Run(() => PumpRuntimeEventsAsync(_runtimeEventsCts.Token), CancellationToken.None);
         await Terminal.RunAsync(
