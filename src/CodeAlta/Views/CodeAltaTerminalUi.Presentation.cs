@@ -72,9 +72,6 @@ internal sealed partial class CodeAltaTerminalUi
                 _chatModelSelect,
                 _chatReasoningSelect,
                 new Markup(() => _viewModel.BackendStatusMarkup)
-                {
-                    Wrap = true,
-                },
             ])
         {
             Spacing = 2,
