@@ -133,48 +133,56 @@ internal sealed partial class CodeAltaTerminalUi
             return;
         }
 
-        var desiredPages = new List<TabPage>();
-        foreach (var threadId in _viewState.OpenThreadIds)
+        _syncingThreadTabPages = true;
+        try
         {
-            var thread = FindThread(threadId);
-            if (thread is null)
+            var desiredPages = new List<TabPage>();
+            foreach (var threadId in _viewState.OpenThreadIds)
             {
-                continue;
+                var thread = FindThread(threadId);
+                if (thread is null)
+                {
+                    continue;
+                }
+
+                desiredPages.Add(EnsureThreadTabPage(thread));
             }
 
-            desiredPages.Add(EnsureThreadTabPage(thread));
-        }
+            _threadTabControl.IsVisible = desiredPages.Count > 0;
 
-        _threadTabControl.IsVisible = desiredPages.Count > 0;
-
-        var existingPages = _threadTabControl.Tabs;
-        var matches = existingPages.Count == desiredPages.Count;
-        if (matches)
-        {
-            for (var i = 0; i < desiredPages.Count; i++)
+            var existingPages = _threadTabControl.Tabs;
+            var matches = existingPages.Count == desiredPages.Count;
+            if (matches)
             {
-                if (!ReferenceEquals(existingPages[i], desiredPages[i]))
+                for (var i = 0; i < desiredPages.Count; i++)
                 {
-                    matches = false;
-                    break;
+                    if (!ReferenceEquals(existingPages[i], desiredPages[i]))
+                    {
+                        matches = false;
+                        break;
+                    }
                 }
             }
-        }
 
-        if (!matches)
+            if (!matches)
+            {
+                for (var i = existingPages.Count - 1; i >= 0; i--)
+                {
+                    _threadTabControl.TryCloseTab(existingPages[i]);
+                }
+
+                foreach (var page in desiredPages)
+                {
+                    _threadTabControl.AddTab(page);
+                }
+            }
+
+            SyncThreadTabControlSelection();
+        }
+        finally
         {
-            for (var i = existingPages.Count - 1; i >= 0; i--)
-            {
-                _threadTabControl.TryCloseTab(existingPages[i]);
-            }
-
-            foreach (var page in desiredPages)
-            {
-                _threadTabControl.AddTab(page);
-            }
+            _syncingThreadTabPages = false;
         }
-
-        SyncThreadTabControlSelection();
     }
 
     private TabPage EnsureThreadTabPage(WorkThreadDescriptor thread)
@@ -265,7 +273,7 @@ internal sealed partial class CodeAltaTerminalUi
 
     private void OnThreadTabControlSelectionChanged(int selectedIndex)
     {
-        if (_syncingThreadTabSelection || _threadTabControl is null)
+        if (_syncingThreadTabSelection || _syncingThreadTabPages || _threadTabControl is null)
         {
             return;
         }
@@ -578,6 +586,7 @@ internal sealed partial class CodeAltaTerminalUi
 
     private void SelectGlobalScope()
     {
+        _pendingThreadTabSelectionThreadId = null;
         _globalScopeSelected = true;
         _selectedThreadId = null;
         _viewState.SelectedThreadId = null;
@@ -588,6 +597,7 @@ internal sealed partial class CodeAltaTerminalUi
 
     private void SelectProjectScope(string projectId)
     {
+        _pendingThreadTabSelectionThreadId = null;
         _globalScopeSelected = false;
         _selectedProjectId = projectId;
         _selectedThreadId = null;

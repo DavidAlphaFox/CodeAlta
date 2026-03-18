@@ -84,6 +84,76 @@ public sealed class CodeAltaTerminalUiSidebarTests
         }
     }
 
+    [TestMethod]
+    public async Task ResolveSidebarTargetForRebuild_PreservesExplicitProjectSelectionWhenCurrentThreadIsVisible()
+    {
+        var rootPath = Path.Combine(Path.GetTempPath(), $"codealta-ui-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(rootPath);
+
+        try
+        {
+            var catalogOptions = new CatalogOptions { GlobalRoot = rootPath };
+            var projectCatalog = new ProjectCatalog(catalogOptions);
+            var threadCatalog = new WorkThreadCatalog(catalogOptions);
+            var db = await CreateTestDbAsync(rootPath);
+            await using var hub = new AgentHub(new AgentBackendFactory(), new AgentRepository(db));
+            await using var runtimeService = new WorkThreadRuntimeService(
+                hub,
+                projectCatalog,
+                threadCatalog,
+                new RoleProfileStore(),
+                new AgentInstructionTemplateProvider(),
+                catalogOptions);
+            var project = new ProjectDescriptor
+            {
+                Id = ProjectId.NewVersion7().ToString(),
+                Slug = "codealta",
+                DisplayName = "CodeAlta",
+                ProjectPath = Path.Combine(rootPath, "repo"),
+            };
+            Directory.CreateDirectory(project.ProjectPath);
+            await projectCatalog.SaveAsync(project);
+
+            var visibleThread = new WorkThreadDescriptor
+            {
+                ThreadId = "thread-1",
+                Kind = WorkThreadKind.ProjectThread,
+                BackendId = AgentBackendIds.Codex.Value,
+                BackendSessionId = "session-1",
+                ProjectRef = project.Id,
+                WorkingDirectory = project.ProjectPath,
+                Title = "Recovered thread",
+                Status = WorkThreadStatus.Active,
+                CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+                UpdatedAt = DateTimeOffset.UtcNow,
+                LastActiveAt = DateTimeOffset.UtcNow,
+            };
+
+            var ui = new CodeAltaTerminalUi(projectCatalog, threadCatalog, runtimeService, catalogOptions, hub);
+            var sidebarTree = new TreeView();
+            SetPrivateField(ui, "_sidebarTree", sidebarTree);
+            SetPrivateField(ui, "_projects", (IReadOnlyList<ProjectDescriptor>)[project]);
+            SetPrivateField(ui, "_threads", (IReadOnlyList<WorkThreadDescriptor>)[visibleThread]);
+            SetPrivateField(ui, "_viewState", new WorkThreadViewState());
+            SetPrivateField(ui, "_selectedProjectId", project.Id);
+            SetPrivateField(ui, "_globalScopeSelected", false);
+            InvokePrivate(ui, "RebuildSidebarTree");
+
+            var projectNode = sidebarTree.Roots[1].Children[0];
+            SetPrivateField(ui, "_lastSidebarSelectedTarget", projectNode.Data);
+
+            SetPrivateField(ui, "_selectedThreadId", visibleThread.ThreadId);
+
+            var selectedTarget = InvokePrivate(ui, "ResolveSidebarTargetForRebuild");
+
+            Assert.AreEqual(projectNode.Data, selectedTarget);
+        }
+        finally
+        {
+            Directory.Delete(rootPath, recursive: true);
+        }
+    }
+
     private static async Task<CodeAltaDb> CreateTestDbAsync(string rootPath)
     {
         var dbPath = Path.Combine(rootPath, "state", "db", "codealta.db");
@@ -92,11 +162,11 @@ public sealed class CodeAltaTerminalUiSidebarTests
         return db;
     }
 
-    private static void InvokePrivate(object instance, string methodName)
+    private static object? InvokePrivate(object instance, string methodName)
     {
         var method = instance.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.IsNotNull(method);
-        method.Invoke(instance, null);
+        return method.Invoke(instance, null);
     }
 
     private static void SetPrivateField(object instance, string fieldName, object? value)

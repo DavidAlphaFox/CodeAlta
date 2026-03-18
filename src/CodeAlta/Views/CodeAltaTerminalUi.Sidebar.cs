@@ -228,12 +228,24 @@ internal sealed partial class CodeAltaTerminalUi
             return;
         }
 
-        var selectedTarget = ResolveSidebarTargetForCurrentState();
+        var selectedTarget = ResolveSidebarTargetForRebuild();
         var selectedNode = FindSidebarNode(_sidebarTree.Roots, selectedTarget);
         if (selectedNode is not null)
         {
             _sidebarTree.TrySelectNode(selectedNode);
         }
+    }
+
+    private SidebarSelectionTarget ResolveSidebarTargetForRebuild()
+    {
+        if (_lastSidebarSelectedTarget is { } previousTarget &&
+            _sidebarTree is not null &&
+            FindSidebarNode(_sidebarTree.Roots, previousTarget) is not null)
+        {
+            return previousTarget;
+        }
+
+        return ResolveSidebarTargetForCurrentState();
     }
 
     private static TreeNode? FindSidebarNode(IEnumerable<TreeNode> roots, SidebarSelectionTarget selectedTarget)

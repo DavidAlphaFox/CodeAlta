@@ -61,6 +61,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
     private bool _statusBusy;
     private StatusTone _statusTone = StatusTone.Ready;
     private bool _syncingThreadTabSelection;
+    private bool _syncingThreadTabPages;
     private string? _pendingThreadTabSelectionThreadId;
     private bool _terminalLoopStarted;
     private bool _globalScopeSelected = true;

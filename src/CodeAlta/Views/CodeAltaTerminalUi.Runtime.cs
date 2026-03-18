@@ -347,6 +347,7 @@ internal sealed partial class CodeAltaTerminalUi
             return;
         }
 
+        _pendingThreadTabSelectionThreadId = null;
         EnsureThreadTab(thread);
         if (!_viewState.OpenThreadIds.Contains(threadId, StringComparer.OrdinalIgnoreCase))
         {
@@ -380,6 +381,7 @@ internal sealed partial class CodeAltaTerminalUi
 
     private async Task CloseThreadAsync(string threadId)
     {
+        _pendingThreadTabSelectionThreadId = null;
         _viewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
         if (_threadTabs.TryGetValue(threadId, out var tab))
         {
