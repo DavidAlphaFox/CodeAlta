@@ -1737,6 +1737,45 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
+    public void BuildSessionUsageMarkdown_CopilotQuotaSnapshotsUseJsonCodeBlocks()
+    {
+        using var quotaJson = JsonDocument.Parse("""{"isUnlimitedEntitlement":false,"entitlementRequests":1500,"usedRequests":477,"usageAllowedWithExhaustion":true}""");
+
+        var markdown = CodeAltaTerminalUi.BuildSessionUsageMarkdown(
+            new AgentSessionUsage(
+                CurrentTokens: 49652,
+                TokenLimit: 272000,
+                MessageCount: 54,
+                UpdatedAt: DateTimeOffset.Parse("2026-03-18T21:39:53+00:00"),
+                Details: new CopilotSessionUsageDetails(
+                    LastAssistantUsage: new CopilotAssistantUsage(
+                        Model: "gpt-5.4",
+                        ReasoningEffort: "high",
+                        Initiator: "agent",
+                        InputTokens: 47307,
+                        OutputTokens: 989,
+                        CacheReadTokens: 47104,
+                        CacheWriteTokens: 0,
+                        DurationMs: null,
+                        Cost: null,
+                        TotalNanoAiu: null),
+                    QuotaSnapshots:
+                    [
+                        new CopilotQuotaSnapshot("premium_interactions", quotaJson.RootElement.Clone()),
+                    ])),
+            "Copilot",
+            "gpt-5.4");
+
+        StringAssert.Contains(markdown, "# Copilot context usage");
+        StringAssert.Contains(markdown, "## Quota snapshots");
+        StringAssert.Contains(markdown, "### premium_interactions");
+        StringAssert.Contains(markdown, "```json");
+        StringAssert.Contains(markdown, "\"isUnlimitedEntitlement\": false");
+        StringAssert.Contains(markdown, "\"usedRequests\": 477");
+        Assert.IsFalse(markdown.Contains("- premium_interactions:", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void ResolveChatBackendSelection_CanPreserveCurrentSelection()
     {
         var selected = CodeAltaTerminalUi.ResolveChatBackendSelection(

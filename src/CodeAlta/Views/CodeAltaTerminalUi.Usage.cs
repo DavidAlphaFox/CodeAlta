@@ -4,6 +4,7 @@ using CodeAlta.Agent;
 using XenoAtom.Ansi;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
+using XenoAtom.Terminal.UI.Extensions.Markdown;
 using XenoAtom.Terminal.UI.Geometry;
 using XenoAtom.Terminal.UI.Styling;
 
@@ -407,9 +408,24 @@ internal sealed partial class CodeAltaTerminalUi
             stack.Add(new Markup("[bold]Quota snapshots[/]"));
             foreach (var quota in quotaSnapshots)
             {
-                stack.Add(new Markup(AnsiMarkup.Escape($"{quota.Name}: {SummarizeJson(quota.Payload)}")));
+                stack.Add(new Markup($"[bold]{AnsiMarkup.Escape(quota.Name)}[/]"));
+                stack.Add(CreateUsageMarkdownControl(FormatChatCodeFence(PrettyPrintJson(quota.Payload), "json")));
             }
         }
+    }
+
+    private static MarkdownControl CreateUsageMarkdownControl(string markdown)
+    {
+        return new MarkdownControl(markdown.Trim())
+        {
+            HorizontalAlignment = Align.Stretch,
+            VerticalAlignment = Align.Start,
+            Options = MarkdownRenderOptions.Default with
+            {
+                WrapCodeBlocks = true,
+                MaxCodeBlockHeight = 12,
+            },
+        };
     }
 
     private static Visual? BuildCodexUsageChart(CodexTokenUsage usage)
@@ -549,14 +565,6 @@ internal sealed partial class CodeAltaTerminalUi
         return string.Join(" · ", parts);
     }
 
-    private static string SummarizeJson(JsonElement payload)
-    {
-        var raw = payload.GetRawText();
-        return raw.Length <= 96
-            ? raw
-            : raw[..93] + "...";
-    }
-
     private static string GetUsageTone(double percentage)
     {
         return percentage switch
@@ -632,10 +640,10 @@ internal sealed partial class CodeAltaTerminalUi
                 .AppendLine("## Quota snapshots");
             foreach (var quota in quotaSnapshots)
             {
-                builder.Append("- ")
-                    .Append(quota.Name)
-                    .Append(": ")
-                    .AppendLine(SummarizeJson(quota.Payload));
+                builder.AppendLine()
+                    .Append("### ")
+                    .AppendLine(quota.Name)
+                    .AppendLine(FormatChatCodeFence(PrettyPrintJson(quota.Payload), "json"));
             }
         }
     }
