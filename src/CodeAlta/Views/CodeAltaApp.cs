@@ -26,11 +26,13 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private readonly CodeAltaOwnedServices? _ownedServices;
     private readonly CodeAltaShellController _shellController;
     private readonly RuntimeEventPump _runtimeEventPump;
+    private readonly ChatBackendInitializationCoordinator _chatBackendInitializationCoordinator;
     private readonly ShellThreadStateCoordinator _threadStateCoordinator;
     private readonly ShellWorkspaceCoordinator _workspaceCoordinator;
     private readonly ThreadHistoryCoordinator _threadHistoryCoordinator;
     private readonly ThreadRuntimeEventCoordinator _threadRuntimeEventCoordinator;
     private readonly ThreadCommandCoordinator _threadCommandCoordinator;
+    private readonly ThreadCreationCoordinator _threadCreationCoordinator;
     private readonly CodeAltaShellViewModel _shellViewModel = new();
     private readonly SidebarViewModel _sidebarViewModel = new();
     private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel = new();
@@ -230,6 +232,11 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             DispatchToUi,
             VerifyBindableAccess,
             _catalogOptions.GlobalRoot);
+        _chatBackendInitializationCoordinator = new ChatBackendInitializationCoordinator(
+            _agentHub,
+            _chatBackendStates,
+            DispatchToUi,
+            RefreshHeaderAndThreadWorkspace);
         _threadTabStripCoordinator = new ThreadTabStripCoordinator(
             () => ThreadTabControl,
             () => _threadWorkspaceView,
@@ -256,6 +263,18 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             SetStatus,
             (tab, message, showSpinner, tone) => SetThreadStatus(tab, message, showSpinner, tone),
             ClearThreadStatus);
+        _threadCreationCoordinator = new ThreadCreationCoordinator(
+            _runtimeService,
+            _catalogOptions,
+            GetPreferredBackendId,
+            GetSelectedProject,
+            () => _globalScopeSelected,
+            () => ReadBindableState(() => _sidebarViewModel.DraftThreadTitle?.Trim()),
+            (backendId, workingDirectory, projectRoots) => _threadCommandCoordinator!.BuildPreferredExecutionOptions(backendId, workingDirectory, projectRoots),
+            RememberThreadPreference,
+            RegisterCreatedThreadAsync,
+            ClearThreadTitleDraft,
+            SetStatus);
         _threadCommandCoordinator = new ThreadCommandCoordinator(
             _runtimeService,
             _catalogOptions,
@@ -275,8 +294,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             () => _selectedProjectId,
             GetPreferredBackendId,
             () => TrySetPromptUnavailableStatus(),
-            CreateGlobalThreadAsync,
-            CreateProjectThreadAsync,
+            () => _threadCreationCoordinator.CreateGlobalThreadAsync(),
+            () => _threadCreationCoordinator.CreateProjectThreadAsync(),
             RegisterDelegatedThread,
             PersistViewStateAsync,
             GetAutoApproveEnabled,
@@ -777,151 +796,18 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     }
 
     internal async Task InitializeChatBackendsAsync(CancellationToken cancellationToken)
-    {
-        await Task.WhenAll(
-                RefreshChatBackendStateAsync(AgentBackendIds.Codex, cancellationToken),
-                RefreshChatBackendStateAsync(AgentBackendIds.Copilot, cancellationToken))
-            .ConfigureAwait(false);
-    }
-
-    private async Task RefreshChatBackendStateAsync(AgentBackendId backendId, CancellationToken cancellationToken)
-    {
-        var state = _chatBackendStates[backendId.Value];
-        DispatchToUi(
-            () =>
-            {
-                state.Availability = ChatBackendAvailability.Connecting;
-                state.StatusMessage = "Detecting backend...";
-                RefreshHeaderAndThreadWorkspace();
-            });
-
-        try
-        {
-            var models = await _agentHub.ListModelsAsync(backendId, cancellationToken).ConfigureAwait(false);
-            DispatchToUi(
-                () =>
-                {
-                    state.Models.Clear();
-                    state.Models.AddRange(models);
-                    state.SelectedModelId = ChatBackendPresentation.ResolvePreferredModelId(models, state.SelectedModelId);
-                    state.SelectedReasoningEffort = ChatBackendPresentation.ResolvePreferredReasoningEffort(
-                        ChatBackendPreferenceCoordinator.FindModel(models, state.SelectedModelId),
-                        state.SelectedReasoningEffort);
-                    state.Availability = ChatBackendAvailability.Ready;
-                    state.StatusMessage = ChatBackendPresentation.BuildReadyStatusMessage(state);
-                    RefreshHeaderAndThreadWorkspace();
-                });
-        }
-        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            var (availability, statusMessage) = ClassifyBackendInitializationFailure(state, ex);
-            DispatchToUi(
-                () =>
-                {
-                    state.Models.Clear();
-                    state.SelectedModelId = null;
-                    state.SelectedReasoningEffort = null;
-                    state.DraftScopeKey = null;
-                    state.Availability = availability;
-                    state.StatusMessage = statusMessage;
-                    RefreshHeaderAndThreadWorkspace();
-                });
-        }
-    }
+        => await _chatBackendInitializationCoordinator.InitializeAsync(cancellationToken).ConfigureAwait(false);
 
     internal void ApplyRecoveredCatalogState(
         IReadOnlyList<ProjectDescriptor> projects,
         IReadOnlyList<WorkThreadDescriptor> threads)
         => _threadStateCoordinator.ApplyRecoveredCatalogState(projects, threads);
 
-    internal static (ChatBackendAvailability Availability, string StatusMessage) ClassifyBackendInitializationFailure(
-        ChatBackendState state,
-        Exception exception)
-    {
-        ArgumentNullException.ThrowIfNull(state);
-        ArgumentNullException.ThrowIfNull(exception);
-
-        var root = exception.GetBaseException();
-        if (root is FileNotFoundException or DirectoryNotFoundException)
-        {
-            return (ChatBackendAvailability.Unsupported, ChatBackendPresentation.BuildUnsupportedBackendMessage(state, root.Message));
-        }
-
-        if (root is Win32Exception win32Exception && win32Exception.NativeErrorCode == 2)
-        {
-            return (ChatBackendAvailability.Unsupported, ChatBackendPresentation.BuildUnsupportedBackendMessage(state, root.Message));
-        }
-
-        var message = root.Message.Trim();
-        if (message.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("No such file", StringComparison.OrdinalIgnoreCase))
-        {
-            return (ChatBackendAvailability.Unsupported, ChatBackendPresentation.BuildUnsupportedBackendMessage(state, message));
-        }
-
-        return (ChatBackendAvailability.Failed, ChatBackendPresentation.BuildFailedBackendMessage(state, message));
-    }
-
     internal void TrySchedulePendingStartupThreadRestore(CancellationToken cancellationToken)
         => _threadStateCoordinator.TrySchedulePendingStartupThreadRestore(cancellationToken);
 
     private async Task RestoreStartupThreadHistoryAsync(string? threadId, CancellationToken cancellationToken)
         => await _threadStateCoordinator.RestoreStartupThreadHistoryAsync(threadId, cancellationToken).ConfigureAwait(false);
-
-    private async Task<WorkThreadDescriptor?> CreateGlobalThreadAsync()
-    {
-        try
-        {
-            SetStatus("Creating global thread...", showSpinner: true);
-            var title = ReadBindableState(() => _sidebarViewModel.DraftThreadTitle?.Trim());
-            var executionOptions = _threadCommandCoordinator.BuildPreferredExecutionOptions(
-                GetPreferredBackendId(),
-                _catalogOptions.GlobalRoot,
-                []);
-            var thread = await _runtimeService.CreateGlobalThreadAsync(executionOptions, title).ConfigureAwait(false);
-            RememberThreadPreference(thread.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, autoScroll: true, persistNow: false);
-            await RegisterCreatedThreadAsync(thread).ConfigureAwait(false);
-            ClearThreadTitleDraft();
-            SetStatus(ShellTextFormatter.BuildReadyStatusText(thread, GetSelectedProject(), _globalScopeSelected), tone: StatusTone.Ready);
-            return thread;
-        }
-        catch (Exception ex)
-        {
-            SetStatus($"Failed to create global thread: {ex.Message}", tone: StatusTone.Error);
-            return null;
-        }
-    }
-
-    private async Task<WorkThreadDescriptor?> CreateProjectThreadAsync()
-    {
-        var project = GetSelectedProject();
-        if (project is null)
-        {
-            SetStatus("Select a project before creating a project thread.", tone: StatusTone.Warning);
-            return null;
-        }
-
-        try
-        {
-            SetStatus($"Creating thread for '{project.DisplayName}'...", showSpinner: true);
-            var title = ReadBindableState(() => _sidebarViewModel.DraftThreadTitle?.Trim());
-            var executionOptions = _threadCommandCoordinator.BuildPreferredExecutionOptions(
-                GetPreferredBackendId(),
-                project.ProjectPath,
-                [project.ProjectPath]);
-            var thread = await _runtimeService.CreateProjectThreadAsync(project, executionOptions, title).ConfigureAwait(false);
-            RememberThreadPreference(thread.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, autoScroll: true, persistNow: false);
-            await RegisterCreatedThreadAsync(thread).ConfigureAwait(false);
-            ClearThreadTitleDraft();
-            SetStatus(ShellTextFormatter.BuildReadyStatusText(thread, GetSelectedProject(), _globalScopeSelected), tone: StatusTone.Ready);
-            return thread;
-        }
-        catch (Exception ex)
-        {
-            SetStatus($"Failed to create project thread: {ex.Message}", tone: StatusTone.Error);
-            return null;
-        }
-    }
 
     private async Task RegisterCreatedThreadAsync(WorkThreadDescriptor thread)
         => await _threadStateCoordinator.RegisterCreatedThreadAsync(thread).ConfigureAwait(false);

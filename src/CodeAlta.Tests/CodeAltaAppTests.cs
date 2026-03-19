@@ -673,7 +673,7 @@ public sealed class CodeAltaAppTests
     {
         var backendState = new ChatBackendState(AgentBackendIds.Codex, "Codex");
 
-        var result = CodeAltaApp.ClassifyBackendInitializationFailure(
+        var result = ChatBackendInitializationCoordinator.ClassifyFailure(
             backendState,
             new FileNotFoundException("codex executable was not found"));
 

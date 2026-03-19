@@ -169,14 +169,17 @@ public sealed class ArchitectureGuardrailTests
     public void CodeAltaApp_DelegatesThreadCommandWorkflow()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var creationSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadCreationCoordinator.cs"));
 
         Assert.IsTrue(appSource.Contains("_threadCommandCoordinator.SendSelectedThreadPromptAsync", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_threadCommandCoordinator.DelegateSelectedThreadAsync", StringComparison.Ordinal));
-        Assert.IsTrue(appSource.Contains("_threadCommandCoordinator.BuildPreferredExecutionOptions", StringComparison.Ordinal));
+        Assert.IsTrue(creationSource.Contains("_buildPreferredExecutionOptions(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private async Task<AgentPermissionDecision> HandleThreadPermissionRequestAsync(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private async Task<AgentUserInputResponse> HandleThreadUserInputRequestAsync(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private WorkThreadExecutionOptions BuildExecutionOptions(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private WorkThreadExecutionOptions BuildPreferredExecutionOptions(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private async Task<WorkThreadDescriptor?> CreateGlobalThreadAsync(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private async Task<WorkThreadDescriptor?> CreateProjectThreadAsync(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private static string CreateTransientThreadKey(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private string ResolveWorkingDirectory(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private IReadOnlyList<string> ResolveProjectRoots(", StringComparison.Ordinal));
@@ -211,6 +214,16 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void CodeAltaApp_DelegatesBackendInitializationWorkflow()
+    {
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+
+        Assert.IsTrue(appSource.Contains("_chatBackendInitializationCoordinator.InitializeAsync", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private async Task RefreshChatBackendStateAsync(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal static (ChatBackendAvailability Availability, string StatusMessage) ClassifyBackendInitializationFailure(", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void CodeAltaApp_DoesNotConstructPromptEditorControls()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
@@ -228,7 +241,7 @@ public sealed class ArchitectureGuardrailTests
         var appPath = Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs");
         var appSize = new FileInfo(appPath).Length;
 
-        Assert.IsTrue(appSize < 45000, $"CodeAltaApp.cs exceeded the facade size budget: {appSize} bytes.");
+        Assert.IsTrue(appSize < 36000, $"CodeAltaApp.cs exceeded the facade size budget: {appSize} bytes.");
     }
 
     [TestMethod]
