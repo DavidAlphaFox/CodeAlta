@@ -302,10 +302,7 @@ internal sealed partial class CodeAltaApp
     {
         _pendingThreadTabSelectionThreadId = null;
         _viewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
-        if (_threadTabs.TryGetValue(threadId, out var tab))
-        {
-            tab.Page = null;
-        }
+        _threadTabPages.Remove(threadId);
         _threadTabs.Remove(threadId);
         if (string.Equals(_selectedThreadId, threadId, StringComparison.OrdinalIgnoreCase))
         {

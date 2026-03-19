@@ -36,24 +36,10 @@ internal sealed partial class CodeAltaApp
         _syncingThreadTabPages = true;
         try
         {
-            var desiredPages = new List<TabPage>();
-            foreach (var threadId in _viewState.OpenThreadIds)
-            {
-                var thread = FindThread(threadId);
-                if (thread is null)
-                {
-                    continue;
-                }
+            var projection = BuildThreadTabStripProjection();
+            var desiredPages = BuildDesiredThreadTabPages(projection);
 
-                desiredPages.Add(EnsureThreadTabPage(thread));
-            }
-
-            if (_draftTabOpen)
-            {
-                desiredPages.Add(EnsureDraftTabPage());
-            }
-
-            _threadTabControl.IsVisible = desiredPages.Count > 0;
+            _threadTabControl.IsVisible = projection.Tabs.Count > 0;
 
             var existingPages = _threadTabControl.Tabs;
             var matches = existingPages.Count == desiredPages.Count;
@@ -82,7 +68,7 @@ internal sealed partial class CodeAltaApp
                 }
             }
 
-            SyncThreadTabControlSelection();
+            SyncThreadTabControlSelection(projection);
         }
         finally
         {
@@ -90,16 +76,58 @@ internal sealed partial class CodeAltaApp
         }
     }
 
-    private TabPage EnsureThreadTabPage(WorkThreadDescriptor thread)
+    private ThreadTabStripProjection BuildThreadTabStripProjection()
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        var availableThreadIds = _viewState.OpenThreadIds
+            .Select(FindThread)
+            .Where(static thread => thread is not null)
+            .Select(thread =>
+            {
+                var current = thread!;
+                EnsureThreadTab(current);
+                return current.ThreadId;
+            })
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return ThreadTabStripProjectionBuilder.Build(
+            _viewState.OpenThreadIds,
+            availableThreadIds,
+            _draftTabOpen,
+            DraftTabId,
+            _selectedThreadId);
+    }
+
+    private List<TabPage> BuildDesiredThreadTabPages(ThreadTabStripProjection projection)
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+
+        var pages = new List<TabPage>(projection.Tabs.Count);
+        foreach (var tab in projection.Tabs)
+        {
+            pages.Add(tab.IsDraft
+                ? EnsureDraftTabPage()
+                : EnsureThreadTabPage(tab.TabId));
+        }
+
+        return pages;
+    }
+
+    private TabPage EnsureThreadTabPage(string threadId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+
+        if (_threadTabPages.TryGetValue(threadId, out var existingPage))
+        {
+            existingPage.Data = threadId;
+            return existingPage;
+        }
+
+        var thread = FindThread(threadId);
+        if (thread is null)
+        {
+            throw new InvalidOperationException($"Thread '{threadId}' was not found when creating a tab page.");
+        }
 
         var tab = EnsureThreadTab(thread);
-        if (tab.Page is not null)
-        {
-            tab.Page.Data = thread.ThreadId;
-            return tab.Page;
-        }
 
         var header = CreateComputedVisual(
             () =>
@@ -131,7 +159,7 @@ internal sealed partial class CodeAltaApp
             _ = CloseThreadAsync(threadId);
         };
 
-        tab.Page = page;
+        _threadTabPages[thread.ThreadId] = page;
         return page;
     }
 
@@ -179,38 +207,23 @@ internal sealed partial class CodeAltaApp
             IsVisible = false,
         };
 
-    private void SyncThreadTabControlSelection()
+    private void SyncThreadTabControlSelection(ThreadTabStripProjection projection)
     {
-        if (_threadTabControl is null || _threadTabControl.Tabs.Count == 0)
+        ArgumentNullException.ThrowIfNull(projection);
+
+        if (_threadTabControl is null || _threadTabControl.Tabs.Count == 0 || string.IsNullOrWhiteSpace(projection.SelectedTabId))
         {
             return;
         }
 
         var selectedIndex = -1;
-        if (string.IsNullOrWhiteSpace(_selectedThreadId))
+        for (var i = 0; i < _threadTabControl.Tabs.Count; i++)
         {
-            if (_draftTabOpen)
+            if (_threadTabControl.Tabs[i].Data is string threadId &&
+                string.Equals(threadId, projection.SelectedTabId, StringComparison.OrdinalIgnoreCase))
             {
-                for (var i = 0; i < _threadTabControl.Tabs.Count; i++)
-                {
-                    if (string.Equals(_threadTabControl.Tabs[i].Data as string, DraftTabId, StringComparison.Ordinal))
-                    {
-                        selectedIndex = i;
-                        break;
-                    }
-                }
-            }
-        }
-        else
-        {
-            for (var i = 0; i < _threadTabControl.Tabs.Count; i++)
-            {
-                if (_threadTabControl.Tabs[i].Data is string threadId &&
-                    string.Equals(threadId, _selectedThreadId, StringComparison.OrdinalIgnoreCase))
-                {
-                    selectedIndex = i;
-                    break;
-                }
+                selectedIndex = i;
+                break;
             }
         }
 
@@ -1055,7 +1068,7 @@ internal sealed partial class CodeAltaApp
             : "No chat backend is connected. Browse threads and projects, but prompt sending is unavailable.";
     }
 
-    private static string CompactTabTitle(string title)
+    internal static string CompactTabTitle(string title)
     {
         var normalized = title.Trim();
         return normalized.Length <= MaxTabTitleLength

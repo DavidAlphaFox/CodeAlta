@@ -52,7 +52,7 @@ This document is the implementation checklist companion to the architecture prop
 - [x] Introduce `ThreadSessionState` as non-visual per-thread state.
 - [x] Move history loading flags and cached history data into `ThreadSessionState`.
 - [x] Move per-thread backend/model/reasoning/usage/status state into `ThreadSessionState` and `ThreadTabViewModel` as appropriate.
-- [ ] Remove concrete controls from the current thread state bag.
+- [x] Remove concrete controls from the current thread state bag.
 - [x] Replace the current `ThreadTabState` with smaller focused types.
 
 ## Phase 6: Extract timeline and tool-call presenters
@@ -87,7 +87,7 @@ This document is the implementation checklist companion to the architecture prop
 
 - [ ] Add controller tests for selection, scope, status, and prompt availability.
 - [ ] Add controller tests for startup restoration and runtime event application.
-- [ ] Add projection tests for sidebar and tab-strip models/builders.
+- [x] Add projection tests for sidebar and tab-strip models/builders.
 - [x] Add presenter-focused tests where they provide value.
 - [ ] Keep a small number of real UI interaction tests for behavior that requires controls.
 - [ ] Reduce reflection-heavy tests that poke private `CodeAltaApp` fields.

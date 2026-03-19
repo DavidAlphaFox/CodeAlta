@@ -24,7 +24,7 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     private const int MaxRecentThreadsPerProject = 3;
     private const int MaxTabTitleLength = 18;
     private const int StatusPrefixWidth = 2;
-    private const string DraftTabId = "__draft__";
+    internal const string DraftTabId = "__draft__";
     private const string ReadyStatusMessage = "Prompt ready";
     private const string ThinkingStatusMessage = "Thinking...";
     private const bool DefaultAutoApproveEnabled = true;
@@ -45,6 +45,7 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     private readonly PromptComposerViewModel _promptComposerViewModel = new();
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates = ChatBackendPresentation.CreateBackendStates();
     private readonly Dictionary<string, ThreadTabState> _threadTabs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, TabPage> _threadTabPages = new(StringComparer.OrdinalIgnoreCase);
     private readonly State<int> _viewRefreshState = new(0);
     private readonly State<int> _usageRefreshState = new(0);
 
@@ -262,8 +263,6 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
             get => Session.Usage;
             set => Session.Usage = value;
         }
-
-        public TabPage? Page { get; set; }
 
         public string? StatusMessage
         {
