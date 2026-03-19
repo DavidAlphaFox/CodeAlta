@@ -88,7 +88,7 @@ This document is the implementation checklist companion to the architecture prop
 - [ ] Add controller tests for selection, scope, status, and prompt availability.
 - [ ] Add controller tests for startup restoration and runtime event application.
 - [ ] Add projection tests for sidebar and tab-strip models/builders.
-- [ ] Add presenter-focused tests where they provide value.
+- [x] Add presenter-focused tests where they provide value.
 - [ ] Keep a small number of real UI interaction tests for behavior that requires controls.
 - [ ] Reduce reflection-heavy tests that poke private `CodeAltaApp` fields.
 

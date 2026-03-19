@@ -421,17 +421,6 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public async Task CreateTruncatedHistoryState_CanBeCreatedFromWorkerThread()
-    {
-        var state = await Task.Run(() => ThreadTimelinePresenter.CreateTruncatedHistoryState(3, static () => { }));
-
-        Assert.IsNotNull(state);
-        Assert.IsInstanceOfType<Rule>(state.Rule);
-        Assert.IsInstanceOfType<Button>(state.Rule.CenterLabel);
-        Assert.AreEqual(3, state.OmittedMessageCount);
-    }
-
-    [TestMethod]
     public void CreateDeferredUiAction_PostsWorkInsteadOfRunningInline()
     {
         using var session = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(80, 20)), new TerminalOptions { ImplicitStartInput = true }, force: true);
@@ -461,38 +450,6 @@ public sealed class CodeAltaAppTests
         {
             InvokeTerminalApp(app, "EndRun");
         }
-    }
-
-    [TestMethod]
-    public void BuildInitialThreadHistoryItems_PrependsTruncatedHistoryBeforeFirstLoadedPrompt()
-    {
-        var pending = ChatTimelineVisualFactory.CreatePendingChatMessage("hello");
-        var followup = ChatTimelineVisualFactory.CreatePendingChatMessage("assistant");
-        var truncatedHistory = ThreadTimelinePresenter.CreateTruncatedHistoryState(3, static () => { });
-
-        var items = ThreadTimelinePresenter.BuildInitialThreadHistoryItems(
-            [pending.UserItem, followup.AssistantItem],
-            truncatedHistory.Item);
-
-        Assert.AreEqual(3, items.Count);
-        Assert.AreSame(truncatedHistory.Item.Content, items[0].Content);
-        Assert.AreSame(pending.UserItem.Content, items[1].Content);
-        Assert.AreSame(followup.AssistantItem.Content, items[2].Content);
-    }
-
-    [TestMethod]
-    public void BuildInitialThreadHistoryItems_LeavesRenderedItemsUnchangedWhenNoMarkerExists()
-    {
-        var pending = ChatTimelineVisualFactory.CreatePendingChatMessage("hello");
-        var followup = ChatTimelineVisualFactory.CreatePendingChatMessage("assistant");
-
-        var items = ThreadTimelinePresenter.BuildInitialThreadHistoryItems(
-            [pending.UserItem, followup.AssistantItem],
-            truncatedHistoryItem: null);
-
-        Assert.AreEqual(2, items.Count);
-        Assert.AreSame(pending.UserItem.Content, items[0].Content);
-        Assert.AreSame(followup.AssistantItem.Content, items[1].Content);
     }
 
     [TestMethod]
@@ -940,26 +897,6 @@ public sealed class CodeAltaAppTests
         await Task.Run(() => ChatTimelineVisualFactory.ApplyTimestamp(markup, timestamp));
 
         Assert.AreEqual("[dim]2026-03-12 14:05:06[/]", markup.Text);
-    }
-
-    [TestMethod]
-    public void ResolveCompletedThreadContent_PreservesBufferedDeltaWhenCompletedPayloadIsEmpty()
-    {
-        var buffer = new System.Text.StringBuilder("Streaming assistant reply");
-
-        var content = ThreadTimelinePresenter.ResolveCompletedContent(string.Empty, buffer);
-
-        Assert.AreEqual("Streaming assistant reply", content);
-    }
-
-    [TestMethod]
-    public void ResolveCompletedThreadContent_PrefersCompletedPayloadWhenPresent()
-    {
-        var buffer = new System.Text.StringBuilder("Older delta text");
-
-        var content = ThreadTimelinePresenter.ResolveCompletedContent("Final assistant reply", buffer);
-
-        Assert.AreEqual("Final assistant reply", content);
     }
 
     [TestMethod]
