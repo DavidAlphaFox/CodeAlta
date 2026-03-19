@@ -69,7 +69,7 @@ This document is the implementation checklist companion to the architecture prop
 
 - [ ] Create `ChatMarkdownFormatter`.
 - [ ] Create `ToolCallSummaryFormatter`.
-- [ ] Create `SessionUsageFormatter`.
+- [x] Create `SessionUsageFormatter`.
 - [ ] Move status/usage/tool-call/chat formatting helpers out of `CodeAltaApp`.
 - [ ] Remove `CodeAltaApp.ChatHelpers.cs` as a generic helper bucket.
 - [ ] Remove remaining `CodeAltaApp` partial files that exist only to group unrelated helpers.
