@@ -12,12 +12,14 @@ internal sealed partial class CodeAltaApp
     private CodeAltaShellView EnsureShellView()
     {
         _sidebarView ??= new SidebarView(
-            _viewModel,
+            _sidebarViewModel,
             () => _ = _shellController.ReloadCatalogAsync(CancellationToken.None));
         _sidebarTree ??= _sidebarView.Tree;
 
         _threadWorkspaceView ??= new ThreadWorkspaceView(
-            _viewModel,
+            _shellViewModel,
+            _threadWorkspaceViewModel,
+            _promptComposerViewModel,
             _statusSpinner!,
             () => CreateComputedVisual(BuildSessionUsageIndicatorVisual),
             () => _statusTone,
@@ -45,7 +47,7 @@ internal sealed partial class CodeAltaApp
         RefreshThreadPaneContent();
 
         _shellView ??= new CodeAltaShellView(
-            _viewModel,
+            _shellViewModel,
             _sidebarView.Root,
             _threadWorkspaceView.Root,
             _threadCommandBar);

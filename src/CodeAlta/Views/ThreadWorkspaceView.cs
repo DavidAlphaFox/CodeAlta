@@ -13,7 +13,9 @@ internal sealed class ThreadWorkspaceView
     private Markup? _statusIconVisual;
 
     public ThreadWorkspaceView(
-        CodeAltaShellViewModel viewModel,
+        CodeAltaShellViewModel shellViewModel,
+        ThreadWorkspaceViewModel workspaceViewModel,
+        PromptComposerViewModel promptComposerViewModel,
         Spinner statusSpinner,
         Func<Visual> buildSessionUsageIndicatorVisual,
         Func<CodeAltaApp.StatusTone> getStatusTone,
@@ -25,7 +27,9 @@ internal sealed class ThreadWorkspaceView
         Action<int> onChatReasoningSelectionChanged,
         Action onAutoScrollChanged)
     {
-        ArgumentNullException.ThrowIfNull(viewModel);
+        ArgumentNullException.ThrowIfNull(shellViewModel);
+        ArgumentNullException.ThrowIfNull(workspaceViewModel);
+        ArgumentNullException.ThrowIfNull(promptComposerViewModel);
         ArgumentNullException.ThrowIfNull(statusSpinner);
         ArgumentNullException.ThrowIfNull(buildSessionUsageIndicatorVisual);
         ArgumentNullException.ThrowIfNull(getStatusTone);
@@ -48,31 +52,37 @@ internal sealed class ThreadWorkspaceView
         ThreadTabControl.RegisterDynamicUpdate(_ => onThreadTabSelectionChanged(ThreadTabControl.SelectedIndex));
 
         ThreadInput = createPromptEditor();
+        ThreadInput.RegisterDynamicUpdate(_ => ThreadInput.IsEnabled = promptComposerViewModel.IsEnabled);
         ThreadInputView = ThreadInput.Scrollable();
 
         SendPromptButton = new Button(new TextBlock($"{NerdFont.MdSend} Send"))
             .Click(sendPrompt);
+        SendPromptButton.RegisterDynamicUpdate(_ => SendPromptButton.IsEnabled = promptComposerViewModel.CanSend);
         ChatBackendSelect = new Select<ChatBackendOption>()
             .SelectionChanged((_, e) => onChatBackendSelectionChanged(e.NewIndex))
             .MinWidth(14)
             .MaxWidth(22);
+        ChatBackendSelect.RegisterDynamicUpdate(_ => ChatBackendSelect.IsEnabled = workspaceViewModel.CanSelectBackend);
         ChatModelSelect = new Select<ChatModelOption>()
             .SelectionChanged((_, e) => onChatModelSelectionChanged(e.NewIndex))
             .MinWidth(18)
             .MaxWidth(36);
+        ChatModelSelect.RegisterDynamicUpdate(_ => ChatModelSelect.IsEnabled = workspaceViewModel.CanSelectModel);
         ChatReasoningSelect = new Select<ChatReasoningOption>()
             .SelectionChanged((_, e) => onChatReasoningSelectionChanged(e.NewIndex))
             .MinWidth(12)
             .MaxWidth(22);
+        ChatReasoningSelect.RegisterDynamicUpdate(_ => ChatReasoningSelect.IsEnabled = workspaceViewModel.CanSelectReasoning);
         ChatAutoScrollCheckBox = new CheckBox("AutoScroll", isChecked: true);
         ChatAutoScrollCheckBox.RegisterDynamicUpdate(_ => onAutoScrollChanged());
+        ChatAutoScrollCheckBox.RegisterDynamicUpdate(_ => ChatAutoScrollCheckBox.IsEnabled = workspaceViewModel.CanToggleAutoScroll);
 
         var usageIndicator = buildSessionUsageIndicatorVisual();
         var statusPrefix = new Center(
             new ComputedVisual(
-                () => viewModel.StatusBusy
+                () => shellViewModel.StatusBusy
                     ? statusSpinner
-                    : _statusIconVisual ??= new Markup(() => viewModel.StatusIconMarkup)
+                    : _statusIconVisual ??= new Markup(() => shellViewModel.StatusIconMarkup)
                     {
                         Wrap = false,
                     }))
@@ -88,8 +98,8 @@ internal sealed class ThreadWorkspaceView
                 {
                     Wrap = true,
                     IsSelectable = false,
-                }.Text(() => viewModel.StatusText)
-                    .Style(() => CodeAltaApp.BuildStatusTextStyle(viewModel.StatusText, viewModel.StatusBusy, _getStatusTone())),
+                }.Text(() => shellViewModel.StatusText)
+                    .Style(() => CodeAltaApp.BuildStatusTextStyle(shellViewModel.StatusText, shellViewModel.StatusBusy, _getStatusTone())),
             ])
         {
             Spacing = 1,
@@ -110,7 +120,7 @@ internal sealed class ThreadWorkspaceView
 
         var selectionRight = new HStack(
             [
-                new Markup(() => viewModel.BackendStatusMarkup)
+                new Markup(() => workspaceViewModel.BackendStatusMarkup)
                 {
                     Wrap = false,
                 },

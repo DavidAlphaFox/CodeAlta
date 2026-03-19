@@ -39,7 +39,10 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     private readonly CodeAltaOwnedServices? _ownedServices;
     private readonly CodeAltaShellController _shellController;
     private readonly RuntimeEventPump _runtimeEventPump;
-    private readonly CodeAltaShellViewModel _viewModel = new();
+    private readonly CodeAltaShellViewModel _shellViewModel = new();
+    private readonly SidebarViewModel _sidebarViewModel = new();
+    private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel = new();
+    private readonly PromptComposerViewModel _promptComposerViewModel = new();
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates = CreateChatBackendStates();
     private readonly Dictionary<string, ThreadTabState> _threadTabs = new(StringComparer.OrdinalIgnoreCase);
     private readonly State<int> _viewRefreshState = new(0);
@@ -138,11 +141,11 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await LoadCatalogStateAsync(cancellationToken).ConfigureAwait(false);
-        _viewModel.HeaderText = BuildHeaderText();
+        _shellViewModel.HeaderText = BuildHeaderText();
 
         _statusSpinner = new Spinner().Style(SpinnerStyles.Arc);
-        _statusSpinner.IsActive(() => _viewModel.StatusBusy);
-        _statusSpinner.IsVisible(() => _viewModel.StatusBusy);
+        _statusSpinner.IsActive(() => _shellViewModel.StatusBusy);
+        _statusSpinner.IsVisible(() => _shellViewModel.StatusBusy);
 
         SetStatus("Connecting to available backends...", showSpinner: true);
 

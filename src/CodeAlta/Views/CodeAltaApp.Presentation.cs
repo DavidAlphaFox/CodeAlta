@@ -284,7 +284,7 @@ internal sealed partial class CodeAltaApp
             () =>
             {
                 EnsureSelectionDefaults();
-                _viewModel.HeaderText = BuildHeaderText();
+                _shellViewModel.HeaderText = BuildHeaderText();
                 RebuildSidebarTree();
 
                 _viewRefreshState.Value++;
@@ -358,7 +358,11 @@ internal sealed partial class CodeAltaApp
             autoScrollCheckBox.IsChecked = true;
             autoScrollCheckBox.IsEnabled = false;
 
-            _viewModel.BackendStatusMarkup = BuildChatBackendStatusMarkup(_chatBackendStates.Values, backendOptions[backendIndex].BackendId, isInitializing: false);
+            _threadWorkspaceViewModel.BackendStatusMarkup = BuildChatBackendStatusMarkup(_chatBackendStates.Values, backendOptions[backendIndex].BackendId, isInitializing: false);
+            _threadWorkspaceViewModel.CanSelectBackend = true;
+            _threadWorkspaceViewModel.CanSelectModel = backendState.Availability == ChatBackendAvailability.Ready;
+            _threadWorkspaceViewModel.CanSelectReasoning = backendState.Availability == ChatBackendAvailability.Ready;
+            _threadWorkspaceViewModel.CanToggleAutoScroll = false;
         }
         finally
         {
@@ -428,7 +432,11 @@ internal sealed partial class CodeAltaApp
             autoScrollCheckBox.IsEnabled = true;
 
             backendSelect.IsEnabled = false;
-            _viewModel.BackendStatusMarkup = BuildChatBackendStatusMarkup(_chatBackendStates.Values, tab.BackendId, isInitializing: false);
+            _threadWorkspaceViewModel.BackendStatusMarkup = BuildChatBackendStatusMarkup(_chatBackendStates.Values, tab.BackendId, isInitializing: false);
+            _threadWorkspaceViewModel.CanSelectBackend = false;
+            _threadWorkspaceViewModel.CanSelectModel = backendState.Availability == ChatBackendAvailability.Ready;
+            _threadWorkspaceViewModel.CanSelectReasoning = backendState.Availability == ChatBackendAvailability.Ready;
+            _threadWorkspaceViewModel.CanToggleAutoScroll = true;
         }
         finally
         {
@@ -1099,7 +1107,7 @@ internal sealed partial class CodeAltaApp
                 (selectedThread is not null ? new AgentBackendId(selectedThread.BackendId) : GetPreferredBackendId()).Value,
                 out var backendState))
         {
-            _viewModel.PromptPlaceholder = BuildPromptUnavailablePlaceholder(
+            _promptComposerViewModel.Placeholder = BuildPromptUnavailablePlaceholder(
                 selectedThread,
                 backendState.DisplayName,
                 backendState.Availability,
@@ -1107,13 +1115,16 @@ internal sealed partial class CodeAltaApp
         }
         else
         {
-            _viewModel.PromptPlaceholder = BuildPromptPlaceholder(selectedThread, GetSelectedProject(), _globalScopeSelected);
+            _promptComposerViewModel.Placeholder = BuildPromptPlaceholder(selectedThread, GetSelectedProject(), _globalScopeSelected);
         }
 
-        if (_sendPromptButton is not null)
-        {
-            _sendPromptButton.IsEnabled = !TryGetPromptUnavailableStatus(out _, out _);
-        }
+        var promptUnavailable = TryGetPromptUnavailableStatus(out _, out _);
+        _promptComposerViewModel.IsEnabled = !promptUnavailable;
+        _promptComposerViewModel.CanSend = !promptUnavailable;
+        _promptComposerViewModel.CanSteer = selectedThread is not null && !promptUnavailable;
+        _promptComposerViewModel.CanDelegate = selectedThread is not null && !promptUnavailable;
+        _promptComposerViewModel.CanAbort = selectedThread is not null;
+        _promptComposerViewModel.CanCloseTab = selectedThread is not null || (_draftTabOpen && string.IsNullOrWhiteSpace(_selectedThreadId));
     }
 
     internal void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
@@ -1123,9 +1134,9 @@ internal sealed partial class CodeAltaApp
             {
                 _statusBusy = showSpinner;
                 _statusTone = tone;
-                _viewModel.StatusText = message;
-                _viewModel.StatusBusy = showSpinner;
-                _viewModel.StatusIconMarkup = BuildStatusIconMarkup(tone);
+                _shellViewModel.StatusText = message;
+                _shellViewModel.StatusBusy = showSpinner;
+                _shellViewModel.StatusIconMarkup = BuildStatusIconMarkup(tone);
             });
     }
 
@@ -1297,7 +1308,7 @@ internal sealed partial class CodeAltaApp
 
     private void ClearThreadTitleDraft()
     {
-        _viewModel.DraftThreadTitle = string.Empty;
+        _sidebarViewModel.DraftThreadTitle = string.Empty;
     }
 
     private async Task ActivateDraftTabAsync()
@@ -1356,7 +1367,7 @@ internal sealed partial class CodeAltaApp
         var editor = new ChatPromptEditor(text => _ = SendSelectedThreadPromptAsync(steer: false))
             .PromptMarkup("[primary]>[/] ")
             .ContinuationPromptMarkup("[muted]·[/] ")
-            .Placeholder(_viewModel.Bind.PromptPlaceholder)
+            .Placeholder(_promptComposerViewModel.Bind.Placeholder)
             .EnterMode(PromptEditorEnterMode.EnterInsertsNewLine)
             .EnableWordHints(true)
             .Highlighter(HighlightMarkdown)
@@ -1376,7 +1387,7 @@ internal sealed partial class CodeAltaApp
             Importance = CommandImportance.Primary,
             Presentation = CommandPresentation.CommandBar,
             Execute = _visual => { _ = SendSelectedThreadPromptAsync(steer: true); },
-            CanExecute = _visual => GetSelectedThread() is { } thread && IsChatBackendReady(new AgentBackendId(thread.BackendId)),
+            CanExecute = _visual => _promptComposerViewModel.CanSteer,
         });
 
         editor.AddCommand(new Command
@@ -1387,7 +1398,7 @@ internal sealed partial class CodeAltaApp
             Gesture = new KeyGesture(TerminalKey.F7),
             Presentation = CommandPresentation.CommandBar,
             Execute = _visual => { _ = DelegateSelectedThreadAsync(); },
-            CanExecute = _visual => GetSelectedThread() is { } thread && IsChatBackendReady(new AgentBackendId(thread.BackendId)),
+            CanExecute = _visual => _promptComposerViewModel.CanDelegate,
         });
 
         editor.AddCommand(new Command
@@ -1398,7 +1409,7 @@ internal sealed partial class CodeAltaApp
             Gesture = new KeyGesture(TerminalKey.F8),
             Presentation = CommandPresentation.CommandBar,
             Execute = _visual => { _ = AbortSelectedThreadAsync(); },
-            CanExecute = _visual => GetSelectedThread() is not null,
+            CanExecute = _visual => _promptComposerViewModel.CanAbort,
         });
 
         editor.AddCommand(new Command
@@ -1409,7 +1420,7 @@ internal sealed partial class CodeAltaApp
             Gesture = new KeyGesture(TerminalKey.F9),
             Presentation = CommandPresentation.CommandBar,
             Execute = _visual => { _ = GetSelectedThread() is not null ? CloseSelectedThreadAsync() : CloseDraftTabAsync(); },
-            CanExecute = _visual => GetSelectedThread() is not null || (_draftTabOpen && string.IsNullOrWhiteSpace(_selectedThreadId)),
+            CanExecute = _visual => _promptComposerViewModel.CanCloseTab,
         });
 
         return editor;

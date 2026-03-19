@@ -7,7 +7,7 @@ using XenoAtom.Terminal.UI.Layout;
 internal sealed class SidebarView
 {
     public SidebarView(
-        CodeAltaShellViewModel viewModel,
+        SidebarViewModel viewModel,
         Action refreshCatalog)
     {
         ArgumentNullException.ThrowIfNull(viewModel);

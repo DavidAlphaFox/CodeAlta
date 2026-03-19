@@ -9,9 +9,6 @@ public sealed partial class CodeAltaShellViewModel
         HeaderText = "CodeAlta";
         StatusText = "Prompt ready";
         StatusIconMarkup = string.Empty;
-        PromptPlaceholder = "Start a thread...";
-        BackendStatusMarkup = string.Empty;
-        DraftThreadTitle = string.Empty;
     }
 
     [Bindable]
@@ -25,13 +22,4 @@ public sealed partial class CodeAltaShellViewModel
 
     [Bindable]
     public partial bool StatusBusy { get; set; }
-
-    [Bindable]
-    public partial string? PromptPlaceholder { get; set; }
-
-    [Bindable]
-    public partial string BackendStatusMarkup { get; set; }
-
-    [Bindable]
-    public partial string? DraftThreadTitle { get; set; }
 }
