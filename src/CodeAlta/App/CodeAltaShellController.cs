@@ -4,30 +4,30 @@ using XenoAtom.Logging;
 
 internal sealed class CodeAltaShellController : IAsyncDisposable
 {
-    private readonly CodeAltaApp _app;
-    private readonly KnownProjectImporter _knownProjectImporter;
-    private readonly ProjectCatalog _projectCatalog;
-    private readonly WorkThreadRuntimeService _runtimeService;
+    private readonly ICodeAltaShell _shell;
+    private readonly IKnownProjectImporter _knownProjectImporter;
+    private readonly IProjectCatalogLoader _projectCatalog;
+    private readonly IRecoverableThreadSource _recoverableThreadSource;
     private readonly CancellationTokenSource _disposeCts = new();
     private IUiDispatcher? _uiDispatcher;
     private CancellationTokenSource? _initializationCts;
     private Task? _initializationTask;
 
     public CodeAltaShellController(
-        CodeAltaApp app,
-        KnownProjectImporter knownProjectImporter,
-        ProjectCatalog projectCatalog,
-        WorkThreadRuntimeService runtimeService)
+        ICodeAltaShell shell,
+        IKnownProjectImporter knownProjectImporter,
+        IProjectCatalogLoader projectCatalog,
+        IRecoverableThreadSource recoverableThreadSource)
     {
-        ArgumentNullException.ThrowIfNull(app);
+        ArgumentNullException.ThrowIfNull(shell);
         ArgumentNullException.ThrowIfNull(knownProjectImporter);
         ArgumentNullException.ThrowIfNull(projectCatalog);
-        ArgumentNullException.ThrowIfNull(runtimeService);
+        ArgumentNullException.ThrowIfNull(recoverableThreadSource);
 
-        _app = app;
+        _shell = shell;
         _knownProjectImporter = knownProjectImporter;
         _projectCatalog = projectCatalog;
-        _runtimeService = runtimeService;
+        _recoverableThreadSource = recoverableThreadSource;
     }
 
     public void AttachUiDispatcher(IUiDispatcher uiDispatcher)
@@ -54,18 +54,18 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
         try
         {
             await UiDispatcher.InvokeAsync(
-                    () => _app.SetStatus("Refreshing project and thread catalog...", showSpinner: true))
+                    () => _shell.SetStatus("Refreshing project and thread catalog...", showSpinner: true))
                 .ConfigureAwait(false);
 
             await _knownProjectImporter.ImportAsync(cancellationToken).ConfigureAwait(false);
             var projects = await _projectCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
-            var threads = await _runtimeService.ListRecoverableThreadsAsync(cancellationToken).ConfigureAwait(false);
+            var threads = await _recoverableThreadSource.ListRecoverableThreadsAsync(cancellationToken).ConfigureAwait(false);
 
             await UiDispatcher.InvokeAsync(
                     () =>
                     {
-                        _app.ApplyRecoveredCatalogState(projects, threads);
-                        _app.SetReadyStatusForCurrentSelection();
+                        _shell.ApplyRecoveredCatalogState(projects, threads);
+                        _shell.SetReadyStatusForCurrentSelection();
                     })
                 .ConfigureAwait(false);
         }
@@ -75,7 +75,7 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
         catch (Exception ex)
         {
             await UiDispatcher.InvokeAsync(
-                    () => _app.SetStatus($"Failed to refresh catalog: {ex.Message}", tone: CodeAltaApp.StatusTone.Error))
+                    () => _shell.SetStatus($"Failed to refresh catalog: {ex.Message}", tone: CodeAltaApp.StatusTone.Error))
                 .ConfigureAwait(false);
         }
     }
@@ -84,7 +84,7 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(runtimeEvent);
         cancellationToken.ThrowIfCancellationRequested();
-        return UiDispatcher.InvokeAsync(() => _app.HandleRuntimeEvent(runtimeEvent));
+        return UiDispatcher.InvokeAsync(() => _shell.HandleRuntimeEvent(runtimeEvent));
     }
 
     public async ValueTask DisposeAsync()
@@ -110,11 +110,14 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
     private IUiDispatcher UiDispatcher
         => _uiDispatcher ?? throw new InvalidOperationException("The UI dispatcher must be attached before shell operations begin.");
 
+    internal Task InitializeAsync(CancellationToken cancellationToken)
+        => RunInitializationAsync(cancellationToken);
+
     private async Task RunInitializationAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await _app.InitializeChatBackendsAsync(cancellationToken).ConfigureAwait(false);
+            await _shell.InitializeChatBackendsAsync(cancellationToken).ConfigureAwait(false);
             await RefreshCatalogFromBackendsAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -127,9 +130,9 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
                 await UiDispatcher.InvokeAsync(
                     () =>
                     {
-                            _app.RefreshCatalogAndThreadWorkspace();
-                            _app.SetReadyStatusForCurrentSelection();
-                            _app.TrySchedulePendingStartupThreadRestore(CancellationToken.None);
+                            _shell.RefreshCatalogAndThreadWorkspace();
+                            _shell.SetReadyStatusForCurrentSelection();
+                            _shell.TrySchedulePendingStartupThreadRestore(CancellationToken.None);
                         })
                     .ConfigureAwait(false);
             }
@@ -142,10 +145,10 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
         {
             await _knownProjectImporter.ImportAsync(cancellationToken).ConfigureAwait(false);
             var projects = await _projectCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
-            var threads = await _runtimeService.ListRecoverableThreadsAsync(cancellationToken).ConfigureAwait(false);
+            var threads = await _recoverableThreadSource.ListRecoverableThreadsAsync(cancellationToken).ConfigureAwait(false);
 
             await UiDispatcher.InvokeAsync(
-                    () => _app.ApplyRecoveredCatalogState(projects, threads))
+                    () => _shell.ApplyRecoveredCatalogState(projects, threads))
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

@@ -3,7 +3,7 @@ using CodeAlta.Catalog;
 using CodeAlta.Orchestration.Runtime;
 using XenoAtom.Logging;
 
-internal sealed class KnownProjectImporter
+internal sealed class KnownProjectImporter : IKnownProjectImporter
 {
     private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.App");
     private readonly AgentHub _agentHub;
