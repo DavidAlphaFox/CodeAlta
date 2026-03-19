@@ -190,27 +190,79 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
         {
             Thread = thread;
             Flow = flow;
+            Session = new ThreadSessionState();
+            ViewModel = new ThreadTabViewModel
+            {
+                ThreadId = thread.ThreadId,
+                Title = thread.Title,
+            };
         }
 
         public WorkThreadDescriptor Thread { get; set; }
 
         public DocumentFlow Flow { get; }
 
-        public AgentBackendId BackendId { get; set; } = AgentBackendIds.Codex;
+        public ThreadSessionState Session { get; }
 
-        public string? ModelId { get; set; }
+        public ThreadTabViewModel ViewModel { get; }
 
-        public AgentReasoningEffort? ReasoningEffort { get; set; }
+        public AgentBackendId BackendId
+        {
+            get => Session.BackendId;
+            set => Session.BackendId = value;
+        }
 
-        public bool AutoScroll { get; set; } = true;
+        public string? ModelId
+        {
+            get => Session.ModelId;
+            set => Session.ModelId = value;
+        }
 
-        public bool HistoryLoaded { get; set; }
+        public AgentReasoningEffort? ReasoningEffort
+        {
+            get => Session.ReasoningEffort;
+            set => Session.ReasoningEffort = value;
+        }
 
-        public bool HistoryLoading { get; set; }
+        public bool AutoScroll
+        {
+            get => Session.AutoScroll;
+            set => Session.AutoScroll = value;
+        }
 
-        public Task? HistoryLoadTask { get; set; }
+        public bool HistoryLoaded
+        {
+            get => Session.HistoryLoaded;
+            set => Session.HistoryLoaded = value;
+        }
 
-        public List<AgentEvent>? HistoryEvents { get; set; }
+        public bool HistoryLoading
+        {
+            get => Session.HistoryLoading;
+            set => Session.HistoryLoading = value;
+        }
+
+        public Task? HistoryLoadTask
+        {
+            get => Session.HistoryLoadTask;
+            set => Session.HistoryLoadTask = value;
+        }
+
+        public List<AgentEvent>? HistoryEvents
+        {
+            get => Session.HistoryEvents;
+            set => Session.HistoryEvents = value;
+        }
+
+        public Dictionary<string, AgentPermissionRequest> PermissionRequests => Session.PermissionRequests;
+
+        public Dictionary<string, AgentUserInputRequest> UserInputRequests => Session.UserInputRequests;
+
+        public AgentSessionUsage? Usage
+        {
+            get => Session.Usage;
+            set => Session.Usage = value;
+        }
 
         public List<DocumentFlowItem>? BufferedHistoryItems { get; set; }
 
@@ -225,11 +277,6 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
         public Dictionary<string, ChatStatusState> PlanStates { get; } = new(StringComparer.Ordinal);
 
         public Dictionary<string, ToolCallEntryState> ToolCallStates { get; } = new(StringComparer.Ordinal);
-
-        public Dictionary<string, AgentPermissionRequest> PermissionRequests { get; } = new(StringComparer.Ordinal);
-
-        public Dictionary<string, AgentUserInputRequest> UserInputRequests { get; } = new(StringComparer.Ordinal);
-
         public ToolCallGroupState? ActiveToolCallGroup { get; set; }
 
         public TabPage? Page { get; set; }
@@ -238,15 +285,29 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
 
         public bool HasSeenUserPrompt { get; set; }
 
-        public string? StatusMessage { get; set; }
+        public string? StatusMessage
+        {
+            get => ViewModel.StatusMessage;
+            set => ViewModel.StatusMessage = value;
+        }
 
-        public StatusTone StatusTone { get; set; } = StatusTone.Ready;
+        public StatusTone StatusTone
+        {
+            get => ViewModel.StatusTone;
+            set => ViewModel.StatusTone = value;
+        }
 
-        public bool StatusBusy { get; set; }
+        public bool StatusBusy
+        {
+            get => ViewModel.StatusBusy;
+            set => ViewModel.StatusBusy = value;
+        }
 
-        public bool HasCustomStatus { get; set; }
-
-        public AgentSessionUsage? Usage { get; set; }
+        public bool HasCustomStatus
+        {
+            get => ViewModel.HasCustomStatus;
+            set => ViewModel.HasCustomStatus = value;
+        }
     }
 
     private enum SidebarSelectionKind

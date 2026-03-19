@@ -1647,6 +1647,8 @@ internal sealed partial class CodeAltaApp
         if (_threadTabs.TryGetValue(thread.ThreadId, out var existing))
         {
             existing.Thread = thread;
+            existing.ViewModel.ThreadId = thread.ThreadId;
+            existing.ViewModel.Title = thread.Title;
             return existing;
         }
 
@@ -1659,11 +1661,10 @@ internal sealed partial class CodeAltaApp
                 ItemSpacing = 0,
             });
 
-        var state = new ThreadTabState(thread, flow)
-        {
-            BackendId = new AgentBackendId(thread.BackendId),
-            StatusMessage = BuildReadyStatusText(thread, GetSelectedProject(), globalScopeSelected: false),
-        };
+        var state = new ThreadTabState(thread, flow);
+        state.BackendId = new AgentBackendId(thread.BackendId);
+        state.ViewModel.Title = thread.Title;
+        state.StatusMessage = BuildReadyStatusText(thread, GetSelectedProject(), globalScopeSelected: false);
 
         ApplyThreadPreference(state);
         RememberThreadPreference(thread.ThreadId, state.ModelId, state.ReasoningEffort, state.AutoScroll, persistNow: false);

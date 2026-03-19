@@ -107,8 +107,8 @@ internal sealed partial class CodeAltaApp
                 var current = tab.Thread;
                 return new HStack(
                     [
-                        CreateOpenTabIndicator(tab.StatusBusy, tab.StatusTone),
-                        CreateOpenTabTitle(CompactTabTitle(current.Title)),
+                        CreateOpenTabIndicator(tab.ViewModel.StatusBusy, tab.ViewModel.StatusTone),
+                        CreateOpenTabTitle(CompactTabTitle(tab.ViewModel.Title)),
                     ])
                 {
                     Spacing = 1,
@@ -1225,9 +1225,9 @@ internal sealed partial class CodeAltaApp
             var snapshot = ResolveSelectionStatus(
                 readyMessage,
                 selectedTab.HasCustomStatus,
-                selectedTab.StatusMessage,
-                selectedTab.StatusBusy,
-                selectedTab.StatusTone,
+                selectedTab.ViewModel.StatusMessage,
+                selectedTab.ViewModel.StatusBusy,
+                selectedTab.ViewModel.StatusTone,
                 promptUnavailable,
                 promptUnavailableMessage,
                 promptUnavailableTone);

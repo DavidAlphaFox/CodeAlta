@@ -40,7 +40,7 @@ This document is the implementation checklist companion to the architecture prop
 - [ ] Expand `CodeAltaShellViewModel`.
 - [x] Add `SidebarViewModel`.
 - [x] Add `ThreadWorkspaceViewModel`.
-- [ ] Add `ThreadTabViewModel`.
+- [x] Add `ThreadTabViewModel`.
 - [x] Add `PromptComposerViewModel`.
 - [ ] Add `SessionUsageViewModel` if needed by the popup/presenter split.
 - [x] Move shell/header/status/sidebar/workspace scalar state into bindable view models.
@@ -49,11 +49,11 @@ This document is the implementation checklist companion to the architecture prop
 
 ## Phase 5: Split thread session state from visual state
 
-- [ ] Introduce `ThreadSessionState` as non-visual per-thread state.
-- [ ] Move history loading flags and cached history data into `ThreadSessionState`.
-- [ ] Move per-thread backend/model/reasoning/usage/status state into `ThreadSessionState` and `ThreadTabViewModel` as appropriate.
+- [x] Introduce `ThreadSessionState` as non-visual per-thread state.
+- [x] Move history loading flags and cached history data into `ThreadSessionState`.
+- [x] Move per-thread backend/model/reasoning/usage/status state into `ThreadSessionState` and `ThreadTabViewModel` as appropriate.
 - [ ] Remove concrete controls from the current thread state bag.
-- [ ] Replace the current `ThreadTabState` with smaller focused types.
+- [x] Replace the current `ThreadTabState` with smaller focused types.
 
 ## Phase 6: Extract timeline and tool-call presenters
 
