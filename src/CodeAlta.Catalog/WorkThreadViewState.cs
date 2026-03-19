@@ -80,5 +80,11 @@ public sealed class WorkThreadPreference
     /// </summary>
     [JsonPropertyName("reasoning_effort")]
     public AgentReasoningEffort? ReasoningEffort { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the thread should auto-scroll as new content arrives.
+    /// </summary>
+    [JsonPropertyName("auto_scroll")]
+    public bool AutoScroll { get; set; } = true;
 }
 

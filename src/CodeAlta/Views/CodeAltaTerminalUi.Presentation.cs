@@ -37,6 +37,8 @@ internal sealed partial class CodeAltaTerminalUi
             .SelectionChanged((_, e) => OnChatReasoningSelectionChanged(e.NewIndex))
             .MinWidth(12)
             .MaxWidth(22);
+        _chatAutoScrollCheckBox ??= new CheckBox("AutoScroll", isChecked: true);
+        _chatAutoScrollCheckBox.RegisterDynamicUpdate(_ => OnChatAutoScrollChanged());
         var usageIndicator = CreateComputedVisual(BuildSessionUsageIndicatorVisual);
         var statusPrefix = new Center(
             new ComputedVisual(
@@ -72,6 +74,7 @@ internal sealed partial class CodeAltaTerminalUi
                 _chatBackendSelect,
                 _chatModelSelect,
                 _chatReasoningSelect,
+                _chatAutoScrollCheckBox,
             ])
         {
             Spacing = 2,
@@ -436,6 +439,7 @@ internal sealed partial class CodeAltaTerminalUi
             var backendSelect = _chatBackendSelect!;
             var modelSelect = _chatModelSelect!;
             var reasoningSelect = _chatReasoningSelect!;
+            var autoScrollCheckBox = _chatAutoScrollCheckBox!;
             var backendOptions = BuildChatBackendOptions();
             ReplaceSelectItems(backendSelect, backendOptions);
 
@@ -463,6 +467,8 @@ internal sealed partial class CodeAltaTerminalUi
                 0,
                 Math.Max(0, reasoningOptions.Count - 1));
             reasoningSelect.IsEnabled = backendState.Availability == ChatBackendAvailability.Ready;
+            autoScrollCheckBox.IsChecked = true;
+            autoScrollCheckBox.IsEnabled = false;
 
             _viewModel.BackendStatusMarkup = BuildChatBackendStatusMarkup(_chatBackendStates.Values, backendOptions[backendIndex].BackendId, isInitializing: false);
         }
@@ -501,6 +507,7 @@ internal sealed partial class CodeAltaTerminalUi
             var backendSelect = _chatBackendSelect!;
             var modelSelect = _chatModelSelect!;
             var reasoningSelect = _chatReasoningSelect!;
+            var autoScrollCheckBox = _chatAutoScrollCheckBox!;
             var backendOptions = BuildChatBackendOptions();
             ReplaceSelectItems(backendSelect, backendOptions);
             backendSelect.SelectedIndex = Math.Clamp(
@@ -529,6 +536,8 @@ internal sealed partial class CodeAltaTerminalUi
                 0,
                 Math.Max(0, reasoningOptions.Count - 1));
             reasoningSelect.IsEnabled = backendState.Availability == ChatBackendAvailability.Ready;
+            autoScrollCheckBox.IsChecked = tab.AutoScroll;
+            autoScrollCheckBox.IsEnabled = true;
 
             backendSelect.IsEnabled = false;
             _viewModel.BackendStatusMarkup = BuildChatBackendStatusMarkup(_chatBackendStates.Values, tab.BackendId, isInitializing: false);
@@ -606,7 +615,7 @@ internal sealed partial class CodeAltaTerminalUi
         tab.ModelId = options[newIndex].ModelId;
         var selectedModel = FindModel(backendState.Models, tab.ModelId);
         tab.ReasoningEffort = ResolvePreferredReasoningEffort(selectedModel, preferredReasoningEffort: null);
-        RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, persistNow: true);
+        RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, tab.AutoScroll, persistNow: true);
         backendState.SelectedModelId = tab.ModelId;
         backendState.SelectedReasoningEffort = tab.ReasoningEffort;
         RememberGlobalBackendPreference(tab.BackendId, tab.ModelId, tab.ReasoningEffort);
@@ -647,10 +656,33 @@ internal sealed partial class CodeAltaTerminalUi
         }
 
         tab.ReasoningEffort = options[newIndex].Effort;
-        RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, persistNow: true);
+        RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, tab.AutoScroll, persistNow: true);
         backendState.SelectedModelId = tab.ModelId;
         backendState.SelectedReasoningEffort = tab.ReasoningEffort;
         RememberGlobalBackendPreference(tab.BackendId, tab.ModelId, tab.ReasoningEffort);
+    }
+
+    private void OnChatAutoScrollChanged()
+    {
+        if (_chatSelectorsRefreshing || _chatAutoScrollCheckBox is null)
+        {
+            return;
+        }
+
+        var thread = GetSelectedThread();
+        if (thread is null)
+        {
+            return;
+        }
+
+        var tab = EnsureThreadTab(thread);
+        if (tab.AutoScroll == _chatAutoScrollCheckBox.IsChecked)
+        {
+            return;
+        }
+
+        tab.AutoScroll = _chatAutoScrollCheckBox.IsChecked;
+        RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, tab.AutoScroll, persistNow: true);
     }
 
     private AgentBackendId GetPreferredBackendId()

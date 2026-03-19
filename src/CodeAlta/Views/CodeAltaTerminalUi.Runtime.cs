@@ -288,7 +288,7 @@ internal sealed partial class CodeAltaTerminalUi
                 _catalogOptions.GlobalRoot,
                 []);
             var thread = await _runtimeService.CreateGlobalThreadAsync(executionOptions, title).ConfigureAwait(false);
-            RememberThreadPreference(thread.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, persistNow: false);
+            RememberThreadPreference(thread.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, autoScroll: true, persistNow: false);
             await RegisterCreatedThreadAsync(thread).ConfigureAwait(false);
             ClearThreadTitleDraft();
             SetStatus(BuildReadyStatusText(thread, GetSelectedProject(), _globalScopeSelected), tone: StatusTone.Ready);
@@ -319,7 +319,7 @@ internal sealed partial class CodeAltaTerminalUi
                 project.ProjectPath,
                 [project.ProjectPath]);
             var thread = await _runtimeService.CreateProjectThreadAsync(project, executionOptions, title).ConfigureAwait(false);
-            RememberThreadPreference(thread.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, persistNow: false);
+            RememberThreadPreference(thread.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, autoScroll: true, persistNow: false);
             await RegisterCreatedThreadAsync(thread).ConfigureAwait(false);
             ClearThreadTitleDraft();
             SetStatus(BuildReadyStatusText(thread, GetSelectedProject(), _globalScopeSelected), tone: StatusTone.Ready);
@@ -683,7 +683,7 @@ internal sealed partial class CodeAltaTerminalUi
                 executionOptions,
                 title: SummarizeThreadContent(prompt),
                 cancellationToken: CancellationToken.None).ConfigureAwait(false);
-            RememberThreadPreference(child.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, persistNow: false);
+            RememberThreadPreference(child.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, tab.AutoScroll, persistNow: false);
 
             _threads = _threads
                 .Where(existing => !string.Equals(existing.ThreadId, child.ThreadId, StringComparison.OrdinalIgnoreCase))
@@ -702,6 +702,7 @@ internal sealed partial class CodeAltaTerminalUi
             childTab.BackendId = tab.BackendId;
             childTab.ModelId = tab.ModelId;
             childTab.ReasoningEffort = tab.ReasoningEffort;
+            childTab.AutoScroll = tab.AutoScroll;
 
             _ = await _runtimeService.SendAsync(
                     child,
@@ -1166,7 +1167,7 @@ internal sealed partial class CodeAltaTerminalUi
         {
             ApplyChatCardHeader(state.HeaderText, GetContentTone(delta.Kind), GetContentHeader(delta.Kind), headerSecondary);
             state.Markdown.Markdown = markdown;
-            tab.Flow.ScrollToTailIfFollowing();
+            tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
         });
     }
 
@@ -1182,7 +1183,7 @@ internal sealed partial class CodeAltaTerminalUi
         {
             ApplyChatCardHeader(state.HeaderText, GetContentTone(completed.Kind), GetContentHeader(completed.Kind), headerSecondary);
             state.Markdown.Markdown = markdown;
-            tab.Flow.ScrollToTailIfFollowing();
+            tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
         });
     }
 
@@ -1374,7 +1375,7 @@ internal sealed partial class CodeAltaTerminalUi
         {
             ApplyChatCardTimestamp(stateEntry.TimestampText, timestamp);
             stateEntry.Markdown.Markdown = stateEntry.MarkdownValue;
-            tab.Flow.ScrollToTailIfFollowing();
+            tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
         });
     }
 
@@ -1409,7 +1410,7 @@ internal sealed partial class CodeAltaTerminalUi
         {
             ApplyChatCardTimestamp(state.TimestampText, timestamp);
             state.Markdown.Markdown = state.MarkdownValue;
-            tab.Flow.ScrollToTailIfFollowing();
+            tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
         });
     }
 
@@ -1753,7 +1754,7 @@ internal sealed partial class CodeAltaTerminalUi
         };
 
         ApplyThreadPreference(state);
-        RememberThreadPreference(thread.ThreadId, state.ModelId, state.ReasoningEffort, persistNow: false);
+        RememberThreadPreference(thread.ThreadId, state.ModelId, state.ReasoningEffort, state.AutoScroll, persistNow: false);
 
         _threadTabs[thread.ThreadId] = state;
         return state;
@@ -1799,7 +1800,7 @@ internal sealed partial class CodeAltaTerminalUi
         PostToUi(() =>
         {
             tab.Flow.Items.Add(item);
-            tab.Flow.ScrollToTailIfFollowing();
+            tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
         });
     }
 
@@ -1816,7 +1817,7 @@ internal sealed partial class CodeAltaTerminalUi
             () =>
             {
                 tab.Flow.Items.AddRange(items);
-                tab.Flow.ScrollToTailIfFollowing();
+                tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
             });
     }
 

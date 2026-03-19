@@ -59,6 +59,7 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
     private Select<ChatBackendOption>? _chatBackendSelect;
     private Select<ChatModelOption>? _chatModelSelect;
     private Select<ChatReasoningOption>? _chatReasoningSelect;
+    private CheckBox? _chatAutoScrollCheckBox;
     private Popup? _sessionUsagePopup;
     private bool _sessionUsagePopupOpen;
     private TreeView? _sidebarTree;
@@ -211,6 +212,8 @@ internal sealed partial class CodeAltaTerminalUi : IAsyncDisposable
         public string? ModelId { get; set; }
 
         public AgentReasoningEffort? ReasoningEffort { get; set; }
+
+        public bool AutoScroll { get; set; } = true;
 
         public bool HistoryLoaded { get; set; }
 

@@ -2,6 +2,17 @@ using XenoAtom.Terminal.UI.Controls;
 
 internal static class FlowScrollExtensions
 {
+    internal static void ScrollToTailIfEnabled(this DocumentFlow flow, bool autoScroll)
+    {
+        ArgumentNullException.ThrowIfNull(flow);
+        if (!autoScroll)
+        {
+            return;
+        }
+
+        flow.ScrollToTailIfFollowing();
+    }
+
     internal static void ScrollToTailIfFollowing(this DocumentFlow flow)
     {
         ArgumentNullException.ThrowIfNull(flow);

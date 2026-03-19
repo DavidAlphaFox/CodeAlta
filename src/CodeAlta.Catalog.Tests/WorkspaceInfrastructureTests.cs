@@ -468,6 +468,7 @@ public sealed class WorkspaceInfrastructureTests
                 {
                     ModelId = "gpt-5.4",
                     ReasoningEffort = AgentReasoningEffort.High,
+                    AutoScroll = false,
                 },
             },
         };
@@ -479,6 +480,7 @@ public sealed class WorkspaceInfrastructureTests
         Assert.AreEqual(viewState.SelectedThreadId, reloaded.SelectedThreadId);
         Assert.AreEqual("gpt-5.4", reloaded.ThreadPreferences["platform-search-review"].ModelId);
         Assert.AreEqual(AgentReasoningEffort.High, reloaded.ThreadPreferences["platform-search-review"].ReasoningEffort);
+        Assert.IsFalse(reloaded.ThreadPreferences["platform-search-review"].AutoScroll);
     }
 
     [TestMethod]

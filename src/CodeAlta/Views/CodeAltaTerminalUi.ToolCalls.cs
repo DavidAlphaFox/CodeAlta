@@ -124,7 +124,7 @@ internal sealed partial class CodeAltaTerminalUi
         PostToUi(() =>
         {
             group.ItemsHost.Children.Add(entry.Button);
-            tab.Flow.ScrollToTailIfFollowing();
+            tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
         });
 
         return entry;

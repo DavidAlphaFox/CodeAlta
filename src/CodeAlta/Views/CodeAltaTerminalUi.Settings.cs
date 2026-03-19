@@ -80,6 +80,7 @@ internal sealed partial class CodeAltaTerminalUi
         var defaults = GetEffectiveBackendPreference(tab.BackendId, GetThreadProjectRoot(tab.Thread));
         tab.ModelId ??= persistedPreference?.ModelId ?? defaults.Model;
         tab.ReasoningEffort ??= persistedPreference?.ReasoningEffort ?? defaults.ReasoningEffort;
+        tab.AutoScroll = persistedPreference?.AutoScroll ?? true;
 
         if (!_chatBackendStates.TryGetValue(tab.BackendId.Value, out var backendState))
         {
@@ -130,12 +131,13 @@ internal sealed partial class CodeAltaTerminalUi
         string threadId,
         string? modelId,
         AgentReasoningEffort? reasoningEffort,
+        bool autoScroll,
         bool persistNow)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
 
         var normalizedModel = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
-        if (normalizedModel is null && reasoningEffort is null)
+        if (normalizedModel is null && reasoningEffort is null && autoScroll)
         {
             _viewState.ThreadPreferences.Remove(threadId);
         }
@@ -145,6 +147,7 @@ internal sealed partial class CodeAltaTerminalUi
             {
                 ModelId = normalizedModel,
                 ReasoningEffort = reasoningEffort,
+                AutoScroll = autoScroll,
             };
         }
 
