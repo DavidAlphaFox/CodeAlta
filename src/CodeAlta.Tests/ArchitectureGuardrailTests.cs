@@ -15,6 +15,7 @@ public sealed class ArchitectureGuardrailTests
         AssertSourceDoesNotContain(sourceFiles, "ReadUiValue");
         AssertSourceDoesNotContain(sourceFiles, "RunOnUiThread");
         AssertSourceDoesNotContain(sourceFiles, "RefreshView(");
+        AssertSourceDoesNotContain(sourceFiles, "ThreadTabState");
     }
 
     [TestMethod]

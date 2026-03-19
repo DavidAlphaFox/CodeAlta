@@ -461,7 +461,7 @@ internal sealed partial class CodeAltaApp
         return backendOptions.FirstOrDefault()?.BackendId ?? AgentBackendIds.Codex;
     }
 
-    private void RefreshChatSelectorsForThread(ThreadTabState tab)
+    private void RefreshChatSelectorsForThread(OpenThreadState tab)
     {
         VerifyBindableAccess();
         _chatSelectorsRefreshing = true;
@@ -1185,7 +1185,7 @@ internal sealed partial class CodeAltaApp
     }
 
     private void SetThreadStatus(
-        ThreadTabState tab,
+        OpenThreadState tab,
         string message,
         bool showSpinner = false,
         StatusTone tone = StatusTone.Info,
@@ -1216,7 +1216,7 @@ internal sealed partial class CodeAltaApp
         }
     }
 
-    private void ClearThreadStatus(ThreadTabState tab)
+    private void ClearThreadStatus(OpenThreadState tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
         SetThreadStatus(

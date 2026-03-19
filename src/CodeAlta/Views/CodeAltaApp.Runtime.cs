@@ -346,9 +346,9 @@ internal sealed partial class CodeAltaApp
     }
 
     private Task GetOrStartThreadHistoryLoadTask(
-        ThreadTabState tab,
+        OpenThreadState tab,
         WorkThreadDescriptor thread,
-        Func<CodeAltaApp, WorkThreadDescriptor, ThreadTabState, CancellationToken, Task> loadAsync,
+        Func<CodeAltaApp, WorkThreadDescriptor, OpenThreadState, CancellationToken, Task> loadAsync,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tab);
@@ -372,7 +372,7 @@ internal sealed partial class CodeAltaApp
 
     private async Task LoadThreadHistoryCoreAsync(
         WorkThreadDescriptor thread,
-        ThreadTabState tab,
+        OpenThreadState tab,
         CancellationToken cancellationToken)
     {
         await RebuildThreadHistoryAsync(
@@ -386,7 +386,7 @@ internal sealed partial class CodeAltaApp
 
     private async Task RebuildThreadHistoryAsync(
         WorkThreadDescriptor thread,
-        ThreadTabState tab,
+        OpenThreadState tab,
         bool loadOnlyFromLastUserPrompt,
         bool preferCachedHistory,
         CancellationToken cancellationToken)
@@ -448,7 +448,7 @@ internal sealed partial class CodeAltaApp
 
     private async Task<IReadOnlyList<AgentEvent>> GetThreadHistoryAsync(
         WorkThreadDescriptor thread,
-        ThreadTabState tab,
+        OpenThreadState tab,
         bool preferCachedHistory,
         CancellationToken cancellationToken)
     {
@@ -709,7 +709,7 @@ internal sealed partial class CodeAltaApp
         }
     }
 
-    private void HandleAgentEvent(WorkThreadDescriptor thread, ThreadTabState tab, AgentEvent @event)
+    private void HandleAgentEvent(WorkThreadDescriptor thread, OpenThreadState tab, AgentEvent @event)
     {
         if (!tab.HistoryLoading && ShouldPromoteAgentEventToThinking(@event))
         {
@@ -1086,7 +1086,7 @@ internal sealed partial class CodeAltaApp
             .ConfigureAwait(false);
     }
 
-    private void TryRenderThreadInteraction(ThreadTabState tab, Action action, string context)
+    private void TryRenderThreadInteraction(OpenThreadState tab, Action action, string context)
     {
         try
         {
@@ -1167,7 +1167,7 @@ internal sealed partial class CodeAltaApp
         return response;
     }
 
-    private WorkThreadExecutionOptions BuildExecutionOptions(WorkThreadDescriptor thread, ThreadTabState tab)
+    private WorkThreadExecutionOptions BuildExecutionOptions(WorkThreadDescriptor thread, OpenThreadState tab)
     {
         var workingDirectory = ResolveWorkingDirectory(thread);
         var projectRoots = ResolveProjectRoots(thread);
@@ -1313,7 +1313,7 @@ internal sealed partial class CodeAltaApp
         return normalized[..117].TrimEnd() + "...";
     }
 
-    private ThreadTabState EnsureThreadTab(WorkThreadDescriptor thread)
+    private OpenThreadState EnsureThreadTab(WorkThreadDescriptor thread)
     {
         if (_threadTabs.TryGetValue(thread.ThreadId, out var existing))
         {
@@ -1323,12 +1323,12 @@ internal sealed partial class CodeAltaApp
             return existing;
         }
 
-        ThreadTabState? state = null;
+        OpenThreadState? state = null;
         var timeline = new ThreadTimelinePresenter(
             GetUiDispatcher(),
             () => state!.AutoScroll,
             () => ThreadPaneLayout?.GetAbsoluteBounds());
-        state = new ThreadTabState(thread, timeline);
+        state = new OpenThreadState(thread, timeline);
         state.BackendId = new AgentBackendId(thread.BackendId);
         state.ViewModel.Title = thread.Title;
         state.StatusMessage = BuildReadyStatusText(thread, GetSelectedProject(), globalScopeSelected: false);
@@ -1340,7 +1340,7 @@ internal sealed partial class CodeAltaApp
         return state;
     }
 
-    private void ResetThreadTab(ThreadTabState tab)
+    private void ResetThreadTab(OpenThreadState tab)
     {
         tab.Timeline.Reset();
         tab.PermissionRequests.Clear();

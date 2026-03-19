@@ -72,7 +72,7 @@ internal sealed partial class CodeAltaApp
         backendState.DraftScopeKey = scopeKey;
     }
 
-    private void ApplyThreadPreference(ThreadTabState tab)
+    private void ApplyThreadPreference(OpenThreadState tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
 

@@ -57,6 +57,7 @@ This document is the implementation checklist companion to the architecture prop
 - [x] Move per-thread backend/model/reasoning/usage/status state into `ThreadSessionState` and `ThreadTabViewModel` as appropriate.
 - [x] Remove concrete controls from the current thread state bag.
 - [x] Replace the current `ThreadTabState` with smaller focused types.
+- [x] Move the remaining open-thread state model out of `CodeAltaApp`.
 
 ## Phase 6: Extract timeline and tool-call presenters
 
@@ -104,6 +105,6 @@ This document is the implementation checklist companion to the architecture prop
 - [x] Verify runtime events are applied through one shell/controller path on the UI thread.
 - [ ] Verify bindable view models are only accessed on the UI thread.
 - [x] Verify timeline/tool-call/dialog logic lives outside the shell controller.
-- [ ] Verify `ThreadTabState` is gone or reduced to one focused responsibility.
+- [x] Verify `ThreadTabState` is gone or reduced to one focused responsibility.
 - [x] Verify `RefreshView()` no longer exists as a broad shell refresh primitive.
 - [ ] Update docs if the implementation materially changes structure or terminology.
