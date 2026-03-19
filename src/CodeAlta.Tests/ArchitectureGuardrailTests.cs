@@ -100,16 +100,16 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaApp_PartialFilesRemainFocusedAndLimited()
     {
-        var viewsRoot = Path.Combine(GetCodeAltaSourceRoot(), "Views");
+        var codeAltaRoot = GetCodeAltaSourceRoot();
         var partialFiles = Directory
-            .EnumerateFiles(viewsRoot, "CodeAltaApp*.cs", SearchOption.TopDirectoryOnly)
+            .EnumerateFiles(codeAltaRoot, "CodeAltaApp*.cs", SearchOption.AllDirectories)
             .Where(static file => File.ReadAllText(file).Contains("partial class CodeAltaApp", StringComparison.Ordinal))
-            .Select(Path.GetFileName)
+            .Select(static file => Path.GetRelativePath(GetCodeAltaSourceRoot(), file).Replace('\\', '/'))
             .OrderBy(static name => name, StringComparer.Ordinal)
             .ToArray();
 
         Assert.AreEqual(
-            "CodeAltaApp.Presentation.cs|CodeAltaApp.Runtime.cs|CodeAltaApp.Sidebar.cs|CodeAltaApp.cs",
+            "Views/CodeAltaApp.Presentation.cs|Views/CodeAltaApp.Runtime.cs|Views/CodeAltaApp.Sidebar.cs|Views/CodeAltaApp.cs",
             string.Join("|", partialFiles));
     }
 
