@@ -446,6 +446,7 @@ internal sealed partial class CodeAltaTerminalUi
 
         if (requestQuotas is { Length: > 0 })
         {
+            stack.Add(new Markup("[bold]Copilot quota snapshots[/]"));
             stack.Add(BuildCopilotQuotaTable(requestQuotas));
         }
 
@@ -1031,13 +1032,26 @@ internal sealed partial class CodeAltaTerminalUi
     private static void AppendLimitsAndQuotasMarkdown(System.Text.StringBuilder builder, AgentSessionUsage usage)
     {
         var quotaSnapshots = (usage.Details as CopilotSessionUsageDetails)?.QuotaSnapshots;
-        if (usage.RateLimits is null && quotaSnapshots is not { Length: > 0 })
+        var requestQuotas = quotaSnapshots?
+            .Where(static quota => quota.Details is CopilotRequestQuotaDetails)
+            .ToArray();
+        var opaqueQuotas = quotaSnapshots?
+            .Where(static quota => quota.Details is CopilotOpaqueQuotaDetails)
+            .ToArray();
+
+        if (usage.RateLimits is null &&
+            requestQuotas is not { Length: > 0 } &&
+            opaqueQuotas is not { Length: > 0 })
         {
             return;
         }
 
         builder.AppendLine()
-            .AppendLine("## Limits and quotas");
+            .AppendLine(usage.RateLimits is not null && (requestQuotas is { Length: > 0 } || opaqueQuotas is { Length: > 0 })
+                ? "## Limits and quotas"
+                : usage.RateLimits is not null
+                    ? "## Limits"
+                    : "## Quotas");
         if (usage.RateLimits is { } rateLimits)
         {
             builder.Append("- Limits: ")
@@ -1055,24 +1069,37 @@ internal sealed partial class CodeAltaTerminalUi
             }
         }
 
-        if (quotaSnapshots is { Length: > 0 })
+        if (requestQuotas is { Length: > 0 })
         {
             builder.AppendLine()
-                .AppendLine("### Copilot quota snapshots");
-            foreach (var quota in quotaSnapshots)
+                .AppendLine("### Copilot quota snapshots")
+                .AppendLine()
+                .AppendLine("| Quota | Usage | Status |")
+                .AppendLine("| --- | --- | --- |");
+
+            foreach (var quota in requestQuotas)
+            {
+                var requestQuota = (CopilotRequestQuotaDetails)quota.Details;
+                builder.Append("| ")
+                    .Append(quota.Name)
+                    .Append(" | ")
+                    .Append(FormatCopilotQuotaUsageCell(requestQuota))
+                    .Append(" | ")
+                    .AppendLine(FormatCopilotQuotaStatusCell(requestQuota) + " |");
+            }
+        }
+
+        if (opaqueQuotas is { Length: > 0 })
+        {
+            builder.AppendLine()
+                .AppendLine("### Raw quota snapshots");
+            foreach (var quota in opaqueQuotas)
             {
                 builder.Append("- ")
                     .Append(quota.Name)
                     .Append(": ");
-                switch (quota.Details)
-                {
-                    case CopilotRequestQuotaDetails requestQuota:
-                        builder.AppendLine(FormatCopilotQuotaDetails(requestQuota));
-                        break;
-                    case CopilotOpaqueQuotaDetails opaqueQuota:
-                        builder.AppendLine(opaqueQuota.Summary);
-                        break;
-                }
+                var opaqueQuota = (CopilotOpaqueQuotaDetails)quota.Details;
+                builder.AppendLine(opaqueQuota.Summary);
             }
         }
     }

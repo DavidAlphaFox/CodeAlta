@@ -1840,7 +1840,7 @@ public sealed class CodeAltaTerminalUiTests
             StringAssert.Contains(markdown, "# Codex context usage");
             StringAssert.Contains(markdown, "## Summary");
             StringAssert.Contains(markdown, "## Usage breakdown");
-            StringAssert.Contains(markdown, "## Limits and quotas");
+            StringAssert.Contains(markdown, "## Limits");
             StringAssert.Contains(markdown, "## Backend-specific details");
             StringAssert.Contains(markdown, "50,000 / 120,000 tokens (41.7%)");
             StringAssert.Contains(markdown, "Scope: Current window");
@@ -1899,10 +1899,11 @@ public sealed class CodeAltaTerminalUiTests
             "gpt-5.4");
 
         StringAssert.Contains(markdown, "# Copilot context usage");
-        StringAssert.Contains(markdown, "## Limits and quotas");
+        StringAssert.Contains(markdown, "## Quotas");
         StringAssert.Contains(markdown, "### Copilot quota snapshots");
-        StringAssert.Contains(markdown, "premium_interactions: 477 / 1,500 requests");
-        StringAssert.Contains(markdown, "usage allowed after exhaustion");
+        StringAssert.Contains(markdown, "| Quota | Usage | Status |");
+        StringAssert.Contains(markdown, "| premium_interactions | 477 / 1,500");
+        StringAssert.Contains(markdown, "allowed |");
     }
 
     [TestMethod]
