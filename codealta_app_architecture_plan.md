@@ -67,7 +67,7 @@ This document is the implementation checklist companion to the architecture prop
 
 ## Phase 7: Extract formatting and helper buckets
 
-- [ ] Create `ChatMarkdownFormatter`.
+- [x] Create `ChatMarkdownFormatter`.
 - [x] Create `ToolCallSummaryFormatter`.
 - [x] Create `SessionUsageFormatter`.
 - [ ] Move status/usage/tool-call/chat formatting helpers out of `CodeAltaApp`.

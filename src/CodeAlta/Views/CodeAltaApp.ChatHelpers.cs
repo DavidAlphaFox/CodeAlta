@@ -345,19 +345,7 @@ internal sealed partial class CodeAltaApp
     }
 
     internal static string FormatChatContentMarkdown(AgentContentKind kind, string content)
-    {
-        ArgumentNullException.ThrowIfNull(content);
-        content = SanitizeInlineImageContent(content);
-
-        return kind switch
-        {
-            AgentContentKind.User => content,
-            AgentContentKind.Assistant => content,
-            AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary => TrimReasoningContent(content),
-            AgentContentKind.CommandOutput or AgentContentKind.FileChangeOutput or AgentContentKind.ToolOutput => FormatChatOutputMarkdown(content),
-            _ => content,
-        };
-    }
+        => ChatMarkdownFormatter.FormatChatContentMarkdown(kind, content);
 
     private static string SanitizeInlineImageContent(string content)
     {
@@ -394,13 +382,7 @@ internal sealed partial class CodeAltaApp
     }
 
     internal static string? GetChatContentHeaderSecondary(AgentContentKind kind, string content)
-    {
-        return kind switch
-        {
-            AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary => BuildReasoningSummary(content),
-            _ => null,
-        };
-    }
+        => ChatMarkdownFormatter.GetChatContentHeaderSecondary(kind, content);
 
     internal static void ApplyChatCardHeader(Markup headerText, ChatTimelineTone tone, string? headerOverride, string? headerSecondary)
     {
@@ -416,67 +398,10 @@ internal sealed partial class CodeAltaApp
     }
 
     internal static string FormatChatPlanMarkdown(AgentPlanSnapshot snapshot)
-    {
-        ArgumentNullException.ThrowIfNull(snapshot);
-
-        var builder = new StringBuilder();
-        if (snapshot.ChangeKind is { } changeKind)
-        {
-            builder.Append("_").Append(SplitPascalCase(changeKind.ToString())).Append("._");
-        }
-
-        if (!string.IsNullOrWhiteSpace(snapshot.Explanation))
-        {
-            if (builder.Length > 0)
-            {
-                builder.AppendLine().AppendLine();
-            }
-
-            builder.Append(snapshot.Explanation);
-        }
-
-        if (snapshot.Steps is { Count: > 0 } steps)
-        {
-            foreach (var step in steps)
-            {
-                builder.AppendLine()
-                    .Append("- ")
-                    .Append(FormatPlanStepStatus(step.Status))
-                    .Append(step.Text);
-            }
-        }
-
-        return builder.ToString();
-    }
+        => ChatMarkdownFormatter.FormatChatPlanMarkdown(snapshot);
 
     internal static string FormatChatActivityMarkdown(AgentActivityEvent activity)
-    {
-        ArgumentNullException.ThrowIfNull(activity);
-
-        var builder = new StringBuilder();
-        var displayName = ResolveActivityDisplayName(activity);
-        if (!string.IsNullOrWhiteSpace(displayName))
-        {
-            builder.AppendLine()
-                .Append("- Name: `")
-                .Append(displayName)
-                .Append('`');
-        }
-
-        if (!string.IsNullOrWhiteSpace(activity.Message))
-        {
-            if (builder.Length > 0)
-            {
-                builder.AppendLine();
-            }
-
-            builder
-                .Append("- Detail: ")
-                .Append(SummarizeActivityMessage(activity));
-        }
-
-        return builder.ToString();
-    }
+        => ChatMarkdownFormatter.FormatChatActivityMarkdown(activity);
 
     private static string? ResolveActivityDisplayName(AgentActivityEvent activity)
     {
@@ -493,10 +418,7 @@ internal sealed partial class CodeAltaApp
     }
 
     internal static string FormatChatSessionUpdateMarkdown(AgentSessionUpdateEvent update)
-    {
-        ArgumentNullException.ThrowIfNull(update);
-        return update.Message ?? string.Empty;
-    }
+        => ChatMarkdownFormatter.FormatChatSessionUpdateMarkdown(update);
 
     internal static string GetSessionUpdateHeader(AgentSessionUpdateKind kind)
         => kind switch
@@ -523,239 +445,37 @@ internal sealed partial class CodeAltaApp
         };
 
     internal static string FormatChatPermissionRequestMarkdown(AgentPermissionRequest request)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        var builder = new StringBuilder("_The agent is blocked until this permission request is resolved._");
-
-        switch (request)
-        {
-            case AgentCommandPermissionRequest command:
-                builder.AppendLine()
-                    .AppendLine()
-                    .Append("- Kind: command execution");
-
-                if (!string.IsNullOrWhiteSpace(command.Command))
-                {
-                    builder.AppendLine()
-                        .AppendLine()
-                        .Append(FormatChatCodeFence(command.Command, "shell"));
-                }
-
-                AppendBullet(builder, "Working directory", command.WorkingDirectory, code: true);
-                AppendBullet(builder, "Reason", command.Reason);
-
-                if (command.Actions is { Count: > 0 } actions)
-                {
-                    builder.AppendLine().AppendLine().AppendLine("**Actions**");
-                    foreach (var action in actions)
-                    {
-                        builder.Append("- ")
-                            .Append(ToDisplayLabel(action.Kind));
-
-                        if (!string.IsNullOrWhiteSpace(action.Path))
-                        {
-                            builder.Append(": `").Append(action.Path).Append('`');
-                        }
-                        else if (!string.IsNullOrWhiteSpace(action.Query))
-                        {
-                            builder.Append(": `").Append(action.Query).Append('`');
-                        }
-
-                        builder.AppendLine();
-                    }
-                }
-
-                if (command.Network is { } network)
-                {
-                    AppendBullet(builder, "Network", $"{network.Protocol}://{network.Host}");
-                }
-
-                break;
-
-            case AgentFileChangePermissionRequest fileChange:
-                builder.AppendLine()
-                    .AppendLine()
-                    .Append("- Kind: file change");
-                AppendBullet(builder, "Grant root", fileChange.GrantRoot, code: true);
-                AppendBullet(builder, "Reason", fileChange.Reason);
-                break;
-
-            case AgentGenericPermissionRequest generic:
-                builder.AppendLine().AppendLine().Append("- Kind: ").Append(generic.Kind);
-                if (TryGetStringProperty(generic.Raw, "toolName", out var toolName))
-                {
-                    builder.AppendLine().Append("- Tool: `").Append(toolName).Append('`');
-                }
-
-                builder.AppendLine()
-                    .AppendLine()
-                    .Append(FormatChatCodeFence(generic.Raw.GetRawText(), "json"));
-                break;
-
-            default:
-                builder.AppendLine().AppendLine().Append("- Kind: ").Append(request.Kind);
-                break;
-        }
-
-        return builder.ToString();
-    }
+        => ChatMarkdownFormatter.FormatChatPermissionRequestMarkdown(request);
 
     internal static string FormatChatRawEventMarkdown(AgentRawEvent raw)
-    {
-        ArgumentNullException.ThrowIfNull(raw);
-
-        var builder = new StringBuilder()
-            .AppendLine($"- Event: `{raw.BackendEventType}`");
-
-        var payload = raw.Raw.ValueKind == JsonValueKind.Undefined
-            ? "{}"
-            : raw.Raw.GetRawText();
-
-        builder
-            .AppendLine()
-            .AppendLine("```json")
-            .AppendLine(payload)
-            .Append("```");
-
-        return builder.ToString();
-    }
+        => ChatMarkdownFormatter.FormatChatRawEventMarkdown(raw);
 
     internal static bool ShouldDisplayActivity(AgentActivityEvent activity)
-    {
-        ArgumentNullException.ThrowIfNull(activity);
-
-        if (activity.Kind == AgentActivityKind.Turn)
-        {
-            return false;
-        }
-
-        if (activity.Kind is AgentActivityKind.ToolCall
-            or AgentActivityKind.CommandExecution
-            or AgentActivityKind.FileChange
-            or AgentActivityKind.McpToolCall
-            or AgentActivityKind.DynamicToolCall
-            or AgentActivityKind.CollabAgentToolCall
-            or AgentActivityKind.Subagent
-            or AgentActivityKind.Hook
-            or AgentActivityKind.Skill
-            or AgentActivityKind.WebSearch
-            or AgentActivityKind.ImageGeneration)
-        {
-            return false;
-        }
-
-        return activity.Phase switch
-        {
-            AgentActivityPhase.Requested => false,
-            _ => true,
-        };
-    }
+        => ChatMarkdownFormatter.ShouldDisplayActivity(activity);
 
     internal static bool ShouldDisplayRawEvent(AgentRawEvent raw)
-    {
-        ArgumentNullException.ThrowIfNull(raw);
-        return false;
-    }
+        => ChatMarkdownFormatter.ShouldDisplayRawEvent(raw);
 
     internal static bool ShouldDisplayCompletedContent(AgentContentCompletedEvent completed)
-    {
-        ArgumentNullException.ThrowIfNull(completed);
-
-        return completed.Kind switch
-        {
-            AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary => !string.IsNullOrWhiteSpace(completed.Content),
-            AgentContentKind.CommandOutput or AgentContentKind.FileChangeOutput or AgentContentKind.ToolOutput or AgentContentKind.Notice => false,
-            _ => true,
-        };
-    }
+        => ChatMarkdownFormatter.ShouldDisplayCompletedContent(completed);
 
     internal static bool ShouldDisplayContentDelta(AgentContentDeltaEvent delta)
-    {
-        ArgumentNullException.ThrowIfNull(delta);
-
-        return delta.Kind switch
-        {
-            AgentContentKind.CommandOutput or AgentContentKind.FileChangeOutput or AgentContentKind.ToolOutput or AgentContentKind.Notice => false,
-            _ => true,
-        };
-    }
+        => ChatMarkdownFormatter.ShouldDisplayContentDelta(delta);
 
     internal static bool ShouldDisplaySessionUpdate(AgentSessionUpdateEvent update)
-    {
-        ArgumentNullException.ThrowIfNull(update);
-        return update.Kind == AgentSessionUpdateKind.Warning;
-    }
+        => ChatMarkdownFormatter.ShouldDisplaySessionUpdate(update);
 
     internal static bool ShouldDisplayPermissionRequest(bool autoApproveEnabled)
-        => !autoApproveEnabled;
+        => ChatMarkdownFormatter.ShouldDisplayPermissionRequest(autoApproveEnabled);
 
     internal static bool ShouldDisplayInteraction(AgentInteractionEvent interaction, bool autoApproveEnabled)
-    {
-        ArgumentNullException.ThrowIfNull(interaction);
-
-        if (interaction.Kind == AgentInteractionKind.PermissionResolved && autoApproveEnabled)
-        {
-            return false;
-        }
-
-        return true;
-    }
+        => ChatMarkdownFormatter.ShouldDisplayInteraction(interaction, autoApproveEnabled);
 
     internal static string FormatChatUserInputRequestMarkdown(AgentUserInputRequest request)
-        => FormatChatUserInputRequestMarkdown(request, autoApprove: DefaultAutoApproveEnabled);
+        => ChatMarkdownFormatter.FormatChatUserInputRequestMarkdown(request, DefaultAutoApproveEnabled);
 
     internal static string FormatChatUserInputRequestMarkdown(AgentUserInputRequest request, bool autoApprove)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        var builder = new StringBuilder(
-            autoApprove
-                ? "_The agent asked a question. CodeAlta will prefer continue/inspect-style choices or use a neutral fallback answer so the run can continue._"
-                : "_The agent asked a question. Terminal question prompts are not implemented yet, so CodeAlta returns empty answers for now._");
-
-        for (var index = 0; index < request.Form.Prompts.Count; index++)
-        {
-            var prompt = request.Form.Prompts[index];
-            builder.AppendLine()
-                .AppendLine()
-                .Append("**Question ")
-                .Append(index + 1)
-                .Append("**");
-
-            AppendBullet(builder, "Id", prompt.Id, code: true);
-            if (!string.IsNullOrWhiteSpace(prompt.Header))
-            {
-                builder.AppendLine().Append("- Header: ").Append(prompt.Header);
-            }
-
-            builder.AppendLine().Append("- Question: ").Append(prompt.Question);
-
-            if (prompt.Options is { Count: > 0 } options)
-            {
-                builder.AppendLine().AppendLine().Append("**Choices**");
-                foreach (var option in options)
-                {
-                    builder.AppendLine().Append("- ").Append(option.Label);
-                    if (!string.IsNullOrWhiteSpace(option.Description))
-                    {
-                        builder.Append(": ").Append(option.Description);
-                    }
-                }
-            }
-
-            builder.AppendLine()
-                .Append("- Freeform: ")
-                .Append(prompt.AllowFreeform ? "allowed" : "disabled");
-
-            if (prompt.IsSecret)
-            {
-                builder.AppendLine().Append("- Input: secret");
-            }
-        }
-
-        return builder.ToString();
-    }
+        => ChatMarkdownFormatter.FormatChatUserInputRequestMarkdown(request, autoApprove);
 
     internal static string FormatChatInteractionResolutionMarkdown(AgentInteractionEvent interaction, bool includeHeading)
     {
@@ -796,44 +516,10 @@ internal sealed partial class CodeAltaApp
     }
 
     internal static string FormatChatImmediatePermissionDecisionMarkdown(AgentPermissionDecision decision, bool autoApprove)
-    {
-        ArgumentNullException.ThrowIfNull(decision);
-
-        var reason = autoApprove
-            ? "CodeAlta response: auto-approved this request."
-            : "CodeAlta response: denied this request because interactive approval UI is not implemented yet.";
-        return $"_Status:_ {reason}\n\n- Decision: {SplitPascalCase(decision.Kind.ToString())}";
-    }
+        => ChatMarkdownFormatter.FormatChatImmediatePermissionDecisionMarkdown(decision, autoApprove);
 
     internal static string FormatChatImmediateUserInputResponseMarkdown(AgentUserInputResponse response, bool autoApprove)
-    {
-        ArgumentNullException.ThrowIfNull(response);
-
-        var builder = new StringBuilder();
-        builder.Append(
-            autoApprove
-                ? "_Status:_ CodeAlta auto-answered the question."
-                : "_Status:_ CodeAlta returned an empty answer because terminal question prompts are not implemented yet.");
-
-        foreach (var answer in response.Answers)
-        {
-            builder.AppendLine()
-                .AppendLine()
-                .Append("- `")
-                .Append(answer.Key)
-                .Append("`: ");
-            if (string.IsNullOrWhiteSpace(answer.Value))
-            {
-                builder.Append("_empty_");
-            }
-            else
-            {
-                builder.Append('`').Append(answer.Value).Append('`');
-            }
-        }
-
-        return builder.ToString();
-    }
+        => ChatMarkdownFormatter.FormatChatImmediateUserInputResponseMarkdown(response, autoApprove);
 
     private static string CreateChatContentKey(AgentContentKind kind, string contentId)
         => $"content:{kind}:{contentId}";
@@ -994,20 +680,7 @@ internal sealed partial class CodeAltaApp
     }
 
     private static string GetActivityHeadline(AgentActivityKind kind, AgentActivityPhase phase)
-    {
-        var label = GetActivityKindLabel(kind);
-        return phase switch
-        {
-            AgentActivityPhase.Requested or AgentActivityPhase.Started => $"Calling {label}",
-            AgentActivityPhase.Completed => $"{label} Result",
-            AgentActivityPhase.Failed => $"{label} Failed",
-            AgentActivityPhase.Canceled => $"{label} Canceled",
-            AgentActivityPhase.Progressed => $"{label} Update",
-            AgentActivityPhase.Selected => $"{label} Selected",
-            AgentActivityPhase.Deselected => $"{label} Deselected",
-            _ => $"{label} · {GetActivityPhaseLabel(phase)}",
-        };
-    }
+        => ChatMarkdownFormatter.GetActivityHeadline(kind, phase);
 
     private static string SummarizeActivityMessage(AgentActivityEvent activity)
     {

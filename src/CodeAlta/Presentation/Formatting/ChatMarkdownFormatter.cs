@@ -1,0 +1,675 @@
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using CodeAlta.Agent;
+internal static class ChatMarkdownFormatter
+{
+    public static string FormatChatContentMarkdown(AgentContentKind kind, string content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        content = SanitizeInlineImageContent(content);
+
+        return kind switch
+        {
+            AgentContentKind.User => content,
+            AgentContentKind.Assistant => content,
+            AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary => TrimReasoningContent(content),
+            AgentContentKind.CommandOutput or AgentContentKind.FileChangeOutput or AgentContentKind.ToolOutput => FormatChatOutputMarkdown(content),
+            _ => content,
+        };
+    }
+
+    public static string? GetChatContentHeaderSecondary(AgentContentKind kind, string content)
+    {
+        return kind switch
+        {
+            AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary => BuildReasoningSummary(content),
+            _ => null,
+        };
+    }
+
+    public static string FormatChatPlanMarkdown(AgentPlanSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var builder = new StringBuilder();
+        if (snapshot.ChangeKind is { } changeKind)
+        {
+            builder.Append("_").Append(SplitPascalCase(changeKind.ToString())).Append("._");
+        }
+
+        if (!string.IsNullOrWhiteSpace(snapshot.Explanation))
+        {
+            if (builder.Length > 0)
+            {
+                builder.AppendLine().AppendLine();
+            }
+
+            builder.Append(snapshot.Explanation);
+        }
+
+        if (snapshot.Steps is { Count: > 0 } steps)
+        {
+            foreach (var step in steps)
+            {
+                builder.AppendLine()
+                    .Append("- ")
+                    .Append(FormatPlanStepStatus(step.Status))
+                    .Append(step.Text);
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    public static string FormatChatActivityMarkdown(AgentActivityEvent activity)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+
+        var builder = new StringBuilder();
+        var displayName = ResolveActivityDisplayName(activity);
+        if (!string.IsNullOrWhiteSpace(displayName))
+        {
+            builder.AppendLine()
+                .Append("- Name: `")
+                .Append(displayName)
+                .Append('`');
+        }
+
+        if (!string.IsNullOrWhiteSpace(activity.Message))
+        {
+            if (builder.Length > 0)
+            {
+                builder.AppendLine();
+            }
+
+            builder
+                .Append("- Detail: ")
+                .Append(SummarizeActivityMessage(activity));
+        }
+
+        return builder.ToString();
+    }
+
+    public static string FormatChatSessionUpdateMarkdown(AgentSessionUpdateEvent update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        return update.Message ?? string.Empty;
+    }
+
+    public static string FormatChatPermissionRequestMarkdown(AgentPermissionRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var builder = new StringBuilder("_The agent is blocked until this permission request is resolved._");
+
+        switch (request)
+        {
+            case AgentCommandPermissionRequest command:
+                builder.AppendLine()
+                    .AppendLine()
+                    .Append("- Kind: command execution");
+
+                if (!string.IsNullOrWhiteSpace(command.Command))
+                {
+                    builder.AppendLine()
+                        .AppendLine()
+                        .Append(FormatChatCodeFence(command.Command, "shell"));
+                }
+
+                AppendBullet(builder, "Working directory", command.WorkingDirectory, code: true);
+                AppendBullet(builder, "Reason", command.Reason);
+
+                if (command.Actions is { Count: > 0 } actions)
+                {
+                    builder.AppendLine().AppendLine().AppendLine("**Actions**");
+                    foreach (var action in actions)
+                    {
+                        builder.Append("- ")
+                            .Append(ToDisplayLabel(action.Kind));
+
+                        if (!string.IsNullOrWhiteSpace(action.Path))
+                        {
+                            builder.Append(": `").Append(action.Path).Append('`');
+                        }
+                        else if (!string.IsNullOrWhiteSpace(action.Query))
+                        {
+                            builder.Append(": `").Append(action.Query).Append('`');
+                        }
+
+                        builder.AppendLine();
+                    }
+                }
+
+                if (command.Network is { } network)
+                {
+                    AppendBullet(builder, "Network", $"{network.Protocol}://{network.Host}");
+                }
+
+                break;
+
+            case AgentFileChangePermissionRequest fileChange:
+                builder.AppendLine()
+                    .AppendLine()
+                    .Append("- Kind: file change");
+                AppendBullet(builder, "Grant root", fileChange.GrantRoot, code: true);
+                AppendBullet(builder, "Reason", fileChange.Reason);
+                break;
+
+            case AgentGenericPermissionRequest generic:
+                builder.AppendLine().AppendLine().Append("- Kind: ").Append(generic.Kind);
+                if (TryGetStringProperty(generic.Raw, "toolName", out var toolName))
+                {
+                    builder.AppendLine().Append("- Tool: `").Append(toolName).Append('`');
+                }
+
+                builder.AppendLine()
+                    .AppendLine()
+                    .Append(FormatChatCodeFence(generic.Raw.GetRawText(), "json"));
+                break;
+
+            default:
+                builder.AppendLine().AppendLine().Append("- Kind: ").Append(request.Kind);
+                break;
+        }
+
+        return builder.ToString();
+    }
+
+    public static string FormatChatRawEventMarkdown(AgentRawEvent raw)
+    {
+        ArgumentNullException.ThrowIfNull(raw);
+
+        var builder = new StringBuilder()
+            .AppendLine($"- Event: `{raw.BackendEventType}`");
+
+        var payload = raw.Raw.ValueKind == JsonValueKind.Undefined
+            ? "{}"
+            : raw.Raw.GetRawText();
+
+        builder
+            .AppendLine()
+            .AppendLine("```json")
+            .AppendLine(payload)
+            .Append("```");
+
+        return builder.ToString();
+    }
+
+    public static bool ShouldDisplayActivity(AgentActivityEvent activity)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+
+        if (activity.Kind == AgentActivityKind.Turn)
+        {
+            return false;
+        }
+
+        if (activity.Kind is AgentActivityKind.ToolCall
+            or AgentActivityKind.CommandExecution
+            or AgentActivityKind.FileChange
+            or AgentActivityKind.McpToolCall
+            or AgentActivityKind.DynamicToolCall
+            or AgentActivityKind.CollabAgentToolCall
+            or AgentActivityKind.Subagent
+            or AgentActivityKind.Hook
+            or AgentActivityKind.Skill
+            or AgentActivityKind.WebSearch
+            or AgentActivityKind.ImageGeneration)
+        {
+            return false;
+        }
+
+        return activity.Phase switch
+        {
+            AgentActivityPhase.Requested => false,
+            _ => true,
+        };
+    }
+
+    public static bool ShouldDisplayRawEvent(AgentRawEvent raw)
+    {
+        ArgumentNullException.ThrowIfNull(raw);
+        return false;
+    }
+
+    public static bool ShouldDisplayCompletedContent(AgentContentCompletedEvent completed)
+    {
+        ArgumentNullException.ThrowIfNull(completed);
+
+        return completed.Kind switch
+        {
+            AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary => !string.IsNullOrWhiteSpace(completed.Content),
+            AgentContentKind.CommandOutput or AgentContentKind.FileChangeOutput or AgentContentKind.ToolOutput or AgentContentKind.Notice => false,
+            _ => true,
+        };
+    }
+
+    public static bool ShouldDisplayContentDelta(AgentContentDeltaEvent delta)
+    {
+        ArgumentNullException.ThrowIfNull(delta);
+
+        return delta.Kind switch
+        {
+            AgentContentKind.CommandOutput or AgentContentKind.FileChangeOutput or AgentContentKind.ToolOutput or AgentContentKind.Notice => false,
+            _ => true,
+        };
+    }
+
+    public static bool ShouldDisplaySessionUpdate(AgentSessionUpdateEvent update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        return update.Kind == AgentSessionUpdateKind.Warning;
+    }
+
+    public static bool ShouldDisplayPermissionRequest(bool autoApproveEnabled)
+        => !autoApproveEnabled;
+
+    public static bool ShouldDisplayInteraction(AgentInteractionEvent interaction, bool autoApproveEnabled)
+    {
+        ArgumentNullException.ThrowIfNull(interaction);
+
+        if (interaction.Kind == AgentInteractionKind.PermissionResolved && autoApproveEnabled)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static string FormatChatUserInputRequestMarkdown(AgentUserInputRequest request, bool autoApprove)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var builder = new StringBuilder(
+            autoApprove
+                ? "_The agent asked a question. CodeAlta will prefer continue/inspect-style choices or use a neutral fallback answer so the run can continue._"
+                : "_The agent asked a question. Terminal question prompts are not implemented yet, so CodeAlta returns empty answers for now._");
+
+        for (var index = 0; index < request.Form.Prompts.Count; index++)
+        {
+            var prompt = request.Form.Prompts[index];
+            builder.AppendLine()
+                .AppendLine()
+                .Append("**Question ")
+                .Append(index + 1)
+                .Append("**");
+
+            AppendBullet(builder, "Id", prompt.Id, code: true);
+            if (!string.IsNullOrWhiteSpace(prompt.Header))
+            {
+                builder.AppendLine().Append("- Header: ").Append(prompt.Header);
+            }
+
+            builder.AppendLine().Append("- Question: ").Append(prompt.Question);
+
+            if (prompt.Options is { Count: > 0 } options)
+            {
+                builder.AppendLine().AppendLine().Append("**Choices**");
+                foreach (var option in options)
+                {
+                    builder.AppendLine().Append("- ").Append(option.Label);
+                    if (!string.IsNullOrWhiteSpace(option.Description))
+                    {
+                        builder.Append(": ").Append(option.Description);
+                    }
+                }
+            }
+
+            builder.AppendLine()
+                .Append("- Freeform: ")
+                .Append(prompt.AllowFreeform ? "allowed" : "disabled");
+
+            if (prompt.IsSecret)
+            {
+                builder.AppendLine().Append("- Input: secret");
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    public static string FormatChatImmediatePermissionDecisionMarkdown(AgentPermissionDecision decision, bool autoApprove)
+    {
+        ArgumentNullException.ThrowIfNull(decision);
+
+        var reason = autoApprove
+            ? "CodeAlta response: auto-approved this request."
+            : "CodeAlta response: denied this request because interactive approval UI is not implemented yet.";
+        return $"_Status:_ {reason}\n\n- Decision: {SplitPascalCase(decision.Kind.ToString())}";
+    }
+
+    public static string FormatChatImmediateUserInputResponseMarkdown(AgentUserInputResponse response, bool autoApprove)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        var builder = new StringBuilder();
+        builder.Append(
+            autoApprove
+                ? "_Status:_ CodeAlta auto-answered the question."
+                : "_Status:_ CodeAlta returned an empty answer because terminal question prompts are not implemented yet.");
+
+        foreach (var answer in response.Answers)
+        {
+            builder.AppendLine()
+                .AppendLine()
+                .Append("- `")
+                .Append(answer.Key)
+                .Append("`: ");
+            if (string.IsNullOrWhiteSpace(answer.Value))
+            {
+                builder.Append("_empty_");
+            }
+            else
+            {
+                builder.Append('`').Append(answer.Value).Append('`');
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    public static string GetActivityHeadline(AgentActivityKind kind, AgentActivityPhase phase)
+    {
+        var label = GetActivityKindLabel(kind);
+        return phase switch
+        {
+            AgentActivityPhase.Requested or AgentActivityPhase.Started => $"Calling {label}",
+            AgentActivityPhase.Completed => $"{label} Result",
+            AgentActivityPhase.Failed => $"{label} Failed",
+            AgentActivityPhase.Canceled => $"{label} Canceled",
+            AgentActivityPhase.Progressed => $"{label} Update",
+            AgentActivityPhase.Selected => $"{label} Selected",
+            AgentActivityPhase.Deselected => $"{label} Deselected",
+            _ => $"{label} · {GetActivityPhaseLabel(phase)}",
+        };
+    }
+
+    private static string SanitizeInlineImageContent(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return content;
+        }
+
+        var normalizedLines = content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var lines = new List<string>(normalizedLines.Length);
+        var changed = false;
+
+        foreach (var line in normalizedLines)
+        {
+            var trimmed = line.Trim();
+            if (string.Equals(trimmed, "<image>", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            {
+                if (lines.Count == 0 || !string.Equals(lines[^1], "Inline Image", StringComparison.Ordinal))
+                {
+                    lines.Add("Inline Image");
+                }
+
+                changed = true;
+                continue;
+            }
+
+            lines.Add(line);
+        }
+
+        return changed
+            ? string.Join(Environment.NewLine, lines)
+            : content;
+    }
+
+    private static string TrimReasoningContent(string content)
+    {
+        var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return string.Empty;
+        }
+
+        if (TryExtractReasoningHeading(normalized, out _, out var remainder) && remainder is not null)
+        {
+            return remainder;
+        }
+
+        return normalized;
+    }
+
+    private static string? BuildReasoningSummary(string content)
+    {
+        var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        if (TryExtractReasoningHeading(normalized, out var heading, out _))
+        {
+            return TrimSummaryText(heading);
+        }
+
+        var firstSentenceEnd = normalized.IndexOf('.');
+        var firstLineEnd = normalized.IndexOf('\n');
+        var end = firstSentenceEnd >= 0 && firstLineEnd >= 0
+            ? Math.Min(firstSentenceEnd, firstLineEnd)
+            : Math.Max(firstSentenceEnd, firstLineEnd);
+        var summary = end >= 0 ? normalized[..end] : normalized;
+        return TrimSummaryText(summary);
+    }
+
+    private static bool TryExtractReasoningHeading(string content, out string? heading, out string? remainder)
+    {
+        heading = null;
+        remainder = null;
+        var normalized = content.TrimStart();
+        if (normalized.StartsWith("**", StringComparison.Ordinal))
+        {
+            var closingIndex = normalized.IndexOf("**", 2, StringComparison.Ordinal);
+            if (closingIndex > 2)
+            {
+                heading = normalized[2..closingIndex].Trim();
+                remainder = normalized[(closingIndex + 2)..].TrimStart('\n', '\r', ' ');
+                return !string.IsNullOrWhiteSpace(heading);
+            }
+        }
+
+        if (normalized.StartsWith("#", StringComparison.Ordinal))
+        {
+            var lineEnd = normalized.IndexOf('\n');
+            var line = (lineEnd >= 0 ? normalized[..lineEnd] : normalized).Trim();
+            heading = line.TrimStart('#', ' ').Trim();
+            remainder = lineEnd >= 0 ? normalized[(lineEnd + 1)..].TrimStart() : string.Empty;
+            return !string.IsNullOrWhiteSpace(heading);
+        }
+
+        return false;
+    }
+
+    private static string? TrimSummaryText(string? summary)
+    {
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            return null;
+        }
+
+        var normalized = summary.Trim();
+        const int maxLength = 44;
+        return normalized.Length <= maxLength
+            ? normalized
+            : normalized[..maxLength].TrimEnd() + "...";
+    }
+
+    private static string FormatPlanStepStatus(AgentPlanStepStatus? status)
+    {
+        return status switch
+        {
+            AgentPlanStepStatus.Pending => "[ ] ",
+            AgentPlanStepStatus.InProgress => "[~] ",
+            AgentPlanStepStatus.Completed => "[x] ",
+            _ => string.Empty,
+        };
+    }
+
+    private static string? ResolveActivityDisplayName(AgentActivityEvent activity)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+
+        if (activity.Details is { } details &&
+            TryGetStringProperty(details, "command", out var command) &&
+            !string.IsNullOrWhiteSpace(command))
+        {
+            return command;
+        }
+
+        return activity.Name;
+    }
+
+    private static string GetActivityPhaseLabel(AgentActivityPhase phase)
+    {
+        return phase switch
+        {
+            AgentActivityPhase.Requested => "Requested",
+            AgentActivityPhase.Started => "Started",
+            AgentActivityPhase.Progressed => "In Progress",
+            AgentActivityPhase.Completed => "Completed",
+            AgentActivityPhase.Failed => "Failed",
+            AgentActivityPhase.Canceled => "Canceled",
+            AgentActivityPhase.Selected => "Selected",
+            AgentActivityPhase.Deselected => "Deselected",
+            _ => phase.ToString(),
+        };
+    }
+
+    private static string GetActivityKindLabel(AgentActivityKind kind)
+    {
+        return kind switch
+        {
+            AgentActivityKind.Turn => "Turn",
+            AgentActivityKind.ToolCall => "Tool Call",
+            AgentActivityKind.CommandExecution => "Command Execution",
+            AgentActivityKind.FileChange => "File Change",
+            AgentActivityKind.McpToolCall => "MCP Tool Call",
+            AgentActivityKind.DynamicToolCall => "Dynamic Tool Call",
+            AgentActivityKind.CollabAgentToolCall => "Collab Agent Tool Call",
+            AgentActivityKind.Subagent => "Subagent",
+            AgentActivityKind.Hook => "Hook",
+            AgentActivityKind.Skill => "Skill",
+            AgentActivityKind.Compaction => "Compaction",
+            AgentActivityKind.WebSearch => "Web Search",
+            AgentActivityKind.ImageGeneration => "Image Generation",
+            _ => SplitPascalCase(kind.ToString()),
+        };
+    }
+
+    private static string SummarizeActivityMessage(AgentActivityEvent activity)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+
+        if (string.IsNullOrWhiteSpace(activity.Message))
+        {
+            return string.Empty;
+        }
+
+        var normalized = activity.Message
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Trim();
+        var lineCount = normalized.Count(static ch => ch == '\n') + 1;
+        var shouldCompact = activity.Kind is AgentActivityKind.ToolCall
+            or AgentActivityKind.CommandExecution
+            or AgentActivityKind.FileChange
+            or AgentActivityKind.McpToolCall
+            or AgentActivityKind.DynamicToolCall
+            or AgentActivityKind.CollabAgentToolCall
+            or AgentActivityKind.Hook
+            or AgentActivityKind.Skill
+            or AgentActivityKind.Subagent;
+
+        if (shouldCompact && (normalized.Length > 220 || lineCount > 6))
+        {
+            var firstLine = normalized.Split('\n')[0].Trim();
+            if (firstLine.Length > 120)
+            {
+                firstLine = firstLine[..117].TrimEnd() + "...";
+            }
+
+            return string.IsNullOrWhiteSpace(firstLine)
+                ? $"Output omitted ({lineCount} lines, {normalized.Length} chars)."
+                : $"{firstLine} _(output omitted: {lineCount} lines, {normalized.Length} chars)_";
+        }
+
+        return normalized;
+    }
+
+    private static string ToDisplayLabel(AgentCommandPreviewKind kind)
+    {
+        return kind switch
+        {
+            AgentCommandPreviewKind.ListFiles => "List Files",
+            _ => SplitPascalCase(kind.ToString()),
+        };
+    }
+
+    private static string FormatChatOutputMarkdown(string content)
+        => string.IsNullOrWhiteSpace(content) ? string.Empty : FormatChatCodeFence(content, "text");
+
+    private static string FormatChatCodeFence(string content, string language)
+    {
+        var fence = content.Contains("```", StringComparison.Ordinal) ? "````" : "```";
+        return $"{fence}{language}\n{content}\n{fence}";
+    }
+
+    private static void AppendBullet(StringBuilder builder, string label, string? value, bool code = false)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        builder.AppendLine().Append("- ").Append(label).Append(": ");
+        if (code)
+        {
+            builder.Append('`').Append(value).Append('`');
+        }
+        else
+        {
+            builder.Append(value);
+        }
+    }
+
+    private static string SplitPascalCase(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder(value.Length + 8);
+        for (var index = 0; index < value.Length; index++)
+        {
+            var ch = value[index];
+            if (index > 0 && char.IsUpper(ch) && !char.IsWhiteSpace(value[index - 1]))
+            {
+                builder.Append(' ');
+            }
+
+            builder.Append(ch);
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool TryGetStringProperty(JsonElement element, string propertyName, out string? value)
+    {
+        if (element.ValueKind == JsonValueKind.Object &&
+            element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.String)
+        {
+            value = property.GetString();
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        value = null;
+        return false;
+    }
+
+}
