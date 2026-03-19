@@ -1003,71 +1003,19 @@ internal sealed partial class CodeAltaApp
         ];
     }
 
-    private static string BuildPromptPlaceholder(
-        WorkThreadDescriptor? thread,
-        ProjectDescriptor? selectedProject,
-        bool globalScopeSelected)
-    {
-        if (thread is not null)
-        {
-            return $"Continue '{thread.Title}'...";
-        }
-
-        if (globalScopeSelected)
-        {
-            return "Start a global thread...";
-        }
-
-        return selectedProject is null
-            ? "Select a project to start a thread..."
-            : $"Start a thread for {selectedProject.DisplayName}...";
-    }
-
     internal static string BuildPromptUnavailablePlaceholder(
         WorkThreadDescriptor? thread,
         string backendDisplayName,
         ChatBackendAvailability availability,
         bool anyBackendReady)
-    {
-        if (thread is not null)
-        {
-            return availability == ChatBackendAvailability.Connecting
-                ? $"Waiting for {backendDisplayName} to reconnect..."
-                : $"'{thread.Title}' is unavailable until {backendDisplayName} is connected.";
-        }
-
-        if (availability == ChatBackendAvailability.Connecting)
-        {
-            return $"Connecting to {backendDisplayName}...";
-        }
-
-        return anyBackendReady
-            ? "Select a connected backend to start a thread..."
-            : "Install or connect Codex/Copilot to start a thread...";
-    }
+        => PromptComposerProjectionBuilder.BuildPromptUnavailablePlaceholder(thread, backendDisplayName, availability, anyBackendReady);
 
     internal static string BuildPromptUnavailableStatusText(
         WorkThreadDescriptor? thread,
         string backendDisplayName,
         ChatBackendAvailability availability,
         bool anyBackendReady)
-    {
-        if (thread is not null)
-        {
-            return availability == ChatBackendAvailability.Connecting
-                ? $"Reconnecting '{thread.Title}' to {backendDisplayName}. Prompt sending is temporarily unavailable."
-                : $"'{thread.Title}' is unavailable because {backendDisplayName} is not connected.";
-        }
-
-        if (availability == ChatBackendAvailability.Connecting)
-        {
-            return $"Connecting to {backendDisplayName}. Prompt sending will be available once the backend is ready.";
-        }
-
-        return anyBackendReady
-            ? "Select a connected backend to send prompts."
-            : "No chat backend is connected. Browse threads and projects, but prompt sending is unavailable.";
-    }
+        => PromptComposerProjectionBuilder.BuildPromptUnavailableStatusText(thread, backendDisplayName, availability, anyBackendReady);
 
     internal static string CompactTabTitle(string title)
     {
@@ -1134,26 +1082,39 @@ internal sealed partial class CodeAltaApp
     private bool HasAnyReadyChatBackend()
         => _chatBackendStates.Values.Any(static state => state.Availability == ChatBackendAvailability.Ready);
 
-    private bool TryGetPromptUnavailableStatus(out string message, out StatusTone tone)
+    private PromptComposerProjection BuildPromptComposerProjection()
     {
         var selectedThread = GetSelectedThread();
         var backendId = selectedThread is not null ? new AgentBackendId(selectedThread.BackendId) : GetPreferredBackendId();
         if (!_chatBackendStates.TryGetValue(backendId.Value, out var backendState) ||
-            backendState.Availability == ChatBackendAvailability.Ready)
+            string.IsNullOrWhiteSpace(backendState.DisplayName))
+        {
+            backendState = _chatBackendStates[AgentBackendIds.Codex.Value];
+        }
+
+        return PromptComposerProjectionBuilder.Build(
+            selectedThread,
+            GetSelectedProject(),
+            _globalScopeSelected,
+            backendState.DisplayName,
+            backendState.Availability,
+            HasAnyReadyChatBackend(),
+            _draftTabOpen,
+            _selectedThreadId);
+    }
+
+    private bool TryGetPromptUnavailableStatus(out string message, out StatusTone tone)
+    {
+        var projection = BuildPromptComposerProjection();
+        if (!projection.HasUnavailableStatus)
         {
             message = string.Empty;
             tone = StatusTone.Ready;
             return false;
         }
 
-        message = BuildPromptUnavailableStatusText(
-            selectedThread,
-            backendState.DisplayName,
-            backendState.Availability,
-            HasAnyReadyChatBackend());
-        tone = backendState.Availability == ChatBackendAvailability.Connecting
-            ? StatusTone.Info
-            : StatusTone.Warning;
+        message = projection.UnavailableStatusMessage!;
+        tone = projection.UnavailableStatusTone;
         return true;
     }
 
@@ -1170,30 +1131,14 @@ internal sealed partial class CodeAltaApp
 
     private void UpdatePromptAvailabilityUi()
     {
-        var selectedThread = GetSelectedThread();
-        if (TryGetPromptUnavailableStatus(out _, out _) &&
-            _chatBackendStates.TryGetValue(
-                (selectedThread is not null ? new AgentBackendId(selectedThread.BackendId) : GetPreferredBackendId()).Value,
-                out var backendState))
-        {
-            _promptComposerViewModel.Placeholder = BuildPromptUnavailablePlaceholder(
-                selectedThread,
-                backendState.DisplayName,
-                backendState.Availability,
-                HasAnyReadyChatBackend());
-        }
-        else
-        {
-            _promptComposerViewModel.Placeholder = BuildPromptPlaceholder(selectedThread, GetSelectedProject(), _globalScopeSelected);
-        }
-
-        var promptUnavailable = TryGetPromptUnavailableStatus(out _, out _);
-        _promptComposerViewModel.IsEnabled = !promptUnavailable;
-        _promptComposerViewModel.CanSend = !promptUnavailable;
-        _promptComposerViewModel.CanSteer = selectedThread is not null && !promptUnavailable;
-        _promptComposerViewModel.CanDelegate = selectedThread is not null && !promptUnavailable;
-        _promptComposerViewModel.CanAbort = selectedThread is not null;
-        _promptComposerViewModel.CanCloseTab = selectedThread is not null || (_draftTabOpen && string.IsNullOrWhiteSpace(_selectedThreadId));
+        var projection = BuildPromptComposerProjection();
+        _promptComposerViewModel.Placeholder = projection.Placeholder;
+        _promptComposerViewModel.IsEnabled = projection.IsEnabled;
+        _promptComposerViewModel.CanSend = projection.CanSend;
+        _promptComposerViewModel.CanSteer = projection.CanSteer;
+        _promptComposerViewModel.CanDelegate = projection.CanDelegate;
+        _promptComposerViewModel.CanAbort = projection.CanAbort;
+        _promptComposerViewModel.CanCloseTab = projection.CanCloseTab;
     }
 
     internal void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)

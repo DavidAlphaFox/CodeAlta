@@ -86,7 +86,7 @@ This document is the implementation checklist companion to the architecture prop
 ## Phase 9: Rework tests around the new seams
 
 - [x] Add controller tests for selection and scope intent routing.
-- [ ] Add controller tests for status and prompt availability.
+- [x] Add prompt/status availability projection tests.
 - [x] Add controller tests for startup restoration and runtime event application.
 - [x] Add projection tests for sidebar and tab-strip models/builders.
 - [x] Add presenter-focused tests where they provide value.
