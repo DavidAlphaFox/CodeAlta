@@ -1,11 +1,6 @@
-using System.IO;
-using System.Reflection;
 using CodeAlta.Agent;
 using CodeAlta.Catalog;
-using CodeAlta.Catalog.Roles;
-using CodeAlta.Orchestration.Runtime;
-using CodeAlta.Persistence;
-using XenoAtom.Terminal.UI.Controls;
+using CodeAlta.ViewModels;
 
 namespace CodeAlta.Tests;
 
@@ -13,224 +8,145 @@ namespace CodeAlta.Tests;
 public sealed class CodeAltaAppSidebarTests
 {
     [TestMethod]
-    public async Task RefreshCatalogAndThreadWorkspace_RebuildsSidebarTreeWhenRecoveredThreadsChange()
+    public void Build_CreatesProjectThreadChildrenForMatchingProject()
     {
-        var rootPath = Path.Combine(Path.GetTempPath(), $"codealta-ui-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(rootPath);
+        var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
+        var otherProject = CreateProject("project-2", "Other", @"C:\other");
+        var visibleThread = CreateThread(
+            threadId: "thread-1",
+            title: "Recovered thread",
+            kind: WorkThreadKind.ProjectThread,
+            projectId: project.Id,
+            backendId: AgentBackendIds.Codex.Value,
+            workingDirectory: project.ProjectPath);
+        var internalThread = CreateThread(
+            threadId: "thread-2",
+            title: "Internal helper",
+            kind: WorkThreadKind.InternalThread,
+            projectId: project.Id,
+            backendId: AgentBackendIds.Codex.Value,
+            workingDirectory: project.ProjectPath);
+        var unrelatedThread = CreateThread(
+            threadId: "thread-3",
+            title: "Other thread",
+            kind: WorkThreadKind.ProjectThread,
+            projectId: otherProject.Id,
+            backendId: AgentBackendIds.Codex.Value,
+            workingDirectory: otherProject.ProjectPath);
 
-        try
-        {
-            var catalogOptions = new CatalogOptions { GlobalRoot = rootPath };
-            var projectCatalog = new ProjectCatalog(catalogOptions);
-            var threadCatalog = new WorkThreadCatalog(catalogOptions);
-            var db = await CreateTestDbAsync(rootPath);
-            await using var hub = new AgentHub(new AgentBackendFactory(), new AgentRepository(db));
-            await using var runtimeService = new WorkThreadRuntimeService(
-                hub,
-                projectCatalog,
-                threadCatalog,
-                new RoleProfileStore(),
-                new AgentInstructionTemplateProvider(),
-                catalogOptions);
-            var project = new ProjectDescriptor
+        var projection = SidebarTreeProjectionBuilder.Build(
+            [project, otherProject],
+            [unrelatedThread, internalThread, visibleThread],
+            @"C:\global",
+            project.Id,
+            maxRecentThreadsPerProject: 3);
+
+        Assert.AreEqual(2, projection.Roots.Count);
+        var projectsRoot = projection.Roots[1];
+        Assert.AreEqual("Projects", projectsRoot.Title);
+        Assert.AreEqual(2, projectsRoot.Children.Count);
+
+        var projectNode = projectsRoot.Children[0];
+        Assert.AreEqual(project.DisplayName, projectNode.Title);
+        Assert.AreEqual(SidebarSelectionTarget.Project(project.Id), projectNode.SelectionTarget);
+        Assert.IsTrue(projectNode.IsExpanded);
+        Assert.AreEqual(2, projectNode.Children.Count);
+        CollectionAssert.AreEquivalent(
+            new SidebarSelectionTarget[]
             {
-                Id = ProjectId.NewVersion7().ToString(),
-                Slug = "codealta",
-                DisplayName = "CodeAlta",
-                ProjectPath = Path.Combine(rootPath, "repo"),
-            };
-            Directory.CreateDirectory(project.ProjectPath);
-            await projectCatalog.SaveAsync(project);
+                SidebarSelectionTarget.Thread(visibleThread.ThreadId),
+                SidebarSelectionTarget.Thread(internalThread.ThreadId),
+            },
+            projectNode.Children
+                .Select(node => node.SelectionTarget!.Value)
+                .ToArray());
 
-            var ui = new CodeAltaApp(projectCatalog, threadCatalog, runtimeService, catalogOptions, hub);
-            var sidebarTree = new TreeView();
-            SetPrivateField(ui, "_sidebarTree", sidebarTree);
-            SetPrivateField(ui, "_projects", (IReadOnlyList<ProjectDescriptor>)[project]);
-            SetPrivateField(ui, "_threads", Array.Empty<WorkThreadDescriptor>());
-            SetPrivateField(ui, "_viewState", new WorkThreadViewState());
-            SetPrivateField(ui, "_selectedProjectId", project.Id);
-            SetPrivateField(ui, "_globalScopeSelected", false);
-
-            InvokePrivate(ui, "RebuildSidebarTree");
-            Assert.AreEqual(0, sidebarTree.Roots[1].Children[0].Children.Count);
-
-            SetPrivateField(
-                ui,
-                "_threads",
-                (IReadOnlyList<WorkThreadDescriptor>)
-                [
-                    new WorkThreadDescriptor
-                    {
-                        ThreadId = "thread-1",
-                        Kind = WorkThreadKind.ProjectThread,
-                        BackendId = AgentBackendIds.Codex.Value,
-                        BackendSessionId = "session-1",
-                        ProjectRef = project.Id,
-                        WorkingDirectory = project.ProjectPath,
-                        Title = "Recovered thread",
-                        Status = WorkThreadStatus.Active,
-                        CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
-                        UpdatedAt = DateTimeOffset.UtcNow,
-                        LastActiveAt = DateTimeOffset.UtcNow,
-                    }
-                ]);
-
-            InvokePrivate(ui, "RefreshCatalogAndThreadWorkspace");
-            Assert.AreEqual(1, sidebarTree.Roots[1].Children[0].Children.Count);
-        }
-        finally
-        {
-            Directory.Delete(rootPath, recursive: true);
-        }
+        Assert.IsFalse(projectNode.Children.Any(node => node.SelectionTarget == SidebarSelectionTarget.Thread(unrelatedThread.ThreadId)));
     }
 
     [TestMethod]
-    public async Task ResolveSidebarTargetForRebuild_PreservesExplicitProjectSelectionWhenCurrentThreadIsVisible()
+    public void ResolveTargetForProjectionChange_PreservesExplicitProjectSelectionWhenCurrentThreadIsVisible()
     {
-        var rootPath = Path.Combine(Path.GetTempPath(), $"codealta-ui-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(rootPath);
+        var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
+        var visibleThread = CreateThread(
+            threadId: "thread-1",
+            title: "Recovered thread",
+            kind: WorkThreadKind.ProjectThread,
+            projectId: project.Id,
+            backendId: AgentBackendIds.Codex.Value,
+            workingDirectory: project.ProjectPath);
+        var projection = SidebarTreeProjectionBuilder.Build(
+            [project],
+            [visibleThread],
+            @"C:\global",
+            project.Id,
+            maxRecentThreadsPerProject: 3);
+        var currentTarget = SidebarSelectionResolver.ResolveCurrentTarget(
+            visibleThread.ThreadId,
+            project.Id,
+            globalScopeSelected: false);
 
-        try
-        {
-            var catalogOptions = new CatalogOptions { GlobalRoot = rootPath };
-            var projectCatalog = new ProjectCatalog(catalogOptions);
-            var threadCatalog = new WorkThreadCatalog(catalogOptions);
-            var db = await CreateTestDbAsync(rootPath);
-            await using var hub = new AgentHub(new AgentBackendFactory(), new AgentRepository(db));
-            await using var runtimeService = new WorkThreadRuntimeService(
-                hub,
-                projectCatalog,
-                threadCatalog,
-                new RoleProfileStore(),
-                new AgentInstructionTemplateProvider(),
-                catalogOptions);
-            var project = new ProjectDescriptor
-            {
-                Id = ProjectId.NewVersion7().ToString(),
-                Slug = "codealta",
-                DisplayName = "CodeAlta",
-                ProjectPath = Path.Combine(rootPath, "repo"),
-            };
-            Directory.CreateDirectory(project.ProjectPath);
-            await projectCatalog.SaveAsync(project);
+        var selectedTarget = SidebarSelectionResolver.ResolveTargetForProjectionChange(
+            SidebarSelectionTarget.Project(project.Id),
+            projection,
+            currentTarget);
 
-            var visibleThread = new WorkThreadDescriptor
-            {
-                ThreadId = "thread-1",
-                Kind = WorkThreadKind.ProjectThread,
-                BackendId = AgentBackendIds.Codex.Value,
-                BackendSessionId = "session-1",
-                ProjectRef = project.Id,
-                WorkingDirectory = project.ProjectPath,
-                Title = "Recovered thread",
-                Status = WorkThreadStatus.Active,
-                CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
-                UpdatedAt = DateTimeOffset.UtcNow,
-                LastActiveAt = DateTimeOffset.UtcNow,
-            };
-
-            var ui = new CodeAltaApp(projectCatalog, threadCatalog, runtimeService, catalogOptions, hub);
-            var sidebarTree = new TreeView();
-            SetPrivateField(ui, "_sidebarTree", sidebarTree);
-            SetPrivateField(ui, "_projects", (IReadOnlyList<ProjectDescriptor>)[project]);
-            SetPrivateField(ui, "_threads", (IReadOnlyList<WorkThreadDescriptor>)[visibleThread]);
-            SetPrivateField(ui, "_viewState", new WorkThreadViewState());
-            SetPrivateField(ui, "_selectedProjectId", project.Id);
-            SetPrivateField(ui, "_globalScopeSelected", false);
-            InvokePrivate(ui, "RebuildSidebarTree");
-
-            var projectNode = sidebarTree.Roots[1].Children[0];
-            SetPrivateField(ui, "_lastSidebarSelectedTarget", projectNode.Data);
-
-            SetPrivateField(ui, "_selectedThreadId", visibleThread.ThreadId);
-
-            var selectedTarget = InvokePrivate(ui, "ResolveSidebarTargetForRebuild");
-
-            Assert.AreEqual(projectNode.Data, selectedTarget);
-        }
-        finally
-        {
-            Directory.Delete(rootPath, recursive: true);
-        }
+        Assert.AreEqual(SidebarSelectionTarget.Project(project.Id), selectedTarget);
     }
 
     [TestMethod]
-    public async Task ApplyPendingSidebarSelection_SelectsQueuedProjectNodeAfterRebuild()
+    public void SidebarView_ApplyProjectionBuildsSelectableProjectNode()
     {
-        var rootPath = Path.Combine(Path.GetTempPath(), $"codealta-ui-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(rootPath);
+        var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
+        var projection = SidebarTreeProjectionBuilder.Build(
+            [project],
+            [],
+            @"C:\global",
+            project.Id,
+            maxRecentThreadsPerProject: 3);
+        var view = new SidebarView(new SidebarViewModel(), static () => { });
 
-        try
+        view.ApplyProjection(projection);
+
+        Assert.AreEqual(2, view.Tree.Roots.Count);
+        var projectNode = view.Tree.Roots[1].Children[0];
+        Assert.AreEqual(SidebarSelectionTarget.Project(project.Id), projectNode.Data);
+        Assert.IsTrue(projectNode.IsExpanded);
+        Assert.IsTrue(projection.ContainsTarget(SidebarSelectionTarget.Project(project.Id)));
+    }
+
+    private static ProjectDescriptor CreateProject(string id, string displayName, string projectPath)
+    {
+        return new ProjectDescriptor
         {
-            var catalogOptions = new CatalogOptions { GlobalRoot = rootPath };
-            var projectCatalog = new ProjectCatalog(catalogOptions);
-            var threadCatalog = new WorkThreadCatalog(catalogOptions);
-            var db = await CreateTestDbAsync(rootPath);
-            await using var hub = new AgentHub(new AgentBackendFactory(), new AgentRepository(db));
-            await using var runtimeService = new WorkThreadRuntimeService(
-                hub,
-                projectCatalog,
-                threadCatalog,
-                new RoleProfileStore(),
-                new AgentInstructionTemplateProvider(),
-                catalogOptions);
-            var project = new ProjectDescriptor
-            {
-                Id = ProjectId.NewVersion7().ToString(),
-                Slug = "codealta",
-                DisplayName = "CodeAlta",
-                ProjectPath = Path.Combine(rootPath, "repo"),
-            };
-            Directory.CreateDirectory(project.ProjectPath);
-            await projectCatalog.SaveAsync(project);
+            Id = id,
+            Slug = displayName.ToLowerInvariant(),
+            DisplayName = displayName,
+            ProjectPath = projectPath,
+        };
+    }
 
-            var ui = new CodeAltaApp(projectCatalog, threadCatalog, runtimeService, catalogOptions, hub);
-            var sidebarTree = new TreeView();
-            SetPrivateField(ui, "_sidebarTree", sidebarTree);
-            SetPrivateField(ui, "_projects", (IReadOnlyList<ProjectDescriptor>)[project]);
-            SetPrivateField(ui, "_threads", Array.Empty<WorkThreadDescriptor>());
-            SetPrivateField(ui, "_viewState", new WorkThreadViewState());
-            SetPrivateField(ui, "_selectedProjectId", project.Id);
-            SetPrivateField(ui, "_globalScopeSelected", false);
-
-            InvokePrivate(ui, "RebuildSidebarTree");
-            InvokeNonPublic(typeof(TreeView), sidebarTree, "PrepareChildren");
-            InvokePrivate(ui, "ApplyPendingSidebarSelection");
-
-            Assert.AreEqual(sidebarTree.Roots[1].Children[0].Data, sidebarTree.SelectedNode?.Data);
-        }
-        finally
+    private static WorkThreadDescriptor CreateThread(
+        string threadId,
+        string title,
+        WorkThreadKind kind,
+        string? projectId,
+        string backendId,
+        string workingDirectory)
+    {
+        return new WorkThreadDescriptor
         {
-            Directory.Delete(rootPath, recursive: true);
-        }
-    }
-
-    private static async Task<CodeAltaDb> CreateTestDbAsync(string rootPath)
-    {
-        var dbPath = Path.Combine(rootPath, "state", "db", "codealta.db");
-        var db = new CodeAltaDb(new CodeAltaDbOptions { DatabasePath = dbPath });
-        await db.InitializeAsync();
-        return db;
-    }
-
-    private static object? InvokePrivate(object instance, string methodName)
-    {
-        var method = instance.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.IsNotNull(method);
-        return method.Invoke(instance, null);
-    }
-
-    private static object? InvokeNonPublic(Type type, object instance, string methodName)
-    {
-        var method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.IsNotNull(method);
-        return method.Invoke(instance, null);
-    }
-
-    private static void SetPrivateField(object instance, string fieldName, object? value)
-    {
-        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.IsNotNull(field);
-        field.SetValue(instance, value);
+            ThreadId = threadId,
+            Kind = kind,
+            BackendId = backendId,
+            BackendSessionId = $"session-{threadId}",
+            ProjectRef = projectId,
+            WorkingDirectory = workingDirectory,
+            Title = title,
+            Status = WorkThreadStatus.Active,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+            UpdatedAt = DateTimeOffset.UtcNow,
+            LastActiveAt = DateTimeOffset.UtcNow,
+        };
     }
 }

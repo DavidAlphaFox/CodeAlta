@@ -11,4 +11,6 @@ public sealed partial class SidebarViewModel
 
     [Bindable]
     public partial string? DraftThreadTitle { get; set; }
+
+    internal SidebarTreeProjection? Projection { get; set; }
 }

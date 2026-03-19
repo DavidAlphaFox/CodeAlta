@@ -70,7 +70,6 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     private Select<ChatModelOption>? _chatModelSelect;
     private Select<ChatReasoningOption>? _chatReasoningSelect;
     private CheckBox? _chatAutoScrollCheckBox;
-    private TreeView? _sidebarTree;
     private TabControl? _threadTabControl;
     private TabPage? _draftTabPage;
     private bool _chatSelectorsRefreshing;
@@ -82,6 +81,7 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     private bool _terminalLoopStarted;
     private bool _globalScopeSelected = true;
     private bool _sidebarSelectionSyncEnabled = true;
+    private SidebarTreeProjection? _sidebarProjection;
     private SidebarSelectionTarget? _lastSidebarSelectedTarget;
     private string? _selectedProjectId;
     private string? _selectedThreadId;
@@ -290,13 +290,6 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
         }
     }
 
-    private enum SidebarSelectionKind
-    {
-        GlobalScope,
-        ProjectScope,
-        Thread,
-    }
-
     internal enum StatusTone
     {
         Info,
@@ -314,21 +307,6 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
         Warning,
         Error,
         Info,
-    }
-
-    private sealed record SidebarSelectionTarget(
-        SidebarSelectionKind Kind,
-        string? ProjectId,
-        string? ThreadId)
-    {
-        public static SidebarSelectionTarget Global()
-            => new(SidebarSelectionKind.GlobalScope, null, null);
-
-        public static SidebarSelectionTarget Project(string projectId)
-            => new(SidebarSelectionKind.ProjectScope, projectId, null);
-
-        public static SidebarSelectionTarget Thread(string threadId)
-            => new(SidebarSelectionKind.Thread, null, threadId);
     }
 
     internal sealed record InitialThreadSelection(string? SelectedThreadId, string? StartupThreadRestoreId);

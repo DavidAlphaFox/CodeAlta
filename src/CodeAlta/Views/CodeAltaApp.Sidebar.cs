@@ -1,10 +1,7 @@
 using CodeAlta.Agent;
 using CodeAlta.Catalog;
 using CodeAlta.ViewModels;
-using XenoAtom.Ansi;
 using XenoAtom.Terminal.UI;
-using XenoAtom.Terminal.UI.Controls;
-using XenoAtom.Terminal.UI.Layout;
 using XenoAtom.Terminal.UI.Styling;
 
 internal sealed partial class CodeAltaApp
@@ -14,7 +11,6 @@ internal sealed partial class CodeAltaApp
         _sidebarView ??= new SidebarView(
             _sidebarViewModel,
             () => _ = _shellController.ReloadCatalogAsync(CancellationToken.None));
-        _sidebarTree ??= _sidebarView.Tree;
 
         _threadWorkspaceView ??= new ThreadWorkspaceView(
             _shellViewModel,
@@ -42,7 +38,7 @@ internal sealed partial class CodeAltaApp
         _chatAutoScrollCheckBox ??= _threadWorkspaceView.ChatAutoScrollCheckBox;
         _threadTabControl ??= _threadWorkspaceView.ThreadTabControl;
 
-        RebuildSidebarTree();
+        RefreshSidebarProjection();
         RefreshThreadPaneContent();
 
         _shellView ??= new CodeAltaShellView(
@@ -53,134 +49,38 @@ internal sealed partial class CodeAltaApp
         return _shellView;
     }
 
-    private void RebuildSidebarTree()
+    private void RefreshSidebarProjection()
     {
-        if (_sidebarTree is null)
+        if (_sidebarView is null)
         {
             return;
         }
 
-        var roots = new List<TreeNode>
-        {
-            CreateSidebarGlobalNode(),
-            CreateSidebarProjectsNode(),
-        };
+        var projection = SidebarTreeProjectionBuilder.Build(
+            _projects,
+            _threads,
+            _catalogOptions.GlobalRoot,
+            GetExpandedSidebarProjectId(),
+            MaxRecentThreadsPerProject);
 
+        if (_sidebarProjection == projection)
+        {
+            SyncSidebarSelectionToCurrentState();
+            return;
+        }
+
+        _sidebarProjection = projection;
+        _sidebarViewModel.Projection = projection;
         _sidebarSelectionSyncEnabled = false;
         try
         {
-            _sidebarTree.Roots.Clear();
-            foreach (var root in roots)
-            {
-                _sidebarTree.Roots.Add(root);
-            }
-
+            _sidebarView.ApplyProjection(projection);
             SelectSidebarNodeForCurrentState();
         }
         finally
         {
             _sidebarSelectionSyncEnabled = true;
         }
-    }
-
-    private TreeNode CreateSidebarGlobalNode()
-    {
-        var globalNode = new TreeNode(CreateSidebarHeader(
-            "Global",
-            _catalogOptions.GlobalRoot))
-        {
-            Icon = NerdFont.MdHomeOutline,
-            IconStyle = UiPalette.GetSidebarIconStyle(SidebarAccent.Global),
-            Data = SidebarSelectionTarget.Global(),
-            IsExpanded = true,
-        };
-
-        foreach (var thread in _threads
-                     .Where(static item => item.Kind == WorkThreadKind.GlobalThread)
-                     .OrderByDescending(static item => item.LastActiveAt)
-                     .Take(MaxRecentThreadsPerProject))
-        {
-            globalNode.Children.Add(CreateThreadNode(thread));
-        }
-
-        return globalNode;
-    }
-
-    private TreeNode CreateSidebarProjectsNode()
-    {
-        var projectsNode = new TreeNode(CreateSidebarHeader(
-            "Projects",
-            $"{_projects.Count} known projects"))
-        {
-            Icon = NerdFont.MdFolderMultipleOutline,
-            IconStyle = UiPalette.GetSidebarIconStyle(SidebarAccent.Projects),
-            IsExpanded = true,
-        };
-
-        foreach (var project in _projects.OrderBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase))
-        {
-            projectsNode.Children.Add(CreateProjectNode(project));
-        }
-
-        return projectsNode;
-    }
-
-    private TreeNode CreateProjectNode(ProjectDescriptor project)
-    {
-        var threads = FilterThreadsForProject(_threads, project.Id, includeInternal: true)
-            .Take(MaxRecentThreadsPerProject)
-            .ToArray();
-        var projectNode = new TreeNode(CreateSidebarHeader(
-            project.DisplayName,
-            project.ProjectPath))
-        {
-            Icon = NerdFont.MdFolderOutline,
-            IconStyle = UiPalette.GetSidebarIconStyle(SidebarAccent.Projects),
-            Data = SidebarSelectionTarget.Project(project.Id),
-            IsExpanded = string.Equals(project.Id, GetExpandedSidebarProjectId(), StringComparison.OrdinalIgnoreCase),
-        };
-
-        foreach (var thread in threads)
-        {
-            projectNode.Children.Add(CreateThreadNode(thread));
-        }
-
-        return projectNode;
-    }
-
-    private TreeNode CreateThreadNode(WorkThreadDescriptor thread)
-    {
-        var icon = thread.Kind switch
-        {
-            WorkThreadKind.GlobalThread => NerdFont.MdHomeOutline,
-            WorkThreadKind.ProjectThread => NerdFont.MdChatProcessingOutline,
-            WorkThreadKind.InternalThread => NerdFont.MdAccountCogOutline,
-            _ => NerdFont.MdChatProcessingOutline,
-        };
-
-        return new TreeNode(CreateSidebarHeader(
-            CompactSidebarThreadTitle(thread.Title),
-            BuildThreadSidebarTooltip(thread)))
-        {
-            Icon = icon,
-            IconStyle = ResolveSidebarThreadIconStyle(thread.BackendId, thread.Kind),
-            Data = SidebarSelectionTarget.Thread(thread.ThreadId),
-        };
-    }
-
-    private static Visual CreateSidebarHeader(string title, string? tooltip)
-    {
-        var markup = new Markup($"[bold]{AnsiMarkup.Escape(title)}[/]")
-        {
-            Wrap = false,
-        };
-
-        if (string.IsNullOrWhiteSpace(tooltip))
-        {
-            return markup;
-        }
-
-        return markup.Tooltip(tooltip);
     }
 
     internal static SidebarAccent ResolveSidebarThreadAccent(string? backendId, WorkThreadKind kind)
@@ -199,16 +99,6 @@ internal sealed partial class CodeAltaApp
         };
     }
 
-    private static Style ResolveSidebarThreadIconStyle(string? backendId, WorkThreadKind kind)
-    {
-        return UiPalette.GetSidebarIconStyle(ResolveSidebarThreadAccent(backendId, kind));
-    }
-
-    private static SidebarSelectionTarget? GetSelectedSidebarTarget(TreeNode? node)
-    {
-        return node?.Data as SidebarSelectionTarget;
-    }
-
     private string? GetExpandedSidebarProjectId()
     {
         return GetSelectedThread()?.ProjectRef ?? _selectedProjectId;
@@ -216,22 +106,15 @@ internal sealed partial class CodeAltaApp
 
     private SidebarSelectionTarget ResolveSidebarTargetForCurrentState()
     {
-        if (!string.IsNullOrWhiteSpace(_selectedThreadId))
-        {
-            return SidebarSelectionTarget.Thread(_selectedThreadId);
-        }
-
-        if (_globalScopeSelected || string.IsNullOrWhiteSpace(_selectedProjectId))
-        {
-            return SidebarSelectionTarget.Global();
-        }
-
-        return SidebarSelectionTarget.Project(_selectedProjectId);
+        return SidebarSelectionResolver.ResolveCurrentTarget(
+            _selectedThreadId,
+            _selectedProjectId,
+            _globalScopeSelected);
     }
 
     private void SelectSidebarNodeForCurrentState()
     {
-        if (_sidebarTree is null)
+        if (_sidebarView is null)
         {
             return;
         }
@@ -241,7 +124,7 @@ internal sealed partial class CodeAltaApp
 
     private void SyncSidebarSelectionToCurrentState()
     {
-        if (_sidebarTree is null)
+        if (_sidebarView is null)
         {
             return;
         }
@@ -252,19 +135,18 @@ internal sealed partial class CodeAltaApp
 
     private void ApplyPendingSidebarSelection()
     {
-        if (_sidebarTree is null || _pendingSidebarSelectionTarget is not { } target)
+        if (_sidebarView is null || _pendingSidebarSelectionTarget is not { } target)
         {
             return;
         }
 
-        var selectedNode = FindSidebarNode(_sidebarTree.Roots, target);
-        if (selectedNode is null)
+        if (_sidebarProjection is null || !_sidebarProjection.ContainsTarget(target))
         {
             _pendingSidebarSelectionTarget = null;
             return;
         }
 
-        if (!_sidebarTree.TrySelectNode(selectedNode))
+        if (!_sidebarView.TrySelectTarget(target))
         {
             return;
         }
@@ -275,56 +157,20 @@ internal sealed partial class CodeAltaApp
 
     private SidebarSelectionTarget ResolveSidebarTargetForRebuild()
     {
-        if (_lastSidebarSelectedTarget is { } previousTarget &&
-            _sidebarTree is not null &&
-            FindSidebarNode(_sidebarTree.Roots, previousTarget) is not null)
-        {
-            return previousTarget;
-        }
-
-        return ResolveSidebarTargetForCurrentState();
-    }
-
-    private static TreeNode? FindSidebarNode(IEnumerable<TreeNode> roots, SidebarSelectionTarget selectedTarget)
-    {
-        foreach (var root in roots)
-        {
-            if (FindSidebarNode(root, selectedTarget) is { } match)
-            {
-                return match;
-            }
-        }
-
-        return null;
-    }
-
-    private static TreeNode? FindSidebarNode(TreeNode node, SidebarSelectionTarget selectedTarget)
-    {
-        if (node.Data is SidebarSelectionTarget target && target == selectedTarget)
-        {
-            return node;
-        }
-
-        foreach (var child in node.Children)
-        {
-            if (FindSidebarNode(child, selectedTarget) is { } match)
-            {
-                return match;
-            }
-        }
-
-        return null;
+        return SidebarSelectionResolver.ResolveTargetForProjectionChange(
+            _lastSidebarSelectedTarget,
+            _sidebarProjection,
+            ResolveSidebarTargetForCurrentState());
     }
 
     private void SyncSidebarSelection()
     {
-        if (!_sidebarSelectionSyncEnabled || _sidebarTree is null || _pendingSidebarSelectionTarget is not null)
+        if (!_sidebarSelectionSyncEnabled || _sidebarView is null || _pendingSidebarSelectionTarget is not null)
         {
             return;
         }
 
-        var target = GetSelectedSidebarTarget(_sidebarTree.SelectedNode);
-        if (target is null || target == _lastSidebarSelectedTarget)
+        if (_sidebarView.SelectedTarget is not { } target || target == _lastSidebarSelectedTarget)
         {
             return;
         }

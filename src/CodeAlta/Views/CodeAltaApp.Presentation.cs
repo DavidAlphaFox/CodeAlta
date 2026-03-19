@@ -319,7 +319,7 @@ internal sealed partial class CodeAltaApp
     {
         EnsureSelectionDefaults();
         _shellViewModel.HeaderText = BuildHeaderText();
-        RebuildSidebarTree();
+        RefreshSidebarProjection();
     }
 
     private void RefreshCatalogAndThreadWorkspaceCore()
