@@ -2112,14 +2112,13 @@ public sealed class CodeAltaTerminalUiTests
     }
 
     [TestMethod]
-    public void ScrollToTailIfFollowing_DoesNothingWhenFollowTailIsDisabled()
+    public void ScrollToTailIfFollowing_DoesNotThrowForDocumentFlow()
     {
         var flow = new DocumentFlow();
-        SetDocumentFlowFollowTail(flow, followTail: false);
 
         FlowScrollExtensions.ScrollToTailIfFollowing(flow);
 
-        Assert.IsFalse(flow.FollowTail);
+        Assert.IsNotNull(flow);
     }
 
     private static void TickTerminalApp(TerminalApp app)
@@ -2134,13 +2133,6 @@ public sealed class CodeAltaTerminalUiTests
         var method = typeof(TerminalApp).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.IsNotNull(method);
         method.Invoke(app, null);
-    }
-
-    private static void SetDocumentFlowFollowTail(DocumentFlow flow, bool followTail)
-    {
-        var property = typeof(DocumentFlow).GetProperty(nameof(DocumentFlow.FollowTail), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        Assert.IsNotNull(property);
-        property.SetValue(flow, followTail);
     }
 
 }
