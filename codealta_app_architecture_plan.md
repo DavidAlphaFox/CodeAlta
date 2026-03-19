@@ -135,4 +135,5 @@ This document is the implementation checklist companion to the architecture prop
 - [x] Move prompt editor control construction and command registration out of `CodeAltaApp`.
 - [x] Extract backend initialization coordination out of `CodeAltaApp`.
 - [x] Extract draft/global thread creation coordination out of `CodeAltaApp`.
+- [x] Extract terminal-loop startup and per-iteration shell sync out of `CodeAltaApp.RunAsync(...)`.
 - [x] Keep `CodeAltaApp` as a wiring/lifecycle shell that delegates to named collaborators for thread workflows.

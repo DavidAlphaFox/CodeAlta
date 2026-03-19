@@ -224,6 +224,17 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void CodeAltaApp_DelegatesTerminalLoopLifecycle()
+    {
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+
+        Assert.IsTrue(appSource.Contains("_terminalLoopCoordinator.OnIteration", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("_terminalLoopStarted", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("_shellController.AttachUiDispatcher(_uiDispatcher)", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("_runtimeEventPump.Start(cancellationToken)", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void CodeAltaApp_DoesNotConstructPromptEditorControls()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));

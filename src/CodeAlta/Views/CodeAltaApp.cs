@@ -26,6 +26,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private readonly CodeAltaOwnedServices? _ownedServices;
     private readonly CodeAltaShellController _shellController;
     private readonly RuntimeEventPump _runtimeEventPump;
+    private readonly TerminalLoopCoordinator _terminalLoopCoordinator;
     private readonly ChatBackendInitializationCoordinator _chatBackendInitializationCoordinator;
     private readonly ShellThreadStateCoordinator _threadStateCoordinator;
     private readonly ShellWorkspaceCoordinator _workspaceCoordinator;
@@ -47,7 +48,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private ThreadWorkspaceView? _threadWorkspaceView;
     private SessionUsagePresenter? _sessionUsagePresenter;
     private IUiDispatcher? _uiDispatcher;
-    private bool _terminalLoopStarted;
 
     private WorkThreadViewState _viewState
     {
@@ -163,6 +163,12 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             new ProjectCatalogLoader(projectCatalog),
             new RecoverableThreadSource(_runtimeService));
         _runtimeEventPump = new RuntimeEventPump(_runtimeService, _shellController);
+        _terminalLoopCoordinator = new TerminalLoopCoordinator(
+            _shellController,
+            _runtimeEventPump,
+            dispatcher => _uiDispatcher = dispatcher,
+            ApplyPendingSidebarSelection,
+            SyncSidebarSelection);
         _threadStateCoordinator = new ShellThreadStateCoordinator(
             projectCatalog,
             threadCatalog,
@@ -334,21 +340,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
 
         await Terminal.RunAsync(
                 root,
-                () =>
-                {
-                    if (!_terminalLoopStarted)
-                    {
-                        _terminalLoopStarted = true;
-                        _uiDispatcher = new TerminalUiDispatcher(Dispatcher.Current);
-                        _shellController.AttachUiDispatcher(_uiDispatcher);
-                        _shellController.StartInitialization(cancellationToken);
-                        _runtimeEventPump.Start(cancellationToken);
-                    }
-
-                    ApplyPendingSidebarSelection();
-                    SyncSidebarSelection();
-                    return TerminalLoopResult.Continue;
-                },
+                () => _terminalLoopCoordinator.OnIteration(cancellationToken),
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -682,7 +674,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             action,
             allowInline: ShouldRunInlineOnCurrentThread(
                 dispatcher.CheckAccess(),
-                _terminalLoopStarted));
+                _terminalLoopCoordinator.HasStarted));
     }
 
     internal static bool CanAccessBindableState(
@@ -700,7 +692,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private void VerifyBindableAccess()
     {
         var dispatcher = GetUiDispatcher();
-        if (CanAccessBindableState(dispatcher.CheckAccess(), _terminalLoopStarted))
+        if (CanAccessBindableState(dispatcher.CheckAccess(), _terminalLoopCoordinator.HasStarted))
         {
             return;
         }
