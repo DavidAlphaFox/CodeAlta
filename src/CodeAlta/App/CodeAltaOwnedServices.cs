@@ -7,18 +7,12 @@ using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Persistence;
 using XenoAtom.Logging;
 
-internal sealed class TerminalHost : IAsyncDisposable
+internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 {
-    private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.Host");
     private readonly bool _ownsLogging;
     private readonly CodeAltaDb _db;
-    private readonly CatalogOptions _catalogOptions;
-    private readonly ProjectCatalog _projectCatalog;
-    private readonly WorkThreadCatalog _threadCatalog;
-    private readonly AgentHub _agentHub;
-    private readonly WorkThreadRuntimeService _runtimeService;
 
-    private TerminalHost(
+    private CodeAltaOwnedServices(
         bool ownsLogging,
         CodeAltaDb db,
         CatalogOptions catalogOptions,
@@ -29,14 +23,24 @@ internal sealed class TerminalHost : IAsyncDisposable
     {
         _ownsLogging = ownsLogging;
         _db = db;
-        _catalogOptions = catalogOptions;
-        _projectCatalog = projectCatalog;
-        _threadCatalog = threadCatalog;
-        _agentHub = agentHub;
-        _runtimeService = runtimeService;
+        CatalogOptions = catalogOptions;
+        ProjectCatalog = projectCatalog;
+        ThreadCatalog = threadCatalog;
+        AgentHub = agentHub;
+        RuntimeService = runtimeService;
     }
 
-    public static async Task<TerminalHost> CreateAsync(CancellationToken cancellationToken)
+    public CatalogOptions CatalogOptions { get; }
+
+    public ProjectCatalog ProjectCatalog { get; }
+
+    public WorkThreadCatalog ThreadCatalog { get; }
+
+    public AgentHub AgentHub { get; }
+
+    public WorkThreadRuntimeService RuntimeService { get; }
+
+    public static async Task<CodeAltaOwnedServices> CreateAsync(CancellationToken cancellationToken)
     {
         var homeRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -61,6 +65,7 @@ internal sealed class TerminalHost : IAsyncDisposable
         };
         var projectCatalog = new ProjectCatalog(catalogOptions);
         await projectCatalog.UpsertFromPathAsync(Environment.CurrentDirectory, cancellationToken).ConfigureAwait(false);
+
         var threadCatalog = new WorkThreadCatalog(catalogOptions);
         var roleProfileStore = new RoleProfileStore();
         var instructionTemplateProvider = new AgentInstructionTemplateProvider();
@@ -78,7 +83,7 @@ internal sealed class TerminalHost : IAsyncDisposable
             instructionTemplateProvider,
             catalogOptions);
 
-        return new TerminalHost(
+        return new CodeAltaOwnedServices(
             ownsLogging,
             db,
             catalogOptions,
@@ -88,22 +93,10 @@ internal sealed class TerminalHost : IAsyncDisposable
             runtimeService);
     }
 
-    public async Task RunAsync(CancellationToken cancellationToken)
-    {
-        await using var ui = new CodeAltaApp(
-            _projectCatalog,
-            _threadCatalog,
-            _runtimeService,
-            _catalogOptions,
-            _agentHub);
-
-        await ui.RunAsync(cancellationToken).ConfigureAwait(false);
-    }
-
     public async ValueTask DisposeAsync()
     {
-        await _runtimeService.DisposeAsync().ConfigureAwait(false);
-        await _agentHub.DisposeAsync().ConfigureAwait(false);
+        await RuntimeService.DisposeAsync().ConfigureAwait(false);
+        await AgentHub.DisposeAsync().ConfigureAwait(false);
 
         GC.KeepAlive(_db);
 
@@ -111,27 +104,5 @@ internal sealed class TerminalHost : IAsyncDisposable
         {
             LogManager.Shutdown();
         }
-    }
-
-    internal static async Task ImportKnownProjectsFromBackendsAsync(
-        AgentHub agentHub,
-        ProjectCatalog projectCatalog,
-        CancellationToken cancellationToken)
-    {
-        var workingDirectories = new List<string?>();
-        foreach (var backendId in new[] { AgentBackendIds.Codex, AgentBackendIds.Copilot })
-        {
-            try
-            {
-                var sessions = await agentHub.ListSessionsAsync(backendId, cancellationToken: cancellationToken).ConfigureAwait(false);
-                workingDirectories.AddRange(sessions.Select(static session => session.Context?.Cwd ?? session.WorkspacePath));
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, $"Failed to import project history from backend '{backendId.Value}'.");
-            }
-        }
-
-        await projectCatalog.ImportWorkingDirectoriesAsync(workingDirectories, cancellationToken).ConfigureAwait(false);
     }
 }

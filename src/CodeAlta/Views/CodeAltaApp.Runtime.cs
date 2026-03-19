@@ -136,7 +136,7 @@ internal sealed partial class CodeAltaApp
     {
         try
         {
-            await TerminalHost.ImportKnownProjectsFromBackendsAsync(_agentHub, _projectCatalog, cancellationToken).ConfigureAwait(false);
+            await _knownProjectImporter.ImportAsync(cancellationToken).ConfigureAwait(false);
             var projects = await _projectCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
             var threads = await _runtimeService.ListRecoverableThreadsAsync(cancellationToken).ConfigureAwait(false);
             PostToUi(() => ApplyRecoveredCatalogState(projects, threads));
@@ -265,7 +265,7 @@ internal sealed partial class CodeAltaApp
         try
         {
             SetStatus("Refreshing project and thread catalog...", showSpinner: true);
-            await TerminalHost.ImportKnownProjectsFromBackendsAsync(_agentHub, _projectCatalog, CancellationToken.None).ConfigureAwait(false);
+            await _knownProjectImporter.ImportAsync(CancellationToken.None).ConfigureAwait(false);
             var projects = await _projectCatalog.LoadAsync().ConfigureAwait(false);
             var threads = await _runtimeService.ListRecoverableThreadsAsync().ConfigureAwait(false);
             PostToUi(() => ApplyRecoveredCatalogState(projects, threads));

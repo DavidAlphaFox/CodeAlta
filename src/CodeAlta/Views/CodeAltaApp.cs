@@ -35,6 +35,8 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     private readonly WorkThreadRuntimeService _runtimeService;
     private readonly CatalogOptions _catalogOptions;
     private readonly AgentHub _agentHub;
+    private readonly KnownProjectImporter _knownProjectImporter;
+    private readonly CodeAltaOwnedServices? _ownedServices;
     private readonly CodeAltaShellViewModel _viewModel = new();
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates = CreateChatBackendStates();
     private readonly Dictionary<string, ThreadTabState> _threadTabs = new(StringComparer.OrdinalIgnoreCase);
@@ -93,6 +95,25 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
         WorkThreadRuntimeService runtimeService,
         CatalogOptions catalogOptions,
         AgentHub agentHub)
+        : this(
+            projectCatalog,
+            threadCatalog,
+            runtimeService,
+            catalogOptions,
+            agentHub,
+            knownProjectImporter: null,
+            ownedServices: null)
+    {
+    }
+
+    private CodeAltaApp(
+        ProjectCatalog projectCatalog,
+        WorkThreadCatalog threadCatalog,
+        WorkThreadRuntimeService runtimeService,
+        CatalogOptions catalogOptions,
+        AgentHub agentHub,
+        KnownProjectImporter? knownProjectImporter,
+        CodeAltaOwnedServices? ownedServices)
     {
         ArgumentNullException.ThrowIfNull(projectCatalog);
         ArgumentNullException.ThrowIfNull(threadCatalog);
@@ -106,6 +127,8 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
         _runtimeService = runtimeService;
         _catalogOptions = catalogOptions;
         _agentHub = agentHub;
+        _knownProjectImporter = knownProjectImporter ?? new KnownProjectImporter(agentHub, projectCatalog);
+        _ownedServices = ownedServices;
     }
 
     /// <summary>
@@ -193,6 +216,11 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
 
         _runtimeEventsCts.Dispose();
         _startupRefreshCts?.Dispose();
+
+        if (_ownedServices is not null)
+        {
+            await _ownedServices.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     private sealed class ThreadTabState

@@ -5,5 +5,5 @@ Console.CancelKeyPress += (_, e) =>
     cancellationTokenSource.Cancel();
 };
 
-await using var host = await TerminalHost.CreateAsync(cancellationTokenSource.Token).ConfigureAwait(false);
-await host.RunAsync(cancellationTokenSource.Token).ConfigureAwait(false);
+await using var app = await CodeAltaApp.CreateAsync(cancellationTokenSource.Token).ConfigureAwait(false);
+await app.RunAsync(cancellationTokenSource.Token).ConfigureAwait(false);
