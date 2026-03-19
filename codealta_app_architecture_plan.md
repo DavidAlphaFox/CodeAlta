@@ -78,7 +78,7 @@ This document is the implementation checklist companion to the architecture prop
 
 - [ ] Replace broad `RefreshView()` usage with narrower update paths.
 - [ ] Make sidebar updates driven by sidebar projection changes.
-- [ ] Make tab-strip updates driven by open-tab and selected-tab changes.
+- [x] Make tab-strip updates driven by open-tab and selected-tab changes.
 - [ ] Make status/header updates driven by bindable state changes.
 - [x] Make timeline updates incremental per event/history load.
 - [x] Make usage popup updates target only the selected thread usage state.

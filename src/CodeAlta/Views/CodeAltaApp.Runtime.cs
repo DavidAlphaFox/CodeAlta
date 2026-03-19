@@ -284,7 +284,7 @@ internal sealed partial class CodeAltaApp
         }
 
         _ = PersistViewStateAsync();
-        RefreshView();
+        RefreshSelectionAndThreadWorkspace();
         _ = EnsureThreadHistoryLoadedAsync(thread);
     }
 
@@ -315,7 +315,7 @@ internal sealed partial class CodeAltaApp
 
         _viewState.UpdatedAt = DateTimeOffset.UtcNow;
         await PersistViewStateAsync().ConfigureAwait(false);
-        RefreshView();
+        RefreshSelectionAndThreadWorkspace();
     }
 
     private async Task EnsureThreadHistoryLoadedAsync(WorkThreadDescriptor thread, CancellationToken cancellationToken = default)

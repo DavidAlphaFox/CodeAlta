@@ -300,6 +300,15 @@ internal sealed partial class CodeAltaApp
             });
     }
 
+    private void RefreshSelectionAndThreadWorkspace()
+    {
+        PostToUi(
+            () =>
+            {
+                RefreshSelectionAndThreadWorkspaceCore();
+            });
+    }
+
     private void RefreshHeaderAndThreadWorkspaceCore()
     {
         EnsureSelectionDefaults();
@@ -312,6 +321,14 @@ internal sealed partial class CodeAltaApp
         EnsureSelectionDefaults();
         _shellViewModel.HeaderText = BuildHeaderText();
         RebuildSidebarTree();
+    }
+
+    private void RefreshSelectionAndThreadWorkspaceCore()
+    {
+        EnsureSelectionDefaults();
+        _shellViewModel.HeaderText = BuildHeaderText();
+        SyncSidebarSelectionToCurrentState();
+        RefreshThreadWorkspaceCore();
     }
 
     private void RefreshThreadWorkspaceCore()
@@ -644,7 +661,7 @@ internal sealed partial class CodeAltaApp
         _viewState.SelectedThreadId = null;
         _viewState.UpdatedAt = DateTimeOffset.UtcNow;
         _ = PersistViewStateAsync();
-        RefreshView();
+        RefreshSelectionAndThreadWorkspace();
     }
 
     private void SelectProjectScope(string projectId)
@@ -657,7 +674,7 @@ internal sealed partial class CodeAltaApp
         _viewState.SelectedThreadId = null;
         _viewState.UpdatedAt = DateTimeOffset.UtcNow;
         _ = PersistViewStateAsync();
-        RefreshView();
+        RefreshSelectionAndThreadWorkspace();
     }
 
     private void EnsureSelectionDefaults()
@@ -1387,7 +1404,7 @@ internal sealed partial class CodeAltaApp
         _viewState.SelectedThreadId = null;
         _viewState.UpdatedAt = DateTimeOffset.UtcNow;
         await PersistViewStateAsync().ConfigureAwait(false);
-        RefreshView();
+        RefreshSelectionAndThreadWorkspace();
     }
 
     private async Task CloseDraftTabAsync()
@@ -1401,7 +1418,7 @@ internal sealed partial class CodeAltaApp
 
         _viewState.UpdatedAt = DateTimeOffset.UtcNow;
         await PersistViewStateAsync().ConfigureAwait(false);
-        RefreshView();
+        RefreshSelectionAndThreadWorkspace();
     }
 
     private bool GetAutoApproveEnabled()

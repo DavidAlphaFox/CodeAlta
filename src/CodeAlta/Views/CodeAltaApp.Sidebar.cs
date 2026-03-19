@@ -240,6 +240,17 @@ internal sealed partial class CodeAltaApp
         _pendingSidebarSelectionTarget = ResolveSidebarTargetForRebuild();
     }
 
+    private void SyncSidebarSelectionToCurrentState()
+    {
+        if (_sidebarTree is null)
+        {
+            return;
+        }
+
+        _pendingSidebarSelectionTarget = ResolveSidebarTargetForCurrentState();
+        ApplyPendingSidebarSelection();
+    }
+
     private void ApplyPendingSidebarSelection()
     {
         if (_sidebarTree is null || _pendingSidebarSelectionTarget is not { } target)
