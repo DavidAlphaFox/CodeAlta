@@ -395,7 +395,6 @@ internal sealed partial class CodeAltaApp
         CancellationToken cancellationToken)
     {
         tab.HistoryLoading = true;
-        tab.BufferedHistoryItems = [];
         try
         {
             SetThreadStatus(
@@ -414,20 +413,19 @@ internal sealed partial class CodeAltaApp
             DocumentFlowItem? truncatedHistoryItem = null;
             if (plan.OmittedMessageCount > 0)
             {
-                truncatedHistoryItem = CreateTruncatedHistoryItem(thread.ThreadId, tab, plan.OmittedMessageCount);
+                truncatedHistoryItem = tab.Timeline.CreateTruncatedHistoryItem(
+                    plan.OmittedMessageCount,
+                    () => _ = LoadEarlierThreadHistoryAsync(thread.ThreadId));
             }
 
+            tab.Timeline.BeginBufferedHistoryLoad();
             foreach (var @event in plan.EventsToRender)
             {
                 HandleAgentEvent(thread, tab, @event);
             }
 
-            if (tab.BufferedHistoryItems is { } bufferedHistoryItems)
-            {
-                tab.BufferedHistoryItems = BuildInitialThreadHistoryItems(bufferedHistoryItems, truncatedHistoryItem);
-            }
-
-            FlushBufferedHistoryItems(tab);
+            tab.Timeline.CompleteInitialBufferedHistory(truncatedHistoryItem);
+            tab.Timeline.FlushBufferedHistoryItems();
             tab.HistoryLoaded = true;
             ClearThreadStatus(tab);
         }
@@ -439,15 +437,15 @@ internal sealed partial class CodeAltaApp
             }
 
             ResetThreadTab(tab);
-            FlushBufferedHistoryItems(tab);
-            RenderThreadFailure(tab, $"Failed to load history: {ex.Message}");
+            tab.Timeline.FlushBufferedHistoryItems();
+            tab.Timeline.RenderFailure($"Failed to load history: {ex.Message}");
             SetThreadStatus(tab, $"Failed to load '{thread.Title}': {ex.Message}", tone: StatusTone.Error);
         }
         finally
         {
             tab.HistoryLoading = false;
             tab.HistoryLoadTask = null;
-            tab.BufferedHistoryItems = null;
+            tab.Timeline.ClearBufferedHistory();
         }
     }
 
@@ -507,7 +505,7 @@ internal sealed partial class CodeAltaApp
 
         var tab = EnsureThreadTab(thread);
         await EnsureThreadHistoryLoadedAsync(thread).ConfigureAwait(false);
-        ReplaceTruncatedHistoryLoadButton(tab);
+        tab.Timeline.ReplaceTruncatedHistoryLoadButton();
         ClearThreadInput();
         try
         {
@@ -541,7 +539,7 @@ internal sealed partial class CodeAltaApp
                 UiLogger.Error(ex, $"Failed to send prompt for thread {thread.ThreadId}");
             }
 
-            RenderThreadFailure(tab, $"Failed to send prompt: {ex.Message}");
+            tab.Timeline.RenderFailure($"Failed to send prompt: {ex.Message}");
             SetThreadStatus(tab, $"Failed to send prompt: {ex.Message}", tone: StatusTone.Error);
         }
     }
@@ -696,10 +694,7 @@ internal sealed partial class CodeAltaApp
                 {
                     TryRenderThreadInteraction(
                         hostTab,
-                        () => UpsertThreadStatus(
-                            hostTab,
-                            dictionary: null,
-                            key: null,
+                        () => hostTab.Timeline.AddStatus(
                             hostEvent.Timestamp,
                             markdown: hostEvent.Message,
                             tone: ChatTimelineTone.Notice,
@@ -724,7 +719,7 @@ internal sealed partial class CodeAltaApp
         switch (@event)
         {
             case AgentContentDeltaEvent delta:
-                if (tab.ToolCalls.TryHandleContent(delta))
+                if (tab.Timeline.ToolCalls.TryHandleContent(delta))
                 {
                     break;
                 }
@@ -734,16 +729,16 @@ internal sealed partial class CodeAltaApp
                     break;
                 }
 
-                AppendThreadContent(tab, delta);
+                tab.Timeline.AppendContent(delta);
                 break;
 
             case AgentContentCompletedEvent completed:
-                if (tab.ToolCalls.TryHandleContent(completed))
+                if (tab.Timeline.ToolCalls.TryHandleContent(completed))
                 {
                     break;
                 }
 
-                if (ShouldSkipEmptyAssistantCompletion(tab, completed))
+                if (tab.Timeline.ShouldSkipEmptyAssistantCompletion(completed))
                 {
                     break;
                 }
@@ -753,7 +748,7 @@ internal sealed partial class CodeAltaApp
                     break;
                 }
 
-                FinalizeThreadContent(tab, completed);
+                tab.Timeline.FinalizeContent(completed);
                 if (completed.Kind == AgentContentKind.Assistant && !string.IsNullOrWhiteSpace(completed.Content))
                 {
                     thread.LatestSummary = SummarizeThreadContent(completed.Content);
@@ -762,9 +757,7 @@ internal sealed partial class CodeAltaApp
                 break;
 
             case AgentPlanSnapshotEvent planEvent:
-                UpsertThreadStatus(
-                    tab,
-                    tab.PlanStates,
+                tab.Timeline.UpsertPlanStatus(
                     "plan",
                     planEvent.Timestamp,
                     ChatMarkdownFormatter.FormatChatPlanMarkdown(planEvent.Snapshot),
@@ -773,7 +766,7 @@ internal sealed partial class CodeAltaApp
                 break;
 
             case AgentActivityEvent activity:
-                if (tab.ToolCalls.TryHandleActivity(activity))
+                if (tab.Timeline.ToolCalls.TryHandleActivity(activity))
                 {
                     break;
                 }
@@ -783,9 +776,7 @@ internal sealed partial class CodeAltaApp
                     break;
                 }
 
-                UpsertThreadStatus(
-                    tab,
-                    tab.ActivityStates,
+                tab.Timeline.UpsertActivityStatus(
                     activity.ActivityId,
                     activity.Timestamp,
                     ChatMarkdownFormatter.FormatChatActivityMarkdown(activity),
@@ -799,13 +790,10 @@ internal sealed partial class CodeAltaApp
                     break;
                 }
 
-                UpsertThreadStatus(
-                    tab,
-                    dictionary: null,
-                    key: null,
+                tab.Timeline.AddStatus(
                     raw.Timestamp,
-                    markdown: ChatMarkdownFormatter.FormatChatRawEventMarkdown(raw),
-                    tone: ChatTimelineTone.Activity,
+                    ChatMarkdownFormatter.FormatChatRawEventMarkdown(raw),
+                    ChatTimelineTone.Activity,
                     headerOverride: "Raw Event");
                 break;
 
@@ -816,8 +804,7 @@ internal sealed partial class CodeAltaApp
                 }
 
                 tab.PermissionRequests[permissionRequest.InteractionId] = permissionRequest;
-                UpsertThreadInteraction(
-                    tab,
+                tab.Timeline.UpsertInteraction(
                     permissionRequest.InteractionId,
                     permissionRequest.Timestamp,
                     ChatMarkdownFormatter.FormatChatPermissionRequestMarkdown(permissionRequest),
@@ -830,8 +817,7 @@ internal sealed partial class CodeAltaApp
             case AgentUserInputRequest userInputRequest:
                 var autoApproveEnabled = GetAutoApproveEnabled();
                 tab.UserInputRequests[userInputRequest.InteractionId] = userInputRequest;
-                UpsertThreadInteraction(
-                    tab,
+                tab.Timeline.UpsertInteraction(
                     userInputRequest.InteractionId,
                     userInputRequest.Timestamp,
                     ChatMarkdownFormatter.FormatChatUserInputRequestMarkdown(userInputRequest, autoApproveEnabled),
@@ -849,8 +835,7 @@ internal sealed partial class CodeAltaApp
                     break;
                 }
 
-                UpsertThreadInteraction(
-                    tab,
+                tab.Timeline.UpsertInteraction(
                     interaction.InteractionId,
                     interaction.Timestamp,
                     null,
@@ -877,13 +862,10 @@ internal sealed partial class CodeAltaApp
                     break;
                 }
 
-                UpsertThreadStatus(
-                    tab,
-                    dictionary: null,
-                    key: null,
+                tab.Timeline.AddStatus(
                     update.Timestamp,
-                    markdown: ChatMarkdownFormatter.FormatChatSessionUpdateMarkdown(update),
-                    tone: update.Kind == AgentSessionUpdateKind.Warning ? ChatTimelineTone.Interaction : ChatTimelineTone.Notice,
+                    ChatMarkdownFormatter.FormatChatSessionUpdateMarkdown(update),
+                    update.Kind == AgentSessionUpdateKind.Warning ? ChatTimelineTone.Interaction : ChatTimelineTone.Notice,
                     headerOverride: "Notice",
                     headerSecondary: ChatMarkdownFormatter.GetSessionUpdateHeader(update.Kind));
                 if (!string.IsNullOrWhiteSpace(update.Message))
@@ -894,7 +876,7 @@ internal sealed partial class CodeAltaApp
                 break;
 
             case AgentErrorEvent error:
-                RenderThreadError(tab, error.Message, error.Timestamp);
+                tab.Timeline.RenderError(error.Message, error.Timestamp);
                 thread.LatestSummary = SummarizeThreadContent(error.Message);
                 SetThreadStatus(tab, error.Message, tone: StatusTone.Error);
                 break;
@@ -1064,186 +1046,6 @@ internal sealed partial class CodeAltaApp
         }
     }
 
-    private void AppendThreadContent(ThreadTabState tab, AgentContentDeltaEvent delta)
-    {
-        if (string.IsNullOrEmpty(delta.Delta))
-        {
-            return;
-        }
-
-        var state = GetOrCreateThreadContentState(tab, delta.Kind, delta.ContentId, delta.Timestamp);
-        state.Buffer.Append(delta.Delta);
-        var content = state.Buffer.ToString();
-        var markdown = ChatMarkdownFormatter.FormatChatContentMarkdown(delta.Kind, content);
-        var headerSecondary = ChatMarkdownFormatter.GetChatContentHeaderSecondary(delta.Kind, content);
-        PostToUi(() =>
-        {
-            ChatTimelineVisualFactory.ApplyHeader(
-                state.HeaderText,
-                ChatTimelineVisualFactory.GetContentTone(delta.Kind),
-                ChatTimelineVisualFactory.GetContentHeader(delta.Kind),
-                headerSecondary);
-            state.Markdown.Markdown = markdown;
-            tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
-        });
-    }
-
-    private void FinalizeThreadContent(ThreadTabState tab, AgentContentCompletedEvent completed)
-    {
-        var state = GetOrCreateThreadContentState(tab, completed.Kind, completed.ContentId, completed.Timestamp);
-        var content = ResolveCompletedThreadContent(completed.Content, state.Buffer);
-        state.Buffer.Clear();
-        state.Buffer.Append(content);
-        var markdown = ChatMarkdownFormatter.FormatChatContentMarkdown(completed.Kind, content);
-        var headerSecondary = ChatMarkdownFormatter.GetChatContentHeaderSecondary(completed.Kind, content);
-        PostToUi(() =>
-        {
-            ChatTimelineVisualFactory.ApplyHeader(
-                state.HeaderText,
-                ChatTimelineVisualFactory.GetContentTone(completed.Kind),
-                ChatTimelineVisualFactory.GetContentHeader(completed.Kind),
-                headerSecondary);
-            state.Markdown.Markdown = markdown;
-            tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
-        });
-    }
-
-    internal static string ResolveCompletedThreadContent(string completedContent, System.Text.StringBuilder bufferedContent)
-    {
-        ArgumentNullException.ThrowIfNull(bufferedContent);
-
-        return completedContent.Length > 0
-            ? completedContent
-            : bufferedContent.ToString();
-    }
-
-    private static bool ShouldSkipEmptyAssistantCompletion(ThreadTabState tab, AgentContentCompletedEvent completed)
-    {
-        ArgumentNullException.ThrowIfNull(tab);
-        ArgumentNullException.ThrowIfNull(completed);
-
-        if (completed.Kind != AgentContentKind.Assistant || !string.IsNullOrWhiteSpace(completed.Content))
-        {
-            return false;
-        }
-
-        var key = ChatTimelineVisualFactory.CreateContentKey(completed.Kind, completed.ContentId);
-        if (tab.ContentStates.TryGetValue(key, out var existing))
-        {
-            return existing.Buffer.Length == 0;
-        }
-
-        return true;
-    }
-
-    private ChatContentState GetOrCreateThreadContentState(ThreadTabState tab, AgentContentKind kind, string contentId, DateTimeOffset timestamp)
-    {
-        var key = ChatTimelineVisualFactory.CreateContentKey(kind, contentId);
-        if (tab.ContentStates.TryGetValue(key, out var existing))
-        {
-            return existing;
-        }
-
-        if (kind == AgentContentKind.Assistant && tab.PendingAssistant is { ContentId: null } pending)
-        {
-            pending.ContentId = contentId;
-            ChatTimelineVisualFactory.ApplyTimestamp(pending.TimestampText, timestamp);
-            tab.PendingAssistant = null;
-            var pendingState = new ChatContentState(pending.Item, pending.Markdown, pending.TimestampText, pending.HeaderText, pending.Buffer, kind);
-            tab.ContentStates[key] = pendingState;
-            return pendingState;
-        }
-
-        var entry = ChatTimelineVisualFactory.CreateMarkdownItem(
-            ChatMarkdownFormatter.FormatChatContentMarkdown(kind, string.Empty),
-            ChatTimelineVisualFactory.GetContentTone(kind),
-            headerOverride: ChatTimelineVisualFactory.GetContentHeader(kind),
-            headerSecondary: ChatMarkdownFormatter.GetChatContentHeaderSecondary(kind, string.Empty));
-        ChatTimelineVisualFactory.ApplyTimestamp(entry.TimestampText, timestamp);
-        var state = new ChatContentState(entry.Item, entry.Markdown, entry.TimestampText, entry.HeaderText, new System.Text.StringBuilder(), kind);
-        tab.ContentStates[key] = state;
-        if (kind == AgentContentKind.User)
-        {
-            foreach (var item in ChatTimelineVisualFactory.BuildUserPromptTimelineItems(entry.Item, tab.HasSeenUserPrompt))
-            {
-                AppendThreadTimelineItem(tab, item);
-            }
-
-            tab.HasSeenUserPrompt = true;
-            return state;
-        }
-
-        AppendThreadTimelineItem(tab, entry.Item);
-        return state;
-    }
-
-    private DocumentFlowItem CreateTruncatedHistoryItem(string threadId, ThreadTabState tab, int omittedMessageCount)
-    {
-        var state = CreateTruncatedHistoryState(omittedMessageCount, () => _ = LoadEarlierThreadHistoryAsync(threadId));
-        tab.TruncatedHistory = state;
-        return state.Item;
-    }
-
-    internal static TruncatedHistoryState CreateTruncatedHistoryState(int omittedMessageCount, Action onLoad)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(omittedMessageCount);
-        ArgumentNullException.ThrowIfNull(onLoad);
-
-        return RunOnCurrentUiThread(
-            static state =>
-            {
-                var button = new Button(new TextBlock(ChatTimelineVisualFactory.BuildTruncatedHistoryLoadButtonText(state.omittedMessageCount)))
-                    .Click(ChatTimelineVisualFactory.CreateDeferredUiAction(state.onLoad));
-                var rule = new Rule()
-                    .CenterLabel(button);
-                var item = new DocumentFlowItem
-                {
-                    Content = new FlowDocument().Add(rule),
-                    Alignment = DocumentFlowAlignment.Stretch,
-                    Padding = new Thickness(0, 1, 0, 0),
-                };
-                return new TruncatedHistoryState(item, rule, state.omittedMessageCount);
-            },
-            (omittedMessageCount, onLoad));
-    }
-
-    internal static List<DocumentFlowItem> BuildInitialThreadHistoryItems(
-        IReadOnlyList<DocumentFlowItem> renderedItems,
-        DocumentFlowItem? truncatedHistoryItem)
-    {
-        ArgumentNullException.ThrowIfNull(renderedItems);
-
-        if (truncatedHistoryItem is null)
-        {
-            return [.. renderedItems];
-        }
-
-        var items = new List<DocumentFlowItem>(renderedItems.Count + 1);
-        items.Add(truncatedHistoryItem.Value);
-        items.AddRange(renderedItems);
-        return items;
-    }
-
-    private void ReplaceTruncatedHistoryLoadButton(ThreadTabState tab)
-    {
-        ArgumentNullException.ThrowIfNull(tab);
-
-        if (tab.TruncatedHistory is not { CanLoad: true } truncatedHistory)
-        {
-            return;
-        }
-
-        truncatedHistory.CanLoad = false;
-        PostToUi(
-            () =>
-            {
-                truncatedHistory.Rule.CenterLabel = new TextBlock(ChatTimelineVisualFactory.BuildTruncatedHistorySummaryText(truncatedHistory.OmittedMessageCount))
-                {
-                    Wrap = false,
-                };
-            });
-    }
-
     private async Task LoadEarlierThreadHistoryAsync(string threadId)
     {
         var thread = FindThread(threadId);
@@ -1252,12 +1054,12 @@ internal sealed partial class CodeAltaApp
             return;
         }
 
-        if (tab.TruncatedHistory is not { CanLoad: true })
+        if (!tab.Timeline.HasLoadableTruncatedHistory)
         {
             return;
         }
 
-        ReplaceTruncatedHistoryLoadButton(tab);
+        tab.Timeline.ReplaceTruncatedHistoryLoadButton();
         await RebuildThreadHistoryAsync(
                 thread,
                 tab,
@@ -1265,163 +1067,6 @@ internal sealed partial class CodeAltaApp
                 preferCachedHistory: true,
                 CancellationToken.None)
             .ConfigureAwait(false);
-    }
-
-    private void UpsertThreadStatus(
-        ThreadTabState tab,
-        Dictionary<string, ChatStatusState>? dictionary,
-        string? key,
-        DateTimeOffset timestamp,
-        string markdown,
-        ChatTimelineTone tone,
-        string? headerOverride = null,
-        string? headerSecondary = null)
-    {
-        if (dictionary is null || key is null)
-        {
-            var state = CreateChatStatusState(markdown, tone, timestamp, headerOverride, headerSecondary);
-            AppendThreadTimelineItem(tab, state.Item);
-            return;
-        }
-
-        if (!dictionary.TryGetValue(key, out var stateEntry))
-        {
-            stateEntry = CreateChatStatusState(markdown, tone, timestamp, headerOverride, headerSecondary);
-            dictionary[key] = stateEntry;
-            AppendThreadTimelineItem(tab, stateEntry.Item);
-        }
-
-        stateEntry.BaseMarkdown = markdown;
-        PostToUi(() =>
-        {
-            ChatTimelineVisualFactory.ApplyTimestamp(stateEntry.TimestampText, timestamp);
-            stateEntry.Markdown.Markdown = stateEntry.MarkdownValue;
-            tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
-        });
-    }
-
-    private void UpsertThreadInteraction(
-        ThreadTabState tab,
-        string interactionId,
-        DateTimeOffset timestamp,
-        string? baseMarkdown,
-        string? statusMarkdown,
-        ChatTimelineTone tone,
-        string? headerOverride = null,
-        string? headerSecondary = null)
-    {
-        if (!tab.InteractionStates.TryGetValue(interactionId, out var state))
-        {
-            state = CreateChatStatusState(baseMarkdown ?? statusMarkdown ?? string.Empty, tone, timestamp, headerOverride, headerSecondary);
-            tab.InteractionStates[interactionId] = state;
-            AppendThreadTimelineItem(tab, state.Item);
-        }
-
-        if (!string.IsNullOrWhiteSpace(baseMarkdown))
-        {
-            state.BaseMarkdown = baseMarkdown;
-        }
-
-        if (!string.IsNullOrWhiteSpace(statusMarkdown))
-        {
-            state.StatusMarkdown = statusMarkdown;
-        }
-
-        PostToUi(() =>
-        {
-            ChatTimelineVisualFactory.ApplyTimestamp(state.TimestampText, timestamp);
-            state.Markdown.Markdown = state.MarkdownValue;
-            tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
-        });
-    }
-
-    private static ChatStatusState CreateChatStatusState(
-        string markdown,
-        ChatTimelineTone tone,
-        DateTimeOffset timestamp,
-        string? headerOverride = null,
-        string? headerSecondary = null)
-    {
-        var entry = ChatTimelineVisualFactory.CreateMarkdownItem(markdown, tone, headerOverride, headerSecondary);
-        ChatTimelineVisualFactory.ApplyTimestamp(entry.TimestampText, timestamp);
-        return new ChatStatusState(entry.Item, entry.Markdown, entry.TimestampText)
-        {
-            BaseMarkdown = markdown,
-        };
-    }
-
-    private static void ReplaceEmptyPendingAssistantPlaceholder(ThreadTabState tab)
-    {
-        var pendingAssistant = tab.PendingAssistant;
-        if (pendingAssistant is null || pendingAssistant.Buffer.Length > 0)
-        {
-            return;
-        }
-
-        RunOnCurrentUiThread(
-            static state =>
-            {
-                state.pendingAssistant.Markdown.Markdown = "_No assistant content was returned._";
-                return 0;
-            },
-            new { pendingAssistant });
-        tab.PendingAssistant = null;
-    }
-
-    private static void RenderThreadError(ThreadTabState tab, string message, DateTimeOffset timestamp)
-    {
-        var pendingAssistant = tab.PendingAssistant;
-        if (pendingAssistant is not null)
-        {
-            pendingAssistant.Buffer.Append(message);
-            RunOnCurrentUiThread(
-                static state =>
-                {
-                    state.pendingAssistant.Markdown.Markdown = state.message;
-                    ChatTimelineVisualFactory.ApplyTimestamp(state.pendingAssistant.TimestampText, state.timestamp);
-                    return 0;
-                },
-                (pendingAssistant: pendingAssistant, message, timestamp));
-            tab.PendingAssistant = null;
-            return;
-        }
-
-        var entry = ChatTimelineVisualFactory.CreateMarkdownItem(message, ChatTimelineTone.Interaction, headerOverride: "Error");
-        ChatTimelineVisualFactory.ApplyTimestamp(entry.TimestampText, timestamp);
-        RunOnCurrentUiThread(
-            static state =>
-            {
-                state.tab.Flow.Items.Add(state.entry.Item);
-                return 0;
-            },
-            (tab: tab, entry));
-    }
-
-    private static void RenderThreadFailure(ThreadTabState tab, string markdown)
-    {
-        var pendingAssistant = tab.PendingAssistant;
-        if (pendingAssistant is not null)
-        {
-            pendingAssistant.Buffer.Append(markdown);
-            RunOnCurrentUiThread(
-                static state =>
-                {
-                    state.pendingAssistant.Markdown.Markdown = state.markdown;
-                    return 0;
-                },
-                (pendingAssistant: pendingAssistant, markdown));
-            tab.PendingAssistant = null;
-            return;
-        }
-
-        var entry = ChatTimelineVisualFactory.CreateMarkdownItem(markdown, ChatTimelineTone.Interaction, headerOverride: "Error");
-        RunOnCurrentUiThread(
-            static state =>
-            {
-                state.tab.Flow.Items.Add(state.entry.Item);
-                return 0;
-            },
-            (tab: tab, entry));
     }
 
     private void TryRenderThreadInteraction(ThreadTabState tab, Action action, string context)
@@ -1438,7 +1083,7 @@ internal sealed partial class CodeAltaApp
             }
 
             SetStatus($"Failed to render thread {context}: {ex.Message}", tone: StatusTone.Error);
-            tab.PendingAssistant = null;
+            tab.Timeline.ClearPendingAssistant();
         }
     }
 
@@ -1460,8 +1105,7 @@ internal sealed partial class CodeAltaApp
                 tab,
                 () =>
                 {
-                    UpsertThreadInteraction(
-                        tab,
+                    tab.Timeline.UpsertInteraction(
                         request.InteractionId,
                         request.Timestamp,
                         ChatMarkdownFormatter.FormatChatPermissionRequestMarkdown(request),
@@ -1491,8 +1135,7 @@ internal sealed partial class CodeAltaApp
                 tab,
                 () =>
                 {
-                    UpsertThreadInteraction(
-                        tab,
+                    tab.Timeline.UpsertInteraction(
                         request.InteractionId,
                         request.Timestamp,
                         ChatMarkdownFormatter.FormatChatUserInputRequestMarkdown(request, autoApproveEnabled),
@@ -1661,23 +1304,12 @@ internal sealed partial class CodeAltaApp
             return existing;
         }
 
-        var flow = RunOnUiThread(
-            static () => new DocumentFlow
-            {
-                HorizontalAlignment = Align.Stretch,
-                VerticalAlignment = Align.Stretch,
-                ItemPadding = new Thickness(1, 0, 0, 0),
-                ItemSpacing = 0,
-            });
-
         ThreadTabState? state = null;
-        var toolCalls = new ToolCallPresenter(
-            flow,
+        var timeline = new ThreadTimelinePresenter(
             GetUiDispatcher(),
             () => state!.AutoScroll,
-            item => AppendThreadTimelineItem(state!, item, resetActiveToolCallGroup: false),
             () => _threadPaneLayout?.GetAbsoluteBounds());
-        state = new ThreadTabState(thread, flow, toolCalls);
+        state = new ThreadTabState(thread, timeline);
         state.BackendId = new AgentBackendId(thread.BackendId);
         state.ViewModel.Title = thread.Title;
         state.StatusMessage = BuildReadyStatusText(thread, GetSelectedProject(), globalScopeSelected: false);
@@ -1691,61 +1323,9 @@ internal sealed partial class CodeAltaApp
 
     private void ResetThreadTab(ThreadTabState tab)
     {
-        tab.ToolCalls.Reset();
-        PostToUi(() => tab.Flow.Items.Clear());
-        tab.BufferedHistoryItems = null;
-        tab.ContentStates.Clear();
-        tab.ActivityStates.Clear();
-        tab.InteractionStates.Clear();
-        tab.PlanStates.Clear();
+        tab.Timeline.Reset();
         tab.PermissionRequests.Clear();
         tab.UserInputRequests.Clear();
-        tab.PendingAssistant = null;
-        tab.TruncatedHistory = null;
-        tab.HasSeenUserPrompt = false;
-    }
-
-    private void AppendThreadTimelineItem(ThreadTabState tab, DocumentFlowItem item)
-        => AppendThreadTimelineItem(tab, item, resetActiveToolCallGroup: true);
-
-    private void AppendThreadTimelineItem(
-        ThreadTabState tab,
-        DocumentFlowItem item,
-        bool resetActiveToolCallGroup)
-    {
-        if (resetActiveToolCallGroup)
-        {
-            tab.ToolCalls.OnNonToolTimelineItemAppended();
-        }
-
-        if (tab.HistoryLoading)
-        {
-            (tab.BufferedHistoryItems ??= []).Add(item);
-            return;
-        }
-
-        PostToUi(() =>
-        {
-            tab.Flow.Items.Add(item);
-            tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
-        });
-    }
-
-    private void FlushBufferedHistoryItems(ThreadTabState tab)
-    {
-        ArgumentNullException.ThrowIfNull(tab);
-
-        if (tab.BufferedHistoryItems is not { Count: > 0 } items)
-        {
-            return;
-        }
-
-        PostToUi(
-            () =>
-            {
-                tab.Flow.Items.AddRange(items);
-                tab.Flow.ScrollToTailIfEnabled(tab.AutoScroll);
-            });
     }
 
     private ProjectDescriptor? GetSelectedProject()
@@ -1820,26 +1400,6 @@ internal sealed partial class CodeAltaApp
             .Where(thread => includeInternal || thread.Kind == WorkThreadKind.ProjectThread)
             .OrderByDescending(static thread => thread.LastActiveAt)
             .ToArray();
-    }
-
-    private static T RunOnCurrentUiThread<T>(Func<T> action)
-    {
-        ArgumentNullException.ThrowIfNull(action);
-
-        var dispatcher = Dispatcher.Current;
-        return dispatcher.CheckAccess()
-            ? action()
-            : dispatcher.InvokeAsync(action).GetAwaiter().GetResult();
-    }
-
-    private static T RunOnCurrentUiThread<TState, T>(Func<TState, T> action, TState state)
-    {
-        ArgumentNullException.ThrowIfNull(action);
-
-        var dispatcher = Dispatcher.Current;
-        return dispatcher.CheckAccess()
-            ? action(state)
-            : dispatcher.InvokeAsync(() => action(state)).GetAwaiter().GetResult();
     }
 
 }

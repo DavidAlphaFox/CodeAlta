@@ -186,11 +186,10 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
 
     private sealed class ThreadTabState
     {
-        public ThreadTabState(WorkThreadDescriptor thread, DocumentFlow flow, ToolCallPresenter toolCalls)
+        public ThreadTabState(WorkThreadDescriptor thread, ThreadTimelinePresenter timeline)
         {
             Thread = thread;
-            Flow = flow;
-            ToolCalls = toolCalls;
+            Timeline = timeline;
             Session = new ThreadSessionState();
             ViewModel = new ThreadTabViewModel
             {
@@ -201,9 +200,7 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
 
         public WorkThreadDescriptor Thread { get; set; }
 
-        public DocumentFlow Flow { get; }
-
-        public ToolCallPresenter ToolCalls { get; }
+        public ThreadTimelinePresenter Timeline { get; }
 
         public ThreadSessionState Session { get; }
 
@@ -267,23 +264,7 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
             set => Session.Usage = value;
         }
 
-        public List<DocumentFlowItem>? BufferedHistoryItems { get; set; }
-
-        public PendingAssistantState? PendingAssistant { get; set; }
-
-        public Dictionary<string, ChatContentState> ContentStates { get; } = new(StringComparer.Ordinal);
-
-        public Dictionary<string, ChatStatusState> ActivityStates { get; } = new(StringComparer.Ordinal);
-
-        public Dictionary<string, ChatStatusState> InteractionStates { get; } = new(StringComparer.Ordinal);
-
-        public Dictionary<string, ChatStatusState> PlanStates { get; } = new(StringComparer.Ordinal);
-
         public TabPage? Page { get; set; }
-
-        public TruncatedHistoryState? TruncatedHistory { get; set; }
-
-        public bool HasSeenUserPrompt { get; set; }
 
         public string? StatusMessage
         {

@@ -423,7 +423,7 @@ public sealed class CodeAltaAppTests
     [TestMethod]
     public async Task CreateTruncatedHistoryState_CanBeCreatedFromWorkerThread()
     {
-        var state = await Task.Run(() => CodeAltaApp.CreateTruncatedHistoryState(3, static () => { }));
+        var state = await Task.Run(() => ThreadTimelinePresenter.CreateTruncatedHistoryState(3, static () => { }));
 
         Assert.IsNotNull(state);
         Assert.IsInstanceOfType<Rule>(state.Rule);
@@ -468,9 +468,9 @@ public sealed class CodeAltaAppTests
     {
         var pending = ChatTimelineVisualFactory.CreatePendingChatMessage("hello");
         var followup = ChatTimelineVisualFactory.CreatePendingChatMessage("assistant");
-        var truncatedHistory = CodeAltaApp.CreateTruncatedHistoryState(3, static () => { });
+        var truncatedHistory = ThreadTimelinePresenter.CreateTruncatedHistoryState(3, static () => { });
 
-        var items = CodeAltaApp.BuildInitialThreadHistoryItems(
+        var items = ThreadTimelinePresenter.BuildInitialThreadHistoryItems(
             [pending.UserItem, followup.AssistantItem],
             truncatedHistory.Item);
 
@@ -486,7 +486,7 @@ public sealed class CodeAltaAppTests
         var pending = ChatTimelineVisualFactory.CreatePendingChatMessage("hello");
         var followup = ChatTimelineVisualFactory.CreatePendingChatMessage("assistant");
 
-        var items = CodeAltaApp.BuildInitialThreadHistoryItems(
+        var items = ThreadTimelinePresenter.BuildInitialThreadHistoryItems(
             [pending.UserItem, followup.AssistantItem],
             truncatedHistoryItem: null);
 
@@ -947,7 +947,7 @@ public sealed class CodeAltaAppTests
     {
         var buffer = new System.Text.StringBuilder("Streaming assistant reply");
 
-        var content = CodeAltaApp.ResolveCompletedThreadContent(string.Empty, buffer);
+        var content = ThreadTimelinePresenter.ResolveCompletedContent(string.Empty, buffer);
 
         Assert.AreEqual("Streaming assistant reply", content);
     }
@@ -957,7 +957,7 @@ public sealed class CodeAltaAppTests
     {
         var buffer = new System.Text.StringBuilder("Older delta text");
 
-        var content = CodeAltaApp.ResolveCompletedThreadContent("Final assistant reply", buffer);
+        var content = ThreadTimelinePresenter.ResolveCompletedContent("Final assistant reply", buffer);
 
         Assert.AreEqual("Final assistant reply", content);
     }

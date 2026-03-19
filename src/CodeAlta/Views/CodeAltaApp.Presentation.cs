@@ -315,7 +315,7 @@ internal sealed partial class CodeAltaApp
         var tab = EnsureThreadTab(selectedThread);
         RefreshChatSelectorsForThread(tab);
         UpdatePromptAvailabilityUi();
-        _threadBodySplitter.First = tab.Flow;
+        _threadBodySplitter.First = tab.Timeline.Flow;
         SetReadyStatusForCurrentSelection();
     }
 
