@@ -43,43 +43,7 @@ internal sealed partial class CodeAltaApp
             selectedThread?.ThreadId);
     }
 
-    private void StartStartupRefresh(CancellationToken cancellationToken)
-    {
-        if (_startupRefreshTask is not null)
-        {
-            return;
-        }
-
-        _startupRefreshCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _runtimeEventsCts.Token);
-        _startupRefreshTask = Task.Run(
-            () => RunStartupRefreshAsync(_startupRefreshCts.Token),
-            CancellationToken.None);
-    }
-
-    private async Task RunStartupRefreshAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await InitializeChatBackendsAsync(cancellationToken).ConfigureAwait(false);
-            await RefreshCatalogFromBackendsAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        finally
-        {
-            PostToUi(
-                () =>
-                {
-                    RefreshView();
-                    SetReadyStatusForCurrentSelection();
-                });
-
-            TrySchedulePendingStartupThreadRestore(CancellationToken.None);
-        }
-    }
-
-    private async Task InitializeChatBackendsAsync(CancellationToken cancellationToken)
+    internal async Task InitializeChatBackendsAsync(CancellationToken cancellationToken)
     {
         await Task.WhenAll(
                 RefreshChatBackendStateAsync(AgentBackendIds.Codex, cancellationToken),
@@ -132,28 +96,7 @@ internal sealed partial class CodeAltaApp
         }
     }
 
-    private async Task RefreshCatalogFromBackendsAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _knownProjectImporter.ImportAsync(cancellationToken).ConfigureAwait(false);
-            var projects = await _projectCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
-            var threads = await _runtimeService.ListRecoverableThreadsAsync(cancellationToken).ConfigureAwait(false);
-            PostToUi(() => ApplyRecoveredCatalogState(projects, threads));
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            if (LogManager.IsInitialized && UiLogger.IsEnabled(LogLevel.Error))
-            {
-                UiLogger.Error(ex, "Failed to refresh backend startup state.");
-            }
-        }
-    }
-
-    private void ApplyRecoveredCatalogState(
+    internal void ApplyRecoveredCatalogState(
         IReadOnlyList<ProjectDescriptor> projects,
         IReadOnlyList<WorkThreadDescriptor> threads)
     {
@@ -217,21 +160,7 @@ internal sealed partial class CodeAltaApp
         return (ChatBackendAvailability.Failed, BuildFailedBackendMessage(state, message));
     }
 
-    private async Task PumpRuntimeEventsAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await foreach (var runtimeEvent in _runtimeService.StreamEventsAsync(cancellationToken).ConfigureAwait(false))
-            {
-                HandleRuntimeEvent(runtimeEvent);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-    }
-
-    private void TrySchedulePendingStartupThreadRestore(CancellationToken cancellationToken)
+    internal void TrySchedulePendingStartupThreadRestore(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_pendingStartupThreadRestoreId))
         {
@@ -258,23 +187,6 @@ internal sealed partial class CodeAltaApp
         }
 
         await EnsureThreadHistoryLoadedAsync(thread, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task ReloadCatalogAsync()
-    {
-        try
-        {
-            SetStatus("Refreshing project and thread catalog...", showSpinner: true);
-            await _knownProjectImporter.ImportAsync(CancellationToken.None).ConfigureAwait(false);
-            var projects = await _projectCatalog.LoadAsync().ConfigureAwait(false);
-            var threads = await _runtimeService.ListRecoverableThreadsAsync().ConfigureAwait(false);
-            PostToUi(() => ApplyRecoveredCatalogState(projects, threads));
-            SetReadyStatusForCurrentSelection();
-        }
-        catch (Exception ex)
-        {
-            SetStatus($"Failed to refresh catalog: {ex.Message}", tone: StatusTone.Error);
-        }
     }
 
     private async Task<WorkThreadDescriptor?> CreateGlobalThreadAsync()
@@ -757,7 +669,7 @@ internal sealed partial class CodeAltaApp
         }
     }
 
-    private void HandleRuntimeEvent(WorkThreadRuntimeEvent runtimeEvent)
+    internal void HandleRuntimeEvent(WorkThreadRuntimeEvent runtimeEvent)
     {
         var thread = FindThread(runtimeEvent.ThreadId);
         if (thread is null)

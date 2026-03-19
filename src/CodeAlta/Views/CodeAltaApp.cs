@@ -19,7 +19,7 @@ using XenoAtom.Terminal.UI.Threading;
 
 internal sealed partial class CodeAltaApp : IAsyncDisposable
 {
-    private static readonly Logger UiLogger = LogManager.GetLogger("CodeAlta.UI");
+    internal static readonly Logger UiLogger = LogManager.GetLogger("CodeAlta.UI");
     private static readonly Lazy<FigletFont> WelcomeFigletFont = new(LoadWelcomeFigletFont);
     private const int MaxRecentThreadsPerProject = 3;
     private const int MaxTabTitleLength = 18;
@@ -37,10 +37,11 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     private readonly AgentHub _agentHub;
     private readonly KnownProjectImporter _knownProjectImporter;
     private readonly CodeAltaOwnedServices? _ownedServices;
+    private readonly CodeAltaShellController _shellController;
+    private readonly RuntimeEventPump _runtimeEventPump;
     private readonly CodeAltaShellViewModel _viewModel = new();
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates = CreateChatBackendStates();
     private readonly Dictionary<string, ThreadTabState> _threadTabs = new(StringComparer.OrdinalIgnoreCase);
-    private readonly CancellationTokenSource _runtimeEventsCts = new();
     private readonly State<int> _viewRefreshState = new(0);
 
     private IReadOnlyList<ProjectDescriptor> _projects = [];
@@ -48,7 +49,7 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     private WorkThreadViewState _viewState = new();
     private CodeAltaConfigDocument _globalConfig = new();
     private readonly Dictionary<string, CodeAltaConfigDocument> _projectConfigCache = new(StringComparer.OrdinalIgnoreCase);
-    private Dispatcher? _dispatcher;
+    private IUiDispatcher? _uiDispatcher;
     private Spinner? _statusSpinner;
     private Markup? _statusIconVisual;
     private Visual? _threadPaneLayout;
@@ -67,9 +68,6 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     private TreeView? _sidebarTree;
     private TabControl? _threadTabControl;
     private TabPage? _draftTabPage;
-    private Task? _runtimeEventsTask;
-    private Task? _startupRefreshTask;
-    private CancellationTokenSource? _startupRefreshCts;
     private bool _chatSelectorsRefreshing;
     private bool _statusBusy;
     private StatusTone _statusTone = StatusTone.Ready;
@@ -129,6 +127,8 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
         _agentHub = agentHub;
         _knownProjectImporter = knownProjectImporter ?? new KnownProjectImporter(agentHub, projectCatalog);
         _ownedServices = ownedServices;
+        _shellController = new CodeAltaShellController(this, _knownProjectImporter, _projectCatalog, _runtimeService);
+        _runtimeEventPump = new RuntimeEventPump(_runtimeService, _shellController);
     }
 
     /// <summary>
@@ -136,8 +136,6 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     /// </summary>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        _dispatcher = Dispatcher.Current;
-
         await LoadCatalogStateAsync(cancellationToken).ConfigureAwait(false);
         _viewModel.HeaderText = BuildHeaderText();
 
@@ -170,14 +168,19 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
             1,
             0);
 
-        _runtimeEventsTask = Task.Run(() => PumpRuntimeEventsAsync(_runtimeEventsCts.Token), CancellationToken.None);
         await Terminal.RunAsync(
                 root,
                 () =>
                 {
-                    _terminalLoopStarted = true;
-                    StartStartupRefresh(cancellationToken);
-                    TrySchedulePendingStartupThreadRestore(cancellationToken);
+                    if (!_terminalLoopStarted)
+                    {
+                        _terminalLoopStarted = true;
+                        _uiDispatcher = new TerminalUiDispatcher(Dispatcher.Current);
+                        _shellController.AttachUiDispatcher(_uiDispatcher);
+                        _shellController.StartInitialization(cancellationToken);
+                        _runtimeEventPump.Start(cancellationToken);
+                    }
+
                     ApplyPendingSidebarSelection();
                     SyncSidebarSelection();
                     return TerminalLoopResult.Continue;
@@ -189,33 +192,8 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        _runtimeEventsCts.Cancel();
-
-        if (_runtimeEventsTask is not null)
-        {
-            try
-            {
-                await _runtimeEventsTask.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-        }
-
-        _startupRefreshCts?.Cancel();
-        if (_startupRefreshTask is not null)
-        {
-            try
-            {
-                await _startupRefreshTask.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-        }
-
-        _runtimeEventsCts.Dispose();
-        _startupRefreshCts?.Dispose();
+        await _runtimeEventPump.DisposeAsync().ConfigureAwait(false);
+        await _shellController.DisposeAsync().ConfigureAwait(false);
 
         if (_ownedServices is not null)
         {

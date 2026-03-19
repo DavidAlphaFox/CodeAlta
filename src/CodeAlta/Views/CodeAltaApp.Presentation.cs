@@ -377,7 +377,7 @@ internal sealed partial class CodeAltaApp
         }
 
         _pendingThreadTabSelectionThreadId = threadId;
-        (_dispatcher ?? Dispatcher.Current).Post(
+        GetUiDispatcher().Post(
             () =>
             {
                 if (!string.Equals(threadId, _pendingThreadTabSelectionThreadId, StringComparison.OrdinalIgnoreCase))
@@ -390,7 +390,7 @@ internal sealed partial class CodeAltaApp
             });
     }
 
-    private void RefreshView()
+    internal void RefreshView()
     {
         PostToUi(
             () =>
@@ -1228,7 +1228,7 @@ internal sealed partial class CodeAltaApp
         }
     }
 
-    private void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
+    internal void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
     {
         PostToUi(
             () =>
@@ -1315,7 +1315,7 @@ internal sealed partial class CodeAltaApp
         => !string.IsNullOrWhiteSpace(threadId) &&
            string.Equals(_selectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
 
-    private void SetReadyStatusForCurrentSelection()
+    internal void SetReadyStatusForCurrentSelection()
     {
         var selectedThread = GetSelectedThread();
         var readyMessage = BuildReadyStatusText(selectedThread, GetSelectedProject(), _globalScopeSelected);
@@ -1349,7 +1349,7 @@ internal sealed partial class CodeAltaApp
     {
         ArgumentNullException.ThrowIfNull(action);
 
-        var dispatcher = _dispatcher ?? Dispatcher.Current;
+        var dispatcher = GetUiDispatcher();
         if (ShouldRunInlineOnCurrentThread(
                 dispatcher.CheckAccess(),
                 _terminalLoopStarted))
@@ -1377,11 +1377,14 @@ internal sealed partial class CodeAltaApp
     {
         ArgumentNullException.ThrowIfNull(action);
 
-        var dispatcher = _dispatcher ?? Dispatcher.Current;
+        var dispatcher = GetUiDispatcher();
         return dispatcher.CheckAccess()
             ? action()
             : dispatcher.InvokeAsync(action).GetAwaiter().GetResult();
     }
+
+    private IUiDispatcher GetUiDispatcher()
+        => _uiDispatcher ??= new TerminalUiDispatcher(Dispatcher.Current);
 
     private ComputedVisual CreateComputedVisual(Func<Visual> build)
     {

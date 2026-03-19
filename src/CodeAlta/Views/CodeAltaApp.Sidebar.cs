@@ -59,7 +59,7 @@ internal sealed partial class CodeAltaApp
             [
                 new TextBlock("Thread Title (optional)"),
                 newThreadTitleInput,
-                new Button(new TextBlock("Refresh Catalog")).Click(() => _ = ReloadCatalogAsync()),
+                new Button(new TextBlock("Refresh Catalog")).Click(() => _ = _shellController.ReloadCatalogAsync(CancellationToken.None)),
             ])
         {
             Spacing = 1,
