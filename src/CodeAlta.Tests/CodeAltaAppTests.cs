@@ -684,10 +684,10 @@ public sealed class CodeAltaAppTests
     [TestMethod]
     public void BuildStatusIconMarkup_ReturnsColoredIconsPerTone()
     {
-        StringAssert.Contains(StatusVisualFormatter.BuildStatusIconMarkup(CodeAltaApp.StatusTone.Ready), NerdFont.MdCheckCircleOutline.ToString());
-        StringAssert.Contains(StatusVisualFormatter.BuildStatusIconMarkup(CodeAltaApp.StatusTone.Warning), NerdFont.MdAlertOutline.ToString());
-        StringAssert.Contains(StatusVisualFormatter.BuildStatusIconMarkup(CodeAltaApp.StatusTone.Error), NerdFont.MdAlertCircleOutline.ToString());
-        StringAssert.Contains(StatusVisualFormatter.BuildStatusIconMarkup(CodeAltaApp.StatusTone.Info), NerdFont.OctInfo.ToString());
+        StringAssert.Contains(StatusVisualFormatter.BuildStatusIconMarkup(StatusTone.Ready), NerdFont.MdCheckCircleOutline.ToString());
+        StringAssert.Contains(StatusVisualFormatter.BuildStatusIconMarkup(StatusTone.Warning), NerdFont.MdAlertOutline.ToString());
+        StringAssert.Contains(StatusVisualFormatter.BuildStatusIconMarkup(StatusTone.Error), NerdFont.MdAlertCircleOutline.ToString());
+        StringAssert.Contains(StatusVisualFormatter.BuildStatusIconMarkup(StatusTone.Info), NerdFont.OctInfo.ToString());
     }
 
     [TestMethod]
@@ -1056,7 +1056,7 @@ public sealed class CodeAltaAppTests
             LastActiveAt = DateTimeOffset.UtcNow,
         };
 
-        var selection = CodeAltaApp.ResolveInitialSelection(
+        var selection = InitialThreadSelectionResolver.Resolve(
             new WorkThreadViewState
             {
                 OpenThreadIds = ["thread-1"],
@@ -2013,8 +2013,8 @@ public sealed class CodeAltaAppTests
             },
         ];
 
-        var filteredWithoutInternal = CodeAltaApp.FilterThreadsForProject(threads, project1, includeInternal: false);
-        var filteredWithInternal = CodeAltaApp.FilterThreadsForProject(threads, project1, includeInternal: true);
+        var filteredWithoutInternal = ThreadScopePresentation.FilterThreadsForProject(threads, project1, includeInternal: false);
+        var filteredWithInternal = ThreadScopePresentation.FilterThreadsForProject(threads, project1, includeInternal: true);
 
         CollectionAssert.AreEqual(new[] { "thread-a" }, filteredWithoutInternal.Select(static thread => thread.ThreadId).ToArray());
         CollectionAssert.AreEqual(new[] { "thread-b", "thread-a" }, filteredWithInternal.Select(static thread => thread.ThreadId).ToArray());
@@ -2035,7 +2035,7 @@ public sealed class CodeAltaAppTests
             },
         ];
 
-        var globalSummary = CodeAltaApp.BuildThreadScopeSummary(
+        var globalSummary = ThreadScopePresentation.BuildScopeSummary(
             new WorkThreadDescriptor
             {
                 ThreadId = "global",
@@ -2052,7 +2052,7 @@ public sealed class CodeAltaAppTests
             projects,
             @"C:\Users\alexa\.codealta");
 
-        var projectSummary = CodeAltaApp.BuildThreadScopeSummary(
+        var projectSummary = ThreadScopePresentation.BuildScopeSummary(
             new WorkThreadDescriptor
             {
                 ThreadId = "project",
@@ -2070,7 +2070,7 @@ public sealed class CodeAltaAppTests
             projects,
             @"C:\Users\alexa\.codealta");
 
-        var internalSummary = CodeAltaApp.BuildThreadScopeSummary(
+        var internalSummary = ThreadScopePresentation.BuildScopeSummary(
             new WorkThreadDescriptor
             {
                 ThreadId = "internal",

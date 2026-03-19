@@ -14,7 +14,7 @@ internal sealed class CodeAltaShellBridge : ICodeAltaShell
     public Task InitializeChatBackendsAsync(CancellationToken cancellationToken)
         => _app.InitializeChatBackendsAsync(cancellationToken);
 
-    public void SetStatus(string message, bool showSpinner = false, CodeAltaApp.StatusTone tone = CodeAltaApp.StatusTone.Info)
+    public void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
         => _app.SetStatus(message, showSpinner, tone);
 
     public void ApplyRecoveredCatalogState(

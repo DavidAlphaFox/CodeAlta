@@ -6,7 +6,7 @@ internal sealed class ThreadTabViewModel
 
     public string? StatusMessage { get; set; }
 
-    public CodeAltaApp.StatusTone StatusTone { get; set; } = CodeAltaApp.StatusTone.Ready;
+    public StatusTone StatusTone { get; set; } = StatusTone.Ready;
 
     public bool StatusBusy { get; set; }
 

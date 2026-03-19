@@ -15,26 +15,26 @@ internal static class ThreadTabVisualFactory
             : normalized[..Math.Max(1, MaxTabTitleLength - 1)].TrimEnd() + "…";
     }
 
-    public static CodeAltaApp.OpenTabIndicatorKind ResolveIndicatorKind(bool isBusy, CodeAltaApp.StatusTone tone)
+    public static OpenTabIndicatorKind ResolveIndicatorKind(bool isBusy, StatusTone tone)
     {
         if (isBusy)
         {
-            return CodeAltaApp.OpenTabIndicatorKind.Running;
+            return OpenTabIndicatorKind.Running;
         }
 
         return tone switch
         {
-            CodeAltaApp.StatusTone.Warning => CodeAltaApp.OpenTabIndicatorKind.Warning,
-            CodeAltaApp.StatusTone.Error => CodeAltaApp.OpenTabIndicatorKind.Error,
-            CodeAltaApp.StatusTone.Info => CodeAltaApp.OpenTabIndicatorKind.Info,
-            _ => CodeAltaApp.OpenTabIndicatorKind.Ready,
+            StatusTone.Warning => OpenTabIndicatorKind.Warning,
+            StatusTone.Error => OpenTabIndicatorKind.Error,
+            StatusTone.Info => OpenTabIndicatorKind.Info,
+            _ => OpenTabIndicatorKind.Ready,
         };
     }
 
-    public static Visual CreateIndicator(bool isBusy, CodeAltaApp.StatusTone tone)
+    public static Visual CreateIndicator(bool isBusy, StatusTone tone)
     {
         var kind = ResolveIndicatorKind(isBusy, tone);
-        if (kind == CodeAltaApp.OpenTabIndicatorKind.Running)
+        if (kind == OpenTabIndicatorKind.Running)
         {
             var spinner = new Spinner().Style(SpinnerStyles.Arc);
             spinner.IsActive(() => true);
@@ -44,10 +44,10 @@ internal static class ThreadTabVisualFactory
 
         var statusTone = kind switch
         {
-            CodeAltaApp.OpenTabIndicatorKind.Warning => CodeAltaApp.StatusTone.Warning,
-            CodeAltaApp.OpenTabIndicatorKind.Error => CodeAltaApp.StatusTone.Error,
-            CodeAltaApp.OpenTabIndicatorKind.Info => CodeAltaApp.StatusTone.Info,
-            _ => CodeAltaApp.StatusTone.Ready,
+            OpenTabIndicatorKind.Warning => StatusTone.Warning,
+            OpenTabIndicatorKind.Error => StatusTone.Error,
+            OpenTabIndicatorKind.Info => StatusTone.Info,
+            _ => StatusTone.Ready,
         };
         return new Markup(StatusVisualFormatter.BuildStatusIconMarkup(statusTone))
         {

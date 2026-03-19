@@ -19,7 +19,7 @@ internal sealed class ShellThreadStateCoordinator
     private readonly Action _refreshCatalogAndThreadWorkspace;
     private readonly Action _resetPendingThreadTabSelection;
     private readonly Action<string> _removeTabPage;
-    private readonly Action<string, bool, CodeAltaApp.StatusTone> _setStatus;
+    private readonly Action<string, bool, StatusTone> _setStatus;
     private IReadOnlyList<ProjectDescriptor> _projects = [];
     private IReadOnlyList<WorkThreadDescriptor> _threads = [];
 
@@ -36,7 +36,7 @@ internal sealed class ShellThreadStateCoordinator
         Action refreshCatalogAndThreadWorkspace,
         Action resetPendingThreadTabSelection,
         Action<string> removeTabPage,
-        Action<string, bool, CodeAltaApp.StatusTone> setStatus)
+        Action<string, bool, StatusTone> setStatus)
     {
         ArgumentNullException.ThrowIfNull(projectCatalog);
         ArgumentNullException.ThrowIfNull(threadCatalog);
@@ -287,7 +287,7 @@ internal sealed class ShellThreadStateCoordinator
         var thread = FindThread(threadId);
         if (thread is null)
         {
-            _setStatus($"Thread '{threadId}' was not found.", false, CodeAltaApp.StatusTone.Warning);
+            _setStatus($"Thread '{threadId}' was not found.", false, StatusTone.Warning);
             return;
         }
 

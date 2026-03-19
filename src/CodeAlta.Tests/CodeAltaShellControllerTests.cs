@@ -206,7 +206,7 @@ public sealed class CodeAltaShellControllerTests
             return Task.CompletedTask;
         }
 
-        public void SetStatus(string message, bool showSpinner = false, CodeAltaApp.StatusTone tone = CodeAltaApp.StatusTone.Info)
+        public void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
             => log.Add($"Shell.Status:{message}:{showSpinner}:{tone}");
 
         public void ApplyRecoveredCatalogState(IReadOnlyList<ProjectDescriptor> projects, IReadOnlyList<WorkThreadDescriptor> threads)

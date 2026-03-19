@@ -75,7 +75,7 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
         catch (Exception ex)
         {
             await UiDispatcher.InvokeAsync(
-                    () => _shell.SetStatus($"Failed to refresh catalog: {ex.Message}", tone: CodeAltaApp.StatusTone.Error))
+                    () => _shell.SetStatus($"Failed to refresh catalog: {ex.Message}", tone: StatusTone.Error))
                 .ConfigureAwait(false);
         }
     }

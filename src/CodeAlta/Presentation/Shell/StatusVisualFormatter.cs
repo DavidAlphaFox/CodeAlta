@@ -10,18 +10,18 @@ internal static class StatusVisualFormatter
 
     public static string BuildThinkingStatusText() => ThinkingStatusMessage;
 
-    public static string BuildStatusIconMarkup(CodeAltaApp.StatusTone tone)
+    public static string BuildStatusIconMarkup(StatusTone tone)
     {
         return tone switch
         {
-            CodeAltaApp.StatusTone.Ready => $"[{UiPalette.GetStatusToneMarkup(CodeAltaApp.StatusTone.Ready)}]{NerdFont.MdCheckCircleOutline}[/]",
-            CodeAltaApp.StatusTone.Warning => $"[{UiPalette.GetStatusToneMarkup(CodeAltaApp.StatusTone.Warning)}]{NerdFont.MdAlertOutline}[/]",
-            CodeAltaApp.StatusTone.Error => $"[{UiPalette.GetStatusToneMarkup(CodeAltaApp.StatusTone.Error)}]{NerdFont.MdAlertCircleOutline}[/]",
-            _ => $"[{UiPalette.GetStatusToneMarkup(CodeAltaApp.StatusTone.Info)}]{NerdFont.OctInfo}[/]",
+            StatusTone.Ready => $"[{UiPalette.GetStatusToneMarkup(StatusTone.Ready)}]{NerdFont.MdCheckCircleOutline}[/]",
+            StatusTone.Warning => $"[{UiPalette.GetStatusToneMarkup(StatusTone.Warning)}]{NerdFont.MdAlertOutline}[/]",
+            StatusTone.Error => $"[{UiPalette.GetStatusToneMarkup(StatusTone.Error)}]{NerdFont.MdAlertCircleOutline}[/]",
+            _ => $"[{UiPalette.GetStatusToneMarkup(StatusTone.Info)}]{NerdFont.OctInfo}[/]",
         };
     }
 
-    public static TextBlockStyle BuildStatusTextStyle(string message, bool busy, CodeAltaApp.StatusTone tone)
+    public static TextBlockStyle BuildStatusTextStyle(string message, bool busy, StatusTone tone)
     {
         ArgumentNullException.ThrowIfNull(message);
 
@@ -42,7 +42,7 @@ internal static class StatusVisualFormatter
 
     public static GradientStop[] BuildThinkingGradientStops()
     {
-        var baseColor = UiPalette.GetStatusToneColor(CodeAltaApp.StatusTone.Info);
+        var baseColor = UiPalette.GetStatusToneColor(StatusTone.Info);
         var glowColor = Color.Mix(baseColor, Colors.White, 0.26f, ColorMixSpace.Oklab);
         var highlightColor = Color.Mix(baseColor, Colors.White, 0.52f, ColorMixSpace.Oklab);
         return

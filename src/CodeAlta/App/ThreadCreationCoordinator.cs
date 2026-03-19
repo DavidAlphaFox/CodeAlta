@@ -14,7 +14,7 @@ internal sealed class ThreadCreationCoordinator
     private readonly Action<string, string?, AgentReasoningEffort?, bool, bool> _rememberThreadPreference;
     private readonly Func<WorkThreadDescriptor, Task> _registerCreatedThreadAsync;
     private readonly Action _clearThreadTitleDraft;
-    private readonly Action<string, bool, CodeAltaApp.StatusTone> _setStatus;
+    private readonly Action<string, bool, StatusTone> _setStatus;
 
     public ThreadCreationCoordinator(
         WorkThreadRuntimeService runtimeService,
@@ -27,7 +27,7 @@ internal sealed class ThreadCreationCoordinator
         Action<string, string?, AgentReasoningEffort?, bool, bool> rememberThreadPreference,
         Func<WorkThreadDescriptor, Task> registerCreatedThreadAsync,
         Action clearThreadTitleDraft,
-        Action<string, bool, CodeAltaApp.StatusTone> setStatus)
+        Action<string, bool, StatusTone> setStatus)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(catalogOptions);
@@ -58,7 +58,7 @@ internal sealed class ThreadCreationCoordinator
     {
         try
         {
-            _setStatus("Creating global thread...", true, CodeAltaApp.StatusTone.Info);
+            _setStatus("Creating global thread...", true, StatusTone.Info);
             var title = _readDraftTitle()?.Trim();
             var executionOptions = _buildPreferredExecutionOptions(
                 _getPreferredBackendId(),
@@ -71,12 +71,12 @@ internal sealed class ThreadCreationCoordinator
             _setStatus(
                 ShellTextFormatter.BuildReadyStatusText(thread, _getSelectedProject(), _getGlobalScopeSelected()),
                 false,
-                CodeAltaApp.StatusTone.Ready);
+                StatusTone.Ready);
             return thread;
         }
         catch (Exception ex)
         {
-            _setStatus($"Failed to create global thread: {ex.Message}", false, CodeAltaApp.StatusTone.Error);
+            _setStatus($"Failed to create global thread: {ex.Message}", false, StatusTone.Error);
             return null;
         }
     }
@@ -86,13 +86,13 @@ internal sealed class ThreadCreationCoordinator
         var project = _getSelectedProject();
         if (project is null)
         {
-            _setStatus("Select a project before creating a project thread.", false, CodeAltaApp.StatusTone.Warning);
+            _setStatus("Select a project before creating a project thread.", false, StatusTone.Warning);
             return null;
         }
 
         try
         {
-            _setStatus($"Creating thread for '{project.DisplayName}'...", true, CodeAltaApp.StatusTone.Info);
+            _setStatus($"Creating thread for '{project.DisplayName}'...", true, StatusTone.Info);
             var title = _readDraftTitle()?.Trim();
             var executionOptions = _buildPreferredExecutionOptions(
                 _getPreferredBackendId(),
@@ -105,12 +105,12 @@ internal sealed class ThreadCreationCoordinator
             _setStatus(
                 ShellTextFormatter.BuildReadyStatusText(thread, _getSelectedProject(), _getGlobalScopeSelected()),
                 false,
-                CodeAltaApp.StatusTone.Ready);
+                StatusTone.Ready);
             return thread;
         }
         catch (Exception ex)
         {
-            _setStatus($"Failed to create project thread: {ex.Message}", false, CodeAltaApp.StatusTone.Error);
+            _setStatus($"Failed to create project thread: {ex.Message}", false, StatusTone.Error);
             return null;
         }
     }

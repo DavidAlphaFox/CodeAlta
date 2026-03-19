@@ -12,7 +12,7 @@ internal sealed class ThreadHistoryCoordinator
     private readonly Func<string, OpenThreadState?> _findOpenThread;
     private readonly Func<WorkThreadDescriptor, bool> _canLoadHistory;
     private readonly Func<WorkThreadDescriptor, OpenThreadState, WorkThreadExecutionOptions> _buildExecutionOptions;
-    private readonly Action<OpenThreadState, string, bool, CodeAltaApp.StatusTone> _setThreadStatus;
+    private readonly Action<OpenThreadState, string, bool, StatusTone> _setThreadStatus;
     private readonly Action<OpenThreadState> _clearThreadStatus;
     private readonly Action<OpenThreadState> _resetThreadTab;
     private readonly Action<WorkThreadDescriptor, OpenThreadState, AgentEvent> _handleAgentEvent;
@@ -24,7 +24,7 @@ internal sealed class ThreadHistoryCoordinator
         Func<string, OpenThreadState?> findOpenThread,
         Func<WorkThreadDescriptor, bool> canLoadHistory,
         Func<WorkThreadDescriptor, OpenThreadState, WorkThreadExecutionOptions> buildExecutionOptions,
-        Action<OpenThreadState, string, bool, CodeAltaApp.StatusTone> setThreadStatus,
+        Action<OpenThreadState, string, bool, StatusTone> setThreadStatus,
         Action<OpenThreadState> clearThreadStatus,
         Action<OpenThreadState> resetThreadTab,
         Action<WorkThreadDescriptor, OpenThreadState, AgentEvent> handleAgentEvent)
@@ -267,7 +267,7 @@ internal sealed class ThreadHistoryCoordinator
                     ? $"Loading thread '{thread.Title}'..."
                     : $"Loading previous messages from '{thread.Title}'...",
                 true,
-                CodeAltaApp.StatusTone.Info);
+                StatusTone.Info);
 
             var history = await GetHistoryAsync(thread, tab, preferCachedHistory, cancellationToken).ConfigureAwait(false);
             _resetThreadTab(tab);
@@ -304,7 +304,7 @@ internal sealed class ThreadHistoryCoordinator
             _resetThreadTab(tab);
             tab.Timeline.FlushBufferedHistoryItems();
             tab.Timeline.RenderFailure($"Failed to load history: {ex.Message}");
-            _setThreadStatus(tab, $"Failed to load '{thread.Title}': {ex.Message}", false, CodeAltaApp.StatusTone.Error);
+            _setThreadStatus(tab, $"Failed to load '{thread.Title}': {ex.Message}", false, StatusTone.Error);
         }
         finally
         {

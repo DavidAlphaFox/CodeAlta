@@ -34,8 +34,8 @@ internal sealed class ThreadCommandCoordinator
     private readonly Action _clearThreadInput;
     private readonly Action _refreshHeaderAndThreadWorkspace;
     private readonly Action _refreshCatalogAndThreadWorkspace;
-    private readonly Action<string, bool, CodeAltaApp.StatusTone> _setShellStatus;
-    private readonly Action<OpenThreadState, string, bool, CodeAltaApp.StatusTone> _setThreadStatus;
+    private readonly Action<string, bool, StatusTone> _setShellStatus;
+    private readonly Action<OpenThreadState, string, bool, StatusTone> _setThreadStatus;
     private readonly Action<OpenThreadState, Action, string> _tryRenderInteraction;
 
     public ThreadCommandCoordinator(
@@ -67,8 +67,8 @@ internal sealed class ThreadCommandCoordinator
         Action clearThreadInput,
         Action refreshHeaderAndThreadWorkspace,
         Action refreshCatalogAndThreadWorkspace,
-        Action<string, bool, CodeAltaApp.StatusTone> setShellStatus,
-        Action<OpenThreadState, string, bool, CodeAltaApp.StatusTone> setThreadStatus,
+        Action<string, bool, StatusTone> setShellStatus,
+        Action<OpenThreadState, string, bool, StatusTone> setThreadStatus,
         Action<OpenThreadState, Action, string> tryRenderInteraction)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
@@ -143,7 +143,7 @@ internal sealed class ThreadCommandCoordinator
         {
             if (steer)
             {
-                _setShellStatus("Start the thread before steering it.", false, CodeAltaApp.StatusTone.Warning);
+                _setShellStatus("Start the thread before steering it.", false, StatusTone.Warning);
                 return;
             }
 
@@ -178,7 +178,7 @@ internal sealed class ThreadCommandCoordinator
         _clearThreadInput();
         try
         {
-            _setThreadStatus(tab, StatusVisualFormatter.BuildThinkingStatusText(), true, CodeAltaApp.StatusTone.Info);
+            _setThreadStatus(tab, StatusVisualFormatter.BuildThinkingStatusText(), true, StatusTone.Info);
             var executionOptions = BuildExecutionOptions(thread, tab);
             if (steer)
             {
@@ -209,7 +209,7 @@ internal sealed class ThreadCommandCoordinator
             }
 
             tab.Timeline.RenderFailure($"Failed to send prompt: {ex.Message}");
-            _setThreadStatus(tab, $"Failed to send prompt: {ex.Message}", false, CodeAltaApp.StatusTone.Error);
+            _setThreadStatus(tab, $"Failed to send prompt: {ex.Message}", false, StatusTone.Error);
         }
     }
 
@@ -218,7 +218,7 @@ internal sealed class ThreadCommandCoordinator
         var thread = _getSelectedThread();
         if (thread is null)
         {
-            _setShellStatus("Open a thread before delegating work.", false, CodeAltaApp.StatusTone.Warning);
+            _setShellStatus("Open a thread before delegating work.", false, StatusTone.Warning);
             return;
         }
 
@@ -232,20 +232,20 @@ internal sealed class ThreadCommandCoordinator
         var prompt = UiDispatch.Invoke(_getUiDispatcher(), () => _getThreadInput()?.Text?.Trim());
         if (string.IsNullOrWhiteSpace(prompt))
         {
-            _setShellStatus("Enter delegation instructions before creating an internal thread.", false, CodeAltaApp.StatusTone.Warning);
+            _setShellStatus("Enter delegation instructions before creating an internal thread.", false, StatusTone.Warning);
             return;
         }
 
         var targetProject = _getProjectById(thread.ProjectRef ?? _getSelectedProjectId());
         if (targetProject is null)
         {
-            _setShellStatus("Select a project before delegating internal work.", false, CodeAltaApp.StatusTone.Warning);
+            _setShellStatus("Select a project before delegating internal work.", false, StatusTone.Warning);
             return;
         }
 
         try
         {
-            _setThreadStatus(tab, $"Delegating internal work from '{thread.Title}'...", true, CodeAltaApp.StatusTone.Info);
+            _setThreadStatus(tab, $"Delegating internal work from '{thread.Title}'...", true, StatusTone.Info);
             var transientThreadKey = CreateTransientThreadKey(tab.BackendId, targetProject.ProjectPath);
             var executionOptions = new WorkThreadExecutionOptions
             {
@@ -290,14 +290,14 @@ internal sealed class ThreadCommandCoordinator
                 .ConfigureAwait(false);
 
             _clearThreadInput();
-            _setThreadStatus(tab, $"Delegation started · {child.Title}", false, CodeAltaApp.StatusTone.Ready);
+            _setThreadStatus(tab, $"Delegation started · {child.Title}", false, StatusTone.Ready);
             await _persistViewStateAsync().ConfigureAwait(false);
             _refreshCatalogAndThreadWorkspace();
         }
         catch (Exception ex)
         {
             CodeAltaApp.UiLogger.Error(ex, "Failed to delegate internal thread.");
-            _setThreadStatus(tab, $"Failed to delegate internal thread: {ex.Message}", false, CodeAltaApp.StatusTone.Error);
+            _setThreadStatus(tab, $"Failed to delegate internal thread: {ex.Message}", false, StatusTone.Error);
         }
     }
 
@@ -313,12 +313,12 @@ internal sealed class ThreadCommandCoordinator
         {
             await _runtimeService.AbortAsync(thread.ThreadId).ConfigureAwait(false);
             var tab = _ensureThreadTab(thread);
-            _setThreadStatus(tab, $"Stopped · {thread.Title}", false, CodeAltaApp.StatusTone.Warning);
+            _setThreadStatus(tab, $"Stopped · {thread.Title}", false, StatusTone.Warning);
         }
         catch (Exception ex)
         {
             var tab = _ensureThreadTab(thread);
-            _setThreadStatus(tab, $"Failed to abort '{thread.Title}': {ex.Message}", false, CodeAltaApp.StatusTone.Error);
+            _setThreadStatus(tab, $"Failed to abort '{thread.Title}': {ex.Message}", false, StatusTone.Error);
         }
     }
 

@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using CodeAlta.Agent;
 using CodeAlta.Catalog;
 using CodeAlta.Orchestration.Runtime;
@@ -357,27 +356,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         }
     }
 
-    internal enum StatusTone
-    {
-        Info,
-        Ready,
-        Warning,
-        Error,
-    }
-
-    internal readonly record struct StatusSnapshot(string Message, bool Busy, StatusTone Tone);
-
-    internal enum OpenTabIndicatorKind
-    {
-        Running,
-        Ready,
-        Warning,
-        Error,
-        Info,
-    }
-
-    internal sealed record InitialThreadSelection(string? SelectedThreadId, string? StartupThreadRestoreId);
-
     private string? GetDraftProjectRoot()
         => _globalScopeSelected ? null : GetSelectedProject()?.ProjectPath;
 
@@ -592,29 +570,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     internal void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
         => _workspaceCoordinator.SetStatus(message, showSpinner, tone);
 
-    internal static StatusSnapshot ResolveSelectionStatus(
-        string readyMessage,
-        bool hasThreadStatus,
-        string? threadStatusMessage,
-        bool threadStatusBusy,
-        StatusTone threadStatusTone,
-        bool promptUnavailable,
-        string? promptUnavailableMessage,
-        StatusTone promptUnavailableTone)
-    {
-        if (hasThreadStatus && !string.IsNullOrWhiteSpace(threadStatusMessage))
-        {
-            return new StatusSnapshot(threadStatusMessage!, threadStatusBusy, threadStatusTone);
-        }
-
-        if (promptUnavailable && !string.IsNullOrWhiteSpace(promptUnavailableMessage))
-        {
-            return new StatusSnapshot(promptUnavailableMessage!, Busy: false, promptUnavailableTone);
-        }
-
-        return new StatusSnapshot(readyMessage, Busy: false, StatusTone.Ready);
-    }
-
     private void SetThreadStatus(
         OpenThreadState tab,
         string message,
@@ -770,23 +725,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private async Task LoadCatalogStateAsync(CancellationToken cancellationToken)
         => await _threadStateCoordinator.LoadCatalogStateAsync(cancellationToken).ConfigureAwait(false);
 
-    internal static InitialThreadSelection ResolveInitialSelection(
-        WorkThreadViewState viewState,
-        IReadOnlyList<WorkThreadDescriptor> threads)
-    {
-        ArgumentNullException.ThrowIfNull(viewState);
-        ArgumentNullException.ThrowIfNull(threads);
-
-        var selectedThreadId = viewState.SelectedThreadId ?? viewState.OpenThreadIds.FirstOrDefault();
-        var selectedThread = string.IsNullOrWhiteSpace(selectedThreadId)
-            ? null
-            : threads.FirstOrDefault(thread => string.Equals(thread.ThreadId, selectedThreadId, StringComparison.OrdinalIgnoreCase));
-
-        return new InitialThreadSelection(
-            selectedThread?.ThreadId,
-            selectedThread?.ThreadId);
-    }
-
     internal async Task InitializeChatBackendsAsync(CancellationToken cancellationToken)
         => await _chatBackendInitializationCoordinator.InitializeAsync(cancellationToken).ConfigureAwait(false);
 
@@ -851,39 +789,5 @@ internal sealed class CodeAltaApp : IAsyncDisposable
 
     private WorkThreadDescriptor[] GetThreadsForProject(string projectId, bool includeInternal)
         => _threadStateCoordinator.GetThreadsForProject(projectId, includeInternal);
-
-    internal static string BuildThreadScopeSummary(
-        WorkThreadDescriptor thread,
-        IReadOnlyList<ProjectDescriptor> projects,
-        string globalRoot)
-    {
-        ArgumentNullException.ThrowIfNull(thread);
-        ArgumentNullException.ThrowIfNull(projects);
-
-        return thread.Kind switch
-        {
-            WorkThreadKind.GlobalThread => $"Global thread · {globalRoot}",
-            WorkThreadKind.ProjectThread when projects.FirstOrDefault(project => string.Equals(project.Id, thread.ProjectRef, StringComparison.OrdinalIgnoreCase)) is { } project
-                => $"{project.DisplayName} · {project.ProjectPath}",
-            WorkThreadKind.InternalThread when projects.FirstOrDefault(project => string.Equals(project.Id, thread.ProjectRef, StringComparison.OrdinalIgnoreCase)) is { } internalProject
-                => $"Internal · {internalProject.DisplayName}",
-            WorkThreadKind.InternalThread => "Internal delegated thread",
-            _ => thread.WorkingDirectory,
-        };
-    }
-
-    internal static IReadOnlyList<WorkThreadDescriptor> FilterThreadsForProject(
-        IReadOnlyList<WorkThreadDescriptor> threads,
-        string? projectId,
-        bool includeInternal)
-    {
-        ArgumentNullException.ThrowIfNull(threads);
-
-        return threads
-            .Where(thread => string.Equals(thread.ProjectRef, projectId, StringComparison.OrdinalIgnoreCase))
-            .Where(thread => includeInternal || thread.Kind == WorkThreadKind.ProjectThread)
-            .OrderByDescending(static thread => thread.LastActiveAt)
-            .ToArray();
-    }
 
 }

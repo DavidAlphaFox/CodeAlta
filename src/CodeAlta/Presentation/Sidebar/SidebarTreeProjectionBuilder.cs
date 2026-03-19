@@ -70,7 +70,7 @@ internal static class SidebarTreeProjectionBuilder
         string? expandedProjectId,
         int maxRecentThreadsPerProject)
     {
-        var projectThreads = CodeAltaApp.FilterThreadsForProject(threads, project.Id, includeInternal: true)
+        var projectThreads = ThreadScopePresentation.FilterThreadsForProject(threads, project.Id, includeInternal: true)
             .Take(maxRecentThreadsPerProject)
             .Select(CreateThreadNode)
             .ToArray();

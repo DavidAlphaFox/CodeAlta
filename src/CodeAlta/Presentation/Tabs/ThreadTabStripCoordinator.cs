@@ -277,7 +277,7 @@ internal sealed class ThreadTabStripCoordinator
         var header = _createComputedVisual(
             () => new HStack(
                 [
-                    ThreadTabVisualFactory.CreateIndicator(isBusy: false, CodeAltaApp.StatusTone.Info),
+                    ThreadTabVisualFactory.CreateIndicator(isBusy: false, StatusTone.Info),
                     ThreadTabVisualFactory.CreateTitle(ShellTextFormatter.BuildDraftTabTitle(_getSelectedProject(), _getGlobalScopeSelected())),
                 ])
             {

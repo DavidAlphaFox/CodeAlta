@@ -9,7 +9,7 @@ internal readonly record struct PromptComposerProjection(
     bool CanAbort,
     bool CanCloseTab,
     string? UnavailableStatusMessage,
-    CodeAltaApp.StatusTone UnavailableStatusTone)
+    StatusTone UnavailableStatusTone)
 {
     public bool HasUnavailableStatus
         => !string.IsNullOrWhiteSpace(UnavailableStatusMessage);
@@ -37,8 +37,8 @@ internal static class PromptComposerProjectionBuilder
             ? BuildPromptUnavailableStatusText(selectedThread, backendDisplayName, availability, anyBackendReady)
             : null;
         var unavailableStatusTone = availability == ChatBackendAvailability.Connecting
-            ? CodeAltaApp.StatusTone.Info
-            : CodeAltaApp.StatusTone.Warning;
+            ? StatusTone.Info
+            : StatusTone.Warning;
         var hasThread = selectedThread is not null;
 
         return new PromptComposerProjection(

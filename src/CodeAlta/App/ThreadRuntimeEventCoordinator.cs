@@ -11,8 +11,8 @@ internal sealed class ThreadRuntimeEventCoordinator
     private readonly Func<string, bool> _isSelectedThread;
     private readonly Action _invalidateSelectedSessionUsage;
     private readonly Action _refreshShellChrome;
-    private readonly Action<string, bool, CodeAltaApp.StatusTone> _setShellStatus;
-    private readonly Action<OpenThreadState, string, bool, CodeAltaApp.StatusTone> _setThreadStatus;
+    private readonly Action<string, bool, StatusTone> _setShellStatus;
+    private readonly Action<OpenThreadState, string, bool, StatusTone> _setThreadStatus;
     private readonly Action<OpenThreadState> _clearThreadStatus;
 
     public ThreadRuntimeEventCoordinator(
@@ -22,8 +22,8 @@ internal sealed class ThreadRuntimeEventCoordinator
         Func<string, bool> isSelectedThread,
         Action invalidateSelectedSessionUsage,
         Action refreshShellChrome,
-        Action<string, bool, CodeAltaApp.StatusTone> setShellStatus,
-        Action<OpenThreadState, string, bool, CodeAltaApp.StatusTone> setThreadStatus,
+        Action<string, bool, StatusTone> setShellStatus,
+        Action<OpenThreadState, string, bool, StatusTone> setThreadStatus,
         Action<OpenThreadState> clearThreadStatus)
     {
         ArgumentNullException.ThrowIfNull(findThread);
@@ -101,7 +101,7 @@ internal sealed class ThreadRuntimeEventCoordinator
 
         if (!tab.HistoryLoading && ShouldPromoteAgentEventToThinking(@event))
         {
-            _setThreadStatus(tab, StatusVisualFormatter.BuildThinkingStatusText(), true, CodeAltaApp.StatusTone.Info);
+            _setThreadStatus(tab, StatusVisualFormatter.BuildThinkingStatusText(), true, StatusTone.Info);
         }
 
         switch (@event)
@@ -270,7 +270,7 @@ internal sealed class ThreadRuntimeEventCoordinator
             case AgentErrorEvent error:
                 tab.Timeline.RenderError(error.Message, error.Timestamp);
                 thread.LatestSummary = SummarizeContent(error.Message);
-                _setThreadStatus(tab, error.Message, false, CodeAltaApp.StatusTone.Error);
+                _setThreadStatus(tab, error.Message, false, StatusTone.Error);
                 break;
         }
     }
@@ -292,7 +292,7 @@ internal sealed class ThreadRuntimeEventCoordinator
                 CodeAltaApp.UiLogger.Error(ex, $"Failed to render thread {context}");
             }
 
-            _setShellStatus($"Failed to render thread {context}: {ex.Message}", false, CodeAltaApp.StatusTone.Error);
+            _setShellStatus($"Failed to render thread {context}: {ex.Message}", false, StatusTone.Error);
             tab.Timeline.ClearPendingAssistant();
         }
     }

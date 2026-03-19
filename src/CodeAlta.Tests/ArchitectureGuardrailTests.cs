@@ -113,6 +113,14 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsFalse(appSource.Contains("internal static TextBlockStyle BuildStatusTextStyle(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal static string CompactTabTitle(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal static OpenTabIndicatorKind ResolveOpenTabIndicatorKind(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal enum StatusTone", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal readonly record struct StatusSnapshot", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal enum OpenTabIndicatorKind", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal sealed record InitialThreadSelection", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal static StatusSnapshot ResolveSelectionStatus(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal static InitialThreadSelection ResolveInitialSelection(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal static string BuildThreadScopeSummary(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal static IReadOnlyList<WorkThreadDescriptor> FilterThreadsForProject(", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -252,7 +260,7 @@ public sealed class ArchitectureGuardrailTests
         var appPath = Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs");
         var appSize = new FileInfo(appPath).Length;
 
-        Assert.IsTrue(appSize < 36000, $"CodeAltaApp.cs exceeded the facade size budget: {appSize} bytes.");
+        Assert.IsTrue(appSize < 32000, $"CodeAltaApp.cs exceeded the facade size budget: {appSize} bytes.");
     }
 
     [TestMethod]

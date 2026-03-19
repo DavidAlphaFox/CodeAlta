@@ -14,7 +14,7 @@ internal sealed class ShellWorkspaceCoordinator
     private readonly Func<WorkThreadDescriptor, OpenThreadState> _ensureThreadTab;
     private readonly Func<bool> _getGlobalScopeSelected;
     private readonly Func<AgentBackendId> _getPreferredBackendId;
-    private readonly Func<(bool HasStatus, string Message, CodeAltaApp.StatusTone Tone)> _getPromptUnavailableStatus;
+    private readonly Func<(bool HasStatus, string Message, StatusTone Tone)> _getPromptUnavailableStatus;
     private readonly Func<string, bool> _isSelectedThread;
     private readonly Func<Visual?> _getThreadPaneLayout;
     private readonly Func<VSplitter?> _getThreadBodySplitter;
@@ -41,7 +41,7 @@ internal sealed class ShellWorkspaceCoordinator
         Func<WorkThreadDescriptor, OpenThreadState> ensureThreadTab,
         Func<bool> getGlobalScopeSelected,
         Func<AgentBackendId> getPreferredBackendId,
-        Func<(bool HasStatus, string Message, CodeAltaApp.StatusTone Tone)> getPromptUnavailableStatus,
+        Func<(bool HasStatus, string Message, StatusTone Tone)> getPromptUnavailableStatus,
         Func<string, bool> isSelectedThread,
         Func<Visual?> getThreadPaneLayout,
         Func<VSplitter?> getThreadBodySplitter,
@@ -140,7 +140,7 @@ internal sealed class ShellWorkspaceCoordinator
     public void RefreshSelectionAndThreadWorkspace()
         => _dispatchToUi(RefreshSelectionAndThreadWorkspaceCore);
 
-    public void SetStatus(string message, bool showSpinner = false, CodeAltaApp.StatusTone tone = CodeAltaApp.StatusTone.Info)
+    public void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
 
@@ -159,7 +159,7 @@ internal sealed class ShellWorkspaceCoordinator
         OpenThreadState tab,
         string message,
         bool showSpinner = false,
-        CodeAltaApp.StatusTone tone = CodeAltaApp.StatusTone.Info,
+        StatusTone tone = StatusTone.Info,
         bool hasCustomStatus = true)
     {
         ArgumentNullException.ThrowIfNull(tab);
@@ -193,7 +193,7 @@ internal sealed class ShellWorkspaceCoordinator
         SetThreadStatus(
             tab,
             ShellTextFormatter.BuildReadyStatusText(tab.Thread, _getSelectedProject(), globalScopeSelected: false),
-            tone: CodeAltaApp.StatusTone.Ready,
+            tone: StatusTone.Ready,
             hasCustomStatus: false);
     }
 
@@ -218,7 +218,7 @@ internal sealed class ShellWorkspaceCoordinator
         if (selectedThread is not null)
         {
             var selectedTab = _ensureThreadTab(selectedThread);
-            var snapshot = ResolveSelectionStatus(
+            var snapshot = SelectionStatusResolver.Resolve(
                 readyMessage,
                 selectedTab.HasCustomStatus,
                 selectedTab.ViewModel.StatusMessage,
@@ -237,7 +237,7 @@ internal sealed class ShellWorkspaceCoordinator
             return;
         }
 
-        SetStatus(readyMessage, tone: CodeAltaApp.StatusTone.Ready);
+        SetStatus(readyMessage, tone: StatusTone.Ready);
     }
 
     public void SetShellInitialized(bool isInitialized)
@@ -251,29 +251,6 @@ internal sealed class ShellWorkspaceCoordinator
             _globalRoot,
             _getPreferredBackendId().Value,
             _getGlobalScopeSelected());
-    }
-
-    private static CodeAltaApp.StatusSnapshot ResolveSelectionStatus(
-        string readyMessage,
-        bool hasThreadStatus,
-        string? threadStatusMessage,
-        bool threadStatusBusy,
-        CodeAltaApp.StatusTone threadStatusTone,
-        bool promptUnavailable,
-        string? promptUnavailableMessage,
-        CodeAltaApp.StatusTone promptUnavailableTone)
-    {
-        if (hasThreadStatus && !string.IsNullOrWhiteSpace(threadStatusMessage))
-        {
-            return new CodeAltaApp.StatusSnapshot(threadStatusMessage!, threadStatusBusy, threadStatusTone);
-        }
-
-        if (promptUnavailable && !string.IsNullOrWhiteSpace(promptUnavailableMessage))
-        {
-            return new CodeAltaApp.StatusSnapshot(promptUnavailableMessage!, Busy: false, promptUnavailableTone);
-        }
-
-        return new CodeAltaApp.StatusSnapshot(readyMessage, Busy: false, CodeAltaApp.StatusTone.Ready);
     }
 
     private void RefreshHeaderAndThreadWorkspaceCore()

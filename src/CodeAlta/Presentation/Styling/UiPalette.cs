@@ -106,18 +106,18 @@ internal static class UiPalette
     internal static string GetToolStatusMarkup(ToolCallDisplayStatus status)
         => GetMarkupColor(GetToolStatusColor(status));
 
-    internal static string GetStatusToneMarkup(CodeAltaApp.StatusTone tone)
+    internal static string GetStatusToneMarkup(StatusTone tone)
     {
         return GetMarkupColor(GetStatusToneColor(tone));
     }
 
-    internal static Color GetStatusToneColor(CodeAltaApp.StatusTone tone)
+    internal static Color GetStatusToneColor(StatusTone tone)
     {
         return tone switch
         {
-            CodeAltaApp.StatusTone.Ready => StatusReady,
-            CodeAltaApp.StatusTone.Warning => StatusWarning,
-            CodeAltaApp.StatusTone.Error => StatusError,
+            StatusTone.Ready => StatusReady,
+            StatusTone.Warning => StatusWarning,
+            StatusTone.Error => StatusError,
             _ => StatusInfo,
         };
     }

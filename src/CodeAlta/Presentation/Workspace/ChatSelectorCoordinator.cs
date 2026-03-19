@@ -380,13 +380,13 @@ internal sealed class ChatSelectorCoordinator
                state.Availability == ChatBackendAvailability.Ready;
     }
 
-    public bool TryGetPromptUnavailableStatus(out string message, out CodeAltaApp.StatusTone tone)
+    public bool TryGetPromptUnavailableStatus(out string message, out StatusTone tone)
     {
         var projection = BuildPromptComposerProjection();
         if (!projection.HasUnavailableStatus)
         {
             message = string.Empty;
-            tone = CodeAltaApp.StatusTone.Ready;
+            tone = StatusTone.Ready;
             return false;
         }
 

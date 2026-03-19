@@ -88,7 +88,7 @@ internal sealed class OpenThreadState
         set => ViewModel.StatusMessage = value;
     }
 
-    public CodeAltaApp.StatusTone StatusTone
+    public StatusTone StatusTone
     {
         get => ViewModel.StatusTone;
         set => ViewModel.StatusTone = value;

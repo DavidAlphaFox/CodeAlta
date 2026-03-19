@@ -10,17 +10,17 @@ public sealed class CodeAltaAppTabStripTests
     public void ResolveOpenTabIndicatorKind_PrefersRunningAndMapsTone()
     {
         Assert.AreEqual(
-            CodeAltaApp.OpenTabIndicatorKind.Running,
-            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: true, CodeAltaApp.StatusTone.Ready));
+            OpenTabIndicatorKind.Running,
+            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: true, StatusTone.Ready));
         Assert.AreEqual(
-            CodeAltaApp.OpenTabIndicatorKind.Ready,
-            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: false, CodeAltaApp.StatusTone.Ready));
+            OpenTabIndicatorKind.Ready,
+            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: false, StatusTone.Ready));
         Assert.AreEqual(
-            CodeAltaApp.OpenTabIndicatorKind.Warning,
-            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: false, CodeAltaApp.StatusTone.Warning));
+            OpenTabIndicatorKind.Warning,
+            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: false, StatusTone.Warning));
         Assert.AreEqual(
-            CodeAltaApp.OpenTabIndicatorKind.Error,
-            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: false, CodeAltaApp.StatusTone.Error));
+            OpenTabIndicatorKind.Error,
+            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: false, StatusTone.Error));
     }
 
     [TestMethod]

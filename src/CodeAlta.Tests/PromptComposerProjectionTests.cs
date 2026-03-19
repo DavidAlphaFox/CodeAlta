@@ -29,7 +29,7 @@ public sealed class PromptComposerProjectionTests
         Assert.IsTrue(projection.CanAbort);
         Assert.IsTrue(projection.HasUnavailableStatus);
         Assert.AreEqual("Reconnecting 'Review startup' to Codex. Prompt sending is temporarily unavailable.", projection.UnavailableStatusMessage);
-        Assert.AreEqual(CodeAltaApp.StatusTone.Info, projection.UnavailableStatusTone);
+        Assert.AreEqual(StatusTone.Info, projection.UnavailableStatusTone);
     }
 
     [TestMethod]
@@ -79,7 +79,7 @@ public sealed class PromptComposerProjectionTests
         Assert.AreEqual("Install or connect Codex/Copilot to start a thread...", projection.Placeholder);
         Assert.IsTrue(projection.HasUnavailableStatus);
         Assert.AreEqual("No chat backend is connected. Browse threads and projects, but prompt sending is unavailable.", projection.UnavailableStatusMessage);
-        Assert.AreEqual(CodeAltaApp.StatusTone.Warning, projection.UnavailableStatusTone);
+        Assert.AreEqual(StatusTone.Warning, projection.UnavailableStatusTone);
     }
 
     private static WorkThreadDescriptor CreateThread(string title)
