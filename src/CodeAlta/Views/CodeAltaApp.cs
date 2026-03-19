@@ -168,7 +168,7 @@ internal sealed partial class CodeAltaApp : IAsyncDisposable
         _knownProjectImporter = knownProjectImporter ?? new KnownProjectImporter(agentHub, projectCatalog);
         _ownedServices = ownedServices;
         _shellController = new CodeAltaShellController(
-            this,
+            new CodeAltaShellBridge(this),
             _knownProjectImporter,
             new ProjectCatalogLoader(_projectCatalog),
             new RecoverableThreadSource(_runtimeService));

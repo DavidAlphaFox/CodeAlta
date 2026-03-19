@@ -678,7 +678,7 @@ internal sealed partial class CodeAltaApp
             });
     }
 
-    private void SelectGlobalScope()
+    internal void SelectGlobalScope()
     {
         _pendingThreadTabSelectionThreadId = null;
         _draftTabOpen = true;
@@ -690,7 +690,7 @@ internal sealed partial class CodeAltaApp
         RefreshSelectionAndThreadWorkspace();
     }
 
-    private void SelectProjectScope(string projectId)
+    internal void SelectProjectScope(string projectId)
     {
         _pendingThreadTabSelectionThreadId = null;
         _draftTabOpen = true;
@@ -1273,6 +1273,11 @@ internal sealed partial class CodeAltaApp
         }
 
         SetStatus(readyMessage, tone: StatusTone.Ready);
+    }
+
+    internal void SetShellInitialized(bool isInitialized)
+    {
+        DispatchToUi(() => _shellViewModel.IsInitialized = isInitialized);
     }
 
     private void DispatchToUi(Action action)

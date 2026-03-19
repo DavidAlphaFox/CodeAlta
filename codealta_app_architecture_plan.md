@@ -36,6 +36,7 @@ This document is the implementation checklist companion to the architecture prop
 - [x] Introduce `ShellSelectionState` for open-tab and selected-scope state ownership.
 - [x] Stop duplicating workspace control ownership between `CodeAltaApp` and `ThreadWorkspaceView`.
 - [x] Move remaining draft-tab and status-spinner presentation ownership out of `CodeAltaApp`.
+- [x] Move the shell/controller bridge out of `CodeAltaApp` partials.
 - [ ] Keep `CodeAltaApp` focused on app lifecycle only.
 
 ## Phase 4: Introduce focused bindable view models

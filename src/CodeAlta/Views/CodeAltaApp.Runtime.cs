@@ -259,7 +259,7 @@ internal sealed partial class CodeAltaApp
         await EnsureThreadHistoryLoadedAsync(thread).ConfigureAwait(false);
     }
 
-    private void OpenThread(string threadId)
+    internal void OpenThread(string threadId)
     {
         var thread = FindThread(threadId);
         if (thread is null)
