@@ -15,7 +15,7 @@ This is the implementation checklist for the lighter post-refactor cleanup pass.
 ## Phase 2: Refactor the callback-heavy coordinators
 
 - [ ] Update `ThreadCommandCoordinator` to consume typed contexts instead of its current long callback constructor.
-- [ ] Update `ShellWorkspaceCoordinator` to consume typed contexts instead of its current long callback constructor.
+- [x] Update `ShellWorkspaceCoordinator` to consume typed contexts instead of its current long callback constructor.
 - [x] Update `ChatSelectorCoordinator` to consume typed contexts instead of its current long callback constructor.
 - [x] Update `ThreadTabStripCoordinator` to consume typed contexts instead of its current long callback constructor.
 - [ ] Keep each coordinator migration self-contained and behavior-preserving.

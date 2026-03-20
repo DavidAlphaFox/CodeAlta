@@ -52,6 +52,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private readonly ThreadTabStripCoordinator _threadTabStripCoordinator;
     private readonly ChatPreferenceContext _chatPreferenceContext;
     private readonly ChatSelectorUiContext _chatSelectorUiContext;
+    private readonly ShellWorkspaceContext _shellWorkspaceContext;
     private readonly ThreadSelectionContext _threadSelectionContext;
     private readonly ThreadTabContext _threadTabContext;
     private readonly WorkspaceRefreshContext _workspaceRefreshContext;
@@ -227,21 +228,13 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             _threadSelectionContext,
             _chatPreferenceContext,
             _workspaceRefreshContext);
-        _workspaceCoordinator = new ShellWorkspaceCoordinator(
-            _shellViewModel,
-            _sessionUsageViewModel,
-            _chatBackendStates,
-            GetSelectedThread,
-            GetSelectedProject,
-            EnsureThreadTab,
-            () => _globalScopeSelected,
+        _shellWorkspaceContext = new ShellWorkspaceContext(
             GetPreferredBackendId,
             () =>
             {
                 var hasStatus = TryGetPromptUnavailableStatus(out var message, out var tone);
                 return (hasStatus, message, tone);
             },
-            IsSelectedThread,
             () => ThreadPaneLayout,
             () => ThreadBodySplitter,
             () => ThreadInput,
@@ -253,7 +246,13 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             UpdatePromptAvailabilityUi,
             SyncThreadTabControl,
             DispatchToUi,
-            VerifyBindableAccess,
+            VerifyBindableAccess);
+        _workspaceCoordinator = new ShellWorkspaceCoordinator(
+            _shellViewModel,
+            _sessionUsageViewModel,
+            _chatBackendStates,
+            _threadSelectionContext,
+            _shellWorkspaceContext,
             _catalogOptions.GlobalRoot);
         _chatBackendInitializationCoordinator = new ChatBackendInitializationCoordinator(
             _agentHub,
