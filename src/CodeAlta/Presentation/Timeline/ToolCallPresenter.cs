@@ -58,7 +58,7 @@ internal sealed class ToolCallPresenter
 
         var entry = GetOrCreateToolCallEntry(activity.ActivityId, activity.Timestamp, activity.Kind);
         entry.ActivityKind = PreferActivityKind(entry.ActivityKind, activity.Kind);
-        entry.Status = ToDisplayStatus(activity.Phase);
+        UpdateStatus(entry, ToDisplayStatus(activity.Phase));
         entry.DisplayName = ToolCallEventInterpreter.PreferToolDisplayName(entry.DisplayName, ToolCallEventInterpreter.ResolveToolDisplayName(activity), activity);
         entry.ParentToolCallId = PreferLongerText(entry.ParentToolCallId, activity.ParentActivityId);
         entry.StatusMessage = PreferLongerText(entry.StatusMessage, activity.Message);
@@ -95,19 +95,24 @@ internal sealed class ToolCallPresenter
             return false;
         }
 
-        var entry = GetOrCreateToolCallEntry(ResolveToolCallId(delta.ContentId, delta.ParentActivityId), delta.Timestamp, MapContentKind(delta.Kind));
+        var toolCallId = ResolveToolCallId(delta.ContentId, delta.ParentActivityId);
+        var isNewEntry = !_toolCalls.ContainsKey(toolCallId);
+        var entry = GetOrCreateToolCallEntry(toolCallId, delta.Timestamp, MapContentKind(delta.Kind));
+        var refreshGroupSummary = isNewEntry || entry.Status == ToolCallDisplayStatus.Pending;
         if (!string.IsNullOrEmpty(delta.Delta))
         {
-            entry.OutputBuffer.Append(delta.Delta);
+            AppendOutputDelta(entry, delta.Delta);
         }
 
         entry.LastUpdatedAt = delta.Timestamp;
         if (entry.Status == ToolCallDisplayStatus.Pending)
         {
-            entry.Status = ToolCallDisplayStatus.Running;
+            UpdateStatus(entry, ToolCallDisplayStatus.Running);
         }
 
-        RefreshOutputState(entry);
+        UpdateEntryVisual(entry);
+        UpdateGroupVisual(entry.Group, refreshSummary: refreshGroupSummary);
+        UpdateDialogVisual(entry);
         return true;
     }
 
@@ -120,8 +125,14 @@ internal sealed class ToolCallPresenter
             return false;
         }
 
-        var entry = GetOrCreateToolCallEntry(ResolveToolCallId(completed.ContentId, completed.ParentActivityId), completed.Timestamp, MapContentKind(completed.Kind));
+        var toolCallId = ResolveToolCallId(completed.ContentId, completed.ParentActivityId);
+        var isNewEntry = !_toolCalls.ContainsKey(toolCallId);
+        var entry = GetOrCreateToolCallEntry(toolCallId, completed.Timestamp, MapContentKind(completed.Kind));
+        var refreshGroupSummary = isNewEntry || entry.Status == ToolCallDisplayStatus.Pending;
         ReplaceOutput(entry, completed.Content, completed.Timestamp);
+        UpdateEntryVisual(entry);
+        UpdateGroupVisual(entry.Group, refreshSummary: refreshGroupSummary);
+        UpdateDialogVisual(entry);
         return true;
     }
 
@@ -175,6 +186,7 @@ internal sealed class ToolCallPresenter
 
         entry.Button.Click(() => OpenDialog(entry));
         group.ToolCalls[toolCallId] = entry;
+        AdjustGroupStatusCount(group, entry.Status, 1);
         _toolCalls[toolCallId] = entry;
         UiDispatch.Post(_uiDispatcher, () =>
         {
@@ -218,17 +230,6 @@ internal sealed class ToolCallPresenter
         return group;
     }
 
-    private void RefreshOutputState(ToolCallEntryState entry)
-    {
-        var output = entry.OutputBuffer.ToString();
-        entry.OutputLineCount = ToolCallEventInterpreter.CountLines(output);
-        entry.OutputByteCount = Encoding.UTF8.GetByteCount(output);
-        entry.OutputPreview = ToolCallEventInterpreter.BuildToolPreview(output);
-        UpdateEntryVisual(entry);
-        UpdateGroupVisual(entry.Group);
-        UpdateDialogVisual(entry);
-    }
-
     private void ReplaceOutput(ToolCallEntryState entry, string? output, DateTimeOffset timestamp, bool updateStatusOnly = false)
     {
         if (!string.IsNullOrWhiteSpace(output))
@@ -236,18 +237,15 @@ internal sealed class ToolCallPresenter
             var normalizedOutput = ToolCallEventInterpreter.NormalizeToolOutput(output);
             if (normalizedOutput.Length >= entry.OutputBuffer.Length || entry.OutputBuffer.Length == 0)
             {
-                entry.OutputBuffer.Clear();
-                entry.OutputBuffer.Append(normalizedOutput);
+                ResetOutputState(entry, normalizedOutput);
             }
         }
 
         entry.LastUpdatedAt = timestamp;
         if (!updateStatusOnly && entry.Status == ToolCallDisplayStatus.Pending)
         {
-            entry.Status = ToolCallDisplayStatus.Running;
+            UpdateStatus(entry, ToolCallDisplayStatus.Running);
         }
-
-        RefreshOutputState(entry);
     }
 
     private void UpdateEntryVisual(ToolCallEntryState entry)
@@ -260,7 +258,7 @@ internal sealed class ToolCallPresenter
         });
     }
 
-    private void UpdateGroupVisual(ToolCallGroupState? group)
+    private void UpdateGroupVisual(ToolCallGroupState? group, bool refreshSummary = true)
     {
         if (group is null)
         {
@@ -269,7 +267,11 @@ internal sealed class ToolCallPresenter
 
         UiDispatch.Post(_uiDispatcher, () =>
         {
-            group.SummaryText.Text = ToolCallSummaryFormatter.BuildGroupSummaryMarkup(group);
+            if (refreshSummary)
+            {
+                group.SummaryText.Text = ToolCallSummaryFormatter.BuildGroupSummaryMarkup(group);
+            }
+
             ChatTimelineVisualFactory.ApplyTimestamp(group.TimestampText, group.LastUpdatedAt);
         });
     }
@@ -347,6 +349,125 @@ internal sealed class ToolCallPresenter
         }
     }
 
+    private static void ResetOutputState(ToolCallEntryState entry, string output)
+    {
+        entry.OutputBuffer.Clear();
+        entry.OutputBuffer.Append(output);
+        entry.CurrentOutputLineBuffer.Clear();
+        entry.OutputLineCount = 0;
+        entry.OutputByteCount = 0;
+        entry.OutputNewlineCount = 0;
+        entry.OutputTrailingNewlineCount = 0;
+        entry.OutputNonNewlineCharacterCount = 0;
+        entry.OutputPreview = null;
+        entry.SkipLeadingLineFeed = false;
+        ApplyOutputDeltaState(entry, output);
+    }
+
+    private static void AppendOutputDelta(ToolCallEntryState entry, string delta)
+    {
+        var normalizedDelta = NormalizeOutputDelta(entry, delta);
+        if (normalizedDelta.Length == 0)
+        {
+            return;
+        }
+
+        entry.OutputBuffer.Append(normalizedDelta);
+        ApplyOutputDeltaState(entry, normalizedDelta);
+    }
+
+    private static string NormalizeOutputDelta(ToolCallEntryState entry, string delta)
+    {
+        if (string.IsNullOrEmpty(delta))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder(delta.Length);
+        var skipLeadingLineFeed = entry.SkipLeadingLineFeed;
+        entry.SkipLeadingLineFeed = false;
+
+        for (var index = 0; index < delta.Length; index++)
+        {
+            var ch = delta[index];
+            if (skipLeadingLineFeed)
+            {
+                skipLeadingLineFeed = false;
+                if (ch == '\n')
+                {
+                    continue;
+                }
+            }
+
+            if (ch == '\r')
+            {
+                builder.Append('\n');
+                if (index + 1 < delta.Length)
+                {
+                    if (delta[index + 1] == '\n')
+                    {
+                        index++;
+                    }
+                }
+                else
+                {
+                    entry.SkipLeadingLineFeed = true;
+                }
+
+                continue;
+            }
+
+            builder.Append(ch);
+        }
+
+        if (skipLeadingLineFeed)
+        {
+            entry.SkipLeadingLineFeed = true;
+        }
+
+        return builder.ToString();
+    }
+
+    private static void ApplyOutputDeltaState(ToolCallEntryState entry, string delta)
+    {
+        entry.OutputByteCount += Encoding.UTF8.GetByteCount(delta);
+
+        foreach (var ch in delta)
+        {
+            if (ch == '\n')
+            {
+                entry.OutputNewlineCount++;
+                entry.OutputTrailingNewlineCount++;
+                UpdateOutputPreviewFromLine(entry);
+                entry.CurrentOutputLineBuffer.Clear();
+                continue;
+            }
+
+            entry.OutputNonNewlineCharacterCount++;
+            entry.OutputTrailingNewlineCount = 0;
+            entry.CurrentOutputLineBuffer.Append(ch);
+        }
+
+        UpdateOutputPreviewFromLine(entry);
+        entry.OutputLineCount = entry.OutputNonNewlineCharacterCount == 0
+            ? 0
+            : entry.OutputNewlineCount - entry.OutputTrailingNewlineCount + 1;
+    }
+
+    private static void UpdateOutputPreviewFromLine(ToolCallEntryState entry)
+    {
+        if (entry.CurrentOutputLineBuffer.Length == 0)
+        {
+            return;
+        }
+
+        var preview = ToolCallEventInterpreter.BuildToolPreview(entry.CurrentOutputLineBuffer.ToString());
+        if (!string.IsNullOrWhiteSpace(preview))
+        {
+            entry.OutputPreview = preview;
+        }
+    }
+
     private string ResolveToolCallId(string contentId, string? parentActivityId)
     {
         if (!string.IsNullOrWhiteSpace(contentId) && _toolCalls.ContainsKey(contentId))
@@ -392,5 +513,43 @@ internal sealed class ToolCallPresenter
 
     private static string? PreferLongerText(string? existing, string? candidate)
         => string.IsNullOrWhiteSpace(candidate) ? existing : string.IsNullOrWhiteSpace(existing) || candidate.Length >= existing.Length ? candidate : existing;
+
+    private static void UpdateStatus(ToolCallEntryState entry, ToolCallDisplayStatus status)
+    {
+        if (entry.Status == status)
+        {
+            return;
+        }
+
+        if (entry.Group is { } group)
+        {
+            AdjustGroupStatusCount(group, entry.Status, -1);
+            AdjustGroupStatusCount(group, status, 1);
+        }
+
+        entry.Status = status;
+    }
+
+    private static void AdjustGroupStatusCount(ToolCallGroupState group, ToolCallDisplayStatus status, int delta)
+    {
+        switch (status)
+        {
+            case ToolCallDisplayStatus.Pending:
+                group.PendingCount += delta;
+                break;
+            case ToolCallDisplayStatus.Running:
+                group.RunningCount += delta;
+                break;
+            case ToolCallDisplayStatus.Completed:
+                group.CompletedCount += delta;
+                break;
+            case ToolCallDisplayStatus.Failed:
+                group.FailedCount += delta;
+                break;
+            case ToolCallDisplayStatus.Canceled:
+                group.CanceledCount += delta;
+                break;
+        }
+    }
 
 }

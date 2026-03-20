@@ -174,9 +174,19 @@ namespace CodeAlta.Models
 
         public StringBuilder OutputBuffer { get; } = new();
 
+        public StringBuilder CurrentOutputLineBuffer { get; } = new();
+
         public int OutputLineCount { get; set; }
 
         public int OutputByteCount { get; set; }
+
+        public int OutputNewlineCount { get; set; }
+
+        public int OutputTrailingNewlineCount { get; set; }
+
+        public int OutputNonNewlineCharacterCount { get; set; }
+
+        public bool SkipLeadingLineFeed { get; set; }
 
         public DateTimeOffset FirstSeenAt { get; set; }
 
@@ -211,6 +221,16 @@ namespace CodeAlta.Models
         public Markup TimestampText { get; } = timestampText;
 
         public Dictionary<string, ToolCallEntryState> ToolCalls { get; } = new(StringComparer.Ordinal);
+
+        public int PendingCount { get; set; }
+
+        public int RunningCount { get; set; }
+
+        public int CompletedCount { get; set; }
+
+        public int FailedCount { get; set; }
+
+        public int CanceledCount { get; set; }
 
         public DateTimeOffset LastUpdatedAt { get; set; }
     }

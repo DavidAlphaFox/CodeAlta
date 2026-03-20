@@ -49,11 +49,11 @@ internal static class ToolCallSummaryFormatter
         ArgumentNullException.ThrowIfNull(group);
 
         var total = group.ToolCalls.Count;
-        var running = group.ToolCalls.Values.Count(static entry => entry.Status == ToolCallDisplayStatus.Running);
-        var completed = group.ToolCalls.Values.Count(static entry => entry.Status == ToolCallDisplayStatus.Completed);
-        var failed = group.ToolCalls.Values.Count(static entry => entry.Status == ToolCallDisplayStatus.Failed);
-        var canceled = group.ToolCalls.Values.Count(static entry => entry.Status == ToolCallDisplayStatus.Canceled);
-        var pending = group.ToolCalls.Values.Count(static entry => entry.Status == ToolCallDisplayStatus.Pending);
+        var running = group.RunningCount;
+        var completed = group.CompletedCount;
+        var failed = group.FailedCount;
+        var canceled = group.CanceledCount;
+        var pending = group.PendingCount;
 
         var parts = new List<string>
         {
