@@ -66,54 +66,41 @@ internal static class QueuedPromptListView
         Action<string, string> updateQueuedPromptText,
         Func<Action<string>, string?, ChatPromptEditor> createPromptEditor)
     {
+        var icon = new TextBlock($"{NerdFont.MdMessageTextOutline}")
+        {
+            Wrap = false,
+            IsSelectable = false,
+            Margin = new Thickness(0, 0, 1, 0),
+        };
+
         var promptText = new TextBlock(queuedPrompt.PreviewText)
         {
             HorizontalAlignment = Align.Stretch,
-            Wrap = false,
             IsSelectable = false,
+            Wrap = false,
             Trimming = TextTrimming.EndEllipsis,
+            Margin = new Thickness(0, 0, 1, 0),
         };
 
-        var left = new Grid
-            {
-                HorizontalAlignment = Align.Stretch,
-            }
-            .Rows(new RowDefinition { Height = GridLength.Auto })
-            .Columns(
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = GridLength.Star(1) });
-        left.Cell(
-            new TextBlock($"{NerdFont.MdMessageTextOutline}")
-            {
-                Wrap = false,
-                IsSelectable = false,
-            },
-            0,
-            0);
-        left.Cell(new TextBlock(" ") { Wrap = false, IsSelectable = false }, 0, 1);
-        left.Cell(promptText, 0, 2);
+        var editButton = CreateIconButton(
+            $"{NerdFont.MdSquareEditOutline}",
+            "Edit queued prompt",
+            () => ShowEditorDialog(queuedPrompt, updateQueuedPromptText, createPromptEditor));
+        editButton.Margin = new Thickness(0, 0, 1, 0);
 
-        var actions = new HStack(
-        [
-            CreateIconButton(
-                $"{NerdFont.MdSquareEditOutline}",
-                "Edit queued prompt",
-                () => ShowEditorDialog(queuedPrompt, updateQueuedPromptText, createPromptEditor)),
-            CreateCounter(queuedPrompt, updateQueuedPromptCount),
-            CreateIconButton(
-                $"{NerdFont.MdArrowRightThinCircleOutline}",
-                "Send immediately as a steering prompt",
-                () => convertQueuedPromptToSteer(queuedPrompt.Id)),
-            CreateIconButton(
-                $"{NerdFont.MdTrashCanOutline}",
-                "Delete queued prompt",
-                () => deleteQueuedPrompt(queuedPrompt.Id)),
-        ])
-        {
-            Spacing = 1,
-            HorizontalAlignment = Align.End,
-        };
+        var counter = CreateCounter(queuedPrompt, updateQueuedPromptCount);
+        counter.Margin = new Thickness(0, 0, 1, 0);
+
+        var steerButton = CreateIconButton(
+            $"{NerdFont.MdArrowRightThinCircleOutline}",
+            "Send immediately as a steering prompt",
+            () => convertQueuedPromptToSteer(queuedPrompt.Id));
+        steerButton.Margin = new Thickness(0, 0, 1, 0);
+
+        var deleteButton = CreateIconButton(
+            $"{NerdFont.MdTrashCanOutline}",
+            "Delete queued prompt",
+            () => deleteQueuedPrompt(queuedPrompt.Id));
 
         var row = new Grid
             {
@@ -121,10 +108,18 @@ internal static class QueuedPromptListView
             }
             .Rows(new RowDefinition { Height = GridLength.Auto })
             .Columns(
+                new ColumnDefinition { Width = GridLength.Auto },
                 new ColumnDefinition { Width = GridLength.Star(1) },
+                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = GridLength.Auto },
                 new ColumnDefinition { Width = GridLength.Auto });
-        row.Cell(left, 0, 0);
-        row.Cell(actions, 0, 1);
+        row.Cell(icon, 0, 0);
+        row.Cell(promptText, 0, 1);
+        row.Cell(editButton, 0, 2);
+        row.Cell(counter, 0, 3);
+        row.Cell(steerButton, 0, 4);
+        row.Cell(deleteButton, 0, 5);
         return new ZStack(
             new Placeholder()
                 .HorizontalAlignment(Align.Stretch)
@@ -195,14 +190,7 @@ internal static class QueuedPromptListView
         return button.Tooltip(new TextBlock(tooltipText));
     }
 
-    private static Visual CreateSeparator()
-    {
-        return new TextBlock(new string('─', 256))
-        {
-            Wrap = false,
-            IsSelectable = false,
-        };
-    }
+    private static Visual CreateSeparator() => new Rule();
 
     private static void ShowEditorDialog(
         QueuedPromptListItem queuedPrompt,
