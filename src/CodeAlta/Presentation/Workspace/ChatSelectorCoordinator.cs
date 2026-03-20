@@ -322,11 +322,6 @@ internal sealed class ChatSelectorCoordinator
             return;
         }
 
-        if (_promptComposerViewModel.AlwaysEnqueue == alwaysEnqueueCheckBox.IsChecked)
-        {
-            return;
-        }
-
         _promptComposerViewModel.AlwaysEnqueue = alwaysEnqueueCheckBox.IsChecked;
     }
 
