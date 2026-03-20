@@ -43,7 +43,7 @@ This is the implementation checklist for the lighter post-refactor cleanup pass.
 ## Verification
 
 - [x] Update documentation if file locations, terminology, or ownership boundaries change.
-- [ ] Run `dotnet build -c Release` from `src`.
-- [ ] Run `dotnet test -c Release` from `src`.
-- [ ] Verify the existing architecture guardrails still enforce the intended facade and ownership boundaries.
-- [ ] Add or update tests only where the refactor changes a meaningful seam or contract.
+- [x] Run `dotnet build -c Release` from `src`.
+- [x] Run `dotnet test -c Release` from `src`.
+- [x] Verify the existing architecture guardrails still enforce the intended facade and ownership boundaries.
+- [x] Add or update tests only where the refactor changes a meaningful seam or contract.
