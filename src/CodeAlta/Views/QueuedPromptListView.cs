@@ -70,21 +70,28 @@ internal static class QueuedPromptListView
         {
             Wrap = false,
             IsSelectable = false,
+            HorizontalAlignment = Align.Stretch,
         }.Trimming(TextTrimming.EndEllipsis);
 
-        var left = new HStack(
-        [
+        var left = new Grid
+            {
+                HorizontalAlignment = Align.Stretch,
+            }
+            .Rows(new RowDefinition { Height = GridLength.Auto })
+            .Columns(
+                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = GridLength.Star(1) });
+        left.Cell(
             new TextBlock($"{NerdFont.MdMessageTextOutline}")
             {
                 Wrap = false,
                 IsSelectable = false,
             },
-            promptText,
-        ])
-        {
-            Spacing = 1,
-            HorizontalAlignment = Align.Stretch,
-        };
+            0,
+            0);
+        left.Cell(new TextBlock(" ") { Wrap = false, IsSelectable = false }, 0, 1);
+        left.Cell(promptText, 0, 2);
 
         var actions = new HStack(
         [
@@ -160,7 +167,7 @@ internal static class QueuedPromptListView
         return new HStack(
         [
             CreateIconButton(
-                $"{NerdFont.MdMinus}",
+                "-",
                 "Decrease repeat count",
                 () => updateQueuedPromptCount(queuedPrompt.Id, Math.Max(1, currentCount - 1)),
                 isEnabled: currentCount > 1),

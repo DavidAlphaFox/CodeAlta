@@ -144,7 +144,7 @@ internal sealed class ThreadPromptQueueCoordinator
 
         try
         {
-            await _dispatchSteeringPromptAsync(tab, queuedPrompt.Text, cancellationToken).ConfigureAwait(false);
+            await DispatchQueuedPromptForCurrentThreadStateAsync(tab, queuedPrompt.Text, cancellationToken).ConfigureAwait(false);
             ConsumeQueuedPrompt(tab, queuedPrompt.Id);
         }
         catch
@@ -184,7 +184,7 @@ internal sealed class ThreadPromptQueueCoordinator
 
         try
         {
-            await _dispatchSteeringPromptAsync(tab, queuedPrompt.Text, cancellationToken).ConfigureAwait(false);
+            await DispatchQueuedPromptForCurrentThreadStateAsync(tab, queuedPrompt.Text, cancellationToken).ConfigureAwait(false);
             ConsumeQueuedPrompt(tab, queuedPrompt.Id);
         }
         catch
@@ -214,6 +214,16 @@ internal sealed class ThreadPromptQueueCoordinator
         }
 
         RefreshSelectedThreadQueueUi();
+    }
+
+    private Task DispatchQueuedPromptForCurrentThreadStateAsync(OpenThreadState tab, string prompt, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
+
+        return tab.StatusBusy
+            ? _dispatchSteeringPromptAsync(tab, prompt, cancellationToken)
+            : _dispatchQueuedPromptAsync(tab, prompt, cancellationToken);
     }
 
     private void ConsumeQueuedPrompt(OpenThreadState tab, string queuedPromptId)
