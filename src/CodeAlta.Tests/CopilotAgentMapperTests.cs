@@ -102,6 +102,7 @@ public sealed class CopilotAgentMapperTests
         Assert.AreEqual(5000, mcpConfig.Timeout);
     }
 
+#if CODEALTA_LOCAL_COPILOT_SDK
     [TestMethod]
     public async Task ToSessionConfig_PublishesPermissionRequestAndResolutionEvents()
     {
@@ -144,6 +145,7 @@ public sealed class CopilotAgentMapperTests
         var permissionDetails = resolved.Details.Value;
         Assert.AreEqual("AllowForSession", permissionDetails.GetProperty("decisionKind").GetString());
     }
+#endif
 
     [TestMethod]
     public async Task ToSessionConfig_PublishesUserInputRequestAndResolutionEvents()

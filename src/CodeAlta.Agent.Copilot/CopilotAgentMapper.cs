@@ -157,13 +157,13 @@ internal static class CopilotAgentMapper
                     {
                         Path = directory.Path,
                         DisplayName = directory.DisplayName ?? directory.Path,
-                        LineRange = directory.LineRange is null
-                            ? null
-                            : new UserMessageDataAttachmentsItemDirectoryLineRange
-                            {
-                                Start = directory.LineRange.StartLine,
-                                End = directory.LineRange.EndLine
-                            }
+                        // LineRange = directory.LineRange is null
+                        //     ? null
+                        //     : new UserMessageDataAttachmentsItemDirectoryLineRange
+                        //     {
+                        //         Start = directory.LineRange.StartLine,
+                        //         End = directory.LineRange.EndLine
+                        //     }
                     });
                     break;
 
@@ -792,17 +792,35 @@ internal static class CopilotAgentMapper
         };
     }
 
+    private static string? GetToolCallId(PermissionRequest request)
+    {
+        return request switch
+        {
+            PermissionRequestCustomTool permissionRequestCustomTool => permissionRequestCustomTool.ToolCallId,
+            PermissionRequestHook permissionRequestHook => permissionRequestHook.ToolCallId,
+            PermissionRequestMcp permissionRequestMcp => permissionRequestMcp.ToolCallId,
+            PermissionRequestMemory permissionRequestMemory => permissionRequestMemory.ToolCallId,
+            PermissionRequestRead permissionRequestRead => permissionRequestRead.ToolCallId,
+            PermissionRequestShell permissionRequestShell => permissionRequestShell.ToolCallId,
+            PermissionRequestUrl permissionRequestUrl => permissionRequestUrl.ToolCallId,
+            PermissionRequestWrite permissionRequestWrite => permissionRequestWrite.ToolCallId,
+            _ => null
+        };
+    }
+
     private static AgentPermissionRequest ToPermissionRequest(string sessionId, PermissionRequest request)
     {
-        var interactionId = request.ToolCallId ?? Guid.CreateVersion7().ToString();
+        var requestToolCallId = GetToolCallId(request);
+        var interactionId = requestToolCallId ?? Guid.CreateVersion7().ToString();
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
             writer.WriteStartObject();
             writer.WriteString("kind", request.Kind);
-            if (request.ToolCallId is not null)
-                writer.WriteString("toolCallId", request.ToolCallId);
+            if (requestToolCallId is not null)
+                writer.WriteString("toolCallId", requestToolCallId);
 
+#if CODEALTA_LOCAL_COPILOT_SDK
             if (request.ExtensionData is not null)
             {
                 foreach (var pair in request.ExtensionData)
@@ -822,6 +840,7 @@ internal static class CopilotAgentMapper
                     }
                 }
             }
+#endif
 
             writer.WriteEndObject();
         }

@@ -2,7 +2,7 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <UseLocalGitHubCopilotSdk Condition="'$(UseLocalGitHubCopilotSdk)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\github\copilot-sdk\dotnet\src\GitHub.Copilot.SDK.csproj')">true</UseLocalGitHubCopilotSdk>
+<!--    <UseLocalGitHubCopilotSdk Condition="'$(UseLocalGitHubCopilotSdk)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\github\copilot-sdk\dotnet\src\GitHub.Copilot.SDK.csproj')">true</UseLocalGitHubCopilotSdk>-->
     <CodeAltaCompatibilityConstants Condition="'$(UseLocalGitHubCopilotSdk)' == 'true'">CODEALTA_LOCAL_COPILOT_SDK</CodeAltaCompatibilityConstants>
     <DefineConstants Condition="'$(CodeAltaCompatibilityConstants)' != ''">$(DefineConstants);$(CodeAltaCompatibilityConstants)</DefineConstants>
   </PropertyGroup>
