@@ -163,6 +163,7 @@ internal sealed class ThreadHistoryCoordinator
         var activityIds = new HashSet<string>(StringComparer.Ordinal);
         var interactionIds = new HashSet<string>(StringComparer.Ordinal);
         var count = 0;
+        var hasPendingFileChangeRecap = false;
 
         foreach (var @event in history)
         {
@@ -188,8 +189,18 @@ internal sealed class ThreadHistoryCoordinator
                     count++;
                     break;
 
-                case AgentActivityEvent activity when ChatMarkdownFormatter.ShouldDisplayActivity(activity) && activityIds.Add(activity.ActivityId):
-                    count++;
+                case AgentActivityEvent activity:
+                    if (activity.Kind == AgentActivityKind.FileChange &&
+                        activity.Phase is not (AgentActivityPhase.Failed or AgentActivityPhase.Canceled))
+                    {
+                        hasPendingFileChangeRecap = true;
+                    }
+
+                    if (ChatMarkdownFormatter.ShouldDisplayActivity(activity) && activityIds.Add(activity.ActivityId))
+                    {
+                        count++;
+                    }
+
                     break;
 
                 case AgentRawEvent raw when ChatMarkdownFormatter.ShouldDisplayRawEvent(raw):
@@ -208,8 +219,26 @@ internal sealed class ThreadHistoryCoordinator
                     count++;
                     break;
 
-                case AgentSessionUpdateEvent update when update.Kind != AgentSessionUpdateKind.Idle && ChatMarkdownFormatter.ShouldDisplaySessionUpdate(update):
-                    count++;
+                case AgentSessionUpdateEvent update:
+                    if (update.Kind == AgentSessionUpdateKind.DiffUpdated)
+                    {
+                        hasPendingFileChangeRecap = true;
+                    }
+
+                    if (update.Kind is AgentSessionUpdateKind.Idle or AgentSessionUpdateKind.Shutdown)
+                    {
+                        if (hasPendingFileChangeRecap)
+                        {
+                            count++;
+                            hasPendingFileChangeRecap = false;
+                        }
+                    }
+
+                    if (update.Kind != AgentSessionUpdateKind.Idle && ChatMarkdownFormatter.ShouldDisplaySessionUpdate(update))
+                    {
+                        count++;
+                    }
+
                     break;
 
                 case AgentErrorEvent:

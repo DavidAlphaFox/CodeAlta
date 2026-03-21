@@ -1660,6 +1660,19 @@ internal static class CodexAgentMapper
         {
             writer.WriteString("status", item.Status.ToString());
             writer.WriteNumber("changeCount", item.Changes.Count);
+            writer.WritePropertyName("changes");
+            writer.WriteStartArray();
+            foreach (var change in item.Changes)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("path", change.Path);
+                writer.WriteString("diff", change.Diff);
+                writer.WritePropertyName("kind");
+                JsonSerializer.Serialize(writer, change.Kind, CodexJsonSerializerContext.Default.PatchChangeKind);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
         });
     }
 

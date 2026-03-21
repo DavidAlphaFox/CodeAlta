@@ -166,6 +166,7 @@ internal sealed class ThreadRuntimeEventCoordinator
                 break;
 
             case AgentActivityEvent activity:
+                tab.Timeline.FileChanges.ObserveActivity(activity);
                 if (tab.Timeline.ToolCalls.TryHandleActivity(activity))
                 {
                     break;
@@ -246,6 +247,7 @@ internal sealed class ThreadRuntimeEventCoordinator
                 break;
 
             case AgentSessionUpdateEvent update:
+                tab.Timeline.FileChanges.ObserveSessionUpdate(update);
                 if (update.Usage is { } usage)
                 {
                     tab.Usage = SessionUsageAggregator.Merge(tab.Usage, usage);

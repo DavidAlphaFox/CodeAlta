@@ -50,11 +50,19 @@ internal sealed class ThreadTimelinePresenter
             _isAutoScrollEnabled,
             item => AppendTimelineItem(item, resetActiveToolCallGroup: false),
             getDialogBounds);
+        FileChanges = new FileChangePresenter(
+            Flow,
+            _uiDispatcher,
+            _isAutoScrollEnabled,
+            item => AppendTimelineItem(item, resetActiveToolCallGroup: true),
+            getDialogBounds);
     }
 
     public DocumentFlow Flow { get; }
 
     public ToolCallPresenter ToolCalls { get; }
+
+    public FileChangePresenter FileChanges { get; }
 
     public void BeginBufferedHistoryLoad()
         => _bufferedHistoryItems = [];
@@ -303,6 +311,7 @@ internal sealed class ThreadTimelinePresenter
     public void Reset()
     {
         ToolCalls.Reset();
+        FileChanges.Reset();
         UiDispatch.Post(_uiDispatcher, () => Flow.Items.Clear());
         _bufferedHistoryItems = null;
         _contentStates.Clear();

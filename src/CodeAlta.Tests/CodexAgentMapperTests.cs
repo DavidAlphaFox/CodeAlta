@@ -474,6 +474,44 @@ public sealed class CodexAgentMapperTests
     }
 
     [TestMethod]
+    public void ToAgentEvent_MapsCodexFileChangeDetailsWithPerFileDiffs()
+    {
+        var timestamp = DateTimeOffset.Parse("2026-02-25T10:00:00+00:00");
+        var notification = new CodexNotification.ItemCompleted(
+            new ItemCompletedNotification
+            {
+                ThreadId = "thread-1",
+                TurnId = "turn-1",
+                Item = new ThreadItem.FileChangeThreadItem
+                {
+                    Id = "patch-1",
+                    Status = PatchApplyStatus.Completed,
+                    Changes =
+                    [
+                        new FileUpdateChange
+                        {
+                            Path = "src/Foo.cs",
+                            Diff = "diff --git a/src/Foo.cs b/src/Foo.cs",
+                            Kind = new PatchChangeKind.UpdatePatchChangeKind(),
+                        }
+                    ]
+                }
+            });
+
+        var @event = CodexAgentMapper.ToAgentEvent("thread-1", notification, timestamp);
+
+        Assert.IsInstanceOfType<AgentActivityEvent>(@event);
+        var activity = (AgentActivityEvent)@event;
+        Assert.AreEqual(AgentActivityKind.FileChange, activity.Kind);
+        Assert.IsTrue(activity.Details.HasValue);
+        var changes = activity.Details.Value.GetProperty("changes");
+        Assert.AreEqual(1, changes.GetArrayLength());
+        Assert.AreEqual("src/Foo.cs", changes[0].GetProperty("path").GetString());
+        Assert.AreEqual("diff --git a/src/Foo.cs b/src/Foo.cs", changes[0].GetProperty("diff").GetString());
+        Assert.AreEqual("update", changes[0].GetProperty("kind").GetProperty("type").GetString());
+    }
+
+    [TestMethod]
     public void ToAgentEvent_MapsTokenUsageAndRateLimitUpdates()
     {
         var timestamp = DateTimeOffset.Parse("2026-02-25T10:00:00+00:00");

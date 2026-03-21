@@ -361,6 +361,30 @@ public sealed class CopilotAgentMapperTests
     }
 
     [TestMethod]
+    public void ToAgentEvent_MapsWorkspaceFileChangedToDiffUpdate()
+    {
+        var timestamp = DateTimeOffset.Parse("2026-03-20T12:00:00+00:00");
+        var workspaceChanged = new SessionWorkspaceFileChangedEvent
+        {
+            Timestamp = timestamp,
+            Data = new SessionWorkspaceFileChangedData
+            {
+                Path = "src/NewFile.cs",
+                Operation = SessionWorkspaceFileChangedDataOperation.Create,
+            }
+        };
+
+        var mapped = CopilotAgentMapper.ToAgentEvent("session-1", workspaceChanged);
+
+        Assert.IsInstanceOfType<AgentSessionUpdateEvent>(mapped);
+        var update = (AgentSessionUpdateEvent)mapped;
+        Assert.AreEqual(AgentSessionUpdateKind.DiffUpdated, update.Kind);
+        Assert.IsTrue(update.Details.HasValue);
+        Assert.AreEqual("src/NewFile.cs", update.Details.Value.GetProperty("path").GetString());
+        Assert.AreEqual("create", update.Details.Value.GetProperty("operation").GetString());
+    }
+
+    [TestMethod]
     public void ToAgentEvent_MapsCommentaryAssistantMessagesToReasoning()
     {
         var timestamp = DateTimeOffset.Parse("2026-03-12T20:04:41+00:00");

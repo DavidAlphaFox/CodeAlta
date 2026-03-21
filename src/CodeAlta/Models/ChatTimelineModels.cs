@@ -234,4 +234,78 @@ namespace CodeAlta.Models
 
         public DateTimeOffset LastUpdatedAt { get; set; }
     }
+
+    internal enum FileChangeOperation
+    {
+        Unknown,
+        Modified,
+        Created,
+        Deleted,
+    }
+
+    internal sealed class FileChangeEntryState(
+        string filePath,
+        Button button,
+        Markup fileNameText,
+        Markup directoryText,
+        Markup countsText)
+    {
+        public string FilePath { get; } = filePath;
+
+        public Button Button { get; } = button;
+
+        public Markup FileNameText { get; } = fileNameText;
+
+        public Markup DirectoryText { get; } = directoryText;
+
+        public Markup CountsText { get; } = countsText;
+
+        public FileChangeGroupState? Group { get; set; }
+
+        public FileChangeOperation Operation { get; set; } = FileChangeOperation.Unknown;
+
+        public int Additions { get; set; }
+
+        public int Deletions { get; set; }
+
+        public string? DiffText { get; set; }
+
+        public DateTimeOffset FirstSeenAt { get; set; }
+
+        public DateTimeOffset LastUpdatedAt { get; set; }
+
+        public Dialog? DetailDialog { get; set; }
+
+        public MarkdownControl? DetailMetadata { get; set; }
+
+        public LogControl? DetailLog { get; set; }
+
+        public Markup? DetailStatsText { get; set; }
+    }
+
+    internal sealed class FileChangeGroupState(
+        DocumentFlowItem item,
+        WrapHStack itemsHost,
+        Markup headerText,
+        Markup summaryText,
+        Markup timestampText)
+    {
+        public DocumentFlowItem Item { get; } = item;
+
+        public WrapHStack ItemsHost { get; } = itemsHost;
+
+        public Markup HeaderText { get; } = headerText;
+
+        public Markup SummaryText { get; } = summaryText;
+
+        public Markup TimestampText { get; } = timestampText;
+
+        public Dictionary<string, FileChangeEntryState> Files { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public int TotalAdditions { get; set; }
+
+        public int TotalDeletions { get; set; }
+
+        public DateTimeOffset LastUpdatedAt { get; set; }
+    }
 }

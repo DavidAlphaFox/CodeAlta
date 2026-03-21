@@ -120,6 +120,7 @@ Current terminal shell capabilities:
   - Copilot sessions are started with `codealta.*` MCP tools bridged into the backend via `McpToolBridge` (tool calls execute against the in-process MCP server, with MCP tool ids normalized to Copilot-compatible function names).
   - CodeAlta now auto-approves backend permission requests and auto-resolves `ask_user` prompts by preferring continue/inspect-style choices (or a neutral fallback for freeform prompts).
   - Sequential Codex/Copilot tool activity is grouped into compact "Tool Calls" timeline cards so verbose command/tool logs stay out of the main document flow; each chip shows a live status icon, inferred tool/command label, compact context, and an expandable `LogControl` detail dialog with full output, wrapping toggle, and compact execution stats.
+  - When a run finishes, CodeAlta emits a separate compact "Modified Files" recap card that aggregates all files changed during that run, shows per-file and total `+/-` line counts, and opens an inline diff viewer for each file when diff data is available from the backend.
   - The terminal shell writes a persistent diagnostic log to `~/.codealta/logs/codealta.log`, including chat prompt submission, selected backend/model/tool set, normalized agent events, and Copilot permission/user-input callback traffic.
 - Workspace operations:
   - list discovered workspaces

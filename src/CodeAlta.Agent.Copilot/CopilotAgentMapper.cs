@@ -315,6 +315,13 @@ internal static class CopilotAgentMapper
                     Explanation: null,
                     Steps: null)),
 
+            SessionWorkspaceFileChangedEvent workspaceFileChanged => CreateSessionUpdate(
+                sessionId,
+                workspaceFileChanged.Timestamp,
+                AgentSessionUpdateKind.DiffUpdated,
+                "Workspace file changed.",
+                details: CreateWorkspaceFileChangedDetails(workspaceFileChanged.Data)),
+
             SessionHandoffEvent handoff => CreateSessionUpdate(
                 sessionId,
                 handoff.Timestamp,
@@ -911,6 +918,7 @@ internal static class CopilotAgentMapper
         AgentSessionUpdateKind kind,
         string? message,
         AgentRunId? runId = null,
+        JsonElement? details = null,
         AgentSessionUsage? usage = null)
     {
         return new AgentSessionUpdateEvent(
@@ -920,7 +928,24 @@ internal static class CopilotAgentMapper
             runId,
             kind,
             message,
+            details,
             Usage: usage);
+    }
+
+    private static JsonElement CreateWorkspaceFileChangedDetails(SessionWorkspaceFileChangedData data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("path", data.Path);
+            writer.WriteString("operation", data.Operation switch
+            {
+                SessionWorkspaceFileChangedDataOperation.Create => "create",
+                SessionWorkspaceFileChangedDataOperation.Update => "update",
+                _ => "update",
+            });
+        });
     }
 
     private static AgentSessionUsage CreateCopilotSessionUsage(DateTimeOffset timestamp, SessionUsageInfoData data)
