@@ -268,12 +268,13 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsTrue(appSource.Contains("internal TerminalLoopResult Tick(CancellationToken cancellationToken)", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_terminalLoopCoordinator.OnIteration(cancellationToken)", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("ToggleTerminalLoopCallback()", StringComparison.Ordinal));
-        Assert.IsTrue(deferredAppSource.Contains("Terminal.RunAsync(", StringComparison.Ordinal));
+        Assert.IsTrue(deferredAppSource.Contains("Terminal.Run(", StringComparison.Ordinal));
         Assert.IsTrue(deferredAppSource.Contains("_app.Tick(cancellationToken)", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_terminalLoopStarted", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_shellController.AttachUiDispatcher(_uiDispatcher)", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_runtimeEventPump.Start(cancellationToken)", StringComparison.Ordinal));
         Assert.IsFalse(loopSource.Contains("DrainPendingRuntimeEvents()", StringComparison.Ordinal));
+        Assert.IsFalse(loopSource.Contains("_syncSidebarSelection();", StringComparison.Ordinal));
         Assert.IsTrue(loopSource.Contains("TerminalLoopResult.Continue", StringComparison.Ordinal));
     }
 

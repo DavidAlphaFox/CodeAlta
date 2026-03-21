@@ -10,27 +10,23 @@ internal sealed class TerminalLoopCoordinator
     private readonly RuntimeEventPump _runtimeEventPump;
     private readonly Action<IUiDispatcher> _attachUiDispatcher;
     private readonly Action _applyPendingSidebarSelection;
-    private readonly Action _syncSidebarSelection;
     private bool _started;
 
     public TerminalLoopCoordinator(
         CodeAltaShellController shellController,
         RuntimeEventPump runtimeEventPump,
         Action<IUiDispatcher> attachUiDispatcher,
-        Action applyPendingSidebarSelection,
-        Action syncSidebarSelection)
+        Action applyPendingSidebarSelection)
     {
         ArgumentNullException.ThrowIfNull(shellController);
         ArgumentNullException.ThrowIfNull(runtimeEventPump);
         ArgumentNullException.ThrowIfNull(attachUiDispatcher);
         ArgumentNullException.ThrowIfNull(applyPendingSidebarSelection);
-        ArgumentNullException.ThrowIfNull(syncSidebarSelection);
 
         _shellController = shellController;
         _runtimeEventPump = runtimeEventPump;
         _attachUiDispatcher = attachUiDispatcher;
         _applyPendingSidebarSelection = applyPendingSidebarSelection;
-        _syncSidebarSelection = syncSidebarSelection;
     }
 
     public bool HasStarted => _started;
@@ -54,7 +50,6 @@ internal sealed class TerminalLoopCoordinator
     {
         Start(cancellationToken);
         _applyPendingSidebarSelection();
-        _syncSidebarSelection();
         return TerminalLoopResult.Continue;
     }
 }

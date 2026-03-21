@@ -193,8 +193,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             _shellController,
             _runtimeEventPump,
             dispatcher => _uiDispatcher = dispatcher,
-            ApplyPendingSidebarSelection,
-            SyncSidebarSelectionToCurrentState);
+            ApplyPendingSidebarSelection);
         _threadStateCoordinator = new ShellThreadStateCoordinator(
             projectCatalog,
             threadCatalog,
