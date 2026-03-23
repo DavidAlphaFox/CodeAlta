@@ -245,6 +245,7 @@ internal static partial class QueuedPromptListView
 public sealed partial class QueuedPromptCountState
 {
     private readonly Action<int> _onChanged;
+    private bool _isInitialized;
 
     public QueuedPromptCountState(int value, Action<int> onChanged)
     {
@@ -252,6 +253,7 @@ public sealed partial class QueuedPromptCountState
 
         _onChanged = onChanged;
         Value = Math.Max(1, value);
+        _isInitialized = true;
     }
 
     [Bindable]
@@ -259,6 +261,11 @@ public sealed partial class QueuedPromptCountState
 
     partial void OnValueChanged(int value)
     {
+        if (!_isInitialized)
+        {
+            return;
+        }
+
         _onChanged(value);
     }
 }
