@@ -6,8 +6,9 @@ public sealed class CodeAltaLoggingTests
     [TestMethod]
     public void GetLogFilePath_UsesCodeAltaLogsDirectory()
     {
-        var path = CodeAltaLogging.GetLogFilePath(@"C:\Users\alex\.codealta");
+        var homeRoot = Path.Combine(Path.GetTempPath(), ".codealta-test-home");
+        var path = CodeAltaLogging.GetLogFilePath(homeRoot);
 
-        Assert.AreEqual(@"C:\Users\alex\.codealta\logs\codealta.log", path);
+        Assert.AreEqual(Path.Combine(homeRoot, "logs", CodeAltaLogging.LogFileName), path);
     }
 }
