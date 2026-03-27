@@ -434,6 +434,7 @@ internal sealed class ThreadWorkspaceView
 
         _expandedPromptDialog = dialog;
         dialog.Show();
+        dialog.App?.Focus(editor);
 
         Command CreateExpandedPromptDialogCloseCommand()
             => new()
@@ -451,7 +452,9 @@ internal sealed class ThreadWorkspaceView
     {
         var dialog = _expandedPromptDialog;
         _expandedPromptDialog = null;
+        var app = dialog?.App ?? ThreadPaneLayout.App;
         dialog?.Close();
+        app?.Focus(ThreadInput);
     }
 
     private static Visual CreateIconButton(string icon, string tooltipText, Action onClick, Action<Button>? configureButton = null)

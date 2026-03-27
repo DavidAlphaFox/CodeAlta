@@ -320,6 +320,15 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void ThreadWorkspaceView_ExpandedPromptDialog_TransfersFocusOnOpenAndClose()
+    {
+        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ThreadWorkspaceView.cs"));
+
+        Assert.IsTrue(workspaceSource.Contains("dialog.App?.Focus(editor);", StringComparison.Ordinal));
+        Assert.IsTrue(workspaceSource.Contains("app?.Focus(ThreadInput);", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void CodeAltaSource_UsesBindingsInsteadOfRegisterDynamicUpdate()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
