@@ -2,6 +2,7 @@ using CodeAlta.Agent;
 using CodeAlta.Presentation.Formatting;
 using CodeAlta.ViewModels;
 using CodeAlta.Presentation.Controls;
+using CodeAlta.Views;
 using XenoAtom.Ansi;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
@@ -19,20 +20,25 @@ internal sealed class SessionUsagePresenter
     private readonly SessionUsageViewModel _viewModel;
     private readonly Action<string> _copyMarkdown;
     private readonly Func<Func<Visual>, Visual> _createComputedVisual;
+    private readonly Action _focusPromptEditor;
     private AnchoredPopupView? _popupView;
+    private Visual? _indicatorAnchor;
 
     public SessionUsagePresenter(
         SessionUsageViewModel viewModel,
         Action<string> copyMarkdown,
-        Func<Func<Visual>, Visual> createComputedVisual)
+        Func<Func<Visual>, Visual> createComputedVisual,
+        Action focusPromptEditor)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(copyMarkdown);
         ArgumentNullException.ThrowIfNull(createComputedVisual);
+        ArgumentNullException.ThrowIfNull(focusPromptEditor);
 
         _viewModel = viewModel;
         _copyMarkdown = copyMarkdown;
         _createComputedVisual = createComputedVisual;
+        _focusPromptEditor = focusPromptEditor;
     }
 
     public Visual BuildIndicatorVisual()
@@ -51,8 +57,19 @@ internal sealed class SessionUsagePresenter
             Padding = Thickness.Zero,
         });
         button.Click(() => TogglePopup(button));
+        var buttonHost = button.Tooltip(new TextBlock($"Show context usage ({ThreadWorkspaceView.SessionUsageShortcutSequence})."));
+        _indicatorAnchor = buttonHost;
+        return buttonHost;
+    }
 
-        return button;
+    public void TogglePopupFromIndicator()
+    {
+        if (_indicatorAnchor is null)
+        {
+            return;
+        }
+
+        TogglePopup(_indicatorAnchor);
     }
 
     public void ClosePopup()
@@ -73,7 +90,7 @@ internal sealed class SessionUsagePresenter
 
     private void ShowPopup(Visual anchor)
     {
-        _popupView ??= new AnchoredPopupView(() => _createComputedVisual(BuildPopupContent));
+        _popupView ??= new AnchoredPopupView(() => _createComputedVisual(BuildPopupContent), _focusPromptEditor);
         _popupView.Show(anchor);
     }
 

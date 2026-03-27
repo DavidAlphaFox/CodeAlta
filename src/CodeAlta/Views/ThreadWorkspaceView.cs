@@ -24,12 +24,16 @@ internal sealed class ThreadWorkspaceView
 
     internal const TerminalKey ExpandPromptShortcutKey = TerminalKey.F6;
     internal static readonly KeyGesture ThreadInfoShortcutGesture = new(TerminalChar.CtrlT, TerminalModifiers.Ctrl);
+    internal static readonly KeySequence SessionUsageShortcutSequence = new(
+        new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
+        new KeyGesture(TerminalChar.CtrlU, TerminalModifiers.Ctrl));
 
     public ThreadWorkspaceView(
         CodeAltaShellViewModel shellViewModel,
         ThreadWorkspaceViewModel workspaceViewModel,
         PromptComposerViewModel promptComposerViewModel,
         Func<Visual> buildSessionUsageIndicatorVisual,
+        Action openSessionUsagePopup,
         Action<Visual> toggleThreadInfoPopup,
         Action sendPrompt,
         Action steerPrompt,
@@ -54,6 +58,7 @@ internal sealed class ThreadWorkspaceView
         ArgumentNullException.ThrowIfNull(workspaceViewModel);
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
         ArgumentNullException.ThrowIfNull(buildSessionUsageIndicatorVisual);
+        ArgumentNullException.ThrowIfNull(openSessionUsagePopup);
         ArgumentNullException.ThrowIfNull(toggleThreadInfoPopup);
         ArgumentNullException.ThrowIfNull(sendPrompt);
         ArgumentNullException.ThrowIfNull(steerPrompt);
@@ -86,6 +91,7 @@ internal sealed class ThreadWorkspaceView
         ThreadInput = CreatePromptEditor(
             promptComposerViewModel,
             sendPrompt,
+            openSessionUsagePopup,
             () =>
             {
                 if (threadInfoButton is not null)
@@ -313,6 +319,7 @@ internal sealed class ThreadWorkspaceView
     private static ChatPromptEditor CreatePromptEditor(
         PromptComposerViewModel promptComposerViewModel,
         Action sendPrompt,
+        Action openSessionUsagePopup,
         Action openThreadInfoPopup,
         Func<bool> canShowThreadInfo,
         Action openExpandedPromptEditor,
@@ -326,6 +333,7 @@ internal sealed class ThreadWorkspaceView
     {
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
         ArgumentNullException.ThrowIfNull(sendPrompt);
+        ArgumentNullException.ThrowIfNull(openSessionUsagePopup);
         ArgumentNullException.ThrowIfNull(openThreadInfoPopup);
         ArgumentNullException.ThrowIfNull(canShowThreadInfo);
         ArgumentNullException.ThrowIfNull(openExpandedPromptEditor);
@@ -338,6 +346,16 @@ internal sealed class ThreadWorkspaceView
         var editor = CreateStyledPromptEditor(_ => sendPrompt(), placeholder: null)
             .Placeholder(promptComposerViewModel.Bind.Placeholder)
             .Text(promptText);
+
+        editor.AddCommand(new Command
+        {
+            Id = "CodeAlta.Thread.SessionUsage",
+            LabelMarkup = "Context Usage",
+            DescriptionMarkup = "Show context and usage details for the selected backend session.",
+            Sequence = SessionUsageShortcutSequence,
+            Presentation = CommandPresentation.CommandBar,
+            Execute = _visual => openSessionUsagePopup(),
+        });
 
         editor.AddCommand(new Command
         {

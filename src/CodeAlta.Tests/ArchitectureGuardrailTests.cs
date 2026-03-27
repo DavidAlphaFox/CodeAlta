@@ -329,6 +329,18 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void PopupPresenters_RestorePromptFocusWhenClosed()
+    {
+        var controlsSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Controls", "AnchoredPopupView.cs"));
+        var usageSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Usage", "SessionUsagePresenter.cs"));
+        var threadInfoSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Threads", "ThreadInfoPresenter.cs"));
+
+        Assert.IsTrue(controlsSource.Contains("_onClosed?.Invoke();", StringComparison.Ordinal));
+        Assert.IsTrue(usageSource.Contains("new AnchoredPopupView(() => _createComputedVisual(BuildPopupContent), _focusPromptEditor)", StringComparison.Ordinal));
+        Assert.IsTrue(threadInfoSource.Contains("new AnchoredPopupView(() => _createComputedVisual(BuildPopupContent), _focusPromptEditor)", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void CodeAltaSource_UsesBindingsInsteadOfRegisterDynamicUpdate()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();

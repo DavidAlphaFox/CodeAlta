@@ -551,6 +551,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             _threadWorkspaceViewModel,
             _promptComposerViewModel,
             () => CreateUsageComputedVisual(EnsureSessionUsagePresenter().BuildIndicatorVisual),
+            () => EnsureSessionUsagePresenter().TogglePopupFromIndicator(),
             anchor => EnsureThreadInfoPresenter().TogglePopup(anchor),
             () => _ = _threadCommandCoordinator.SendSelectedThreadPromptAsync(steer: false),
             () => _ = _threadCommandCoordinator.SendSelectedThreadPromptAsync(steer: true),
@@ -649,11 +650,13 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         => _sessionUsagePresenter ??= PopupPresenterFactory.CreateSessionUsagePresenter(
             _sessionUsageViewModel,
             () => ThreadPaneLayout?.App,
+            () => ThreadInput,
             build => CreateUsageComputedVisual(build));
 
     private ThreadInfoPresenter EnsureThreadInfoPresenter()
         => _threadInfoPresenter ??= PopupPresenterFactory.CreateThreadInfoPresenter(
             () => ThreadPaneLayout?.App,
+            () => ThreadInput,
             new ThreadInfoService(_agentHub, _threadSelectionContext, _chatBackendStates),
             DispatchToUi,
             build => CreateComputedVisual(build));

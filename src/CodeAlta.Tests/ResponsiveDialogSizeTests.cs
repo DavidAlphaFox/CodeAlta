@@ -50,4 +50,16 @@ public sealed class ResponsiveDialogSizeTests
         Assert.AreEqual(TerminalChar.CtrlT, ThreadWorkspaceView.ThreadInfoShortcutGesture.Char);
         Assert.AreEqual(TerminalModifiers.Ctrl, ThreadWorkspaceView.ThreadInfoShortcutGesture.Modifiers);
     }
+
+    [TestMethod]
+    public void ThreadWorkspaceView_UsesCtrlGCtrlUForSessionUsageShortcut()
+    {
+        var sequence = ThreadWorkspaceView.SessionUsageShortcutSequence;
+
+        Assert.AreEqual(2, sequence.Count);
+        Assert.AreEqual(TerminalChar.CtrlG, sequence[0].Char);
+        Assert.AreEqual(TerminalModifiers.Ctrl, sequence[0].Modifiers);
+        Assert.AreEqual(TerminalChar.CtrlU, sequence[1].Char);
+        Assert.AreEqual(TerminalModifiers.Ctrl, sequence[1].Modifiers);
+    }
 }

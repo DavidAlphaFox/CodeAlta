@@ -6,18 +6,24 @@ namespace CodeAlta.Presentation.Controls;
 internal sealed class AnchoredPopupView
 {
     private readonly Func<Visual> _buildContent;
+    private readonly Action? _onClosed;
 
-    public AnchoredPopupView(Func<Visual> buildContent)
+    public AnchoredPopupView(Func<Visual> buildContent, Action? onClosed = null)
     {
         ArgumentNullException.ThrowIfNull(buildContent);
         _buildContent = buildContent;
+        _onClosed = onClosed;
 
         Popup = new Popup
         {
             MatchAnchorWidth = false,
             CloseOnTab = false,
         };
-        Popup.Closed((_, _) => IsOpen = false);
+        Popup.Closed((_, _) =>
+        {
+            IsOpen = false;
+            _onClosed?.Invoke();
+        });
     }
 
     public Popup Popup { get; }

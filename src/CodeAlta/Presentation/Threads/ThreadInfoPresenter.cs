@@ -17,6 +17,7 @@ internal sealed class ThreadInfoPresenter
     private readonly Func<CancellationToken, Task<ThreadInfoReport?>> _loadReportAsync;
     private readonly Action<Action> _dispatchToUi;
     private readonly Func<Func<Visual>, Visual> _createComputedVisual;
+    private readonly Action _focusPromptEditor;
     private readonly State<int> _refreshState = new(0);
     private AnchoredPopupView? _popupView;
     private CancellationTokenSource? _loadCancellationTokenSource;
@@ -28,17 +29,20 @@ internal sealed class ThreadInfoPresenter
         Action<string> copyMarkdown,
         Func<CancellationToken, Task<ThreadInfoReport?>> loadReportAsync,
         Action<Action> dispatchToUi,
-        Func<Func<Visual>, Visual> createComputedVisual)
+        Func<Func<Visual>, Visual> createComputedVisual,
+        Action focusPromptEditor)
     {
         ArgumentNullException.ThrowIfNull(copyMarkdown);
         ArgumentNullException.ThrowIfNull(loadReportAsync);
         ArgumentNullException.ThrowIfNull(dispatchToUi);
         ArgumentNullException.ThrowIfNull(createComputedVisual);
+        ArgumentNullException.ThrowIfNull(focusPromptEditor);
 
         _copyMarkdown = copyMarkdown;
         _loadReportAsync = loadReportAsync;
         _dispatchToUi = dispatchToUi;
         _createComputedVisual = createComputedVisual;
+        _focusPromptEditor = focusPromptEditor;
     }
 
     public void TogglePopup(Visual anchor)
@@ -75,7 +79,7 @@ internal sealed class ThreadInfoPresenter
 
     private void ShowPopup(Visual anchor)
     {
-        _popupView ??= new AnchoredPopupView(() => _createComputedVisual(BuildPopupContent));
+        _popupView ??= new AnchoredPopupView(() => _createComputedVisual(BuildPopupContent), _focusPromptEditor);
         _popupView.Show(anchor);
         StartLoad();
     }
