@@ -2,7 +2,7 @@
 
 Last updated: **2026-02-28**
 
-Historical note: references here to workspace-scoped services are obsolete. The active MCP model is project-first, with `global` and `project` scopes.
+Historical note: references here to workspace-scoped services are obsolete. The active MCP model is project-first, with only `global` and `project` scopes.
 
 This document proposes how CodeAlta embeds a **built-in MCP server** to provide durable services to agents:
 
@@ -52,8 +52,8 @@ Regardless of transport, services should be designed as **idempotent** and **aud
 - `name`
 - `description`
 - `role` (knowledge/planner/builder/…)
-- `scope` (global/workspace/project)
-- `workspaceId` / `projectId` (nullable, based on scope)
+- `scope` (global/project)
+- `projectId` (nullable; omitted for global scope)
 - `capabilities[]` (string identifiers)
 - `parentAgentId` (nullable)
 - `backend` + `backendSessionId` (optional for debugging)
@@ -74,7 +74,7 @@ Regardless of transport, services should be designed as **idempotent** and **aud
 
 - tasks are durable and queryable
 - tasks are hierarchical (plans as trees)
-- tasks are scoped (workspace/project/file)
+- tasks are scoped (global/project/file)
 - tasks can attach artifacts and knowledge references
 
 ### 3.2 Suggested tools
@@ -113,7 +113,7 @@ Artifacts can be stored in multiple roots depending on scope and portability goa
   - recommended split:
     - `.codealta/shared/` (optionally committed)
     - `.codealta/local/` (gitignored; caches/logs)
-- **Per-user (workspace/global or sensitive)**:
+- **Per-user (global or sensitive)**:
   - Linux/macOS: `$HOME/.codealta/`
   - Windows: `%USERPROFILE%\\.codealta\\`
   - When multi-machine portability is desired, this directory can be a **git working copy** of a “global knowledge repository” (auto pull/push), containing global manifests + curated artifacts (no secrets).
@@ -137,8 +137,8 @@ Recommended artifact format:
 SQLite stores:
 
 - `artifactId` (UUID v7, generated via `Guid.CreateVersion7()`)
-- `type` (`workspace_summary`, `project_summary`, `task_plan`, `decision_record`, `run_log`, …)
-- scope references (`workspaceId`, `projectId`, `taskId`, `agentId`)
+- `type` (`project_summary`, `task_plan`, `decision_record`, `run_log`, …)
+- scope references (`projectId`, `taskId`, `agentId`)
 - `path`, `contentHash`, timestamps
 
 ---
@@ -218,7 +218,7 @@ Suggested discovery locations:
 - Repo: `.github/agents/*.md` (Copilot-compatible)
 - Repo: `<projectRoot>/.codealta/agents/*.md` (CodeAlta-specific)
 - User: `$HOME/.codealta/agents/*.md`
-- Workspace home/repo (optional): `<workspaceHome>/agents/*.md`
+- Global catalog repo (optional): `~/.codealta/agents/*.md`
 
 Suggested profile format (compatible superset):
 
@@ -235,22 +235,22 @@ Suggested tools:
 
 ---
 
-## 8. Workspace/project services (optional but recommended)
+## 8. Global/project services (optional but recommended)
 
 Suggested tools:
 
-- `workspace.list()`
-- `workspace.get(workspaceId)`
-- `workspace.create(name, projects[], settings?)`
-- `workspace.activate(workspaceId)`
-- `workspace.add_project(workspaceId, path, metadata?)`
-- `workspace.remove_project(workspaceId, projectId)`
+- `project.list()`
+- `project.get(projectId)`
+- `project.register(pathOrRemote, metadata?)`
+- `project.activate(projectId)`
+- `project.update(projectId, patch)`
+- `project.remove(projectId)`
 
 Portability tools (multi-machine):
 
-- `workspace.export(workspaceId) -> workspaceManifest`
-- `workspace.import(workspaceManifest) -> workspaceId`
-- `workspace.set_home(workspaceId, homePathOrGitRemote)` (optional: git-backed workspace repo)
+- `project.export(projectId) -> projectManifest`
+- `project.import(projectManifest) -> projectId`
+- `global_repo.set_home(homePathOrGitRemote)` (optional: git-backed catalog repo)
 
 Global knowledge repository tools (multi-machine):
 
@@ -260,7 +260,7 @@ Global knowledge repository tools (multi-machine):
 
 Bootstrap tools (“setup my dev experience”):
 
-- `bootstrap.plan(workspaceIds?, machineId?) -> plan` (templated checkout rules → concrete paths)
+- `bootstrap.plan(projectIds?, machineId?) -> plan` (templated checkout rules → concrete paths)
 - `bootstrap.apply(plan) -> result` (clone/sync repos, set active scope, rebuild indexes)
 
 Machine configuration tools (path roots, no secrets):
@@ -270,10 +270,9 @@ Machine configuration tools (path roots, no secrets):
 
 Optional scope helpers (for “global agent” UX and routing):
 
-- `workspace.resolve(nameOrId) -> workspaceId`
-- `project.resolve(workspaceId, nameOrId) -> projectId`
-- `context.get_active_scope() -> { workspaceId, projectId? }`
-- `context.set_active_scope(workspaceId, projectId?)`
+- `project.resolve(nameOrId) -> projectId`
+- `context.get_active_scope() -> { kind, projectId? }`
+- `context.set_active_scope(kind, projectId?)`
 
 These tools are used by the global agent to route work reliably.
 
@@ -285,7 +284,7 @@ Minimum requirements:
 
 - every tool call is logged (agentId, timestamp, parameters summary, outcome)
 - file and command execution are gated by approval policy
-- scope boundaries are enforced (agents can only access allowed roots for their workspace/project)
+- scope boundaries are enforced (agents can only access allowed roots for their global/project scope)
 
 Recommended:
 

@@ -172,7 +172,6 @@ public sealed class OrchestrationInfrastructureTests
             new PlannerPlanRequest
             {
                 Goal = "Implement orchestration flow",
-                WorkspaceId = "workspace-1",
                 ProjectId = "project-1",
                 Steps = ["Add planner", "Add builder"],
             }).ConfigureAwait(false);
@@ -186,7 +185,6 @@ public sealed class OrchestrationInfrastructureTests
             new BuilderExecutionRequest
             {
                 TaskId = plan.ChildTaskIds[0],
-                WorkspaceId = "workspace-1",
                 ProjectId = "project-1",
                 VerificationSummary = "dotnet build and dotnet test passed.",
             }).ConfigureAwait(false);

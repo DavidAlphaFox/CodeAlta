@@ -4,7 +4,7 @@ Deferred until after the MVP core experience is working.
 
 Status note: this document is now subordinate to `doc/specs/implementation_plan.md`. Search and specialization remain important, but they are no longer the primary near-term driver of the architecture.
 
-Historical note: older workspace-first storage examples in this document are obsolete. Active catalog guidance is project-first.
+Historical note: older workspace-first storage examples in this document are obsolete. Active catalog guidance is project-first, with `global` handled as a special project-level scope.
 
 This document details how CodeAlta will implement durable storage (files + SQLite), full-text search (FTS5), and vector search using SQLite plus the Semantic Kernel SQLite vector connector.
 
@@ -52,16 +52,15 @@ Proposed subfolders:
 
 Runtime interpretation:
 
-- `~/.codealta/` is the global root CodeAlta uses to discover and navigate workspaces/projects
+- `~/.codealta/` is the global root CodeAlta uses to discover and navigate projects
 - `{projectPath}/.codealta/agents/` and `{projectPath}/.codealta/skills/` are project-local overlays
-- global agents/skills under `~/.codealta/` are cross-workspace/cross-project assets
+- global agents/skills under `~/.codealta/` are cross-project assets
 - project-local agents/skills under `{projectPath}/.codealta/` are repository-specific specializations
 
-### 1.3 Workspace-level storage
+### 1.3 Catalog-level storage
 
-Workspace metadata lives in the portable `~/.codealta/` catalog and references local checkout paths via machine overrides:
-- `~/.codealta/workspaces/<workspaceKey>/readme.md`
-- `~/.codealta/projects/<projectKey>/readme.md`
+Project metadata lives in the portable `~/.codealta/` catalog and references local checkout paths via machine overrides:
+- `~/.codealta/projects/<projectSlug>/readme.md`
 - `~/.codealta/machine/config.yaml` (per-machine path overrides)
 
 ## 2. Artifact file format (markdown + YAML frontmatter)
@@ -72,9 +71,7 @@ Artifacts are plain markdown, with YAML frontmatter for stable metadata:
 ---
 id: "01963b36-0d6f-7e4b-a7e0-6b2e6d1f4c8a" # UUID v7 (`Guid.CreateVersion7()`)
 type: "knowledge.record" # or task.snapshot, plan.output, etc.
-title: "Workspace overview"
-workspace_id: "01963b36-0d6f-7e4b-a7e0-6b2e6d1f4c8a"
-workspace_key: "wk-..." # optional convenience for humans
+title: "Project overview"
 project_id: "01963b36-0d70-7a11-b3c2-1f2e3d4c5b6a" # optional
 project_key: "prj-..." # optional convenience for humans
 source:
@@ -123,13 +120,8 @@ Rationale:
 We keep the first schema small, and add tables only when we have a consumer.
 
 **Core tables**
-- `workspaces`
-  - `workspace_id TEXT PRIMARY KEY`
-  - `display_name TEXT`
-  - `config_uri TEXT` (points to markdown/frontmatter in the filesystem catalog)
 - `projects`
   - `project_id TEXT PRIMARY KEY`
-  - `workspace_id TEXT NOT NULL`
   - `path TEXT`
   - `checkout_path TEXT` (resolved local path)
   - `git_root TEXT` (detected)
@@ -141,7 +133,6 @@ We keep the first schema small, and add tables only when we have a consumer.
   - `last_used_at TEXT`
 - `tasks`
   - `task_id TEXT PRIMARY KEY` (UUID v7, generated via `Guid.CreateVersion7()`)
-  - `workspace_id TEXT NULL`
   - `project_id TEXT NULL`
   - `parent_task_id TEXT NULL`
   - `title TEXT NOT NULL`
@@ -158,10 +149,9 @@ We keep the first schema small, and add tables only when we have a consumer.
 - `artifacts`
   - `artifact_id TEXT PRIMARY KEY`
   - `uri TEXT NOT NULL` (stable logical URI; also used by MCP resources)
-  - `workspace_id TEXT NULL`
   - `project_id TEXT NULL`
   - `type TEXT NOT NULL`
-  - `path TEXT NOT NULL` (absolute or workspace-relative, normalized)
+  - `path TEXT NOT NULL` (absolute or project-relative, normalized)
   - `frontmatter_json TEXT` (cached parsed metadata)
   - `created_at TEXT`
   - `updated_at TEXT`
@@ -175,7 +165,6 @@ We keep the first schema small, and add tables only when we have a consumer.
   - `document_id INTEGER PRIMARY KEY AUTOINCREMENT`
   - `source_kind TEXT NOT NULL` (artifact/file/task_event/…)
   - `source_id TEXT NOT NULL` (artifact_id, file path hash, etc.)
-  - `workspace_id TEXT NULL`
   - `project_id TEXT NULL`
   - `title TEXT`
   - `mime_type TEXT`

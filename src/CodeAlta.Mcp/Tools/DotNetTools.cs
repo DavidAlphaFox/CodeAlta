@@ -143,11 +143,10 @@ public sealed class DotNetTools
     [McpServerTool(Name = "codealta.dotnet.run_diagnostics"), Description("Runs dotnet build and persists diagnostics output as artifacts.")]
     public async Task<string> RunDiagnosticsAsync(
         [Description("Repository root, solution path, or project path.")] string targetPath,
-        [Description("Optional workspace id for artifact tagging.")] string? workspaceId = null,
         [Description("Optional project id for artifact tagging.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _diagnostics.RunBuildAsync(targetPath, workspaceId, projectId, cancellationToken).ConfigureAwait(false);
+        var result = await _diagnostics.RunBuildAsync(targetPath, projectId, cancellationToken).ConfigureAwait(false);
         return McpToolJson.Serialize(
             new
             {
@@ -164,7 +163,6 @@ public sealed class DotNetTools
     [McpServerTool(Name = "codealta.dotnet.refresh_index"), Description("Refreshes .NET artifacts and updates the search index for a repository root.")]
     public async Task<string> RefreshIndexAsync(
         [Description("Repository root path.")] string repoRoot,
-        [Description("Optional workspace id for artifact tagging.")] string? workspaceId = null,
         [Description("Optional project id for artifact tagging.")] string? projectId = null,
         IProgress<ProgressNotificationValue>? progress = null,
         CancellationToken cancellationToken = default)
@@ -176,7 +174,7 @@ public sealed class DotNetTools
                 Total = 0,
                 Message = "Refreshing .NET index...",
             });
-        var result = await _index.RefreshIndexAsync(repoRoot, workspaceId, projectId, cancellationToken).ConfigureAwait(false);
+        var result = await _index.RefreshIndexAsync(repoRoot, projectId, cancellationToken).ConfigureAwait(false);
         progress?.Report(
             new ProgressNotificationValue
             {

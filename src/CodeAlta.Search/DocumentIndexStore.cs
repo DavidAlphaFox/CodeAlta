@@ -80,7 +80,6 @@ public sealed class DocumentIndexStore
                             INSERT INTO documents(
                                 source_kind,
                                 source_id,
-                                workspace_id,
                                 project_id,
                                 title,
                                 mime_type,
@@ -91,7 +90,6 @@ public sealed class DocumentIndexStore
                             VALUES (
                                 $source_kind,
                                 $source_id,
-                                $workspace_id,
                                 $project_id,
                                 $title,
                                 $mime_type,
@@ -103,7 +101,6 @@ public sealed class DocumentIndexStore
                             """;
                         insert.Parameters.AddWithValue("$source_kind", input.SourceKind);
                         insert.Parameters.AddWithValue("$source_id", input.SourceId);
-                        insert.Parameters.AddWithValue("$workspace_id", (object?)input.WorkspaceId ?? DBNull.Value);
                         insert.Parameters.AddWithValue("$project_id", (object?)input.ProjectId ?? DBNull.Value);
                         insert.Parameters.AddWithValue("$title", (object?)input.Title ?? DBNull.Value);
                         insert.Parameters.AddWithValue("$mime_type", (object?)input.MimeType ?? DBNull.Value);
@@ -123,8 +120,7 @@ public sealed class DocumentIndexStore
                             update.CommandText =
                                 """
                                 UPDATE documents
-                                SET workspace_id = $workspace_id,
-                                    project_id = $project_id,
+                                SET project_id = $project_id,
                                     title = $title,
                                     mime_type = $mime_type,
                                     text = $text,
@@ -132,7 +128,6 @@ public sealed class DocumentIndexStore
                                     updated_at = $updated_at
                                 WHERE document_id = $document_id;
                                 """;
-                            update.Parameters.AddWithValue("$workspace_id", (object?)input.WorkspaceId ?? DBNull.Value);
                             update.Parameters.AddWithValue("$project_id", (object?)input.ProjectId ?? DBNull.Value);
                             update.Parameters.AddWithValue("$title", (object?)input.Title ?? DBNull.Value);
                             update.Parameters.AddWithValue("$mime_type", (object?)input.MimeType ?? DBNull.Value);
@@ -154,7 +149,6 @@ public sealed class DocumentIndexStore
                     await TryUpsertSqliteVecEmbeddingAsync(
                         connection,
                         documentId,
-                        input.WorkspaceId,
                         input.ProjectId,
                         embedder.GetType().Name,
                         embeddings[index],
@@ -203,13 +197,11 @@ public sealed class DocumentIndexStore
                     FROM documents_fts
                     INNER JOIN documents d ON d.document_id = documents_fts.document_id
                     WHERE documents_fts MATCH $query
-                      AND ($workspace_id IS NULL OR d.workspace_id = $workspace_id)
                       AND ($project_id IS NULL OR d.project_id = $project_id)
                     ORDER BY score ASC
                     LIMIT $limit;
                     """;
                 command.Parameters.AddWithValue("$query", query.Text);
-                command.Parameters.AddWithValue("$workspace_id", (object?)query.WorkspaceId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$project_id", (object?)query.ProjectId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$limit", limit);
 
@@ -293,14 +285,12 @@ public sealed class DocumentIndexStore
     /// </summary>
     /// <param name="candidateDocumentIds">Candidate document ids to consider (typically an FTS prefilter set).</param>
     /// <param name="queryEmbedding">Query embedding vector.</param>
-    /// <param name="workspaceId">Optional workspace filter.</param>
     /// <param name="projectId">Optional project filter.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Map of document id to distance; empty when sqlite-vec is unavailable.</returns>
     public Task<Dictionary<long, double>> QueryVectorDistancesAsync(
         IReadOnlyCollection<long> candidateDocumentIds,
         float[] queryEmbedding,
-        string? workspaceId = null,
         string? projectId = null,
         CancellationToken cancellationToken = default)
     {
@@ -354,14 +344,12 @@ public sealed class DocumentIndexStore
                     FROM {SqliteVecTableName}
                     WHERE embedding MATCH $embedding
                       AND k = $k
-                      AND ($workspace_id IS NULL OR workspace_id = $workspace_id)
                       AND ($project_id IS NULL OR project_id = $project_id)
                       AND document_id IN ({string.Join(", ", inParameters)})
                     ORDER BY distance ASC;
                     """;
                 command.Parameters.AddWithValue("$embedding", embeddingJson);
                 command.Parameters.AddWithValue("$k", candidateDocumentIds.Count);
-                command.Parameters.AddWithValue("$workspace_id", (object?)workspaceId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$project_id", (object?)projectId ?? DBNull.Value);
 
                 var results = new Dictionary<long, double>();
@@ -507,7 +495,6 @@ public sealed class DocumentIndexStore
     private async Task TryUpsertSqliteVecEmbeddingAsync(
         SqliteConnection connection,
         long documentId,
-        string? workspaceId,
         string? projectId,
         string modelId,
         float[] embedding,
@@ -527,12 +514,11 @@ public sealed class DocumentIndexStore
         await using var command = connection.CreateCommand();
         command.CommandText =
             $"""
-            INSERT OR REPLACE INTO {SqliteVecTableName}(document_id, embedding, workspace_id, project_id, model_id)
-            VALUES ($document_id, $embedding, $workspace_id, $project_id, $model_id);
+            INSERT OR REPLACE INTO {SqliteVecTableName}(document_id, embedding, project_id, model_id)
+            VALUES ($document_id, $embedding, $project_id, $model_id);
             """;
         command.Parameters.AddWithValue("$document_id", documentId);
         command.Parameters.AddWithValue("$embedding", SerializeEmbeddingJson(embedding));
-        command.Parameters.AddWithValue("$workspace_id", (object?)workspaceId ?? DBNull.Value);
         command.Parameters.AddWithValue("$project_id", (object?)projectId ?? DBNull.Value);
         command.Parameters.AddWithValue("$model_id", modelId);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -577,7 +563,6 @@ public sealed class DocumentIndexStore
                     CREATE VIRTUAL TABLE IF NOT EXISTS {SqliteVecTableName} USING vec0(
                         document_id INTEGER PRIMARY KEY,
                         embedding FLOAT[{dimension}] distance_metric=cosine,
-                        workspace_id TEXT,
                         project_id TEXT,
                         model_id TEXT
                     );

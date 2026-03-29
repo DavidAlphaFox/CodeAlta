@@ -37,7 +37,6 @@ public sealed class KnowledgeService
     /// </summary>
     /// <param name="title">Summary title.</param>
     /// <param name="summary">Summary markdown content.</param>
-    /// <param name="workspaceId">Optional workspace id.</param>
     /// <param name="projectId">Optional project id.</param>
     /// <param name="taskId">Optional related task id.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -45,7 +44,6 @@ public sealed class KnowledgeService
     public async Task<ArtifactId> WriteRunSummaryAsync(
         string title,
         string summary,
-        string? workspaceId = null,
         string? projectId = null,
         TaskId? taskId = null,
         CancellationToken cancellationToken = default)
@@ -64,7 +62,7 @@ public sealed class KnowledgeService
         var now = DateTimeOffset.UtcNow;
         var path = Path.Combine(
             _options.ArtifactRoot,
-            workspaceId ?? "global",
+            projectId ?? "global",
             "summaries",
             $"{artifactId}.md");
 
@@ -76,7 +74,6 @@ public sealed class KnowledgeService
                 {
                     Id = artifactId.ToString(),
                     Type = "run.summary",
-                    WorkspaceId = workspaceId,
                     ProjectId = projectId,
                     Title = title.Trim(),
                     Tags = ["summary"],
@@ -94,7 +91,6 @@ public sealed class KnowledgeService
             {
                 ArtifactId = artifactId,
                 Uri = $"artifact://summary/{artifactId}",
-                WorkspaceId = workspaceId,
                 ProjectId = projectId,
                 Type = "run.summary",
                 Path = Path.GetFullPath(path),

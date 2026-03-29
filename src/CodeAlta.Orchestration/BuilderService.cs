@@ -76,7 +76,7 @@ public sealed class BuilderService
         var now = DateTimeOffset.UtcNow;
         var path = Path.Combine(
             _options.ArtifactRoot,
-            request.WorkspaceId ?? "global",
+            request.ProjectId ?? "global",
             "builder",
             $"{request.TaskId}.md");
 
@@ -88,7 +88,6 @@ public sealed class BuilderService
                 {
                     Id = artifactId.ToString(),
                     Type = "builder.verification",
-                    WorkspaceId = request.WorkspaceId,
                     ProjectId = request.ProjectId,
                     Title = $"Verification for {request.TaskId}",
                     Tags = ["builder", "verification"],
@@ -106,7 +105,6 @@ public sealed class BuilderService
             {
                 ArtifactId = artifactId,
                 Uri = $"artifact://builder/{request.TaskId}",
-                WorkspaceId = request.WorkspaceId,
                 ProjectId = request.ProjectId,
                 Type = "builder.verification",
                 Path = Path.GetFullPath(path),

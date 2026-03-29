@@ -18,11 +18,6 @@ public sealed record BuilderExecutionRequest
     public required string VerificationSummary { get; init; }
 
     /// <summary>
-    /// Gets or sets optional workspace id for artifact scoping.
-    /// </summary>
-    public string? WorkspaceId { get; init; }
-
-    /// <summary>
     /// Gets or sets optional project id for artifact scoping.
     /// </summary>
     public string? ProjectId { get; init; }

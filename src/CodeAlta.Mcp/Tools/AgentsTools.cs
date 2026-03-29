@@ -29,15 +29,16 @@ public sealed class AgentsTools
     [McpServerTool(Name = "codealta.agents.register"), Description("Registers or updates an agent in the durable registry.")]
     public async Task<string> RegisterAsync(
         [Description("Agent role id.")] string role,
-        [Description("Scope kind (global|workspace|project).")] string scopeKind,
+        [Description("Scope kind (global|project).")] string scopeKind,
         [Description("Backend id (codex|copilot|...).")] string backendId,
-        [Description("Optional scope identifier for workspace/project scope.")] string? scopeId = null,
+        [Description("Optional scope identifier for project scope.")] string? scopeId = null,
         [Description("Optional explicit agent identifier; generated when omitted.")] string? agentId = null,
         CancellationToken cancellationToken = default)
     {
         var parsedId = string.IsNullOrWhiteSpace(agentId)
             ? AgentId.NewVersion7()
             : AgentId.Parse(agentId);
+        var normalizedScopeKind = NormalizeScopeKind(scopeKind);
         var now = DateTimeOffset.UtcNow;
 
         var upserted = await _agentRepository.UpsertAgentAsync(
@@ -45,8 +46,8 @@ public sealed class AgentsTools
             {
                 AgentId = parsedId,
                 Role = role,
-                ScopeKind = scopeKind,
-                ScopeId = scopeId,
+                ScopeKind = normalizedScopeKind,
+                ScopeId = normalizedScopeKind == "project" ? scopeId : null,
                 BackendId = backendId,
                 CreatedAt = now,
             },
@@ -62,8 +63,8 @@ public sealed class AgentsTools
     public async Task<string> UpdateAsync(
         [Description("Agent identifier.")] string agentId,
         [Description("Optional replacement role.")] string? role = null,
-        [Description("Optional replacement scope kind.")] string? scopeKind = null,
-        [Description("Optional replacement scope identifier.")] string? scopeId = null,
+        [Description("Optional replacement scope kind (global|project).")] string? scopeKind = null,
+        [Description("Optional replacement scope identifier for project scope.")] string? scopeId = null,
         [Description("Optional replacement backend id.")] string? backendId = null,
         CancellationToken cancellationToken = default)
     {
@@ -74,13 +75,14 @@ public sealed class AgentsTools
             throw new InvalidOperationException($"Agent '{agentId}' was not found.");
         }
 
+        var normalizedScopeKind = NormalizeScopeKind(scopeKind ?? existing.ScopeKind);
         var upserted = await _agentRepository.UpsertAgentAsync(
             new AgentRecord
             {
                 AgentId = parsedId,
                 Role = role ?? existing.Role,
-                ScopeKind = scopeKind ?? existing.ScopeKind,
-                ScopeId = scopeId ?? existing.ScopeId,
+                ScopeKind = normalizedScopeKind,
+                ScopeId = normalizedScopeKind == "project" ? (scopeId ?? existing.ScopeId) : null,
                 BackendId = backendId ?? existing.BackendId,
                 CreatedAt = existing.CreatedAt,
             },
@@ -111,6 +113,18 @@ public sealed class AgentsTools
             scopeId = record.ScopeId,
             backendId = record.BackendId,
             createdAt = record.CreatedAt,
+        };
+    }
+
+    private static string NormalizeScopeKind(string scopeKind)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(scopeKind);
+
+        return scopeKind.Trim().ToLowerInvariant() switch
+        {
+            "global" => "global",
+            "project" => "project",
+            _ => throw new ArgumentException("Scope kind must be global or project.", nameof(scopeKind)),
         };
     }
 }

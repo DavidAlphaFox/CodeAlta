@@ -75,7 +75,6 @@ public sealed class DotNetInfrastructureTests
 
         var result = await service.RefreshIndexAsync(
             fixtureRoot,
-            workspaceId: "workspace-1",
             projectId: "project-1").ConfigureAwait(false);
 
         Assert.IsTrue(result.SymbolCount > 0);
@@ -104,7 +103,6 @@ public sealed class DotNetInfrastructureTests
 
         var diagnostics = await service.RunBuildAsync(
             fixtureRoot,
-            workspaceId: "workspace-1",
             projectId: "project-1").ConfigureAwait(false);
 
         Assert.IsTrue(diagnostics.Success);

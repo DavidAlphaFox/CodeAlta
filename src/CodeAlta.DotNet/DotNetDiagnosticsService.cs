@@ -43,13 +43,11 @@ public sealed class DotNetDiagnosticsService
     /// Runs <c>dotnet build</c> and persists diagnostics output.
     /// </summary>
     /// <param name="targetPath">Repository root, solution path, or project path.</param>
-    /// <param name="workspaceId">Optional workspace id.</param>
     /// <param name="projectId">Optional project id.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Diagnostics result.</returns>
     public async Task<DotNetDiagnosticsResult> RunBuildAsync(
         string targetPath,
-        string? workspaceId = null,
         string? projectId = null,
         CancellationToken cancellationToken = default)
     {
@@ -122,7 +120,6 @@ public sealed class DotNetDiagnosticsService
                 {
                     Id = artifactId.ToString(),
                     Type = "diagnostics.build",
-                    WorkspaceId = workspaceId,
                     ProjectId = projectId,
                     Title = $"dotnet build diagnostics ({now:O})",
                     Tags = ["dotnet", "diagnostics"],
@@ -137,7 +134,6 @@ public sealed class DotNetDiagnosticsService
             {
                 ArtifactId = artifactId,
                 Uri = uri,
-                WorkspaceId = workspaceId,
                 ProjectId = projectId,
                 Type = "diagnostics.build",
                 Path = Path.GetFullPath(artifactPath),
@@ -155,7 +151,6 @@ public sealed class DotNetDiagnosticsService
                     {
                         SourceKind = "artifact",
                         SourceId = uri,
-                        WorkspaceId = workspaceId,
                         ProjectId = projectId,
                         Title = "dotnet build diagnostics",
                         MimeType = "text/markdown",

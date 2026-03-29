@@ -26,18 +26,6 @@ public sealed class ArtifactFrontmatter
     public string? Title { get; set; }
 
     /// <summary>
-    /// Gets or sets optional workspace identifier.
-    /// </summary>
-    [JsonPropertyName("workspace_id")]
-    public string? WorkspaceId { get; set; }
-
-    /// <summary>
-    /// Gets or sets optional workspace key.
-    /// </summary>
-    [JsonPropertyName("workspace_key")]
-    public string? WorkspaceKey { get; set; }
-
-    /// <summary>
     /// Gets or sets optional project identifier.
     /// </summary>
     [JsonPropertyName("project_id")]

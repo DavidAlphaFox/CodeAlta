@@ -35,7 +35,6 @@ public sealed class SearchTools
     [McpServerTool(Name = "codealta.search.query"), Description("Runs a hybrid or FTS-only search query.")]
     public async Task<string> QueryAsync(
         [Description("Query text.")] string text,
-        [Description("Optional workspace identifier filter.")] string? workspaceId = null,
         [Description("Optional project identifier filter.")] string? projectId = null,
         [Description("Maximum result count.")] int limit = 10,
         [Description("FTS prefilter limit for hybrid search.")] int prefilterLimit = 50,
@@ -45,7 +44,6 @@ public sealed class SearchTools
         var query = new SearchQuery
         {
             Text = text,
-            WorkspaceId = workspaceId,
             ProjectId = projectId,
             Limit = limit,
             PrefilterLimit = prefilterLimit,
@@ -79,7 +77,6 @@ public sealed class SearchTools
         [Description("Document text content.")] string text,
         [Description("Optional title.")] string? title = null,
         [Description("Optional MIME type.")] string? mimeType = "text/markdown",
-        [Description("Optional workspace identifier.")] string? workspaceId = null,
         [Description("Optional project identifier.")] string? projectId = null,
         [Description("When true process immediately in this call.")] bool processNow = true,
         IProgress<ProgressNotificationValue>? progress = null,
@@ -93,7 +90,6 @@ public sealed class SearchTools
                 {
                     SourceKind = sourceKind,
                     SourceId = sourceId,
-                    WorkspaceId = workspaceId,
                     ProjectId = projectId,
                     Title = title,
                     MimeType = mimeType,

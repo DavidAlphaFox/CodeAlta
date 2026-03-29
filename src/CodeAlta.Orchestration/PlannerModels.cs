@@ -13,11 +13,6 @@ public sealed record PlannerPlanRequest
     public required string Goal { get; init; }
 
     /// <summary>
-    /// Gets or sets optional workspace id.
-    /// </summary>
-    public string? WorkspaceId { get; init; }
-
-    /// <summary>
     /// Gets or sets optional project id.
     /// </summary>
     public string? ProjectId { get; init; }

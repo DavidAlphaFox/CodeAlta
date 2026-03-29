@@ -11,11 +11,6 @@ public sealed record SearchQuery
     public string Text { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets optional workspace filter.
-    /// </summary>
-    public string? WorkspaceId { get; set; }
-
-    /// <summary>
     /// Gets or sets optional project filter.
     /// </summary>
     public string? ProjectId { get; set; }

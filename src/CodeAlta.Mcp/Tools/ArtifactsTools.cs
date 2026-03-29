@@ -39,8 +39,6 @@ public sealed class ArtifactsTools
         [Description("Artifact type.")] string type,
         [Description("Markdown body.")] string body,
         [Description("Optional title.")] string? title = null,
-        [Description("Optional workspace identifier.")] string? workspaceId = null,
-        [Description("Optional workspace key.")] string? workspaceKey = null,
         [Description("Optional project identifier.")] string? projectId = null,
         [Description("Optional project key.")] string? projectKey = null,
         [Description("Optional tags.")] IReadOnlyList<string>? tags = null,
@@ -56,8 +54,6 @@ public sealed class ArtifactsTools
                 Id = artifactId.ToString(),
                 Type = type,
                 Title = title,
-                WorkspaceId = workspaceId,
-                WorkspaceKey = workspaceKey,
                 ProjectId = projectId,
                 ProjectKey = projectKey,
                 Tags = tags?.ToList() ?? [],
@@ -70,12 +66,11 @@ public sealed class ArtifactsTools
             document,
             cancellationToken).ConfigureAwait(false);
 
-        var uri = $"artifact://{workspaceId ?? "global"}/{projectId ?? "global"}/{artifactId}";
+        var uri = $"artifact://{projectId ?? "global"}/{artifactId}";
         var record = new ArtifactRecord
         {
             ArtifactId = artifactId,
             Uri = uri,
-            WorkspaceId = workspaceId,
             ProjectId = projectId,
             Type = type,
             Path = normalizedPath,
@@ -124,7 +119,6 @@ public sealed class ArtifactsTools
                 uri = record.Uri,
                 type = record.Type,
                 path = record.Path,
-                workspaceId = record.WorkspaceId,
                 projectId = record.ProjectId,
                 frontmatter = document.Frontmatter,
                 body = document.Body,
@@ -141,7 +135,6 @@ public sealed class ArtifactsTools
     /// </summary>
     [McpServerTool(Name = "codealta.artifacts.list"), Description("Lists artifacts by optional scope and type filters.")]
     public async Task<string> ListAsync(
-        [Description("Optional workspace identifier filter.")] string? workspaceId = null,
         [Description("Optional project identifier filter.")] string? projectId = null,
         [Description("Optional type filter.")] string? type = null,
         [Description("Maximum result count.")] int limit = 100,
@@ -150,7 +143,6 @@ public sealed class ArtifactsTools
         var records = await _artifactRepository.ListAsync(
             new ArtifactQuery
             {
-                WorkspaceId = workspaceId,
                 ProjectId = projectId,
                 Type = type,
                 Limit = limit,
@@ -161,7 +153,6 @@ public sealed class ArtifactsTools
         {
             artifactId = x.ArtifactId.ToString(),
             uri = x.Uri,
-            workspaceId = x.WorkspaceId,
             projectId = x.ProjectId,
             type = x.Type,
             path = x.Path,

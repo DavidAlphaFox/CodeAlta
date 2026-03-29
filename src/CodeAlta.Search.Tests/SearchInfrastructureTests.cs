@@ -19,8 +19,7 @@ public sealed class SearchInfrastructureTests
                     new DocumentInput
                     {
                         SourceKind = "artifact",
-                        SourceId = "artifact://wk-core/knowledge/perf",
-                        WorkspaceId = "workspace-1",
+                        SourceId = "artifact://project-1/knowledge/perf",
                         ProjectId = "project-1",
                         Title = "Performance Notes",
                         Text = "Use Span<T> and ArrayPool<T> to reduce allocations in tight loops.",
@@ -34,13 +33,12 @@ public sealed class SearchInfrastructureTests
             new SearchQuery
             {
                 Text = "allocations",
-                WorkspaceId = "workspace-1",
                 ProjectId = "project-1",
                 PrefilterLimit = 10,
             }).ConfigureAwait(false);
 
         Assert.AreEqual(1, fts.Count);
-        Assert.AreEqual("artifact://wk-core/knowledge/perf", fts[0].SourceId);
+        Assert.AreEqual("artifact://project-1/knowledge/perf", fts[0].SourceId);
         StringAssert.Contains(fts[0].Snippet ?? string.Empty, "allocations");
     }
 
@@ -58,8 +56,7 @@ public sealed class SearchInfrastructureTests
                     new DocumentInput
                     {
                         SourceKind = "artifact",
-                        SourceId = "artifact://wk-core/knowledge/architecture",
-                        WorkspaceId = "workspace-1",
+                        SourceId = "artifact://project-1/knowledge/architecture",
                         ProjectId = "project-1",
                         Title = "Architecture",
                         Text = "Architecture overview for orchestration and durable state.",
@@ -67,8 +64,7 @@ public sealed class SearchInfrastructureTests
                     new DocumentInput
                     {
                         SourceKind = "artifact",
-                        SourceId = "artifact://wk-core/knowledge/testing",
-                        WorkspaceId = "workspace-1",
+                        SourceId = "artifact://project-1/knowledge/testing",
                         ProjectId = "project-1",
                         Title = "Testing",
                         Text = "Testing notes for durable architecture, persistence, and search behavior.",
@@ -82,7 +78,6 @@ public sealed class SearchInfrastructureTests
             new SearchQuery
             {
                 Text = "durable architecture",
-                WorkspaceId = "workspace-1",
                 ProjectId = "project-1",
                 Limit = 2,
                 PrefilterLimit = 10,
@@ -107,8 +102,7 @@ public sealed class SearchInfrastructureTests
                     new DocumentInput
                     {
                         SourceKind = "artifact",
-                        SourceId = "artifact://wk-core/knowledge/status",
-                        WorkspaceId = "workspace-1",
+                        SourceId = "artifact://project-1/knowledge/status",
                         ProjectId = "project-1",
                         Title = "Status",
                         Text = "queue depth status sample",
@@ -159,8 +153,7 @@ public sealed class SearchInfrastructureTests
                     new DocumentInput
                     {
                         SourceKind = "artifact",
-                        SourceId = "artifact://wk-core/knowledge/vec",
-                        WorkspaceId = "workspace-1",
+                        SourceId = "artifact://project-1/knowledge/vec",
                         ProjectId = "project-1",
                         Title = "Vec Fixture",
                         Text = "sqlite-vec fixture document",

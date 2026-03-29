@@ -11,11 +11,6 @@ public sealed record TaskRecord
     public required TaskId TaskId { get; init; }
 
     /// <summary>
-    /// Gets the optional workspace identifier.
-    /// </summary>
-    public string? WorkspaceId { get; init; }
-
-    /// <summary>
     /// Gets the optional project identifier.
     /// </summary>
     public string? ProjectId { get; init; }
@@ -91,11 +86,6 @@ public sealed record CreateTaskRequest
     /// Gets or sets the optional explicit task identifier.
     /// </summary>
     public TaskId? TaskId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional workspace identifier.
-    /// </summary>
-    public string? WorkspaceId { get; set; }
 
     /// <summary>
     /// Gets or sets the optional project identifier.

@@ -38,12 +38,11 @@ public sealed class ArtifactRepository
                 command.CommandText =
                     """
                     INSERT INTO artifacts(
-                        artifact_id, uri, workspace_id, project_id, type, path, frontmatter_json, created_at, updated_at)
+                        artifact_id, uri, project_id, type, path, frontmatter_json, created_at, updated_at)
                     VALUES (
-                        $artifact_id, $uri, $workspace_id, $project_id, $type, $path, $frontmatter_json, $created_at, $updated_at)
+                        $artifact_id, $uri, $project_id, $type, $path, $frontmatter_json, $created_at, $updated_at)
                     ON CONFLICT(artifact_id) DO UPDATE SET
                         uri = excluded.uri,
-                        workspace_id = excluded.workspace_id,
                         project_id = excluded.project_id,
                         type = excluded.type,
                         path = excluded.path,
@@ -52,7 +51,6 @@ public sealed class ArtifactRepository
                     """;
                 command.Parameters.AddWithValue("$artifact_id", record.ArtifactId.ToString());
                 command.Parameters.AddWithValue("$uri", record.Uri);
-                command.Parameters.AddWithValue("$workspace_id", (object?)record.WorkspaceId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$project_id", (object?)record.ProjectId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$type", record.Type);
                 command.Parameters.AddWithValue("$path", record.Path);
@@ -82,7 +80,7 @@ public sealed class ArtifactRepository
                 await using var command = connection.CreateCommand();
                 command.CommandText =
                     """
-                    SELECT artifact_id, uri, workspace_id, project_id, type, path, frontmatter_json, created_at, updated_at
+                    SELECT artifact_id, uri, project_id, type, path, frontmatter_json, created_at, updated_at
                     FROM artifacts
                     WHERE artifact_id = $artifact_id;
                     """;
@@ -122,15 +120,13 @@ public sealed class ArtifactRepository
                 await using var command = connection.CreateCommand();
                 command.CommandText =
                     """
-                    SELECT artifact_id, uri, workspace_id, project_id, type, path, frontmatter_json, created_at, updated_at
+                    SELECT artifact_id, uri, project_id, type, path, frontmatter_json, created_at, updated_at
                     FROM artifacts
-                    WHERE ($workspace_id IS NULL OR workspace_id = $workspace_id)
-                      AND ($project_id IS NULL OR project_id = $project_id)
+                    WHERE ($project_id IS NULL OR project_id = $project_id)
                       AND ($type IS NULL OR type = $type)
                     ORDER BY updated_at DESC
                     LIMIT $limit;
                     """;
-                command.Parameters.AddWithValue("$workspace_id", (object?)query.WorkspaceId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$project_id", (object?)query.ProjectId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$type", (object?)query.Type ?? DBNull.Value);
                 command.Parameters.AddWithValue("$limit", query.Limit);
@@ -221,13 +217,12 @@ public sealed class ArtifactRepository
         {
             ArtifactId = ArtifactId.Parse(reader.GetString(0)),
             Uri = reader.GetString(1),
-            WorkspaceId = reader.IsDBNull(2) ? null : reader.GetString(2),
-            ProjectId = reader.IsDBNull(3) ? null : reader.GetString(3),
-            Type = reader.GetString(4),
-            Path = reader.GetString(5),
-            FrontmatterJson = reader.IsDBNull(6) ? null : reader.GetString(6),
-            CreatedAt = DateTimeOffset.Parse(reader.GetString(7), provider: null),
-            UpdatedAt = DateTimeOffset.Parse(reader.GetString(8), provider: null),
+            ProjectId = reader.IsDBNull(2) ? null : reader.GetString(2),
+            Type = reader.GetString(3),
+            Path = reader.GetString(4),
+            FrontmatterJson = reader.IsDBNull(5) ? null : reader.GetString(5),
+            CreatedAt = DateTimeOffset.Parse(reader.GetString(6), provider: null),
+            UpdatedAt = DateTimeOffset.Parse(reader.GetString(7), provider: null),
         };
     }
 }

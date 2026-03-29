@@ -52,13 +52,11 @@ public sealed class DotNetIndexService
     /// Refreshes .NET project graph/symbol artifacts and indexes them.
     /// </summary>
     /// <param name="repoRoot">Repository root.</param>
-    /// <param name="workspaceId">Optional workspace id.</param>
     /// <param name="projectId">Optional project id.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Refresh result summary.</returns>
     public async Task<DotNetIndexRefreshResult> RefreshIndexAsync(
         string repoRoot,
-        string? workspaceId = null,
         string? projectId = null,
         CancellationToken cancellationToken = default)
     {
@@ -83,7 +81,6 @@ public sealed class DotNetIndexService
                 {
                     Id = graphArtifactId.ToString(),
                     Type = "knowledge.dotnet.project-graph",
-                    WorkspaceId = workspaceId,
                     ProjectId = projectId,
                     Title = "DotNet project graph",
                     Tags = ["dotnet", "project-graph"],
@@ -96,7 +93,6 @@ public sealed class DotNetIndexService
             {
                 ArtifactId = graphArtifactId,
                 Uri = "artifact://dotnet/project-graph",
-                WorkspaceId = workspaceId,
                 ProjectId = projectId,
                 Type = "knowledge.dotnet.project-graph",
                 Path = Path.GetFullPath(graphPath),
@@ -111,7 +107,6 @@ public sealed class DotNetIndexService
             {
                 SourceKind = "artifact",
                 SourceId = "artifact://dotnet/project-graph",
-                WorkspaceId = workspaceId,
                 ProjectId = projectId,
                 Title = "DotNet project graph",
                 MimeType = "text/markdown",
@@ -145,7 +140,6 @@ public sealed class DotNetIndexService
                     {
                         Id = symbolId.ToString(),
                         Type = "knowledge.dotnet.symbol",
-                        WorkspaceId = workspaceId,
                         ProjectId = projectId,
                         Title = symbol.FullyQualifiedName,
                         Tags = ["dotnet", "symbol"],
@@ -159,7 +153,6 @@ public sealed class DotNetIndexService
                 {
                     ArtifactId = symbolId,
                     Uri = uri,
-                    WorkspaceId = workspaceId,
                     ProjectId = projectId,
                     Type = "knowledge.dotnet.symbol",
                     Path = Path.GetFullPath(symbolPath),
@@ -173,7 +166,6 @@ public sealed class DotNetIndexService
                 {
                     SourceKind = "artifact",
                     SourceId = uri,
-                    WorkspaceId = workspaceId,
                     ProjectId = projectId,
                     Title = symbol.FullyQualifiedName,
                     MimeType = "text/markdown",

@@ -16,11 +16,6 @@ public sealed record DocumentInput
     public string SourceId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets optional workspace identifier.
-    /// </summary>
-    public string? WorkspaceId { get; set; }
-
-    /// <summary>
     /// Gets or sets optional project identifier.
     /// </summary>
     public string? ProjectId { get; set; }

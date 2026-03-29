@@ -48,7 +48,6 @@ public sealed class TasksTools
     public async Task<string> CreateAsync(
         [Description("Task title.")] string title,
         [Description("Optional task description stored as a note event.")] string? description = null,
-        [Description("Optional workspace identifier.")] string? workspaceId = null,
         [Description("Optional project identifier.")] string? projectId = null,
         [Description("Optional parent task identifier.")] string? parentTaskId = null,
         [Description("Optional assigned agent identifier.")] string? assignedAgentId = null,
@@ -58,7 +57,6 @@ public sealed class TasksTools
             new CreateTaskRequest
             {
                 Title = title,
-                WorkspaceId = workspaceId,
                 ProjectId = projectId,
                 ParentTaskId = parentTaskId,
                 AssignedAgentId = assignedAgentId,
@@ -137,14 +135,12 @@ public sealed class TasksTools
     /// </summary>
     [McpServerTool(Name = "codealta.tasks.list"), Description("Lists tasks by optional scope filters.")]
     public async Task<string> ListAsync(
-        [Description("Optional workspace identifier filter.")] string? workspaceId = null,
         [Description("Optional project identifier filter.")] string? projectId = null,
         [Description("Optional cursor for pagination.")] string? cursor = null,
         [Description("Maximum number of tasks.")] int limit = 100,
         CancellationToken cancellationToken = default)
     {
         var page = await _taskRepository.ListPageAsync(
-            workspaceId,
             projectId,
             limit,
             cursor,
@@ -165,7 +161,6 @@ public sealed class TasksTools
     public async Task<string> AddNoteAsync(
         [Description("Task identifier.")] string taskId,
         [Description("Markdown note content.")] string note,
-        [Description("Optional workspace identifier for artifact scoping.")] string? workspaceId = null,
         [Description("Optional project identifier for artifact scoping.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
@@ -175,7 +170,6 @@ public sealed class TasksTools
         var artifact = await WriteTaskNoteArtifactAsync(
             parsedTaskId,
             note,
-            workspaceId,
             projectId,
             cancellationToken).ConfigureAwait(false);
 
@@ -228,14 +222,13 @@ public sealed class TasksTools
     private async Task<ArtifactRecord> WriteTaskNoteArtifactAsync(
         TaskId taskId,
         string note,
-        string? workspaceId,
         string? projectId,
         CancellationToken cancellationToken)
     {
         var artifactId = ArtifactId.NewVersion7();
         var timestamp = DateTimeOffset.UtcNow;
         var relativePath = Path.Combine(
-            workspaceId ?? "global",
+            projectId ?? "global",
             "tasks",
             taskId.ToString(),
             "notes",
@@ -248,7 +241,6 @@ public sealed class TasksTools
             {
                 Id = artifactId.ToString(),
                 Type = "task.note",
-                WorkspaceId = workspaceId,
                 ProjectId = projectId,
                 Title = $"Task note {taskId}",
                 Tags = ["task", "note"],
@@ -269,7 +261,6 @@ public sealed class TasksTools
         {
             ArtifactId = artifactId,
             Uri = $"artifact://task/{taskId}/note/{artifactId}",
-            WorkspaceId = workspaceId,
             ProjectId = projectId,
             Type = "task.note",
             Path = writtenPath,
@@ -297,7 +288,6 @@ public sealed class TasksTools
         builder.AppendLine();
         builder.AppendLine($"- Title: {task.Title}");
         builder.AppendLine($"- Status: {ToStatusString(task.Status)}");
-        builder.AppendLine($"- WorkspaceId: {task.WorkspaceId ?? "(none)"}");
         builder.AppendLine($"- ProjectId: {task.ProjectId ?? "(none)"}");
         builder.AppendLine($"- AssignedAgentId: {task.AssignedAgentId ?? "(none)"}");
         builder.AppendLine($"- CreatedAt: {task.CreatedAt:O}");
@@ -327,7 +317,6 @@ public sealed class TasksTools
         return new
         {
             taskId = task.TaskId.ToString(),
-            workspaceId = task.WorkspaceId,
             projectId = task.ProjectId,
             parentTaskId = task.ParentTaskId,
             title = task.Title,

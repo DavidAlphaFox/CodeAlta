@@ -112,7 +112,7 @@ public sealed class McpToolBridgeTests
         var createTool = tools.Single(x => x.Spec.Name == "codealta.tasks.create");
         var createArgs = JsonDocument.Parse(
             """
-            {"title":"hello","workspaceId":"workspace-1","projectId":"project-1"}
+            {"title":"hello","projectId":"project-1"}
             """).RootElement;
         var createResult = await createTool.Handler(
             new AgentToolInvocation(

@@ -12,15 +12,8 @@ public sealed class CodeAltaDb
         new DbMigration(
             "0001_initial",
             """
-            CREATE TABLE IF NOT EXISTS workspaces (
-                workspace_id TEXT PRIMARY KEY,
-                display_name TEXT,
-                config_uri TEXT
-            );
-
             CREATE TABLE IF NOT EXISTS projects (
                 project_id TEXT PRIMARY KEY,
-                workspace_id TEXT NOT NULL,
                 path TEXT,
                 checkout_path TEXT,
                 git_root TEXT
@@ -45,7 +38,6 @@ public sealed class CodeAltaDb
 
             CREATE TABLE IF NOT EXISTS tasks (
                 task_id TEXT PRIMARY KEY,
-                workspace_id TEXT NULL,
                 project_id TEXT NULL,
                 parent_task_id TEXT NULL,
                 title TEXT NOT NULL,
@@ -66,7 +58,6 @@ public sealed class CodeAltaDb
             CREATE TABLE IF NOT EXISTS artifacts (
                 artifact_id TEXT PRIMARY KEY,
                 uri TEXT NOT NULL,
-                workspace_id TEXT NULL,
                 project_id TEXT NULL,
                 type TEXT NOT NULL,
                 path TEXT NOT NULL,
@@ -85,7 +76,6 @@ public sealed class CodeAltaDb
                 document_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_kind TEXT NOT NULL,
                 source_id TEXT NOT NULL,
-                workspace_id TEXT NULL,
                 project_id TEXT NULL,
                 title TEXT NULL,
                 mime_type TEXT NULL,
@@ -108,14 +98,104 @@ public sealed class CodeAltaDb
                 embedding_blob BLOB NOT NULL
             );
 
-            CREATE INDEX IF NOT EXISTS idx_tasks_workspace_project
-                ON tasks(workspace_id, project_id, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_tasks_project_updated
+                ON tasks(project_id, updated_at);
             CREATE INDEX IF NOT EXISTS idx_task_events_task
                 ON task_events(task_id, created_at);
-            CREATE INDEX IF NOT EXISTS idx_artifacts_scope_type
-                ON artifacts(workspace_id, project_id, type, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_artifacts_project_type
+                ON artifacts(project_id, type, updated_at);
             CREATE INDEX IF NOT EXISTS idx_documents_source
                 ON documents(source_kind, source_id);
+            """
+        ),
+        new DbMigration(
+            "0002_remove_workspace_scope",
+            """
+            PRAGMA foreign_keys = OFF;
+
+            DROP INDEX IF EXISTS idx_tasks_workspace_project;
+            DROP INDEX IF EXISTS idx_artifacts_scope_type;
+
+            ALTER TABLE projects RENAME TO projects_old;
+            CREATE TABLE projects (
+                project_id TEXT PRIMARY KEY,
+                path TEXT,
+                checkout_path TEXT,
+                git_root TEXT
+            );
+            INSERT INTO projects(project_id, path, checkout_path, git_root)
+            SELECT project_id, path, checkout_path, git_root
+            FROM projects_old;
+            DROP TABLE projects_old;
+
+            ALTER TABLE tasks RENAME TO tasks_old;
+            CREATE TABLE tasks (
+                task_id TEXT PRIMARY KEY,
+                project_id TEXT NULL,
+                parent_task_id TEXT NULL,
+                title TEXT NOT NULL,
+                status TEXT NOT NULL,
+                assigned_agent_id TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO tasks(task_id, project_id, parent_task_id, title, status, assigned_agent_id, created_at, updated_at)
+            SELECT task_id, project_id, parent_task_id, title, status, assigned_agent_id, created_at, updated_at
+            FROM tasks_old;
+            DROP TABLE tasks_old;
+
+            ALTER TABLE artifacts RENAME TO artifacts_old;
+            CREATE TABLE artifacts (
+                artifact_id TEXT PRIMARY KEY,
+                uri TEXT NOT NULL,
+                project_id TEXT NULL,
+                type TEXT NOT NULL,
+                path TEXT NOT NULL,
+                frontmatter_json TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO artifacts(artifact_id, uri, project_id, type, path, frontmatter_json, created_at, updated_at)
+            SELECT artifact_id, uri, project_id, type, path, frontmatter_json, created_at, updated_at
+            FROM artifacts_old;
+            DROP TABLE artifacts_old;
+
+            ALTER TABLE documents RENAME TO documents_old;
+            CREATE TABLE documents (
+                document_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_kind TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                project_id TEXT NULL,
+                title TEXT NULL,
+                mime_type TEXT NULL,
+                text TEXT NOT NULL,
+                text_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO documents(document_id, source_kind, source_id, project_id, title, mime_type, text, text_hash, created_at, updated_at)
+            SELECT document_id, source_kind, source_id, project_id, title, mime_type, text, text_hash, created_at, updated_at
+            FROM documents_old;
+            DROP TABLE documents_old;
+
+            UPDATE agents
+            SET scope_kind = 'global',
+                scope_id = NULL
+            WHERE lower(scope_kind) = 'workspace';
+
+            DROP TABLE IF EXISTS workspaces;
+            DROP TABLE IF EXISTS document_embeddings_vec;
+
+            CREATE INDEX IF NOT EXISTS idx_tasks_project_updated
+                ON tasks(project_id, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_task_events_task
+                ON task_events(task_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_artifacts_project_type
+                ON artifacts(project_id, type, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_documents_source
+                ON documents(source_kind, source_id);
+
+            PRAGMA foreign_keys = ON;
             """
         ),
     ];

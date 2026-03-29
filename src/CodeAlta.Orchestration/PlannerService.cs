@@ -60,7 +60,6 @@ public sealed class PlannerService
             new CreateTaskRequest
             {
                 Title = request.Goal.Trim(),
-                WorkspaceId = request.WorkspaceId,
                 ProjectId = request.ProjectId,
                 AssignedAgentId = request.AssignedAgentId,
             },
@@ -73,7 +72,6 @@ public sealed class PlannerService
                 new CreateTaskRequest
                 {
                     Title = step.Trim(),
-                    WorkspaceId = request.WorkspaceId,
                     ProjectId = request.ProjectId,
                     ParentTaskId = rootTask.TaskId.ToString(),
                     AssignedAgentId = request.AssignedAgentId,
@@ -86,7 +84,7 @@ public sealed class PlannerService
         var now = DateTimeOffset.UtcNow;
         var path = Path.Combine(
             _options.ArtifactRoot,
-            request.WorkspaceId ?? "global",
+            request.ProjectId ?? "global",
             "plans",
             $"{rootTask.TaskId}.md");
         var body = BuildPlanMarkdown(rootTask, childTaskIds);
@@ -99,7 +97,6 @@ public sealed class PlannerService
                 {
                     Id = planArtifactId.ToString(),
                     Type = "plan.output",
-                    WorkspaceId = request.WorkspaceId,
                     ProjectId = request.ProjectId,
                     Title = $"Plan for {rootTask.Title}",
                     Tags = ["plan", "planner"],
@@ -117,7 +114,6 @@ public sealed class PlannerService
             {
                 ArtifactId = planArtifactId,
                 Uri = $"artifact://plan/{rootTask.TaskId}",
-                WorkspaceId = request.WorkspaceId,
                 ProjectId = request.ProjectId,
                 Type = "plan.output",
                 Path = Path.GetFullPath(path),

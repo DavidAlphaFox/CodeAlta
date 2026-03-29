@@ -16,11 +16,6 @@ public sealed record ArtifactRecord
     public required string Uri { get; init; }
 
     /// <summary>
-    /// Gets the optional workspace identifier.
-    /// </summary>
-    public string? WorkspaceId { get; init; }
-
-    /// <summary>
     /// Gets the optional project identifier.
     /// </summary>
     public string? ProjectId { get; init; }
@@ -77,11 +72,6 @@ public sealed record ArtifactLinkRecord
 /// </summary>
 public sealed record ArtifactQuery
 {
-    /// <summary>
-    /// Gets or sets an optional workspace identifier filter.
-    /// </summary>
-    public string? WorkspaceId { get; set; }
-
     /// <summary>
     /// Gets or sets an optional project identifier filter.
     /// </summary>

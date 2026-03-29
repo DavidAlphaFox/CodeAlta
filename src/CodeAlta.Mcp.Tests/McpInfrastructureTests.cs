@@ -44,7 +44,6 @@ public sealed class McpInfrastructureTests
             new Dictionary<string, object?>
             {
                 ["title"] = "Implement MCP tools",
-                ["workspaceId"] = "workspace-1",
                 ["projectId"] = "project-1",
             }).ConfigureAwait(false);
 
@@ -78,7 +77,6 @@ public sealed class McpInfrastructureTests
                 new Dictionary<string, object?>
                 {
                     ["title"] = $"task-{i}",
-                    ["workspaceId"] = "workspace-1",
                     ["projectId"] = "project-1",
                 }).ConfigureAwait(false);
         }
@@ -87,7 +85,6 @@ public sealed class McpInfrastructureTests
             "codealta.tasks.list",
             new Dictionary<string, object?>
             {
-                ["workspaceId"] = "workspace-1",
                 ["projectId"] = "project-1",
                 ["limit"] = 2,
             }).ConfigureAwait(false);
@@ -102,7 +99,6 @@ public sealed class McpInfrastructureTests
             "codealta.tasks.list",
             new Dictionary<string, object?>
             {
-                ["workspaceId"] = "workspace-1",
                 ["projectId"] = "project-1",
                 ["limit"] = 2,
                 ["cursor"] = cursor,
@@ -128,7 +124,6 @@ public sealed class McpInfrastructureTests
                 ["sourceId"] = artifactUri,
                 ["title"] = "Performance Notes",
                 ["text"] = "Use Span<T> and ArrayPool<T> to reduce allocations.",
-                ["workspaceId"] = "workspace-1",
                 ["projectId"] = "project-1",
                 ["processNow"] = true,
             }).ConfigureAwait(false);
@@ -138,7 +133,6 @@ public sealed class McpInfrastructureTests
             new Dictionary<string, object?>
             {
                 ["text"] = "allocations span",
-                ["workspaceId"] = "workspace-1",
                 ["projectId"] = "project-1",
                 ["limit"] = 5,
             }).ConfigureAwait(false);

@@ -47,7 +47,6 @@ public sealed class TaskContextProvider : IContextProvider
             $"""
             Task: {task.Title}
             Status: {task.Status}
-            WorkspaceId: {task.WorkspaceId ?? "(none)"}
             ProjectId: {task.ProjectId ?? "(none)"}
             Recent Events:
             {eventSummary}

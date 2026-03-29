@@ -50,7 +50,6 @@ public sealed class TaskRepository
                     """
                     INSERT INTO tasks(
                         task_id,
-                        workspace_id,
                         project_id,
                         parent_task_id,
                         title,
@@ -60,7 +59,6 @@ public sealed class TaskRepository
                         updated_at)
                     VALUES (
                         $task_id,
-                        $workspace_id,
                         $project_id,
                         $parent_task_id,
                         $title,
@@ -70,7 +68,6 @@ public sealed class TaskRepository
                         $updated_at);
                     """;
                 insertTask.Parameters.AddWithValue("$task_id", taskId.ToString());
-                insertTask.Parameters.AddWithValue("$workspace_id", (object?)request.WorkspaceId ?? DBNull.Value);
                 insertTask.Parameters.AddWithValue("$project_id", (object?)request.ProjectId ?? DBNull.Value);
                 insertTask.Parameters.AddWithValue("$parent_task_id", (object?)request.ParentTaskId ?? DBNull.Value);
                 insertTask.Parameters.AddWithValue("$title", request.Title);
@@ -91,7 +88,6 @@ public sealed class TaskRepository
                 return new TaskRecord
                 {
                     TaskId = taskId,
-                    WorkspaceId = request.WorkspaceId,
                     ProjectId = request.ProjectId,
                     ParentTaskId = request.ParentTaskId,
                     Title = request.Title,
@@ -162,7 +158,6 @@ public sealed class TaskRepository
                 return new TaskRecord
                 {
                     TaskId = existing.TaskId,
-                    WorkspaceId = existing.WorkspaceId,
                     ProjectId = existing.ProjectId,
                     ParentTaskId = existing.ParentTaskId,
                     Title = nextTitle,
@@ -189,13 +184,11 @@ public sealed class TaskRepository
     /// <summary>
     /// Lists tasks in descending update order.
     /// </summary>
-    /// <param name="workspaceId">Optional workspace filter.</param>
     /// <param name="projectId">Optional project filter.</param>
     /// <param name="limit">Result limit.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The matching tasks.</returns>
     public Task<IReadOnlyList<TaskRecord>> ListAsync(
-        string? workspaceId = null,
         string? projectId = null,
         int limit = 100,
         CancellationToken cancellationToken = default)
@@ -211,14 +204,12 @@ public sealed class TaskRepository
                 await using var command = connection.CreateCommand();
                 command.CommandText =
                     """
-                    SELECT task_id, workspace_id, project_id, parent_task_id, title, status, assigned_agent_id, created_at, updated_at
+                    SELECT task_id, project_id, parent_task_id, title, status, assigned_agent_id, created_at, updated_at
                     FROM tasks
-                    WHERE ($workspace_id IS NULL OR workspace_id = $workspace_id)
-                      AND ($project_id IS NULL OR project_id = $project_id)
+                    WHERE ($project_id IS NULL OR project_id = $project_id)
                     ORDER BY updated_at DESC, task_id DESC
                     LIMIT $limit;
                     """;
-                command.Parameters.AddWithValue("$workspace_id", (object?)workspaceId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$project_id", (object?)projectId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$limit", limit);
 
@@ -237,7 +228,6 @@ public sealed class TaskRepository
     /// <summary>
     /// Lists tasks using cursor-based pagination in descending update order.
     /// </summary>
-    /// <param name="workspaceId">Optional workspace filter.</param>
     /// <param name="projectId">Optional project filter.</param>
     /// <param name="limit">Result limit.</param>
     /// <param name="cursor">Optional cursor returned by a previous page.</param>
@@ -246,7 +236,6 @@ public sealed class TaskRepository
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit"/> is not positive.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="cursor"/> is invalid.</exception>
     public Task<TaskListPage> ListPageAsync(
-        string? workspaceId = null,
         string? projectId = null,
         int limit = 100,
         string? cursor = null,
@@ -270,10 +259,9 @@ public sealed class TaskRepository
                 await using var command = connection.CreateCommand();
                 command.CommandText =
                     """
-                    SELECT task_id, workspace_id, project_id, parent_task_id, title, status, assigned_agent_id, created_at, updated_at
+                    SELECT task_id, project_id, parent_task_id, title, status, assigned_agent_id, created_at, updated_at
                     FROM tasks
-                    WHERE ($workspace_id IS NULL OR workspace_id = $workspace_id)
-                      AND ($project_id IS NULL OR project_id = $project_id)
+                    WHERE ($project_id IS NULL OR project_id = $project_id)
                       AND (
                         $cursor_updated_at IS NULL
                         OR updated_at < $cursor_updated_at
@@ -282,7 +270,6 @@ public sealed class TaskRepository
                     ORDER BY updated_at DESC, task_id DESC
                     LIMIT $limit;
                     """;
-                command.Parameters.AddWithValue("$workspace_id", (object?)workspaceId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$project_id", (object?)projectId ?? DBNull.Value);
                 command.Parameters.AddWithValue(
                     "$cursor_updated_at",
@@ -433,7 +420,7 @@ public sealed class TaskRepository
         await using var command = connection.CreateCommand();
         command.CommandText =
             """
-            SELECT task_id, workspace_id, project_id, parent_task_id, title, status, assigned_agent_id, created_at, updated_at
+            SELECT task_id, project_id, parent_task_id, title, status, assigned_agent_id, created_at, updated_at
             FROM tasks
             WHERE task_id = $task_id;
             """;
@@ -453,14 +440,13 @@ public sealed class TaskRepository
         return new TaskRecord
         {
             TaskId = TaskId.Parse(reader.GetString(0)),
-            WorkspaceId = reader.IsDBNull(1) ? null : reader.GetString(1),
-            ProjectId = reader.IsDBNull(2) ? null : reader.GetString(2),
-            ParentTaskId = reader.IsDBNull(3) ? null : reader.GetString(3),
-            Title = reader.GetString(4),
-            Status = ParseStatus(reader.GetString(5)),
-            AssignedAgentId = reader.IsDBNull(6) ? null : reader.GetString(6),
-            CreatedAt = DateTimeOffset.Parse(reader.GetString(7), provider: null),
-            UpdatedAt = DateTimeOffset.Parse(reader.GetString(8), provider: null),
+            ProjectId = reader.IsDBNull(1) ? null : reader.GetString(1),
+            ParentTaskId = reader.IsDBNull(2) ? null : reader.GetString(2),
+            Title = reader.GetString(3),
+            Status = ParseStatus(reader.GetString(4)),
+            AssignedAgentId = reader.IsDBNull(5) ? null : reader.GetString(5),
+            CreatedAt = DateTimeOffset.Parse(reader.GetString(6), provider: null),
+            UpdatedAt = DateTimeOffset.Parse(reader.GetString(7), provider: null),
         };
     }
 

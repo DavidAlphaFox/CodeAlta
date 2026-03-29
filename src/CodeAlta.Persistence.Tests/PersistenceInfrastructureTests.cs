@@ -34,7 +34,6 @@ public sealed class PersistenceInfrastructureTests
         var created = await repository.CreateAsync(
             new CreateTaskRequest
             {
-                WorkspaceId = "workspace-1",
                 ProjectId = "project-1",
                 Title = "Implement tests",
                 AssignedAgentId = AgentId.NewVersion7().ToString(),
@@ -76,14 +75,12 @@ public sealed class PersistenceInfrastructureTests
             await repository.CreateAsync(
                 new CreateTaskRequest
                 {
-                    WorkspaceId = "workspace-1",
                     ProjectId = "project-1",
                     Title = $"task-{i}",
                 }).ConfigureAwait(false);
         }
 
         var first = await repository.ListPageAsync(
-            workspaceId: "workspace-1",
             projectId: "project-1",
             limit: 2).ConfigureAwait(false);
 
@@ -91,7 +88,6 @@ public sealed class PersistenceInfrastructureTests
         Assert.IsFalse(string.IsNullOrWhiteSpace(first.NextCursor));
 
         var second = await repository.ListPageAsync(
-            workspaceId: "workspace-1",
             projectId: "project-1",
             limit: 2,
             cursor: first.NextCursor).ConfigureAwait(false);
@@ -114,9 +110,7 @@ public sealed class PersistenceInfrastructureTests
         {
             Id = ArtifactId.NewVersion7().ToString(),
             Type = "knowledge.record",
-            Title = "Workspace Overview",
-            WorkspaceId = "workspace-1",
-            WorkspaceKey = "wk-core",
+            Title = "Project Overview",
             ProjectId = "project-1",
             ProjectKey = "repo-main",
             Source = new ArtifactSourceInfo
@@ -161,7 +155,7 @@ public sealed class PersistenceInfrastructureTests
         var reloaded = await store.ReadMarkdownAsync(path).ConfigureAwait(false);
         Assert.AreEqual(frontmatter.Id, reloaded.Frontmatter.Id);
         Assert.AreEqual(frontmatter.Type, reloaded.Frontmatter.Type);
-        Assert.AreEqual("Workspace Overview", reloaded.Frontmatter.Title);
+        Assert.AreEqual("Project Overview", reloaded.Frontmatter.Title);
         Assert.AreEqual("repo-main", reloaded.Frontmatter.ProjectKey);
         Assert.AreEqual(body.Trim(), reloaded.Body.Trim());
 
@@ -181,8 +175,7 @@ public sealed class PersistenceInfrastructureTests
         var artifact = new ArtifactRecord
         {
             ArtifactId = ArtifactId.NewVersion7(),
-            Uri = "artifact://workspace-1/knowledge/overview",
-            WorkspaceId = "workspace-1",
+            Uri = "artifact://project-1/knowledge/overview",
             ProjectId = "project-1",
             Type = "knowledge.record",
             Path = Path.Combine(temp.Path, "repo", ".codealta", "knowledge", "overview.md"),
@@ -199,7 +192,6 @@ public sealed class PersistenceInfrastructureTests
         var listed = await repository.ListAsync(
             new ArtifactQuery
             {
-                WorkspaceId = "workspace-1",
                 ProjectId = "project-1",
                 Type = "knowledge.record",
                 Limit = 10,
@@ -232,9 +224,9 @@ public sealed class PersistenceInfrastructureTests
         var agent = new AgentRecord
         {
             AgentId = AgentId.NewVersion7(),
-            Role = "planner.workspace",
-            ScopeKind = "workspace",
-            ScopeId = "workspace-1",
+            Role = "planner.project",
+            ScopeKind = "project",
+            ScopeId = "project-1",
             BackendId = "codex",
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -242,7 +234,7 @@ public sealed class PersistenceInfrastructureTests
         await repository.UpsertAgentAsync(agent).ConfigureAwait(false);
         var loaded = await repository.GetAgentAsync(agent.AgentId).ConfigureAwait(false);
         Assert.IsNotNull(loaded);
-        Assert.AreEqual("planner.workspace", loaded.Role);
+        Assert.AreEqual("planner.project", loaded.Role);
 
         await repository.UpsertSessionAsync(
             new AgentSessionRecord

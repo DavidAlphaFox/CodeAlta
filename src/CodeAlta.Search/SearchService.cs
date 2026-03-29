@@ -67,7 +67,6 @@ public sealed class SearchService
         var vectorDistances = await _indexStore.QueryVectorDistancesAsync(
             candidateIds,
             queryVector,
-            query.WorkspaceId,
             query.ProjectId,
             cancellationToken).ConfigureAwait(false);
 

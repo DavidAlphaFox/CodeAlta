@@ -30,9 +30,7 @@ public sealed class SearchContextProvider : IContextProvider
         var query = new SearchQuery
         {
             Text = request.Query,
-            WorkspaceId = request.Scope.Kind is AgentScopeKind.Project
-                ? request.Scope.Id
-                : null,
+            ProjectId = request.Scope.Kind is AgentScopeKind.Project ? request.Scope.Id : null,
             Limit = 5,
             PrefilterLimit = 10,
         };

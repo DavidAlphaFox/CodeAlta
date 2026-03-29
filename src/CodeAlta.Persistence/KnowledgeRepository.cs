@@ -47,7 +47,6 @@ public sealed class KnowledgeRepository
         {
             ArtifactId = new ArtifactId(record.KnowledgeRecordId.Value),
             Uri = record.Uri,
-            WorkspaceId = record.WorkspaceId,
             ProjectId = record.ProjectId,
             Type = KnowledgeArtifactType,
             Path = record.Path,
@@ -63,13 +62,11 @@ public sealed class KnowledgeRepository
     /// <summary>
     /// Lists knowledge records by optional scope.
     /// </summary>
-    /// <param name="workspaceId">Optional workspace identifier.</param>
     /// <param name="projectId">Optional project identifier.</param>
     /// <param name="limit">Result limit.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The matching knowledge records.</returns>
     public async Task<IReadOnlyList<KnowledgeRecord>> ListAsync(
-        string? workspaceId = null,
         string? projectId = null,
         int limit = 100,
         CancellationToken cancellationToken = default)
@@ -77,7 +74,6 @@ public sealed class KnowledgeRepository
         var artifacts = await _artifactRepository.ListAsync(
             new ArtifactQuery
             {
-                WorkspaceId = workspaceId,
                 ProjectId = projectId,
                 Type = KnowledgeArtifactType,
                 Limit = limit,
@@ -89,7 +85,6 @@ public sealed class KnowledgeRepository
             {
                 KnowledgeRecordId = new KnowledgeRecordId(x.ArtifactId.Value),
                 Uri = x.Uri,
-                WorkspaceId = x.WorkspaceId,
                 ProjectId = x.ProjectId,
                 Path = x.Path,
                 MetadataJson = x.FrontmatterJson,

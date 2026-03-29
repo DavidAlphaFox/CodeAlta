@@ -16,11 +16,6 @@ public sealed record KnowledgeRecord
     public string Uri { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the optional workspace identifier.
-    /// </summary>
-    public string? WorkspaceId { get; set; }
-
-    /// <summary>
     /// Gets or sets the optional project identifier.
     /// </summary>
     public string? ProjectId { get; set; }
