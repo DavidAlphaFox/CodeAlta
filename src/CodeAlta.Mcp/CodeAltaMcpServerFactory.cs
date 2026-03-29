@@ -74,15 +74,15 @@ public sealed class CodeAltaMcpServerFactory
         AddForwardedService<AgentRepository>(serviceCollection);
         AddForwardedService<Indexer>(serviceCollection);
         AddForwardedService<SearchService>(serviceCollection);
-        AddForwardedService<WorkspaceCatalog>(serviceCollection);
-        AddForwardedService<WorkspaceResolver>(serviceCollection);
+        AddForwardedService<ProjectCatalog>(serviceCollection);
+        AddForwardedService<ProjectResolver>(serviceCollection);
         AddForwardedService<RoleProfileStore>(serviceCollection);
         AddForwardedService<SkillCatalog>(serviceCollection);
         AddForwardedService<GitService>(serviceCollection);
         AddForwardedService<GlobalRepoBootstrapper>(serviceCollection);
         AddForwardedService<GlobalRepoSyncService>(serviceCollection);
-        AddForwardedService<WorkspaceBootstrapPlanner>(serviceCollection);
-        AddForwardedService<WorkspaceBootstrapper>(serviceCollection);
+        AddForwardedService<ProjectBootstrapPlanner>(serviceCollection);
+        AddForwardedService<ProjectBootstrapper>(serviceCollection);
         AddForwardedService<DotNetWorkspaceService>(serviceCollection);
         AddForwardedService<SymbolIndexService>(serviceCollection);
         AddForwardedService<DotNetContextProvider>(serviceCollection);
@@ -92,7 +92,7 @@ public sealed class CodeAltaMcpServerFactory
         serviceCollection.AddSingleton<TasksTools>();
         serviceCollection.AddSingleton<ArtifactsTools>();
         serviceCollection.AddSingleton<SearchTools>();
-        serviceCollection.AddSingleton<WorkspacesTools>();
+        serviceCollection.AddSingleton<ProjectsTools>();
         serviceCollection.AddSingleton<AgentsTools>();
         serviceCollection.AddSingleton<RolesTools>();
         serviceCollection.AddSingleton<SkillsTools>();
@@ -114,7 +114,7 @@ public sealed class CodeAltaMcpServerFactory
                 typeof(TasksTools),
                 typeof(ArtifactsTools),
                 typeof(SearchTools),
-                typeof(WorkspacesTools),
+                typeof(ProjectsTools),
                 typeof(AgentsTools),
                 typeof(RolesTools),
                 typeof(SkillsTools),

@@ -10,7 +10,7 @@ Related specs:
 ## 1. Goals
 
 - Run multiple agent roles (global / knowledge / planner / builder) concurrently.
-- Make scoping explicit and easy (global, workspace, project).
+- Make scoping explicit and easy (global, project).
 - Persist “agent work products” (plans, summaries, extracted knowledge) to disk artifacts so the system can recover after context compaction.
 - Coordinate agents via durable tasks/plans (SQLite + exported markdown snapshots).
 - Keep orchestration backend-agnostic: Codex and Copilot sessions should be interchangeable for most flows.
@@ -45,8 +45,8 @@ Records:
   - `Scope` (`AgentScope`)
   - `BackendId` (codex/copilot)
 - `AgentScope`
-  - `Kind` (Global | Workspace | Project)
-  - `Id` (workspaceId/projectId or null)
+  - `Kind` (Global | Project)
+  - `Id` (projectId or null)
 
 ### 3.2 Runs and events
 
@@ -82,7 +82,7 @@ Role profiles can be discovered from:
 ### 4.2 Parsing strategy
 
 `RoleProfileStore`:
-- scans known roots (workspace/projects/global)
+- scans known roots (project/global)
 - parses markdown + optional YAML frontmatter
 - normalizes into:
   - `RoleProfile` record:
@@ -102,9 +102,9 @@ Compatibility note:
 
 Ship built-in roles (as embedded resources and/or generated on first run):
 - `global`
-- `knowledge.global`, `knowledge.workspace`, `knowledge.project`
-- `planner.global`, `planner.workspace`, `planner.project`
-- `builder.global`, `builder.workspace`, `builder.project`
+- `knowledge.global`, `knowledge.project`
+- `planner.global`, `planner.project`
+- `builder.global`, `builder.project`
 - `skiller` (optional early)
 
 ## 5. Context window management (context pack builder)
@@ -112,7 +112,7 @@ Ship built-in roles (as embedded resources and/or generated on first run):
 ### 5.1 Concept
 
 `ContextPackBuilder` creates a bounded context (token/size constrained) for each run:
-- always includes: active task, relevant workspace/project scope, current user request
+- always includes: active task, relevant global/project scope, current user request
 - optionally includes:
   - recent conversation summary (artifact)
   - retrieved knowledge records (search results)

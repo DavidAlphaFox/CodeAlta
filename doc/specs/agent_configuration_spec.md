@@ -1,7 +1,7 @@
 # Agent Configuration Specification
 
 Status: **Proposal**  
-Audience: implementers of agent discovery/loading in `CodeAlta.Orchestration`, `CodeAlta.Catalog` (or the current `CodeAlta.Workspaces` during migration), and future catalog tooling.
+Audience: implementers of agent discovery/loading in `CodeAlta.Orchestration`, `CodeAlta.Catalog`, and future catalog tooling.
 
 References:
 

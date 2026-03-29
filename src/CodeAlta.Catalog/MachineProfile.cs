@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace CodeAlta.Catalog;
 
 /// <summary>
-/// Describes machine-specific workspace overrides.
+/// Describes machine-specific project catalog overrides.
 /// </summary>
 public sealed class MachineProfile
 {
@@ -14,11 +14,10 @@ public sealed class MachineProfile
     public string MachineId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets workspace checkout root overrides by workspace slug.
+    /// Gets or sets the default checkout root override for the current machine.
     /// </summary>
-    [JsonPropertyName("workspace_checkout_roots")]
-    public Dictionary<string, string> WorkspaceCheckoutRoots { get; set; } =
-        new(StringComparer.OrdinalIgnoreCase);
+    [JsonPropertyName("checkout_root")]
+    public string? CheckoutRoot { get; set; }
 
     /// <summary>
     /// Gets or sets project-level overrides by project slug.
@@ -38,14 +37,9 @@ public sealed class MachineProfile
             throw new ArgumentException("Machine id is required.", nameof(MachineId));
         }
 
-        foreach (var key in WorkspaceCheckoutRoots.Keys)
-        {
-            WorkspaceKeyValidator.Validate(key, nameof(WorkspaceCheckoutRoots));
-        }
-
         foreach (var key in ProjectOverrides.Keys)
         {
-            WorkspaceKeyValidator.Validate(key, nameof(ProjectOverrides));
+            CatalogSlugValidator.Validate(key, nameof(ProjectOverrides));
         }
     }
 }

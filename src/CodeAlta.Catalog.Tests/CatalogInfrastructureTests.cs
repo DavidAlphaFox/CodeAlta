@@ -7,7 +7,7 @@ using System.Diagnostics;
 namespace CodeAlta.Catalog.Tests;
 
 [TestClass]
-public sealed class WorkspaceInfrastructureTests
+public sealed class CatalogInfrastructureTests
 {
     [TestMethod]
     public async Task ProjectCatalog_UpsertFromPathAsync_CreatesAndReloadsProject()
@@ -20,11 +20,13 @@ public sealed class WorkspaceInfrastructureTests
         var descriptor = await catalog.UpsertFromPathAsync(projectRoot).ConfigureAwait(false);
         var reloaded = await catalog.LoadAsync().ConfigureAwait(false);
 
+        Assert.AreEqual("Tomlyn", descriptor.Name);
         Assert.AreEqual("Tomlyn", descriptor.DisplayName);
         Assert.AreEqual("tomlyn", descriptor.Slug);
         Assert.AreEqual(projectRoot, descriptor.ProjectPath);
         Assert.AreEqual(1, reloaded.Count);
         Assert.AreEqual(projectRoot, reloaded[0].ProjectPath);
+        Assert.AreEqual("Tomlyn", reloaded[0].Name);
     }
 
     [TestMethod]
@@ -92,6 +94,7 @@ public sealed class WorkspaceInfrastructureTests
             kind: "project"
             id: "{0}"
             slug: "{1}"
+            name: "CodeAlta"
             display_name: "CodeAlta"
             path: "{2}"
             default_branch: "main"
@@ -121,102 +124,61 @@ public sealed class WorkspaceInfrastructureTests
 
         Assert.AreEqual(1, loaded.Count);
         Assert.AreEqual("CodeAlta", loaded[0].DisplayName);
+        Assert.AreEqual("CodeAlta", loaded[0].Name);
         Assert.AreEqual(
             Path.GetFullPath(projectPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
             Path.GetFullPath(loaded[0].ProjectPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
     }
 
     [TestMethod]
-    public void WorkspaceYamlSerializer_RoundTrip_Works()
+    public void CatalogYamlSerializer_ProjectMarkdownRoundTrip_Works()
     {
-        var serializer = new WorkspaceYamlSerializer();
-        var workspace = CreateWorkspaceDescriptor();
-        workspace.ProjectRefs = workspace.Projects.Select(static x => x.Id).ToList();
+        var serializer = new CatalogYamlSerializer();
+        var project = CreateProjectDescriptor("repo-main", "Repo.Main", "Main Repo");
+        project.MarkdownBody = "# Main Repo\n\nShared code and services.";
 
-        var yaml = serializer.SerializeWorkspace(workspace);
-        var reloaded = serializer.DeserializeWorkspace(yaml);
+        var markdown = serializer.SerializeProjectMarkdown(project);
+        var reloaded = serializer.DeserializeProjectMarkdown(markdown);
         reloaded.Validate();
 
-        Assert.AreEqual(workspace.Slug, reloaded.Slug);
-        Assert.AreEqual(workspace.DisplayName, reloaded.DisplayName);
-        Assert.AreEqual(2, reloaded.Projects.Count);
-        Assert.AreEqual("repo-main", reloaded.Projects[0].Slug);
-    }
-
-    [TestMethod]
-    public void WorkspaceYamlSerializer_MarkdownRoundTrip_Works()
-    {
-        var serializer = new WorkspaceYamlSerializer();
-        var workspace = CreateWorkspaceDescriptor();
-        workspace.ProjectRefs = workspace.Projects.Select(static x => x.Id).ToList();
-        workspace.MarkdownBody = "# Core Workspace\n\nShared code and services.";
-
-        var markdown = serializer.SerializeWorkspaceMarkdown(workspace);
-        var reloaded = serializer.DeserializeWorkspaceMarkdown(markdown);
-        reloaded.Validate();
-
-        Assert.AreEqual(workspace.Slug, reloaded.Slug);
-        Assert.AreEqual(workspace.DisplayName, reloaded.DisplayName);
-        CollectionAssert.AreEqual(workspace.ProjectRefs, reloaded.ProjectRefs);
+        Assert.AreEqual(project.Slug, reloaded.Slug);
+        Assert.AreEqual(project.Name, reloaded.Name);
+        Assert.AreEqual(project.DisplayName, reloaded.DisplayName);
         StringAssert.Contains(reloaded.MarkdownBody, "Shared code and services.");
     }
 
     [TestMethod]
-    public async Task WorkspaceCatalog_LoadAsync_LoadsProjectsFromReadmeCatalog()
+    public async Task ProjectCatalog_LoadAsync_LoadsProjectsFromReadmeCatalog()
     {
         using var root = TempDirectory.Create();
-        var workspaceRoot = Path.Combine(root.Path, "workspaces", "wk-core");
-        var projectsRoot = Path.Combine(root.Path, "projects", "repo-main");
-        Directory.CreateDirectory(workspaceRoot);
-        Directory.CreateDirectory(projectsRoot);
+        var projectRoot = Path.Combine(root.Path, "projects", "repo-main");
+        Directory.CreateDirectory(projectRoot);
 
         await File.WriteAllTextAsync(
-            Path.Combine(workspaceRoot, "readme.md"),
-            """
-            ---
-            id: "01963b36-0d6f-7e4b-a7e0-6b2e6d1f4c8a"
-            kind: "workspace"
-            slug: "wk-core"
-            display_name: "Core Workspace"
-            checkout:
-              path_template: 'C:\code'
-            tags:
-              - "core"
-            project_refs:
-              - "01963b36-0d70-7a11-b3c2-1f2e3d4c5b6a"
-            ---
-
-            # Core Workspace
-
-            Shared code and services.
-            """
-        ).ConfigureAwait(false);
-
-        await File.WriteAllTextAsync(
-            Path.Combine(projectsRoot, "readme.md"),
+            Path.Combine(projectRoot, "readme.md"),
             """
             ---
             kind: "project"
             id: "01963b36-0d70-7a11-b3c2-1f2e3d4c5b6a"
             slug: "repo-main"
+            name: "Repo.Main"
             display_name: "Main Repo"
             path: "C:\\code\\repo-main"
             default_branch: "main"
             checkout:
-              path_template: '{workspaceKey}\{projectKey}'
+              path_template: '{projectName}'
             ---
 
             # Main Repo
             """
         ).ConfigureAwait(false);
 
-        var catalog = new WorkspaceCatalog(new WorkspaceCatalogOptions { GlobalRepoRoot = root.Path });
-        var workspaces = await catalog.LoadAsync().ConfigureAwait(false);
+        var catalog = new ProjectCatalog(new CatalogOptions { GlobalRoot = root.Path });
+        var projects = await catalog.LoadAsync().ConfigureAwait(false);
 
-        Assert.AreEqual(1, workspaces.Count);
-        Assert.AreEqual("wk-core", workspaces[0].Slug);
-        Assert.AreEqual(1, workspaces[0].Projects.Count);
-        Assert.AreEqual("repo-main", workspaces[0].Projects[0].Slug);
+        Assert.AreEqual(1, projects.Count);
+        Assert.AreEqual("repo-main", projects[0].Slug);
+        Assert.AreEqual("Repo.Main", projects[0].Name);
     }
 
     [TestMethod]
@@ -225,11 +187,11 @@ public sealed class WorkspaceInfrastructureTests
         using var root = TempDirectory.Create();
         var context = CreatePathTemplateContext(root.Path);
         var resolved = PathTemplateResolver.Resolve(
-            Path.Combine("{workspaceKey}", "{projectKey}"),
+            Path.Combine("{projectName}", "{projectSlug}"),
             context);
 
         Assert.AreEqual(
-            Path.GetFullPath(Path.Combine(root.Path, "wk-core", "repo-main")),
+            Path.GetFullPath(Path.Combine(root.Path, "Repo.Main", "repo-main")),
             resolved);
     }
 
@@ -244,69 +206,32 @@ public sealed class WorkspaceInfrastructureTests
     }
 
     [TestMethod]
-    public async Task WorkspaceResolver_ResolveAsync_UsesMachineOverridesAndPlansCheckouts()
+    public async Task ProjectResolver_ResolveAsync_UsesMachineOverridesAndPlansCheckouts()
     {
         using var root = TempDirectory.Create();
-        var workspaceRoot = Path.Combine(root.Path, "workspaces", "wk-core");
-        var projectRoot = Path.Combine(root.Path, "projects", "repo-main");
-        Directory.CreateDirectory(workspaceRoot);
-        Directory.CreateDirectory(projectRoot);
+        var catalog = new ProjectCatalog(new CatalogOptions { GlobalRoot = root.Path });
+        var project = CreateProjectDescriptor("repo-main", "Repo.Main", "Main Repo");
+        project.ProjectPath = "C:\\code\\repo-main";
+        project.Checkout = new CheckoutRule { PathTemplate = "{projectName}" };
 
-        await File.WriteAllTextAsync(
-            Path.Combine(workspaceRoot, "readme.md"),
-            """
-            ---
-            id: "01963b36-0d6f-7e4b-a7e0-6b2e6d1f4c8a"
-            kind: "workspace"
-            slug: "wk-core"
-            display_name: "Core Workspace"
-            checkout:
-              path_template: 'C:\default'
-            project_refs:
-              - "01963b36-0d70-7a11-b3c2-1f2e3d4c5b6a"
-            ---
+        await catalog.SaveAsync(project).ConfigureAwait(false);
 
-            # Core Workspace
-            """
-        ).ConfigureAwait(false);
-
-        await File.WriteAllTextAsync(
-            Path.Combine(projectRoot, "readme.md"),
-            """
-            ---
-            id: "01963b36-0d70-7a11-b3c2-1f2e3d4c5b6a"
-            kind: "project"
-            slug: "repo-main"
-            display_name: "Main Repo"
-            path: "C:\\code\\repo-main"
-            default_branch: "main"
-            checkout:
-              path_template: '{workspaceKey}\{projectKey}'
-            ---
-
-            # Main Repo
-            """
-        ).ConfigureAwait(false);
-
-        var catalog = new WorkspaceCatalog(new WorkspaceCatalogOptions { GlobalRepoRoot = root.Path });
-        var resolver = new WorkspaceResolver(catalog);
+        var resolver = new ProjectResolver(catalog);
         var machineRoot = Path.Combine(root.Path, "checkouts");
 
         var machine = new MachineProfile
         {
             MachineId = "machine-a",
-            WorkspaceCheckoutRoots = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["wk-core"] = machineRoot,
-            },
+            CheckoutRoot = machineRoot,
         };
 
-        var resolutions = await resolver.ResolveAsync(ScopeSelector.Workspace("wk-core"), machine).ConfigureAwait(false);
+        var resolutions = await resolver.ResolveAsync(ScopeSelector.Project("repo-main"), machine).ConfigureAwait(false);
         Assert.AreEqual(1, resolutions.Count);
         Assert.AreEqual(1, resolutions[0].Projects.Count);
+        Assert.AreEqual("repo-main", resolutions[0].SelectedProject?.Slug);
         StringAssert.StartsWith(resolutions[0].Projects[0].CheckoutPath, Path.GetFullPath(machineRoot));
 
-        var planner = new WorkspaceBootstrapPlanner();
+        var planner = new ProjectBootstrapPlanner();
         var plans = planner.Plan(resolutions[0]);
 
         Assert.AreEqual(1, plans.Count);
@@ -314,42 +239,19 @@ public sealed class WorkspaceInfrastructureTests
     }
 
     [TestMethod]
-    public async Task WorkspaceCatalog_SaveAsync_WritesReadmeCatalogFiles()
+    public async Task ProjectCatalog_SaveAsync_WritesReadmeCatalogFiles()
     {
         using var root = TempDirectory.Create();
-        var catalog = new WorkspaceCatalog(new WorkspaceCatalogOptions { GlobalRepoRoot = root.Path });
-        var project = new ProjectDescriptor
-        {
-            Id = ProjectId.NewVersion7().ToString(),
-            Slug = "repo-main",
-            DisplayName = "Main Repo",
-            ProjectPath = "C:\\code\\repo-main",
-            DefaultBranch = "main",
-            Checkout = new CheckoutRule { PathTemplate = @"{workspaceKey}\{projectKey}" },
-            MarkdownBody = "# Main Repo",
-        };
+        var catalog = new ProjectCatalog(new CatalogOptions { GlobalRoot = root.Path });
+        var project = CreateProjectDescriptor("repo-main", "Repo.Main", "Main Repo");
 
-        await catalog.SaveProjectAsync(project).ConfigureAwait(false);
-
-        var workspace = new WorkspaceDescriptor
-        {
-            Id = WorkspaceId.NewVersion7().ToString(),
-            Slug = "wk-core",
-            DisplayName = "Core Workspace",
-            DefaultCheckoutRoot = @"C:\code",
-            ProjectRefs = [project.Id],
-            MarkdownBody = "# Core Workspace",
-        };
-
-        await catalog.SaveWorkspaceAsync(workspace).ConfigureAwait(false);
+        await catalog.SaveAsync(project).ConfigureAwait(false);
 
         Assert.IsTrue(File.Exists(Path.Combine(root.Path, "projects", "repo-main", "readme.md")));
-        Assert.IsTrue(File.Exists(Path.Combine(root.Path, "workspaces", "wk-core", "readme.md")));
 
-        var loaded = await catalog.GetBySlugAsync("wk-core").ConfigureAwait(false);
+        var loaded = await catalog.GetBySlugAsync("repo-main").ConfigureAwait(false);
         Assert.IsNotNull(loaded);
-        Assert.AreEqual(1, loaded.Projects.Count);
-        Assert.AreEqual("repo-main", loaded.Projects[0].Slug);
+        Assert.AreEqual("Repo.Main", loaded.Name);
     }
 
     [TestMethod]
@@ -382,6 +284,7 @@ public sealed class WorkspaceInfrastructureTests
         {
             Id = Guid.CreateVersion7().ToString(),
             Slug = "repo-main",
+            Name = "Repo.Main",
             DisplayName = "Main Repo",
             ProjectPath = "C:\\code\\repo-main",
             MarkdownBody = "# Main Repo"
@@ -582,12 +485,13 @@ public sealed class WorkspaceInfrastructureTests
 
         Assert.AreEqual(Path.GetFullPath(globalRepoRoot), result.GlobalRepoRoot);
         Assert.IsTrue(Directory.Exists(Path.Combine(globalRepoRoot, ".git")));
-        Assert.IsTrue(Directory.Exists(Path.Combine(globalRepoRoot, "workspaces")));
+        Assert.IsTrue(Directory.Exists(Path.Combine(globalRepoRoot, "projects")));
+        Assert.IsTrue(Directory.Exists(Path.Combine(globalRepoRoot, "checkouts")));
         Assert.IsTrue(Directory.Exists(Path.Combine(globalRepoRoot, "machines")));
     }
 
     [TestMethod]
-    public async Task WorkspaceBootstrapper_EnsureCheckedOutAsync_ClonesMissingRepo()
+    public async Task ProjectBootstrapper_EnsureCheckedOutAsync_ClonesMissingRepo()
     {
         if (!IsGitAvailable())
         {
@@ -596,20 +500,14 @@ public sealed class WorkspaceInfrastructureTests
 
         using var root = TempDirectory.Create();
         var remote = Path.Combine(root.Path, "remote.git");
-        var checkout = Path.Combine(root.Path, "checkouts", "repo-main");
+        var checkout = Path.Combine(root.Path, "checkouts", "Repo.Main");
 
         RunGit(root.Path, $"init --bare \"{remote}\"");
 
-        var resolution = new WorkspaceResolution
+        var resolution = new ProjectScopeResolution
         {
-            Workspace = new WorkspaceDescriptor
-            {
-                Id = WorkspaceId.NewVersion7().ToString(),
-                Slug = "wk-core",
-                DisplayName = "Core Workspace",
-                DefaultCheckoutRoot = root.Path,
-                Projects = [],
-            },
+            Kind = ScopeKind.Project,
+            SelectedProject = CreateProjectDescriptor("repo-main", "Repo.Main", "Main Repo"),
             Projects =
             [
                 new ResolvedProject
@@ -618,6 +516,7 @@ public sealed class WorkspaceInfrastructureTests
                     {
                         Id = ProjectId.NewVersion7().ToString(),
                         Slug = "repo-main",
+                        Name = "Repo.Main",
                         DisplayName = "Main Repo",
                         ProjectPath = remote,
                         DefaultBranch = "main",
@@ -630,7 +529,7 @@ public sealed class WorkspaceInfrastructureTests
             CodeAltaRoots = [Path.Combine(checkout, ".codealta")],
         };
 
-        var bootstrapper = new WorkspaceBootstrapper(new WorkspaceBootstrapPlanner(), new GitService());
+        var bootstrapper = new ProjectBootstrapper(new ProjectBootstrapPlanner(), new GitService());
         var results = await bootstrapper.EnsureCheckedOutAsync(resolution).ConfigureAwait(false);
 
         Assert.AreEqual(1, results.Count);
@@ -639,35 +538,17 @@ public sealed class WorkspaceInfrastructureTests
         Assert.IsTrue(Directory.Exists(Path.Combine(checkout, ".codealta")));
     }
 
-    private static WorkspaceDescriptor CreateWorkspaceDescriptor()
+    private static ProjectDescriptor CreateProjectDescriptor(string slug, string name, string displayName)
     {
-        return new WorkspaceDescriptor
+        return new ProjectDescriptor
         {
-            Id = WorkspaceId.NewVersion7().ToString(),
-            Slug = "wk-core",
-            DisplayName = "Core Workspace",
-            DefaultCheckoutRoot = @"C:\code",
-            Projects =
-            [
-                new ProjectDescriptor
-                {
-                    Id = ProjectId.NewVersion7().ToString(),
-                    Slug = "repo-main",
-                    DisplayName = "Main Repo",
-                    ProjectPath = "C:\\code\\repo-main",
-                    DefaultBranch = "main",
-                    Checkout = new CheckoutRule { PathTemplate = @"{workspaceKey}\{projectKey}" },
-                },
-                new ProjectDescriptor
-                {
-                    Id = ProjectId.NewVersion7().ToString(),
-                    Slug = "repo-tools",
-                    DisplayName = "Tools Repo",
-                    ProjectPath = "C:\\code\\repo-tools",
-                    DefaultBranch = "main",
-                    Checkout = new CheckoutRule { PathTemplate = @"{workspaceKey}\{projectKey}" },
-                },
-            ],
+            Id = ProjectId.NewVersion7().ToString(),
+            Slug = slug,
+            Name = name,
+            DisplayName = displayName,
+            ProjectPath = $@"C:\code\{name}",
+            DefaultBranch = "main",
+            Checkout = new CheckoutRule { PathTemplate = @"{projectName}" },
         };
     }
 
@@ -675,11 +556,10 @@ public sealed class WorkspaceInfrastructureTests
     {
         return new PathTemplateContext
         {
-            WorkspaceSlug = "wk-core",
             ProjectSlug = "repo-main",
+            ProjectName = "Repo.Main",
             RepoName = "repo-main",
             MachineId = "machine-a",
-            WorkspaceId = WorkspaceId.Parse("01963b36-0d6f-7e4b-a7e0-6b2e6d1f4c8a"),
             ProjectId = ProjectId.Parse("01963b36-0d70-7a11-b3c2-1f2e3d4c5b6a"),
             BaseRoot = baseRoot,
         };
@@ -792,6 +672,3 @@ public sealed class WorkspaceInfrastructureTests
         }
     }
 }
-
-
-

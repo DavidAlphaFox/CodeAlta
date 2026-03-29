@@ -1,7 +1,7 @@
 # Filesystem Metadata Catalog Specification
 
 Status: **Proposal**  
-Audience: implementers of `CodeAlta.Catalog` (or the current `CodeAlta.Workspaces` during migration), `CodeAlta.Persistence`, `CodeAlta.Orchestration`, and UI/project discovery flows.
+Audience: implementers of `CodeAlta.Catalog`, `CodeAlta.Persistence`, `CodeAlta.Orchestration`, and UI/project discovery flows.
 
 Related specs:
 

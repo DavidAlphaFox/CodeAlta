@@ -2,6 +2,8 @@
 
 Last updated: **2026-02-28**
 
+Historical note: sections in this blueprint that describe a separate workspace layer are obsolete. The active model is global plus projects, with no required workspace registry.
+
 This document is the high-level blueprint for **CodeAlta**: a local-first, multi-backend, multi-agent coding assistant intended to work on real projects (multiple folders, multiple repositories, long-lived sessions) despite limited model context windows (typically **200K–400K tokens**).
 
 This is a “why/what” blueprint, not a full protocol spec. Detailed designs live in the companion documents:

@@ -4,23 +4,23 @@ An agentic AI coding CLI assistant developed in .NET.
 
 ## Infrastructure Status
 
-Current infrastructure-first progress includes workspace bootstrapping primitives:
+Current infrastructure-first progress includes project catalog and checkout primitives:
 
-- `CodeAlta.Workspaces`: workspace/project descriptors, machine override profiles, catalog loading.
-- Scope resolution (`global`, `workspace`, `project`) into concrete checkout and `.codealta` roots.
+- `CodeAlta.Catalog`: project descriptors, machine override profiles, catalog loading.
+- Scope resolution (`global`, `project`) into concrete checkout and `.codealta` roots.
 - Checkout planning (`clone` vs `update`) without network side effects.
 - `CodeAlta.Persistence`: SQLite migrations, task/artifact/agent repositories, and markdown artifact store.
 
-## Workspace Descriptor Layout
+## Project Catalog Layout
 
 Global repository layout (implemented reader support):
 
-- `workspaces/<workspaceKey>/workspace.yaml`
-- `workspaces/<workspaceKey>/projects/*.yaml`
+- `projects/<projectSlug>/readme.md`
 - `machines/<machineId>.yaml`
+- `checkouts/<projectName>/`
 
-The YAML model uses UUID v7 strings for workspace/project `id` values and validates
-workspace/project keys using `^[a-z0-9][a-z0-9\\-_.]{1,63}$`.
+The catalog model uses UUID v7 strings for project `id` values, validates slugs
+using `^[a-z0-9][a-z0-9\\-_.]{1,63}$`, and keeps a separate project `name` for checkout directories.
 
 ## Persistence Model
 
@@ -53,7 +53,7 @@ Current MCP infrastructure (`CodeAlta.Mcp`) includes:
   - `codealta.tasks.*` for durable task CRUD, notes, and markdown exports.
   - `codealta.artifacts.*` for markdown artifact write/read/list/link operations.
   - `codealta.search.*` for indexing, hybrid query, and queue status.
-  - `codealta.workspaces.*` for workspace listing/getting/scope resolution.
+  - `codealta.projects.*` for project listing/getting/scope resolution.
   - `codealta.agents.*` for agent registry register/update/list operations.
 - MSTest coverage for:
   - in-process tool discovery (`ListTools`)
@@ -126,9 +126,9 @@ Current terminal shell capabilities:
   - Sequential Codex/Copilot tool activity is grouped into compact "Tool Calls" timeline cards so verbose command/tool logs stay out of the main document flow; each chip shows a live status icon, inferred tool/command label, compact context, and an expandable `LogControl` detail dialog with full output, wrapping toggle, and compact execution stats.
   - When a run finishes, CodeAlta emits a separate compact "Modified Files" recap card that aggregates all files changed during that run, shows per-file and total `+/-` line counts, and opens an inline diff viewer for each file when diff data is available from the backend.
   - The terminal shell writes rolling diagnostic logs under `~/.codealta/logs/`, including chat prompt submission, selected backend/model/tool set, normalized agent events, and Copilot permission/user-input callback traffic.
-- Workspace operations:
-  - list discovered workspaces
-  - resolve global/workspace/project scopes.
+- Project operations:
+  - list discovered projects
+  - resolve global/project scopes.
 - Task operations:
   - list tasks
   - create tasks.

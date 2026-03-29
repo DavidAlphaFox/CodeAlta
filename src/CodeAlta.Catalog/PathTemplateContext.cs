@@ -6,14 +6,14 @@ namespace CodeAlta.Catalog;
 public sealed class PathTemplateContext
 {
     /// <summary>
-    /// Gets or sets the workspace slug.
-    /// </summary>
-    public string WorkspaceSlug { get; set; } = string.Empty;
-
-    /// <summary>
     /// Gets or sets the project slug.
     /// </summary>
     public string ProjectSlug { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the project name.
+    /// </summary>
+    public string ProjectName { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the repository name.
@@ -24,11 +24,6 @@ public sealed class PathTemplateContext
     /// Gets or sets the machine id.
     /// </summary>
     public string MachineId { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the workspace id.
-    /// </summary>
-    public WorkspaceId WorkspaceId { get; set; }
 
     /// <summary>
     /// Gets or sets the project id.

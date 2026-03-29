@@ -6,15 +6,15 @@ An agentic AI coding CLI assistant developed in .NET.
 
 ## ✨ Features
 
-- Workspace descriptors and machine profile overrides (`CodeAlta.Workspaces`)
-- Scope resolution and checkout planning APIs for multi-repo workspaces
+- Project catalog descriptors, checkout planning, and machine profile overrides (`CodeAlta.Catalog`)
+- Scope resolution and checkout planning APIs for global/project flows
 - SQLite-backed durable state + migrations + repositories (`CodeAlta.Persistence`)
 - Markdown artifact store with YAML frontmatter parsing and plain-text extraction
 - FTS5 + embedding-backed hybrid search pipeline (`CodeAlta.Search`)
-- In-process MCP server surface with tools for tasks, artifacts, search, workspaces, and agents (`CodeAlta.Mcp`)
+- In-process MCP server surface with tools for tasks, artifacts, search, projects, and agents (`CodeAlta.Mcp`)
 - Agent orchestration services for role profiles, context packs, and planner/builder durable workflows (`CodeAlta.Orchestration`)
-- .NET first-class services for workspace discovery, symbol indexing, context snippets, diagnostics, and index refresh (`CodeAlta.DotNet`)
-- Interactive terminal shell wired to workspace/task/search/.NET/MCP services, with explicit shell-controller/UI-dispatcher/view-presenter seams, rich agent timelines, chat backend/model/reasoning selectors, compact grouped tool-call chips plus a per-run modified-files recap card with per-file `+/-` diff totals and expandable diff details, a live `ctx --` / `ctx NN%` context-window indicator with normalized usage popup sections and backend-specific detail, and asynchronous Codex/Copilot probing so the TUI starts immediately even when a backend is missing (`CodeAlta`)
+- .NET first-class services for solution/project discovery, symbol indexing, context snippets, diagnostics, and index refresh (`CodeAlta.DotNet`)
+- Interactive terminal shell wired to project/task/search/.NET/MCP services, with explicit shell-controller/UI-dispatcher/view-presenter seams, rich agent timelines, chat backend/model/reasoning selectors, compact grouped tool-call chips plus a per-run modified-files recap card with per-file `+/-` diff totals and expandable diff details, a live `ctx --` / `ctx NN%` context-window indicator with normalized usage popup sections and backend-specific detail, and asynchronous Codex/Copilot probing so the TUI starts immediately even when a backend is missing (`CodeAlta`)
 - Busy-thread prompt queueing with an editable waiting list, per-entry repeat counts, immediate steer conversion, and an `F10` clear-queue shortcut; steer requests also surface as transient pending rows at the top of the strip until the backend echoes the user prompt into the timeline (`CodeAlta`)
 - Steering now falls back to a normal send when no active run exists, and failed prompt dispatches preserve the prompt text instead of silently dropping it (`CodeAlta`)
 - Press `F6` or click `Full Prompt` to open the current draft in a large prompt editor window; `Esc` closes it and keeps the edited draft (`CodeAlta`)

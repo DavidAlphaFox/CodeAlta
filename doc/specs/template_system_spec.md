@@ -1,7 +1,7 @@
 # Template System Specification
 
 Status: **Proposal**  
-Audience: implementers of `CodeAlta.Catalog` (or the current `CodeAlta.Workspaces` during migration), `CodeAlta.Orchestration`, catalog tooling, and future authoring UX.
+Audience: implementers of `CodeAlta.Catalog`, `CodeAlta.Orchestration`, catalog tooling, and future authoring UX.
 
 Related specs:
 

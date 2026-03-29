@@ -1,23 +1,18 @@
 namespace CodeAlta.Catalog;
 
 /// <summary>
-/// Represents supported scope kinds for workspace resolution.
+/// Represents supported scope kinds for project resolution.
 /// </summary>
 public enum ScopeKind
 {
     /// <summary>
-    /// All workspaces.
+    /// The global scope spanning all projects.
     /// </summary>
     Global = 0,
 
     /// <summary>
-    /// A specific workspace.
-    /// </summary>
-    Workspace = 1,
-
-    /// <summary>
     /// A specific project.
     /// </summary>
-    Project = 2,
+    Project = 1,
 }
 

@@ -73,7 +73,8 @@ public sealed class GlobalRepoBootstrapper
             _ = await _git.SetOriginAsync(normalizedRoot, remoteUrl, progress, cancellationToken).ConfigureAwait(false);
         }
 
-        Directory.CreateDirectory(Path.Combine(normalizedRoot, "workspaces"));
+        Directory.CreateDirectory(Path.Combine(normalizedRoot, "projects"));
+        Directory.CreateDirectory(Path.Combine(normalizedRoot, "checkouts"));
         Directory.CreateDirectory(Path.Combine(normalizedRoot, "machines"));
 
         return new GlobalRepoBootstrapResult

@@ -26,7 +26,7 @@ public sealed class McpInfrastructureTests
         CollectionAssert.Contains(names, "codealta.tasks.get");
         CollectionAssert.Contains(names, "codealta.artifacts.write_markdown");
         CollectionAssert.Contains(names, "codealta.search.query");
-        CollectionAssert.Contains(names, "CodeAlta.Catalog.resolve_scope");
+        CollectionAssert.Contains(names, "codealta.projects.resolve_scope");
         CollectionAssert.Contains(names, "codealta.agents.register");
         CollectionAssert.Contains(names, "codealta.roles.list");
         CollectionAssert.Contains(names, "codealta.skills.list");
@@ -183,8 +183,8 @@ public sealed class McpInfrastructureTests
             "codealta.skills.list",
             new Dictionary<string, object?>
             {
-                ["kind"] = "workspace",
-                ["workspaceKey"] = "wk-core",
+                ["kind"] = "project",
+                ["projectSlug"] = "repo-main",
             }).ConfigureAwait(false);
 
         var payload = ParseJson(ReadTextContent(listResult));
@@ -208,7 +208,8 @@ public sealed class McpInfrastructureTests
 
         var payload = ParseJson(ReadTextContent(result));
         Assert.AreEqual(Path.GetFullPath(repoRoot), payload.RootElement.GetProperty("globalRepoRoot").GetString());
-        Assert.IsTrue(Directory.Exists(Path.Combine(repoRoot, "workspaces")));
+        Assert.IsTrue(Directory.Exists(Path.Combine(repoRoot, "projects")));
+        Assert.IsTrue(Directory.Exists(Path.Combine(repoRoot, "checkouts")));
     }
 
     [TestMethod]
@@ -308,22 +309,22 @@ public sealed class McpInfrastructureTests
             var embeddingManager = new EmbeddingModelManager(new HashEmbedder());
             var indexer = new Indexer(indexingQueue, documentIndexStore, embeddingManager);
             var searchService = new SearchService(documentIndexStore, embeddingManager);
-            var workspaceCatalog = new WorkspaceCatalog(
-                new WorkspaceCatalogOptions
+            var projectCatalog = new ProjectCatalog(
+                new CatalogOptions
                 {
-                    GlobalRepoRoot = temp.Path,
+                    GlobalRoot = temp.Path,
                 });
-            var workspaceResolver = new WorkspaceResolver(workspaceCatalog);
+            var projectResolver = new ProjectResolver(projectCatalog);
 
-            await SeedWorkspaceFixtureAsync(temp.Path).ConfigureAwait(false);
+            await SeedProjectFixtureAsync(temp.Path).ConfigureAwait(false);
 
             var roles = new RoleProfileStore();
             var skills = new SkillCatalog();
             var git = new GitService();
             var globalRepoBootstrapper = new GlobalRepoBootstrapper(git);
             var globalRepoSync = new GlobalRepoSyncService(git);
-            var workspaceBootstrapPlanner = new WorkspaceBootstrapPlanner();
-            var workspaceBootstrapper = new WorkspaceBootstrapper(workspaceBootstrapPlanner, git);
+            var projectBootstrapPlanner = new ProjectBootstrapPlanner();
+            var projectBootstrapper = new ProjectBootstrapper(projectBootstrapPlanner, git);
 
             var dotNetWorkspace = new DotNetWorkspaceService();
             var symbolIndex = new SymbolIndexService();
@@ -358,15 +359,15 @@ public sealed class McpInfrastructureTests
             services.AddSingleton(agentRepository);
             services.AddSingleton(indexer);
             services.AddSingleton(searchService);
-            services.AddSingleton(workspaceCatalog);
-            services.AddSingleton(workspaceResolver);
+            services.AddSingleton(projectCatalog);
+            services.AddSingleton(projectResolver);
             services.AddSingleton(roles);
             services.AddSingleton(skills);
             services.AddSingleton(git);
             services.AddSingleton(globalRepoBootstrapper);
             services.AddSingleton(globalRepoSync);
-            services.AddSingleton(workspaceBootstrapPlanner);
-            services.AddSingleton(workspaceBootstrapper);
+            services.AddSingleton(projectBootstrapPlanner);
+            services.AddSingleton(projectBootstrapper);
             services.AddSingleton(dotNetWorkspace);
             services.AddSingleton(symbolIndex);
             services.AddSingleton(dotNetContext);
@@ -385,44 +386,32 @@ public sealed class McpInfrastructureTests
             return new TestContext(temp, provider, connection);
         }
 
-        private static async Task SeedWorkspaceFixtureAsync(string globalRepoRoot)
+        private static async Task SeedProjectFixtureAsync(string globalRepoRoot)
         {
-            var workspaceRoot = Path.Combine(globalRepoRoot, "workspaces", "wk-core");
-            var projectsRoot = Path.Combine(workspaceRoot, "projects");
+            var projectsRoot = Path.Combine(globalRepoRoot, "projects", "repo-main");
             Directory.CreateDirectory(projectsRoot);
 
-            var workspaceId = WorkspaceId.NewVersion7();
             var projectId = ProjectId.NewVersion7();
-            var checkoutRootPath = Path.Combine(globalRepoRoot, "checkouts");
 
             await File.WriteAllTextAsync(
-                Path.Combine(workspaceRoot, "workspace.yaml"),
-                string.Join(
-                    "\n",
-                    [
-                        $"id: \"{workspaceId}\"",
-                        "key: \"wk-core\"",
-                        "display_name: \"Core Workspace\"",
-                        $"default_checkout_root: '{checkoutRootPath}'",
-                        string.Empty,
-                    ])).ConfigureAwait(false);
+                Path.Combine(projectsRoot, "readme.md"),
+                $$"""
+                ---
+                kind: "project"
+                id: "{{projectId}}"
+                slug: "repo-main"
+                name: "Repo.Main"
+                display_name: "Main Repo"
+                path: "{{Path.Combine(globalRepoRoot, "remote.git").Replace("\\", "\\\\")}}"
+                default_branch: "main"
+                checkout:
+                  path_template: "{projectName}"
+                ---
 
-            await File.WriteAllTextAsync(
-                Path.Combine(projectsRoot, "repo-main.yaml"),
-                string.Join(
-                    "\n",
-                    [
-                        $"id: \"{projectId}\"",
-                        "key: \"repo-main\"",
-                        "display_name: \"Main Repo\"",
-                        $"path: '{Path.Combine(globalRepoRoot, "remote.git")}'",
-                        "default_branch: \"main\"",
-                        "checkout:",
-                        "  path_template: '{workspaceKey}\\\\{projectKey}'",
-                        string.Empty,
-                    ])).ConfigureAwait(false);
+                # Main Repo
+                """).ConfigureAwait(false);
 
-            var skillRoot = Path.Combine(globalRepoRoot, "checkouts", "wk-core", "repo-main", ".codealta", "skills", "sample-skill");
+            var skillRoot = Path.Combine(globalRepoRoot, "checkouts", "Repo.Main", ".codealta", "skills", "sample-skill");
             Directory.CreateDirectory(skillRoot);
             await File.WriteAllTextAsync(
                 Path.Combine(skillRoot, "SKILL.md"),

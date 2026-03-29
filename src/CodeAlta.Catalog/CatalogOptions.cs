@@ -11,9 +11,19 @@ public sealed class CatalogOptions
     public string GlobalRoot { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets the default checkout root path under the global catalog.
+    /// </summary>
+    public string CheckoutsRoot => Path.Combine(GlobalRoot, "checkouts");
+
+    /// <summary>
     /// Gets the projects root path under the global catalog.
     /// </summary>
     public string ProjectsRoot => Path.Combine(GlobalRoot, "projects");
+
+    /// <summary>
+    /// Gets the machine configuration root path under the global catalog.
+    /// </summary>
+    public string MachinesRoot => Path.Combine(GlobalRoot, "machines");
 
     /// <summary>
     /// Gets the agents root path under the global catalog.

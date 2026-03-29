@@ -11,7 +11,7 @@ public sealed class CheckoutRule
     /// Gets or sets the path template.
     /// </summary>
     [JsonPropertyName("path_template")]
-    public string PathTemplate { get; set; } = "{workspaceKey}\\{projectKey}";
+    public string PathTemplate { get; set; } = "{projectName}";
 
     /// <summary>
     /// Gets or sets the optional clone depth.

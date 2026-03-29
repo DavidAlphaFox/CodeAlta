@@ -3,13 +3,8 @@ namespace CodeAlta.Catalog.Bootstrap;
 /// <summary>
 /// Represents a planned repository checkout operation.
 /// </summary>
-public sealed record WorkspaceCheckoutPlan
+public sealed record ProjectCheckoutPlan
 {
-    /// <summary>
-    /// Gets the workspace slug.
-    /// </summary>
-    public required string WorkspaceSlug { get; init; }
-
     /// <summary>
     /// Gets the project slug.
     /// </summary>
@@ -30,4 +25,3 @@ public sealed record WorkspaceCheckoutPlan
     /// </summary>
     public required CheckoutAction Action { get; init; }
 }
-

@@ -1,7 +1,7 @@
 # CodeAlta Project-First Architecture
 
 Status: **Proposal**  
-Audience: `CodeAlta`, `CodeAlta.Agent*`, `CodeAlta.Orchestration`, `CodeAlta.Catalog` (or the current `CodeAlta.Workspaces` during migration), `CodeAlta.Persistence`, and UI implementers.
+Audience: `CodeAlta`, `CodeAlta.Agent*`, `CodeAlta.Orchestration`, `CodeAlta.Catalog`, `CodeAlta.Persistence`, and UI implementers.
 
 Related specs:
 

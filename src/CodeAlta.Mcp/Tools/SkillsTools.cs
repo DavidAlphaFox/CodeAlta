@@ -11,14 +11,14 @@ namespace CodeAlta.Mcp.Tools;
 [McpServerToolType]
 public sealed class SkillsTools
 {
-    private readonly WorkspaceCatalog _catalog;
-    private readonly WorkspaceResolver _resolver;
+    private readonly ProjectCatalog _catalog;
+    private readonly ProjectResolver _resolver;
     private readonly SkillCatalog _skills;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SkillsTools"/> class.
     /// </summary>
-    public SkillsTools(WorkspaceCatalog catalog, WorkspaceResolver resolver, SkillCatalog skills)
+    public SkillsTools(ProjectCatalog catalog, ProjectResolver resolver, SkillCatalog skills)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(resolver);
@@ -34,14 +34,13 @@ public sealed class SkillsTools
     /// </summary>
     [McpServerTool(Name = "codealta.skills.list"), Description("Lists discovered skills under a scope.")]
     public async Task<string> ListAsync(
-        [Description("Scope kind: global|workspace|project.")] string kind = "global",
-        [Description("Workspace key for workspace scope.")] string? workspaceKey = null,
-        [Description("Project key for project scope.")] string? projectKey = null,
+        [Description("Scope kind: global|project.")] string kind = "global",
+        [Description("Project slug for project scope.")] string? projectSlug = null,
         [Description("Optional machine id for applying machine profile overrides.")] string? machineId = null,
         [Description("Whether to include user-level skill roots under ~/.codealta/skills.")] bool includeUserRoots = false,
         CancellationToken cancellationToken = default)
     {
-        var roots = await ResolveSkillRootsAsync(kind, workspaceKey, projectKey, machineId, includeUserRoots, cancellationToken)
+        var roots = await ResolveSkillRootsAsync(kind, projectSlug, machineId, includeUserRoots, cancellationToken)
             .ConfigureAwait(false);
         var skills = await _skills.ListAsync(roots, cancellationToken).ConfigureAwait(false);
 
@@ -61,14 +60,13 @@ public sealed class SkillsTools
     [McpServerTool(Name = "codealta.skills.get"), Description("Gets a skill SKILL.md by skill name.")]
     public async Task<string> GetAsync(
         [Description("Skill name (folder name).")] string skillName,
-        [Description("Scope kind: global|workspace|project.")] string kind = "global",
-        [Description("Workspace key for workspace scope.")] string? workspaceKey = null,
-        [Description("Project key for project scope.")] string? projectKey = null,
+        [Description("Scope kind: global|project.")] string kind = "global",
+        [Description("Project slug for project scope.")] string? projectSlug = null,
         [Description("Optional machine id for applying machine profile overrides.")] string? machineId = null,
         [Description("Whether to include user-level skill roots under ~/.codealta/skills.")] bool includeUserRoots = false,
         CancellationToken cancellationToken = default)
     {
-        var roots = await ResolveSkillRootsAsync(kind, workspaceKey, projectKey, machineId, includeUserRoots, cancellationToken)
+        var roots = await ResolveSkillRootsAsync(kind, projectSlug, machineId, includeUserRoots, cancellationToken)
             .ConfigureAwait(false);
         var skill = await _skills.GetAsync(roots, skillName, cancellationToken).ConfigureAwait(false);
         if (skill is null)
@@ -87,13 +85,12 @@ public sealed class SkillsTools
 
     private async Task<IReadOnlyList<string>> ResolveSkillRootsAsync(
         string kind,
-        string? workspaceKey,
-        string? projectKey,
+        string? projectSlug,
         string? machineId,
         bool includeUserRoots,
         CancellationToken cancellationToken)
     {
-        var selector = ParseSelector(kind, workspaceKey, projectKey);
+        var selector = ParseSelector(kind, projectSlug);
         MachineProfile? machineProfile = null;
         if (!string.IsNullOrWhiteSpace(machineId))
         {
@@ -125,14 +122,13 @@ public sealed class SkillsTools
             .ToArray();
     }
 
-    private static ScopeSelector ParseSelector(string kind, string? workspaceKey, string? projectKey)
+    private static ScopeSelector ParseSelector(string kind, string? projectSlug)
     {
         return kind.Trim().ToLowerInvariant() switch
         {
             "global" => ScopeSelector.Global(),
-            "workspace" => ScopeSelector.Workspace(workspaceKey ?? string.Empty),
-            "project" => ScopeSelector.Project(projectKey ?? string.Empty),
-            _ => throw new ArgumentException("kind must be one of global, workspace, project.", nameof(kind)),
+            "project" => ScopeSelector.Project(projectSlug ?? string.Empty),
+            _ => throw new ArgumentException("kind must be one of global, project.", nameof(kind)),
         };
     }
 }

@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace CodeAlta.Catalog;
 
 /// <summary>
-/// Describes a project in a workspace.
+/// Describes a project in the global catalog.
 /// </summary>
 public sealed class ProjectDescriptor
 {
@@ -18,6 +18,12 @@ public sealed class ProjectDescriptor
     /// </summary>
     [JsonPropertyName("slug")]
     public string Slug { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the project name used for checkout directories.
+    /// </summary>
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the display name.
@@ -77,12 +83,29 @@ public sealed class ProjectDescriptor
     /// <exception cref="ArgumentException">Thrown when required values are missing or invalid.</exception>
     public void Validate()
     {
+        if (string.IsNullOrWhiteSpace(Name))
+        {
+            Name = InferProjectName(ProjectPath, DisplayName);
+        }
+
         if (!ProjectId.TryParse(Id, out _))
         {
             throw new ArgumentException($"Project '{Slug}' has an invalid id '{Id}'.", nameof(Id));
         }
 
-        WorkspaceKeyValidator.Validate(Slug, nameof(Slug));
+        CatalogSlugValidator.Validate(Slug, nameof(Slug));
+
+        if (string.IsNullOrWhiteSpace(Name))
+        {
+            throw new ArgumentException("Project name is required.", nameof(Name));
+        }
+
+        if (Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+            Name.Contains(Path.DirectorySeparatorChar) ||
+            Name.Contains(Path.AltDirectorySeparatorChar))
+        {
+            throw new ArgumentException("Project name must be a valid single directory name.", nameof(Name));
+        }
 
         if (string.IsNullOrWhiteSpace(DisplayName))
         {
@@ -98,6 +121,29 @@ public sealed class ProjectDescriptor
         {
             throw new ArgumentException("Project default branch is required.", nameof(DefaultBranch));
         }
+    }
+
+    private static string InferProjectName(string projectPath, string displayName)
+    {
+        if (!string.IsNullOrWhiteSpace(projectPath))
+        {
+            if (Uri.TryCreate(projectPath, UriKind.Absolute, out var uri))
+            {
+                var remoteName = Path.GetFileNameWithoutExtension(uri.AbsolutePath);
+                if (!string.IsNullOrWhiteSpace(remoteName))
+                {
+                    return remoteName;
+                }
+            }
+
+            var localName = Path.GetFileName(projectPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (!string.IsNullOrWhiteSpace(localName))
+            {
+                return localName;
+            }
+        }
+
+        return displayName;
     }
 }
 

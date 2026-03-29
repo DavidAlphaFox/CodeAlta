@@ -16,7 +16,7 @@ Related specs:
   - tasks/plans
   - artifact store
   - search (FTS5 + embeddings / vector retrieval)
-  - workspaces/projects + bootstrap helpers
+  - projects + bootstrap helpers
   - skills and role profiles
   - agent registry and coordination primitives
 - Run in-process (no separate MCP server process).
@@ -106,7 +106,7 @@ Use a stable, namespaced naming scheme:
 - `codealta.tasks.*`
 - `codealta.artifacts.*`
 - `codealta.search.*`
-- `CodeAlta.Catalog.*`
+- `codealta.projects.*`
 - `codealta.roles.*`
 - `codealta.skills.*`
 - `codealta.agents.*`
@@ -163,7 +163,7 @@ Backed by file store + SQLite metadata link.
 Tools:
 - `codealta.artifacts.write_markdown` (creates/updates artifact file with YAML frontmatter)
 - `codealta.artifacts.read` (returns text + metadata)
-- `codealta.artifacts.list` (by workspace/project/type/tags)
+- `codealta.artifacts.list` (by global/project/type/tags)
 - `codealta.artifacts.link` (link artifact to task/knowledge record)
 
 ### 5.3 Search (`codealta.search.*`)
@@ -180,14 +180,14 @@ Implementation note:
 - the vector-retrieval side should prefer the `Microsoft.SemanticKernel.Connectors.SqliteVec` integration when practical
 - MCP should expose the search service; MCP should not own the vector-store implementation details
 
-### 5.4 Workspaces (`CodeAlta.Catalog.*`)
+### 5.4 Projects (`CodeAlta.Catalog.*`)
 
 Backed by `CodeAlta.Catalog` + bootstrap service.
 
 Tools:
-- `CodeAlta.Catalog.list`
-- `CodeAlta.Catalog.get`
-- `CodeAlta.Catalog.resolve_scope` (turn a scope selector into concrete roots)
+- `codealta.projects.list`
+- `codealta.projects.get`
+- `codealta.projects.resolve_scope` (turn a scope selector into concrete roots)
 
 ### 5.5 Bootstrap / global repo (`codealta.bootstrap.*`)
 
@@ -196,7 +196,7 @@ Backed by `CodeAlta.Catalog` + `GitService`.
 Tools:
 - `codealta.bootstrap.ensure_global_repo` (clone + open)
 - `codealta.bootstrap.sync` (pull/commit/push; progress)
-- `codealta.bootstrap.ensure_workspace_checked_out` (clone missing repos based on rules)
+- `codealta.bootstrap.ensure_projects_checked_out` (clone missing repos based on rules)
 
 ### 5.6 Roles and skills (`codealta.roles.*`, `codealta.skills.*`)
 

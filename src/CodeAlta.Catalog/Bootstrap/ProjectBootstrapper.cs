@@ -1,19 +1,19 @@
 namespace CodeAlta.Catalog.Bootstrap;
 
 /// <summary>
-/// Applies workspace checkout plans to ensure repositories exist on disk.
+/// Applies project checkout plans to ensure repositories exist on disk.
 /// </summary>
-public sealed class WorkspaceBootstrapper
+public sealed class ProjectBootstrapper
 {
-    private readonly WorkspaceBootstrapPlanner _planner;
+    private readonly ProjectBootstrapPlanner _planner;
     private readonly GitService _git;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WorkspaceBootstrapper"/> class.
+    /// Initializes a new instance of the <see cref="ProjectBootstrapper"/> class.
     /// </summary>
     /// <param name="planner">Planner used to compute checkout actions.</param>
     /// <param name="git">Git service used to apply clone/pull actions.</param>
-    public WorkspaceBootstrapper(WorkspaceBootstrapPlanner planner, GitService git)
+    public ProjectBootstrapper(ProjectBootstrapPlanner planner, GitService git)
     {
         ArgumentNullException.ThrowIfNull(planner);
         ArgumentNullException.ThrowIfNull(git);
@@ -23,15 +23,15 @@ public sealed class WorkspaceBootstrapper
     }
 
     /// <summary>
-    /// Ensures repositories for the resolved workspace scope are checked out.
+    /// Ensures repositories for the resolved scope are checked out.
     /// </summary>
-    /// <param name="resolution">Workspace resolution.</param>
+    /// <param name="resolution">Project scope resolution.</param>
     /// <param name="updateExisting">Whether existing checkouts should be updated via <c>git pull</c>.</param>
     /// <param name="progress">Optional progress sink.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Execution results.</returns>
-    public async Task<IReadOnlyList<WorkspaceCheckoutExecutionResult>> EnsureCheckedOutAsync(
-        WorkspaceResolution resolution,
+    public async Task<IReadOnlyList<ProjectCheckoutExecutionResult>> EnsureCheckedOutAsync(
+        ProjectScopeResolution resolution,
         bool updateExisting = true,
         IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
@@ -39,7 +39,7 @@ public sealed class WorkspaceBootstrapper
         ArgumentNullException.ThrowIfNull(resolution);
 
         var plans = _planner.Plan(resolution);
-        var results = new List<WorkspaceCheckoutExecutionResult>(plans.Count);
+        var results = new List<ProjectCheckoutExecutionResult>(plans.Count);
 
         foreach (var plan in plans)
         {
@@ -86,9 +86,8 @@ public sealed class WorkspaceBootstrapper
             }
 
             results.Add(
-                new WorkspaceCheckoutExecutionResult
+                new ProjectCheckoutExecutionResult
                 {
-                    WorkspaceSlug = plan.WorkspaceSlug,
                     ProjectSlug = plan.ProjectSlug,
                     CheckoutPath = checkoutPath,
                     Action = plan.Action,
@@ -100,5 +99,3 @@ public sealed class WorkspaceBootstrapper
         return results;
     }
 }
-
-

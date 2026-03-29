@@ -1,15 +1,10 @@
 namespace CodeAlta.Catalog.Bootstrap;
 
 /// <summary>
-/// Represents the outcome of executing a workspace checkout plan.
+/// Represents the outcome of executing a project checkout plan.
 /// </summary>
-public sealed record WorkspaceCheckoutExecutionResult
+public sealed record ProjectCheckoutExecutionResult
 {
-    /// <summary>
-    /// Gets the workspace slug.
-    /// </summary>
-    public required string WorkspaceSlug { get; init; }
-
     /// <summary>
     /// Gets the project slug.
     /// </summary>
@@ -35,5 +30,3 @@ public sealed record WorkspaceCheckoutExecutionResult
     /// </summary>
     public string? Message { get; init; }
 }
-
-

@@ -1,14 +1,19 @@
 namespace CodeAlta.Catalog;
 
 /// <summary>
-/// Represents a fully-resolved workspace scope.
+/// Represents a fully-resolved project scope.
 /// </summary>
-public sealed record WorkspaceResolution
+public sealed record ProjectScopeResolution
 {
     /// <summary>
-    /// Gets the resolved workspace.
+    /// Gets the scope kind.
     /// </summary>
-    public required WorkspaceDescriptor Workspace { get; init; }
+    public required ScopeKind Kind { get; init; }
+
+    /// <summary>
+    /// Gets the selected project when the scope targets a single project.
+    /// </summary>
+    public ProjectDescriptor? SelectedProject { get; init; }
 
     /// <summary>
     /// Gets the resolved projects.
@@ -20,4 +25,3 @@ public sealed record WorkspaceResolution
     /// </summary>
     public required IReadOnlyList<string> CodeAltaRoots { get; init; }
 }
-

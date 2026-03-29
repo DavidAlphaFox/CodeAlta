@@ -19,7 +19,7 @@ Deferred/follow-up plans:
 - storage + indexing + search: `doc/specs/implementation_plan_storage_search.md`
 - MCP server product flows: `doc/specs/implementation_plan_mcp_server.md`
 - .NET support: `doc/specs/implementation_plan_dotnet.md`
-- older workspace/bootstrap plan: `doc/specs/implementation_plan_workspaces_bootstrap.md`
+- older bootstrap/catalog plan: `doc/specs/implementation_plan_workspaces_bootstrap.md`
 
 ## 1. Goal
 
@@ -360,7 +360,7 @@ After the MVP core experience is working, the next layers can be resumed in this
 2. search/indexing/semantic retrieval
 3. MCP integration as a product feature
 4. language-specific intelligence such as .NET support
-5. richer project grouping such as tags, saved collections, or optional workspaces
+5. richer project grouping such as tags or saved collections
 
 ## 11. Cross-cutting implementation notes
 

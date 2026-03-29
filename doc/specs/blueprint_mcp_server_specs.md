@@ -2,6 +2,8 @@
 
 Last updated: **2026-02-28**
 
+Historical note: references here to workspace-scoped services are obsolete. The active MCP model is project-first, with `global` and `project` scopes.
+
 This document proposes how CodeAlta embeds a **built-in MCP server** to provide durable services to agents:
 
 - agent registry + inter-agent coordination

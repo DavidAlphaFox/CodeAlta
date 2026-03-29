@@ -2,6 +2,8 @@
 
 Last updated: **2026-02-28**
 
+Historical note: references here to a separate workspace scope are obsolete. The active model is global plus projects.
+
 This document expands the agent + memory ideas described in `doc/specs/blueprint_codealta_specs.md`.
 
 It focuses on two hard problems:

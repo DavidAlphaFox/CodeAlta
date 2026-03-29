@@ -9,7 +9,7 @@ namespace CodeAlta.Catalog;
 public sealed partial class ProjectCatalog
 {
     private readonly CatalogOptions _options;
-    private readonly WorkspaceYamlSerializer _serializer;
+    private readonly CatalogYamlSerializer _serializer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectCatalog"/> class.
@@ -18,7 +18,7 @@ public sealed partial class ProjectCatalog
     /// <param name="serializer">Optional YAML serializer.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <see cref="CatalogOptions.GlobalRoot"/> is empty.</exception>
-    public ProjectCatalog(CatalogOptions options, WorkspaceYamlSerializer? serializer = null)
+    public ProjectCatalog(CatalogOptions options, CatalogYamlSerializer? serializer = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (string.IsNullOrWhiteSpace(options.GlobalRoot))
@@ -27,8 +27,13 @@ public sealed partial class ProjectCatalog
         }
 
         _options = options;
-        _serializer = serializer ?? new WorkspaceYamlSerializer();
+        _serializer = serializer ?? new CatalogYamlSerializer();
     }
+
+    /// <summary>
+    /// Gets the catalog layout options.
+    /// </summary>
+    public CatalogOptions Options => _options;
 
     /// <summary>
     /// Loads all known projects from the portable catalog.
@@ -79,6 +84,21 @@ public sealed partial class ProjectCatalog
 
         var projects = await LoadAsync(cancellationToken).ConfigureAwait(false);
         return projects.FirstOrDefault(project => string.Equals(project.Id, projectId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Gets a project by slug.
+    /// </summary>
+    /// <param name="projectSlug">The normalized project slug.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The matching project when found; otherwise <see langword="null"/>.</returns>
+    public async Task<ProjectDescriptor?> GetBySlugAsync(string projectSlug, CancellationToken cancellationToken = default)
+    {
+        CatalogSlugValidator.Validate(projectSlug, nameof(projectSlug));
+
+        var projects = await LoadAsync(cancellationToken).ConfigureAwait(false);
+        return projects.FirstOrDefault(project =>
+            string.Equals(project.Slug, projectSlug, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -147,6 +167,7 @@ public sealed partial class ProjectCatalog
         {
             Id = ProjectId.NewVersion7().ToString(),
             Slug = slug,
+            Name = directory.Name,
             DisplayName = directory.Name,
             ProjectPath = normalizedPath,
             DefaultBranch = "main",
@@ -207,6 +228,34 @@ public sealed partial class ProjectCatalog
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Loads a machine profile by machine id.
+    /// </summary>
+    /// <param name="machineId">The machine id.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The machine profile when found; otherwise <see langword="null"/>.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="machineId"/> is empty.</exception>
+    public async Task<MachineProfile?> LoadMachineProfileAsync(
+        string machineId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(machineId))
+        {
+            throw new ArgumentException("Machine id is required.", nameof(machineId));
+        }
+
+        var profilePath = Path.Combine(_options.MachinesRoot, $"{machineId}.yaml");
+        if (!File.Exists(profilePath))
+        {
+            return null;
+        }
+
+        var yaml = await File.ReadAllTextAsync(profilePath, cancellationToken).ConfigureAwait(false);
+        var profile = _serializer.DeserializeMachineProfile(yaml);
+        profile.Validate();
+        return profile;
     }
 
     private static string EnsureUniqueSlug(string baseSlug, IReadOnlyList<ProjectDescriptor> projects)
@@ -284,7 +333,7 @@ public sealed partial class ProjectCatalog
             slug = slug[..64].TrimEnd('-', '_', '.');
         }
 
-        if (!WorkspaceKeyValidator.IsValid(slug))
+        if (!CatalogSlugValidator.IsValid(slug))
         {
             slug = "project";
         }

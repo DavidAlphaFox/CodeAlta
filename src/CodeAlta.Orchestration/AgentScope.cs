@@ -11,7 +11,7 @@ public sealed record AgentScope
     public required AgentScopeKind Kind { get; init; }
 
     /// <summary>
-    /// Gets the optional scope identifier (workspace/project id).
+    /// Gets the optional scope identifier (project id).
     /// </summary>
     public string? Id { get; init; }
 }

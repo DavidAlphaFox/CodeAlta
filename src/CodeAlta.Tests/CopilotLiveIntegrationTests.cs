@@ -644,12 +644,12 @@ public sealed class CopilotLiveIntegrationTests
             var indexer = new Indexer(indexingQueue, documentIndexStore, embeddingManager);
             var searchService = new SearchService(documentIndexStore, embeddingManager);
 
-            var workspaceCatalog = new WorkspaceCatalog(
-                new WorkspaceCatalogOptions
+            var projectCatalog = new ProjectCatalog(
+                new CatalogOptions
                 {
-                    GlobalRepoRoot = Path.Combine(rootPath, "repo"),
+                    GlobalRoot = Path.Combine(rootPath, "repo"),
                 });
-            var workspaceResolver = new WorkspaceResolver(workspaceCatalog);
+            var projectResolver = new ProjectResolver(projectCatalog);
 
             var dotNetWorkspaceService = new DotNetWorkspaceService();
             var symbolIndexService = new SymbolIndexService();
@@ -678,17 +678,17 @@ public sealed class CopilotLiveIntegrationTests
             serviceCollection.AddSingleton(agentRepository);
             serviceCollection.AddSingleton(indexer);
             serviceCollection.AddSingleton(searchService);
-            serviceCollection.AddSingleton(workspaceCatalog);
-            serviceCollection.AddSingleton(workspaceResolver);
+            serviceCollection.AddSingleton(projectCatalog);
+            serviceCollection.AddSingleton(projectResolver);
             serviceCollection.AddSingleton(new RoleProfileStore());
             serviceCollection.AddSingleton(new SkillCatalog());
             serviceCollection.AddSingleton(new GitService());
             serviceCollection.AddSingleton(sp => new GlobalRepoBootstrapper(sp.GetRequiredService<GitService>()));
             serviceCollection.AddSingleton(sp => new GlobalRepoSyncService(sp.GetRequiredService<GitService>()));
-            serviceCollection.AddSingleton(new WorkspaceBootstrapPlanner());
+            serviceCollection.AddSingleton(new ProjectBootstrapPlanner());
             serviceCollection.AddSingleton(sp =>
-                new WorkspaceBootstrapper(
-                    sp.GetRequiredService<WorkspaceBootstrapPlanner>(),
+                new ProjectBootstrapper(
+                    sp.GetRequiredService<ProjectBootstrapPlanner>(),
                     sp.GetRequiredService<GitService>()));
             serviceCollection.AddSingleton(dotNetWorkspaceService);
             serviceCollection.AddSingleton(symbolIndexService);

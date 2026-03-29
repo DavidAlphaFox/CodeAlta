@@ -70,8 +70,6 @@ The main supporting code projects for that work should be understood as:
 - `CodeAlta.Orchestration` for runtime routing and thread execution
 - `CodeAlta.Persistence` for SQLite/caches/file-store mechanics only
 
-During migration, the current project named `CodeAlta.Workspaces` should be treated as the temporary implementation location for the future `CodeAlta.Catalog` responsibilities.
-
 If a proposal does not materially improve one of those five items, it is probably not MVP work.
 
 ## 4. Active specs

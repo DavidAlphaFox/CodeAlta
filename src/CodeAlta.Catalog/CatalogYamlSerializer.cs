@@ -5,37 +5,10 @@ using SharpYaml;
 namespace CodeAlta.Catalog;
 
 /// <summary>
-/// Serializes and deserializes workspace and project metadata.
+/// Serializes and deserializes project and machine metadata.
 /// </summary>
-public sealed class WorkspaceYamlSerializer
+public sealed class CatalogYamlSerializer
 {
-    private sealed class WorkspaceFrontMatter
-    {
-        [JsonPropertyName("id")]
-        public string? Id { get; set; }
-
-        [JsonPropertyName("kind")]
-        public string? Kind { get; set; }
-
-        [JsonPropertyName("slug")]
-        public string? Slug { get; set; }
-
-        [JsonPropertyName("display_name")]
-        public string? DisplayName { get; set; }
-
-        [JsonPropertyName("description")]
-        public string? Description { get; set; }
-
-        [JsonPropertyName("tags")]
-        public List<string>? Tags { get; set; }
-
-        [JsonPropertyName("project_refs")]
-        public List<string>? ProjectRefs { get; set; }
-
-        [JsonPropertyName("checkout")]
-        public CheckoutFrontMatter? Checkout { get; set; }
-    }
-
     private sealed class ProjectFrontMatter
     {
         [JsonPropertyName("id")]
@@ -46,6 +19,9 @@ public sealed class WorkspaceYamlSerializer
 
         [JsonPropertyName("slug")]
         public string? Slug { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
 
         [JsonPropertyName("display_name")]
         public string? DisplayName { get; set; }
@@ -76,30 +52,6 @@ public sealed class WorkspaceYamlSerializer
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WorkspaceYamlSerializer"/> class.
-    /// </summary>
-    public WorkspaceYamlSerializer()
-    {
-    }
-
-    /// <summary>
-    /// Deserializes a workspace descriptor from YAML.
-    /// </summary>
-    /// <param name="yaml">The YAML text.</param>
-    /// <returns>The workspace descriptor.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="yaml"/> is <see langword="null"/>.</exception>
-    public WorkspaceDescriptor DeserializeWorkspace(string yaml)
-    {
-        ArgumentNullException.ThrowIfNull(yaml);
-        var descriptor = YamlSerializer.Deserialize<WorkspaceDescriptor>(yaml) ?? new WorkspaceDescriptor();
-
-        descriptor.Projects ??= [];
-        descriptor.ProjectRefs ??= [];
-        descriptor.Tags ??= [];
-        return descriptor;
-    }
-
-    /// <summary>
     /// Deserializes a project descriptor from YAML.
     /// </summary>
     /// <param name="yaml">The YAML text.</param>
@@ -124,46 +76,20 @@ public sealed class WorkspaceYamlSerializer
         ArgumentNullException.ThrowIfNull(yaml);
 
         var profile = YamlSerializer.Deserialize<MachineProfile>(yaml) ?? new MachineProfile();
-        profile.WorkspaceCheckoutRoots ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         profile.ProjectOverrides ??= new Dictionary<string, MachineProjectOverride>(StringComparer.OrdinalIgnoreCase);
         return profile;
     }
 
     /// <summary>
-    /// Serializes a workspace descriptor to YAML.
+    /// Serializes a project descriptor to YAML.
     /// </summary>
-    /// <param name="descriptor">The workspace descriptor.</param>
+    /// <param name="descriptor">The project descriptor.</param>
     /// <returns>Serialized YAML text.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="descriptor"/> is <see langword="null"/>.</exception>
-    public string SerializeWorkspace(WorkspaceDescriptor descriptor)
+    public string SerializeProject(ProjectDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         return YamlSerializer.Serialize(descriptor);
-    }
-
-    /// <summary>
-    /// Deserializes a workspace descriptor from markdown frontmatter.
-    /// </summary>
-    /// <param name="markdown">The markdown content.</param>
-    /// <returns>The workspace descriptor.</returns>
-    public WorkspaceDescriptor DeserializeWorkspaceMarkdown(string markdown)
-    {
-        ArgumentNullException.ThrowIfNull(markdown);
-        var document = ParseFrontMatter(markdown);
-        var frontMatter = YamlSerializer.Deserialize<WorkspaceFrontMatter>(document.FrontMatter) ?? new WorkspaceFrontMatter();
-
-        return new WorkspaceDescriptor
-        {
-            Id = frontMatter.Id ?? string.Empty,
-            Slug = frontMatter.Slug ?? string.Empty,
-            DisplayName = frontMatter.DisplayName ?? string.Empty,
-            Description = frontMatter.Description,
-            Tags = frontMatter.Tags ?? [],
-            ProjectRefs = frontMatter.ProjectRefs ?? [],
-            Projects = [],
-            MarkdownBody = document.Body,
-            DefaultCheckoutRoot = frontMatter.Checkout?.PathTemplate ?? string.Empty,
-        };
     }
 
     /// <summary>
@@ -176,14 +102,16 @@ public sealed class WorkspaceYamlSerializer
         ArgumentNullException.ThrowIfNull(markdown);
         var document = ParseFrontMatter(markdown);
         var frontMatter = YamlSerializer.Deserialize<ProjectFrontMatter>(document.FrontMatter) ?? new ProjectFrontMatter();
+        var projectPath = frontMatter.Path ?? frontMatter.LegacyRepoUrl ?? string.Empty;
 
         return new ProjectDescriptor
         {
             Id = frontMatter.Id ?? string.Empty,
             Slug = frontMatter.Slug ?? string.Empty,
-            DisplayName = frontMatter.DisplayName ?? string.Empty,
+            Name = frontMatter.Name ?? InferProjectName(projectPath),
+            DisplayName = frontMatter.DisplayName ?? frontMatter.Name ?? InferProjectName(projectPath),
             Description = frontMatter.Description,
-            ProjectPath = frontMatter.Path ?? frontMatter.LegacyRepoUrl ?? string.Empty,
+            ProjectPath = projectPath,
             DefaultBranch = frontMatter.DefaultBranch ?? "main",
             Tags = frontMatter.Tags ?? [],
             Checkout = new CheckoutRule
@@ -192,33 +120,6 @@ public sealed class WorkspaceYamlSerializer
             },
             MarkdownBody = document.Body,
         };
-    }
-
-    /// <summary>
-    /// Serializes a workspace descriptor to markdown frontmatter.
-    /// </summary>
-    /// <param name="descriptor">The workspace descriptor.</param>
-    /// <returns>Markdown text.</returns>
-    public string SerializeWorkspaceMarkdown(WorkspaceDescriptor descriptor)
-    {
-        ArgumentNullException.ThrowIfNull(descriptor);
-        var frontMatter = new WorkspaceFrontMatter
-        {
-            Id = descriptor.Id,
-            Kind = "workspace",
-            Slug = descriptor.Slug,
-            DisplayName = descriptor.DisplayName,
-            Description = descriptor.Description,
-            Tags = descriptor.Tags,
-            ProjectRefs = descriptor.ProjectRefs.Count > 0
-                ? descriptor.ProjectRefs
-                : descriptor.Projects.Select(static x => x.Id).ToList(),
-            Checkout = string.IsNullOrWhiteSpace(descriptor.DefaultCheckoutRoot)
-                ? null
-                : new CheckoutFrontMatter { PathTemplate = descriptor.DefaultCheckoutRoot },
-        };
-
-        return SerializeMarkdown(frontMatter, descriptor.MarkdownBody, descriptor.DisplayName);
     }
 
     /// <summary>
@@ -234,6 +135,7 @@ public sealed class WorkspaceYamlSerializer
             Id = descriptor.Id,
             Kind = "project",
             Slug = descriptor.Slug,
+            Name = descriptor.Name,
             DisplayName = descriptor.DisplayName,
             Description = descriptor.Description,
             Path = descriptor.ProjectPath,
@@ -280,5 +182,23 @@ public sealed class WorkspaceYamlSerializer
 
         return $"---\n{yaml}\n---\n\n{markdownBody}\n";
     }
-}
 
+    private static string InferProjectName(string projectPath)
+    {
+        if (string.IsNullOrWhiteSpace(projectPath))
+        {
+            return string.Empty;
+        }
+
+        if (Uri.TryCreate(projectPath, UriKind.Absolute, out var uri))
+        {
+            var remoteName = Path.GetFileNameWithoutExtension(uri.AbsolutePath);
+            if (!string.IsNullOrWhiteSpace(remoteName))
+            {
+                return remoteName;
+            }
+        }
+
+        return Path.GetFileName(projectPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    }
+}

@@ -4,6 +4,8 @@ Deferred until after the MVP core experience is working.
 
 Status note: this document is now subordinate to `doc/specs/implementation_plan.md`. Search and specialization remain important, but they are no longer the primary near-term driver of the architecture.
 
+Historical note: older workspace-first storage examples in this document are obsolete. Active catalog guidance is project-first.
+
 This document details how CodeAlta will implement durable storage (files + SQLite), full-text search (FTS5), and vector search using SQLite plus the Semantic Kernel SQLite vector connector.
 
 Related specs:

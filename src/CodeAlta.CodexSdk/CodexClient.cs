@@ -308,6 +308,23 @@ public sealed partial class CodexClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// Runs a shell command within a thread.
+    /// </summary>
+    /// <param name="parameters">Thread shell command parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>An empty response on success.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<ThreadShellCommandResponse> ThreadShellCommandAsync(
+        ThreadShellCommandParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<ThreadShellCommandParams, ThreadShellCommandResponse>(
+            "thread/shellCommand", parameters, cancellationToken);
+    }
+
+    /// <summary>
     /// Lists all thread ids currently loaded in memory.
     /// </summary>
     /// <param name="parameters">Optional pagination parameters.</param>
@@ -1023,6 +1040,40 @@ public sealed partial class CodexClient : IAsyncDisposable
             "fs/copy", parameters, cancellationToken);
     }
 
+    /// <summary>
+    /// Starts filesystem watch notifications for an absolute path.
+    /// </summary>
+    /// <param name="parameters">Filesystem watch parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The created watch handle.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<FsWatchResponse> FsWatchAsync(
+        FsWatchParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<FsWatchParams, FsWatchResponse>(
+            "fs/watch", parameters, cancellationToken);
+    }
+
+    /// <summary>
+    /// Stops filesystem watch notifications for a prior watch handle.
+    /// </summary>
+    /// <param name="parameters">Filesystem unwatch parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>An empty response on success.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<FsUnwatchResponse> FsUnwatchAsync(
+        FsUnwatchParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<FsUnwatchParams, FsUnwatchResponse>(
+            "fs/unwatch", parameters, cancellationToken);
+    }
+
     // ── Account APIs ──────────────────────────────────────────────
 
     /// <summary>
@@ -1193,6 +1244,23 @@ public sealed partial class CodexClient : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(parameters);
         return _transport.SendRequestAsync<ExperimentalFeatureListParams, ExperimentalFeatureListResponse>(
             "experimentalFeature/list", parameters, cancellationToken);
+    }
+
+    /// <summary>
+    /// Updates experimental feature enablement state.
+    /// </summary>
+    /// <param name="parameters">Experimental feature enablement parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The updated enablement map.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<ExperimentalFeatureEnablementSetResponse> ExperimentalFeatureEnablementSetAsync(
+        ExperimentalFeatureEnablementSetParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<ExperimentalFeatureEnablementSetParams, ExperimentalFeatureEnablementSetResponse>(
+            "experimentalFeature/enablement/set", parameters, cancellationToken);
     }
 
     // ── Dispose ───────────────────────────────────────────────────
