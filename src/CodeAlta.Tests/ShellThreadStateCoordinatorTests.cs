@@ -87,6 +87,25 @@ public sealed class ShellThreadStateCoordinatorTests
         Assert.IsNull(coordinator.SelectedThreadId);
     }
 
+    [TestMethod]
+    public async Task SaveNavigatorSettingsAsync_PersistsUpdatedSettings()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var threadCatalog = new WorkThreadCatalog(options);
+        var coordinator = CreateCoordinator(options, threadCatalog);
+
+        await coordinator.SaveNavigatorSettingsAsync(new NavigatorSettings
+        {
+            SortMode = NavigatorProjectSortMode.Date,
+            RecentThreadsPerProject = 7,
+        }).ConfigureAwait(false);
+
+        var viewState = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
+        Assert.AreEqual(NavigatorProjectSortMode.Date, viewState.Navigator.SortMode);
+        Assert.AreEqual(7, viewState.Navigator.RecentThreadsPerProject);
+    }
+
     private static ShellThreadStateCoordinator CreateCoordinator(CatalogOptions options, WorkThreadCatalog? threadCatalog = null)
     {
         threadCatalog ??= new WorkThreadCatalog(options);

@@ -36,12 +36,19 @@ internal static class SidebarServicesFactory
             () => sidebar!.View.Tree,
             setStatus,
             setReadyStatusForCurrentSelection);
+        var navigatorSettings = new NavigatorSettingsCoordinator(
+            threadStateCoordinator,
+            getUiDispatcher,
+            () => sidebar!.View.Tree.GetAbsoluteBounds(),
+            () => sidebar!.View.Tree,
+            refreshCatalogAndThreadWorkspace,
+            setStatus);
         sidebar = new SidebarCoordinator(
             viewModel,
             catalogOptions,
             shellController,
             () => _ = ToggleSortModeAsync(threadStateCoordinator, refreshCatalogAndThreadWorkspace),
-            () => setStatus("Navigator settings dialog will be added in the next step.", false, StatusTone.Info),
+            navigatorSettings.Open,
             navigatorActions.ConfirmDeleteThread,
             navigatorActions.ConfirmDeleteProject);
         return (navigatorActions, sidebar);

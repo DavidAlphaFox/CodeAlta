@@ -34,11 +34,11 @@ Read that document first for the full product and technical guidance, UX intent,
 - [x] Update selection behavior after thread deletion
 - [x] Update selection behavior after project deletion
 - [x] Add reusable CodeAlta confirmation dialog
-- [ ] Add navigator settings dialog
-  - [ ] Edit sort mode
-  - [ ] Edit recent threads count
-  - [ ] Validate recent threads count
-  - [ ] Persist settings and refresh projection
+- [x] Add navigator settings dialog
+  - [x] Edit sort mode
+  - [x] Edit recent threads count
+  - [x] Validate recent threads count
+  - [x] Persist settings and refresh projection
 - [ ] Add project threads dialog
   - [ ] Create bindable row view model
   - [ ] Build `DataGridControl` with sortable columns
@@ -75,7 +75,7 @@ Read that document first for the full product and technical guidance, UX intent,
 - [x] Add tests for delete flows
 - [ ] Add tests for dialog row view models and selection commands
 - [ ] Add tests for inline rename validation and commit/cancel behavior
-- [ ] Add tests for navigator settings persistence
+- [x] Add tests for navigator settings persistence
 - [ ] Final UX polish
   - [ ] Ensure timestamps stay visible while hover actions appear
   - [ ] Ensure hover buttons have tooltips
