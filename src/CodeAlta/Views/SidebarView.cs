@@ -19,19 +19,28 @@ internal sealed class SidebarView
     };
 
     private readonly Dictionary<SidebarSelectionTarget, TreeNode> _nodesByTarget = new();
+    private readonly Action<string> _deleteThread;
+    private readonly Action<string> _deleteProject;
 
     public SidebarView(
         SidebarViewModel viewModel,
         Action refreshCatalog,
         Action cycleSortMode,
         Action openNavigatorSettings,
+        Action<string> deleteThread,
+        Action<string> deleteProject,
         Action<SidebarSelectionTarget?> onSelectedTargetChanged)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(refreshCatalog);
         ArgumentNullException.ThrowIfNull(cycleSortMode);
         ArgumentNullException.ThrowIfNull(openNavigatorSettings);
+        ArgumentNullException.ThrowIfNull(deleteThread);
+        ArgumentNullException.ThrowIfNull(deleteProject);
         ArgumentNullException.ThrowIfNull(onSelectedTargetChanged);
+
+        _deleteThread = deleteThread;
+        _deleteProject = deleteProject;
 
         Tree = new TreeView
         {
@@ -137,6 +146,17 @@ internal sealed class SidebarView
             node.AddRightVisual(CreateTimestampVisual(projection.Row), TreeNodeRightVisualVisibility.Always);
         }
 
+        if (projection.Kind == SidebarNodeKind.Thread &&
+            projection.SelectionTarget?.ThreadId is { } threadId)
+        {
+            node.AddRightVisual(CreateRowActionButton(NerdFont.MdTrashCanOutline, "Delete thread", () => _deleteThread(threadId)), TreeNodeRightVisualVisibility.Hover);
+        }
+        else if (projection.Kind == SidebarNodeKind.Project &&
+                 projection.SelectionTarget?.ProjectId is { } projectId)
+        {
+            node.AddRightVisual(CreateRowActionButton(NerdFont.MdTrashCanOutline, "Delete project", () => _deleteProject(projectId)), TreeNodeRightVisualVisibility.Hover);
+        }
+
         if (projection.SelectionTarget is { } target)
         {
             _nodesByTarget[target] = node;
@@ -170,6 +190,18 @@ internal sealed class SidebarView
             .TextAlignment(TextAlignment.Right)
             .MinWidth(12)
             .Tooltip(new TextBlock(() => row.ExactActivityText));
+    }
+
+    private static Visual CreateRowActionButton(Rune icon, string tooltip, Action onClick)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tooltip);
+        ArgumentNullException.ThrowIfNull(onClick);
+
+        return new Button(new TextBlock(icon.ToString()))
+            .Style(ToolbarButtonStyle)
+            .Tone(ControlTone.Error)
+            .Click(onClick)
+            .Tooltip(new TextBlock(tooltip));
     }
 
     private static Visual CreateToolbarButton(

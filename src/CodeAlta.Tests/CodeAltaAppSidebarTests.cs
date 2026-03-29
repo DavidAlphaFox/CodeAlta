@@ -197,21 +197,24 @@ public sealed class CodeAltaAppSidebarTests
     public void SidebarView_ApplyProjectionBuildsSelectableProjectNode()
     {
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
+        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
         var projection = BuildProjection(
             [project],
-            [],
+            [thread],
             project.Id,
             nowUtc: DateTimeOffset.Parse("2026-03-29T10:05:00+00:00"));
-        var view = new SidebarView(new SidebarViewModel(), static () => { }, static () => { }, static () => { }, static _ => { });
+        var view = new SidebarView(new SidebarViewModel(), static () => { }, static () => { }, static () => { }, static _ => { }, static _ => { }, static _ => { });
 
         view.ApplyProjection(projection);
 
         Assert.AreEqual(2, view.Tree.Roots.Count);
         var projectNode = view.Tree.Roots[1].Children[0];
+        var threadNode = projectNode.Children[0];
         Assert.AreEqual(SidebarSelectionTarget.Project(project.Id), projectNode.Data);
         Assert.IsTrue(projectNode.IsExpanded);
         Assert.IsTrue(projection.ContainsTarget(SidebarSelectionTarget.Project(project.Id)));
-        Assert.AreEqual(1, projectNode.RightVisuals.Count);
+        Assert.AreEqual(2, projectNode.RightVisuals.Count);
+        Assert.AreEqual(2, threadNode.RightVisuals.Count);
     }
 
     [TestMethod]

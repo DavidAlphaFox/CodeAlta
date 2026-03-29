@@ -393,17 +393,84 @@ internal sealed class ShellThreadStateCoordinator
         ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
 
         _resetPendingThreadTabSelection();
+        var removedSelectedThread = string.Equals(SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
+        var removedThread = FindThread(threadId);
         ViewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
         _removeTabPage(threadId);
         _threadTabs.Remove(threadId);
-        if (string.Equals(SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase))
+        if (removedSelectedThread)
         {
             SelectedThreadId = ViewState.OpenThreadIds.FirstOrDefault();
             ViewState.SelectedThreadId = SelectedThreadId;
+            ApplySelectionFallbackAfterThreadRemoval(removedThread?.ProjectRef);
         }
 
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
         await PersistViewStateAsync().ConfigureAwait(false);
+        _refreshSelectionAndThreadWorkspace();
+    }
+
+    public void RemoveDeletedThread(string threadId, string? fallbackProjectId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+
+        _resetPendingThreadTabSelection();
+        var removedSelectedThread = string.Equals(SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
+        ViewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
+        _removeTabPage(threadId);
+        _threadTabs.Remove(threadId);
+
+        if (string.Equals(ViewState.SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase))
+        {
+            ViewState.SelectedThreadId = null;
+        }
+
+        if (removedSelectedThread)
+        {
+            SelectedThreadId = null;
+            ApplySelectionFallbackAfterThreadRemoval(fallbackProjectId);
+        }
+
+        ViewState.UpdatedAt = DateTimeOffset.UtcNow;
+        _ = PersistViewStateAsync();
+        _refreshSelectionAndThreadWorkspace();
+    }
+
+    public void RemoveDeletedProject(string projectId, IReadOnlyList<string> deletedThreadIds)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentNullException.ThrowIfNull(deletedThreadIds);
+
+        _resetPendingThreadTabSelection();
+        var removedSelectedThread = deletedThreadIds.Contains(SelectedThreadId, StringComparer.OrdinalIgnoreCase);
+        var removedSelectedProject = !GlobalScopeSelected &&
+            string.Equals(SelectedProjectId, projectId, StringComparison.OrdinalIgnoreCase);
+
+        foreach (var threadId in deletedThreadIds)
+        {
+            ViewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
+            _removeTabPage(threadId);
+            _threadTabs.Remove(threadId);
+
+            if (string.Equals(ViewState.SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase))
+            {
+                ViewState.SelectedThreadId = null;
+            }
+        }
+
+        if (removedSelectedThread)
+        {
+            SelectedThreadId = null;
+            ApplySelectionFallbackAfterThreadRemoval(fallbackProjectId: null);
+        }
+        else if (removedSelectedProject && string.IsNullOrWhiteSpace(SelectedThreadId))
+        {
+            DraftTabOpen = true;
+            GlobalScopeSelected = true;
+        }
+
+        ViewState.UpdatedAt = DateTimeOffset.UtcNow;
+        _ = PersistViewStateAsync();
         _refreshSelectionAndThreadWorkspace();
     }
 
@@ -518,5 +585,32 @@ internal sealed class ShellThreadStateCoordinator
         }
 
         return threads;
+    }
+
+    private void ApplySelectionFallbackAfterThreadRemoval(string? fallbackProjectId)
+    {
+        if (!string.IsNullOrWhiteSpace(SelectedThreadId))
+        {
+            DraftTabOpen = false;
+            var selectedThread = FindThread(SelectedThreadId);
+            GlobalScopeSelected = string.IsNullOrWhiteSpace(selectedThread?.ProjectRef);
+            if (!string.IsNullOrWhiteSpace(selectedThread?.ProjectRef))
+            {
+                SelectedProjectId = selectedThread.ProjectRef;
+            }
+
+            return;
+        }
+
+        DraftTabOpen = true;
+        if (!string.IsNullOrWhiteSpace(fallbackProjectId) &&
+            GetProjectById(fallbackProjectId) is not null)
+        {
+            GlobalScopeSelected = false;
+            SelectedProjectId = fallbackProjectId;
+            return;
+        }
+
+        GlobalScopeSelected = true;
     }
 }

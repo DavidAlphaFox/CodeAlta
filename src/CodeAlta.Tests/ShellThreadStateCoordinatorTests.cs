@@ -52,6 +52,41 @@ public sealed class ShellThreadStateCoordinatorTests
         Assert.AreEqual(6, reloaded.ThreadStates["thread-1"].MessageCount);
     }
 
+    [TestMethod]
+    public async Task CloseThreadAsync_LastSelectedProjectThreadFallsBackToProjectScope()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var coordinator = CreateCoordinator(options);
+        var project = CreateProject("project-1", "CodeAlta");
+        coordinator.ApplyRecoveredCatalogState([project], [CreateThread("thread-1", project.Id)]);
+        coordinator.OpenThread("thread-1");
+
+        await coordinator.CloseThreadAsync("thread-1").ConfigureAwait(false);
+
+        Assert.IsTrue(coordinator.DraftTabOpen);
+        Assert.IsFalse(coordinator.GlobalScopeSelected);
+        Assert.AreEqual(project.Id, coordinator.SelectedProjectId);
+        Assert.IsNull(coordinator.SelectedThreadId);
+    }
+
+    [TestMethod]
+    public void RemoveDeletedProject_SelectedProjectScopeFallsBackToGlobal()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var coordinator = CreateCoordinator(options);
+        var project = CreateProject("project-1", "CodeAlta");
+        coordinator.ApplyRecoveredCatalogState([project], [CreateThread("thread-1", project.Id)]);
+        coordinator.SelectProjectScope(project.Id);
+
+        coordinator.RemoveDeletedProject(project.Id, ["thread-1"]);
+
+        Assert.IsTrue(coordinator.DraftTabOpen);
+        Assert.IsTrue(coordinator.GlobalScopeSelected);
+        Assert.IsNull(coordinator.SelectedThreadId);
+    }
+
     private static ShellThreadStateCoordinator CreateCoordinator(CatalogOptions options, WorkThreadCatalog? threadCatalog = null)
     {
         threadCatalog ??= new WorkThreadCatalog(options);
@@ -72,6 +107,9 @@ public sealed class ShellThreadStateCoordinatorTests
     }
 
     private static WorkThreadDescriptor CreateThread(string threadId)
+        => CreateThread(threadId, "project-1");
+
+    private static WorkThreadDescriptor CreateThread(string threadId, string projectId)
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00");
         return new WorkThreadDescriptor
@@ -87,6 +125,19 @@ public sealed class ShellThreadStateCoordinatorTests
             CreatedAt = timestamp,
             UpdatedAt = timestamp,
             LastActiveAt = timestamp,
+        };
+    }
+
+    private static ProjectDescriptor CreateProject(string id, string displayName)
+    {
+        return new ProjectDescriptor
+        {
+            Id = id,
+            Slug = displayName.ToLowerInvariant(),
+            Name = displayName,
+            DisplayName = displayName,
+            ProjectPath = $@"C:\repo\{displayName}",
+            DefaultBranch = "main",
         };
     }
 

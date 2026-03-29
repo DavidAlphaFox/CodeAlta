@@ -23,13 +23,17 @@ internal sealed class SidebarCoordinator
         CatalogOptions catalogOptions,
         CodeAltaShellController shellController,
         Action cycleSortMode,
-        Action openNavigatorSettings)
+        Action openNavigatorSettings,
+        Action<string> requestDeleteThread,
+        Action<string> requestDeleteProject)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(shellController);
         ArgumentNullException.ThrowIfNull(cycleSortMode);
         ArgumentNullException.ThrowIfNull(openNavigatorSettings);
+        ArgumentNullException.ThrowIfNull(requestDeleteThread);
+        ArgumentNullException.ThrowIfNull(requestDeleteProject);
 
         _viewModel = viewModel;
         _catalogOptions = catalogOptions;
@@ -39,6 +43,8 @@ internal sealed class SidebarCoordinator
             () => _ = shellController.ReloadCatalogAsync(CancellationToken.None),
             cycleSortMode,
             openNavigatorSettings,
+            requestDeleteThread,
+            requestDeleteProject,
             OnSelectedTargetChanged);
     }
 

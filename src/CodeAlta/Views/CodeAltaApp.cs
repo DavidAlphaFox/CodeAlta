@@ -53,6 +53,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private readonly SessionUsageViewModel _sessionUsageViewModel = new();
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates = ChatBackendPresentation.CreateBackendStates();
     private readonly SidebarCoordinator _sidebarCoordinator;
+    private readonly NavigatorActionCoordinator _navigatorActionCoordinator;
     private readonly ChatSelectorCoordinator _chatSelectorCoordinator;
     private readonly ThreadTabStripCoordinator _threadTabStripCoordinator;
     private readonly ChatPreferenceContext _chatPreferenceContext;
@@ -215,12 +216,15 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         _workspaceRefreshContext = new WorkspaceRefreshContext(
             InvalidateSelectedSessionUsage,
             RefreshHeaderAndThreadWorkspace);
-        _sidebarCoordinator = new SidebarCoordinator(
+        (_navigatorActionCoordinator, _sidebarCoordinator) = SidebarServicesFactory.Create(
             _sidebarViewModel,
             _catalogOptions,
             _shellController,
-            () => _ = ToggleNavigatorSortModeAsync(),
-            OpenNavigatorSettings);
+            _threadStateCoordinator,
+            GetUiDispatcher,
+            RefreshCatalogAndThreadWorkspace,
+            SetStatus,
+            SetReadyStatusForCurrentSelection);
         _chatSelectorCoordinator = new ChatSelectorCoordinator(
             _threadWorkspaceViewModel,
             _promptComposerViewModel,
@@ -783,13 +787,4 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private WorkThreadDescriptor? FindThread(string? threadId)
         => _threadStateCoordinator.FindThread(threadId);
 
-    private async Task ToggleNavigatorSortModeAsync()
-    {
-        var settings = _threadStateCoordinator.GetNavigatorSettingsSnapshot();
-        settings.SortMode = settings.SortMode == NavigatorProjectSortMode.Name ? NavigatorProjectSortMode.Date : NavigatorProjectSortMode.Name;
-        await _threadStateCoordinator.SaveNavigatorSettingsAsync(settings).ConfigureAwait(false);
-        RefreshCatalogAndThreadWorkspace();
-    }
-
-    private void OpenNavigatorSettings() => SetStatus("Navigator settings dialog will be added in the next step.", tone: StatusTone.Info);
 }

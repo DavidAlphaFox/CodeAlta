@@ -14,7 +14,7 @@ Read that document first for the full product and technical guidance, UX intent,
   - [x] Delete single thread
   - [x] Delete project and all of its threads
   - [x] Handle backend-supported and local-only delete flows
-- [x] Extend sidebar projection models to carry recency text, exact timestamps, node kind, and row actions
+- [ ] Extend sidebar projection models to carry recency text, exact timestamps, node kind, and row actions
 - [x] Add bindable row view models for sidebar nodes where live values change
 - [x] Add relative time formatter utility and exact timestamp tooltip content helper
 - [x] Add recency refresh strategy that updates only when displayed buckets change
@@ -25,15 +25,15 @@ Read that document first for the full product and technical guidance, UX intent,
 - [x] Remove the existing sidebar thread title editor and refresh text button
 - [x] Add always-visible dimmed relative timestamps to project rows
 - [x] Add always-visible dimmed relative timestamps to thread rows
-- [ ] Add hover-only delete button to thread rows
+- [x] Add hover-only delete button to thread rows
 - [ ] Add hover-only project row actions
-  - [ ] Delete project
+  - [x] Delete project
   - [ ] Show all threads
   - [ ] Show project details
 - [x] Filter hidden projects and deleted threads out of the default navigator projection
-- [ ] Update selection behavior after thread deletion
-- [ ] Update selection behavior after project deletion
-- [ ] Add reusable CodeAlta confirmation dialog
+- [x] Update selection behavior after thread deletion
+- [x] Update selection behavior after project deletion
+- [x] Add reusable CodeAlta confirmation dialog
 - [ ] Add navigator settings dialog
   - [ ] Edit sort mode
   - [ ] Edit recent threads count
@@ -72,7 +72,7 @@ Read that document first for the full product and technical guidance, UX intent,
   - [ ] Preserve selection after save
 - [x] Add tests for sidebar projection recency and sort behavior
 - [x] Add tests for sidebar reactivity without unnecessary rebuilds
-- [ ] Add tests for delete flows
+- [x] Add tests for delete flows
 - [ ] Add tests for dialog row view models and selection commands
 - [ ] Add tests for inline rename validation and commit/cancel behavior
 - [ ] Add tests for navigator settings persistence
