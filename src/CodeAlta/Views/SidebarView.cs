@@ -18,7 +18,7 @@ internal sealed class SidebarView
 {
     private static readonly ButtonStyle ToolbarButtonStyle = ButtonStyle.Default with
     {
-        Padding = Thickness.Zero,
+        Padding = new Thickness(1, 0, 1, 0),
     };
 
     private readonly Dictionary<SidebarSelectionTarget, TreeNode> _nodesByTarget = new();
