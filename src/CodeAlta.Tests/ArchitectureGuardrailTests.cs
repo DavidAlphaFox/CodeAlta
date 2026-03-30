@@ -330,6 +330,18 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void ProjectThreadsDialog_ActionColumn_UsesDirectActivateButtonEditor()
+    {
+        var dialogSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ProjectThreadsDialog.cs"));
+
+        Assert.IsTrue(dialogSource.Contains("CellActivationMode = DataGridCellActivationMode.DirectActivate", StringComparison.Ordinal));
+        Assert.IsTrue(dialogSource.Contains("CellTemplate = new DataTemplate<ProjectThreadsDialogRowViewModel>(BuildOpenButtonDisplay, null)", StringComparison.Ordinal));
+        Assert.IsTrue(dialogSource.Contains("CellEditorTemplate = new DataTemplate<ProjectThreadsDialogRowViewModel>(null, BuildOpenButtonEditor)", StringComparison.Ordinal));
+        Assert.IsTrue(dialogSource.Contains("IsHitTestVisible = false", StringComparison.Ordinal));
+        Assert.IsFalse(dialogSource.Contains("ReadOnly = true", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void PopupPresenters_RestorePromptFocusWhenClosed()
     {
         var controlsSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Controls", "AnchoredPopupView.cs"));

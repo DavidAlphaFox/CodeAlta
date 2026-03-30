@@ -89,29 +89,33 @@ internal sealed class ProjectThreadsDialog
             .ShowHeader(true)
             .ShowRowAnchor(false);
 
-        Visual BuildSelectionCell(DataTemplateValue<ProjectThreadsDialogRowViewModel> value, in DataTemplateContext _)
-        {
-            var row = value.GetValue();
-            return new CheckBox(new TextBlock(""), row.Bind.IsSelected);
-        }
-
         static Visual BuildLastUpdatedCell(DataTemplateValue<DateTimeOffset?> value, in DataTemplateContext _)
         {
             var row = value.GetValue();
             return new Markup(() => row.ToString())
                 .Wrap(false);
-/*                .Tooltip(new TextBlock(() => row.LastUpdatedExact))*/;
         }
 
         static Visual BuildMessageCountCell(DataTemplateValue<int?> value, in DataTemplateContext _)
             => new TextBlock(value.GetValue()?.ToString() ?? "—");
 
-        Visual BuildOpenCell(DataTemplateValue<ProjectThreadsDialogRowViewModel> value, in DataTemplateContext context)
+        static Visual BuildOpenButtonDisplay(DataTemplateValue<ProjectThreadsDialogRowViewModel> value, in DataTemplateContext context)
         {
-            var row = value.GetValue();
+            _ = value;
+            _ = context;
+            return new Button("Open")
+            {
+                IsHitTestVisible = false,
+            }
+                .Tone(ControlTone.Primary);
+        }
+
+        Visual BuildOpenButtonEditor(Binding<ProjectThreadsDialogRowViewModel> binding, in DataTemplateContext context)
+        {
+            _ = context;
             return new Button("Open")
                 .Tone(ControlTone.Primary)
-                .Click(() => _ = OpenThreadAsync(row.ThreadId));
+                .Click(() => _ = OpenThreadAsync(binding.GetValue().ThreadId));
         }
 
         grid.Columns.Add(new DataGridColumn<bool>
@@ -174,8 +178,9 @@ internal sealed class ProjectThreadsDialog
             Header = new TextBlock("Action"),
             TypedValueAccessor = rowAccessor,
             Width = GridLength.Auto,
-            ReadOnly = true,
-            CellTemplate = new DataTemplate<ProjectThreadsDialogRowViewModel>(BuildOpenCell, null),
+            CellActivationMode = DataGridCellActivationMode.DirectActivate,
+            CellTemplate = new DataTemplate<ProjectThreadsDialogRowViewModel>(BuildOpenButtonDisplay, null),
+            CellEditorTemplate = new DataTemplate<ProjectThreadsDialogRowViewModel>(null, BuildOpenButtonEditor),
         });
 
         var closeButton = new Button(new TextBlock($"{NerdFont.MdClose} Close"))
