@@ -11,7 +11,7 @@ internal static class SidebarTreeProjectionBuilder
         IReadOnlyList<ProjectDescriptor> projects,
         IReadOnlyList<WorkThreadDescriptor> threads,
         string globalRoot,
-        string? expandedProjectId,
+        IReadOnlyCollection<string> expandedProjectIds,
         NavigatorSettings settings,
         Func<string, SidebarNodeKind, SidebarSelectionTarget?, SidebarNodeViewModel> getOrCreateRow,
         DateTimeOffset nowUtc)
@@ -19,13 +19,14 @@ internal static class SidebarTreeProjectionBuilder
         ArgumentNullException.ThrowIfNull(projects);
         ArgumentNullException.ThrowIfNull(threads);
         ArgumentException.ThrowIfNullOrWhiteSpace(globalRoot);
+        ArgumentNullException.ThrowIfNull(expandedProjectIds);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(getOrCreateRow);
 
         return new SidebarTreeProjection(
             [
                 CreateGlobalNode(threads, settings, getOrCreateRow, nowUtc),
-                CreateProjectsNode(projects, threads, expandedProjectId, settings, getOrCreateRow, nowUtc),
+                CreateProjectsNode(projects, threads, expandedProjectIds, settings, getOrCreateRow, nowUtc),
             ]);
     }
 
@@ -64,7 +65,7 @@ internal static class SidebarTreeProjectionBuilder
     private static SidebarTreeNodeProjection CreateProjectsNode(
         IReadOnlyList<ProjectDescriptor> projects,
         IReadOnlyList<WorkThreadDescriptor> threads,
-        string? expandedProjectId,
+        IReadOnlyCollection<string> expandedProjectIds,
         NavigatorSettings settings,
         Func<string, SidebarNodeKind, SidebarSelectionTarget?, SidebarNodeViewModel> getOrCreateRow,
         DateTimeOffset nowUtc)
@@ -81,7 +82,7 @@ internal static class SidebarTreeProjectionBuilder
             : OrderProjectsByName(visibleProjects);
 
         var children = orderedProjects
-            .Select(project => CreateProjectNode(project, threads, expandedProjectId, settings, getOrCreateRow, nowUtc))
+            .Select(project => CreateProjectNode(project, threads, expandedProjectIds, settings, getOrCreateRow, nowUtc))
             .ToArray();
 
         return new SidebarTreeNodeProjection(
@@ -99,7 +100,7 @@ internal static class SidebarTreeProjectionBuilder
     private static SidebarTreeNodeProjection CreateProjectNode(
         ProjectDescriptor project,
         IReadOnlyList<WorkThreadDescriptor> threads,
-        string? expandedProjectId,
+        IReadOnlyCollection<string> expandedProjectIds,
         NavigatorSettings settings,
         Func<string, SidebarNodeKind, SidebarSelectionTarget?, SidebarNodeViewModel> getOrCreateRow,
         DateTimeOffset nowUtc)
@@ -123,7 +124,7 @@ internal static class SidebarTreeProjectionBuilder
             NerdFont.MdFolderOutline,
             SidebarAccent.Projects,
             SidebarSelectionTarget.Project(project.Id),
-            string.Equals(project.Id, expandedProjectId, StringComparison.OrdinalIgnoreCase),
+            expandedProjectIds.Contains(project.Id, StringComparer.OrdinalIgnoreCase),
             CreateProjectActions(),
             children);
     }

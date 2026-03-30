@@ -162,6 +162,15 @@ internal sealed class SidebarView
                Tree.TrySelectNode(node);
     }
 
+    public IReadOnlyList<string> GetExpandedProjectIds()
+    {
+        return _nodesByTarget
+            .Where(static entry => entry.Key.Kind == SidebarSelectionKind.ProjectScope && entry.Key.ProjectId is not null && entry.Value.IsExpanded)
+            .Select(static entry => entry.Key.ProjectId!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     public void FocusInlineRenameEditor(string nodeId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(nodeId);

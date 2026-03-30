@@ -66,7 +66,7 @@ internal sealed class SidebarCoordinator
     public void RefreshProjection(
         IReadOnlyList<ProjectDescriptor> projects,
         IReadOnlyList<WorkThreadDescriptor> threads,
-        string? expandedProjectId,
+        string? preferredExpandedProjectId,
         SidebarSelectionTarget currentTarget,
         NavigatorSettings settings,
         Action verifyBindableAccess)
@@ -80,11 +80,17 @@ internal sealed class SidebarCoordinator
 
         var nowUtc = DateTimeOffset.UtcNow;
         _viewModel.SortMode = settings.SortMode;
+        var expandedProjectIds = new HashSet<string>(_view.GetExpandedProjectIds(), StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(preferredExpandedProjectId))
+        {
+            expandedProjectIds.Add(preferredExpandedProjectId);
+        }
+
         var projection = SidebarTreeProjectionBuilder.Build(
             projects,
             threads,
             _catalogOptions.GlobalRoot,
-            expandedProjectId,
+            expandedProjectIds,
             settings,
             GetOrCreateRow,
             nowUtc);

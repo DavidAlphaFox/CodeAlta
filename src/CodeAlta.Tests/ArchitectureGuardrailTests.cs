@@ -377,6 +377,17 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void SidebarCoordinator_PreservesMultipleExpandedProjectsAcrossRefresh()
+    {
+        var sidebarSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "SidebarCoordinator.cs"));
+        var sidebarViewSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "SidebarView.cs"));
+
+        Assert.IsTrue(sidebarSource.Contains("var expandedProjectIds = new HashSet<string>(_view.GetExpandedProjectIds(), StringComparer.OrdinalIgnoreCase);", StringComparison.Ordinal));
+        Assert.IsTrue(sidebarSource.Contains("expandedProjectIds.Add(preferredExpandedProjectId);", StringComparison.Ordinal));
+        Assert.IsTrue(sidebarViewSource.Contains("public IReadOnlyList<string> GetExpandedProjectIds()", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void PopupPresenters_RestorePromptFocusWhenClosed()
     {
         var controlsSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Controls", "AnchoredPopupView.cs"));

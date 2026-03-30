@@ -48,7 +48,7 @@ public sealed class CodeAltaAppSidebarTests
         var projection = BuildProjection(
             [project, otherProject],
             [unrelatedThread, internalThread, visibleThread],
-            project.Id,
+            [project.Id],
             nowUtc: timestamp.AddMinutes(3));
 
         Assert.AreEqual(2, projection.Roots.Count);
@@ -88,7 +88,7 @@ public sealed class CodeAltaAppSidebarTests
         var projection = BuildProjection(
             [project, archivedProject],
             [visibleThread, archivedThread],
-            project.Id,
+            [project.Id],
             nowUtc: DateTimeOffset.Parse("2026-03-29T12:02:00+00:00"));
 
         Assert.AreEqual(1, projection.Roots[1].Children.Count);
@@ -112,7 +112,7 @@ public sealed class CodeAltaAppSidebarTests
         var projection = BuildProjection(
             projects: [],
             threads: [globalThread],
-            expandedProjectId: null,
+            expandedProjectIds: [],
             nowUtc: DateTimeOffset.Parse("2026-03-29T12:02:00+00:00"));
 
         var globalNode = projection.Roots[0];
@@ -136,13 +136,30 @@ public sealed class CodeAltaAppSidebarTests
         var projection = BuildProjection(
             [olderProject, newerProject],
             threads,
-            expandedProjectId: newerProject.Id,
+            expandedProjectIds: [newerProject.Id],
             nowUtc: timestamp.AddDays(1).AddMinutes(2),
             sortMode: NavigatorProjectSortMode.Date);
 
         CollectionAssert.AreEqual(
             new[] { newerProject.DisplayName, olderProject.DisplayName },
             projection.Roots[1].Children.Select(static node => node.Row.Title).ToArray());
+    }
+
+    [TestMethod]
+    public void Build_CanExpandMultipleProjects()
+    {
+        var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
+        var project1 = CreateProject("project-1", "Alpha", @"C:\alpha");
+        var project2 = CreateProject("project-2", "Beta", @"C:\beta");
+
+        var projection = BuildProjection(
+            [project1, project2],
+            [],
+            [project1.Id, project2.Id],
+            nowUtc: timestamp);
+
+        Assert.IsTrue(projection.Roots[1].Children[0].IsExpanded);
+        Assert.IsTrue(projection.Roots[1].Children[1].IsExpanded);
     }
 
     [TestMethod]
@@ -157,7 +174,7 @@ public sealed class CodeAltaAppSidebarTests
             [project],
             [thread],
             @"C:\global",
-            project.Id,
+            [project.Id],
             new NavigatorSettings(),
             (nodeId, kind, selectionTarget) => GetOrCreateRow(rows, nodeId, kind, selectionTarget),
             timestamp.AddSeconds(30));
@@ -165,7 +182,7 @@ public sealed class CodeAltaAppSidebarTests
             [project],
             [thread],
             @"C:\global",
-            project.Id,
+            [project.Id],
             new NavigatorSettings(),
             (nodeId, kind, selectionTarget) => GetOrCreateRow(rows, nodeId, kind, selectionTarget),
             timestamp.AddMinutes(1).AddSeconds(5));
@@ -189,7 +206,7 @@ public sealed class CodeAltaAppSidebarTests
         var projection = BuildProjection(
             [project],
             [visibleThread],
-            project.Id,
+            [project.Id],
             nowUtc: DateTimeOffset.Parse("2026-03-29T10:05:00+00:00"));
         var currentTarget = SidebarSelectionResolver.ResolveCurrentTarget(
             visibleThread.ThreadId,
@@ -211,7 +228,7 @@ public sealed class CodeAltaAppSidebarTests
         var projection = BuildProjection(
             [project],
             [],
-            project.Id,
+            [project.Id],
             nowUtc: DateTimeOffset.Parse("2026-03-29T10:05:00+00:00"));
 
         var selectedTarget = SidebarSelectionResolver.ResolveTargetForProjectionChange(
@@ -230,7 +247,7 @@ public sealed class CodeAltaAppSidebarTests
         var projection = BuildProjection(
             [project],
             [thread],
-            project.Id,
+            [project.Id],
             nowUtc: DateTimeOffset.Parse("2026-03-29T10:05:00+00:00"));
         var view = new SidebarView(new SidebarViewModel(), static () => { }, static () => { }, static () => { }, static () => { }, static _ => { }, static _ => { }, static _ => { }, static _ => { }, static _ => { }, static _ => { }, static _ => { });
 
@@ -259,7 +276,7 @@ public sealed class CodeAltaAppSidebarTests
         var projection = BuildProjection(
             projects: [],
             threads: [globalThread],
-            expandedProjectId: null,
+            expandedProjectIds: [],
             nowUtc: DateTimeOffset.Parse("2026-03-29T10:05:00+00:00"));
         var view = new SidebarView(new SidebarViewModel(), static () => { }, static () => { }, static () => { }, static () => { }, static _ => { }, static _ => { }, static _ => { }, static _ => { }, static _ => { }, static _ => { }, static _ => { });
 
@@ -280,7 +297,7 @@ public sealed class CodeAltaAppSidebarTests
         var projection = BuildProjection(
             [project],
             [],
-            project.Id,
+            [project.Id],
             nowUtc: DateTimeOffset.Parse("2026-03-29T10:05:00+00:00"));
         var renameCount = 0;
         var view = new SidebarView(new SidebarViewModel(), static () => { }, static () => { }, static () => { }, () => renameCount++, static _ => { }, static _ => { }, static _ => { }, static _ => { }, static _ => { }, static _ => { }, static _ => { });
@@ -343,7 +360,7 @@ public sealed class CodeAltaAppSidebarTests
     private static SidebarTreeProjection BuildProjection(
         IReadOnlyList<ProjectDescriptor> projects,
         IReadOnlyList<WorkThreadDescriptor> threads,
-        string? expandedProjectId,
+        IReadOnlyCollection<string> expandedProjectIds,
         DateTimeOffset nowUtc,
         NavigatorProjectSortMode sortMode = NavigatorProjectSortMode.Name)
     {
@@ -352,7 +369,7 @@ public sealed class CodeAltaAppSidebarTests
             projects,
             threads,
             @"C:\global",
-            expandedProjectId,
+            expandedProjectIds,
             new NavigatorSettings
             {
                 SortMode = sortMode,
