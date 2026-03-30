@@ -94,6 +94,21 @@ public sealed class ShellThreadStateCoordinatorTests
     }
 
     [TestMethod]
+    public void EnsureThreadTab_LoadsPersistedPromptDraft()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var coordinator = CreateCoordinator(options, loadPromptDraft: static threadId => threadId == "thread-1" ? "saved prompt" : null);
+        var project = CreateProject("project-1", "CodeAlta");
+        var thread = CreateThread("thread-1", project.Id);
+        coordinator.ApplyRecoveredCatalogState([project], [thread]);
+
+        var tab = coordinator.EnsureThreadTab(thread);
+
+        Assert.AreEqual("saved prompt", tab.Session.PromptDraftText);
+    }
+
+    [TestMethod]
     public void RemoveDeletedProject_SelectedProjectScopeFallsBackToGlobal()
     {
         using var temp = TempDirectory.Create();
@@ -129,7 +144,10 @@ public sealed class ShellThreadStateCoordinatorTests
         Assert.AreEqual(7, viewState.Navigator.RecentThreadsPerProject);
     }
 
-    private static ShellThreadStateCoordinator CreateCoordinator(CatalogOptions options, WorkThreadCatalog? threadCatalog = null)
+    private static ShellThreadStateCoordinator CreateCoordinator(
+        CatalogOptions options,
+        WorkThreadCatalog? threadCatalog = null,
+        Func<string, string?>? loadPromptDraft = null)
     {
         threadCatalog ??= new WorkThreadCatalog(options);
         return new ShellThreadStateCoordinator(
@@ -138,6 +156,8 @@ public sealed class ShellThreadStateCoordinatorTests
             static () => new InlineUiDispatcher(),
             static () => null,
             static _ => true,
+            loadPromptDraft ?? (static _ => null),
+            static _ => { },
             static _ => { },
             static (_, _, _, _, _) => { },
             static (_, _) => Task.CompletedTask,

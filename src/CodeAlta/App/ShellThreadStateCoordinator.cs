@@ -25,6 +25,8 @@ internal sealed class ShellThreadStateCoordinator
     private readonly Func<IUiDispatcher> _getUiDispatcher;
     private readonly Func<Rectangle?> _getTimelineBounds;
     private readonly Func<WorkThreadDescriptor, bool> _isBackendReady;
+    private readonly Func<string, string?> _loadPromptDraft;
+    private readonly Action<string> _deletePromptDraft;
     private readonly Action<OpenThreadState> _applyThreadPreference;
     private readonly Action<string, string?, AgentReasoningEffort?, bool, bool> _rememberThreadPreference;
     private readonly Func<WorkThreadDescriptor, CancellationToken, Task> _ensureThreadHistoryLoadedAsync;
@@ -42,6 +44,8 @@ internal sealed class ShellThreadStateCoordinator
         Func<IUiDispatcher> getUiDispatcher,
         Func<Rectangle?> getTimelineBounds,
         Func<WorkThreadDescriptor, bool> isBackendReady,
+        Func<string, string?> loadPromptDraft,
+        Action<string> deletePromptDraft,
         Action<OpenThreadState> applyThreadPreference,
         Action<string, string?, AgentReasoningEffort?, bool, bool> rememberThreadPreference,
         Func<WorkThreadDescriptor, CancellationToken, Task> ensureThreadHistoryLoadedAsync,
@@ -56,6 +60,8 @@ internal sealed class ShellThreadStateCoordinator
         ArgumentNullException.ThrowIfNull(getUiDispatcher);
         ArgumentNullException.ThrowIfNull(getTimelineBounds);
         ArgumentNullException.ThrowIfNull(isBackendReady);
+        ArgumentNullException.ThrowIfNull(loadPromptDraft);
+        ArgumentNullException.ThrowIfNull(deletePromptDraft);
         ArgumentNullException.ThrowIfNull(applyThreadPreference);
         ArgumentNullException.ThrowIfNull(rememberThreadPreference);
         ArgumentNullException.ThrowIfNull(ensureThreadHistoryLoadedAsync);
@@ -70,6 +76,8 @@ internal sealed class ShellThreadStateCoordinator
         _getUiDispatcher = getUiDispatcher;
         _getTimelineBounds = getTimelineBounds;
         _isBackendReady = isBackendReady;
+        _loadPromptDraft = loadPromptDraft;
+        _deletePromptDraft = deletePromptDraft;
         _applyThreadPreference = applyThreadPreference;
         _rememberThreadPreference = rememberThreadPreference;
         _ensureThreadHistoryLoadedAsync = ensureThreadHistoryLoadedAsync;
@@ -419,6 +427,7 @@ internal sealed class ShellThreadStateCoordinator
         ViewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
         _removeTabPage(threadId);
         _threadTabs.Remove(threadId);
+        _deletePromptDraft(threadId);
 
         if (string.Equals(ViewState.SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase))
         {
@@ -451,6 +460,7 @@ internal sealed class ShellThreadStateCoordinator
             ViewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
             _removeTabPage(threadId);
             _threadTabs.Remove(threadId);
+            _deletePromptDraft(threadId);
 
             if (string.Equals(ViewState.SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase))
             {
@@ -493,6 +503,7 @@ internal sealed class ShellThreadStateCoordinator
             _getTimelineBounds);
         state = new OpenThreadState(thread, timeline);
         state.BackendId = new AgentBackendId(thread.BackendId);
+        state.Session.PromptDraftText = _loadPromptDraft(thread.ThreadId) ?? string.Empty;
         state.ViewModel.Title = thread.Title;
         state.StatusMessage = ShellTextFormatter.BuildReadyStatusText(thread, GetSelectedProject(), globalScopeSelected: false);
 

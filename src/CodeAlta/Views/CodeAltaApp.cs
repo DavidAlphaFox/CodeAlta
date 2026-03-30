@@ -170,7 +170,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         _agentHub = agentHub;
         _knownProjectImporter = knownProjectImporter ?? new KnownProjectImporter(agentHub, projectCatalog);
         _ownedServices = ownedServices;
-        _promptDraftUiCoordinator = new PromptDraftUiCoordinator(new PromptDraftCoordinator(), OnPromptDraftChanged);
+        _promptDraftUiCoordinator = new PromptDraftUiCoordinator(new PromptDraftCoordinator(), _catalogOptions, () => _selectedThreadId, RefreshHeaderAndThreadWorkspace);
         _shellController = new CodeAltaShellController(
             new CodeAltaShellBridge(this),
             _knownProjectImporter,
@@ -189,6 +189,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             GetUiDispatcher,
             () => ThreadPaneLayout?.GetAbsoluteBounds(),
             thread => IsChatBackendReady(new AgentBackendId(thread.BackendId)),
+            _promptDraftUiCoordinator.LoadPromptDraft,
+            _promptDraftUiCoordinator.DeletePersistedPromptDraft,
             ApplyThreadPreference,
             RememberThreadPreference,
             EnsureThreadHistoryLoadedAsync,
@@ -375,11 +377,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     {
         await _runtimeEventPump.DisposeAsync().ConfigureAwait(false);
         await _shellController.DisposeAsync().ConfigureAwait(false);
-
-        if (_ownedServices is not null)
-        {
-            await _ownedServices.DisposeAsync().ConfigureAwait(false);
-        }
+        await _promptDraftUiCoordinator.DisposeAsync().ConfigureAwait(false);
+        if (_ownedServices is not null) await _ownedServices.DisposeAsync().ConfigureAwait(false);
     }
 
     private string? GetDraftProjectRoot()
@@ -431,7 +430,9 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             GetExpandedSidebarProjectId(),
             ResolveSidebarTargetForCurrentState(),
             _threadStateCoordinator.NavigatorSettings,
-            GetThreadVisualState,
+            threadId => _threadStateCoordinator.FindOpenThread(threadId) is { } tab
+                ? new ThreadVisualState(tab.StatusBusy, tab.HasPromptDraft)
+                : new ThreadVisualState(false, _promptDraftUiCoordinator.HasPersistedPromptDraft(threadId)),
             VerifyBindableAccess);
     }
 
@@ -637,15 +638,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         => !string.IsNullOrWhiteSpace(threadId) &&
            string.Equals(_selectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
 
-    private ThreadVisualState GetThreadVisualState(string threadId)
-        => _threadStateCoordinator.FindOpenThread(threadId) is { } tab
-            ? new ThreadVisualState(tab.StatusBusy, tab.HasPromptDraft)
-            : default;
-
-    private void OnPromptDraftChanged(ThreadSessionState? session, PromptDraftChange change)
-    {
-        if (session is not null && change.EditedStateChanged) RefreshHeaderAndThreadWorkspace();
-    }
     internal void SetReadyStatusForCurrentSelection()
         => _workspaceCoordinator.SetReadyStatusForCurrentSelection();
 

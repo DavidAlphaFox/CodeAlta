@@ -1,26 +1,35 @@
 using CodeAlta.Models;
+using CodeAlta.Catalog;
 using CodeAlta.ViewModels;
 using XenoAtom.Terminal.UI;
 
 namespace CodeAlta.App;
 
-internal sealed class PromptDraftUiCoordinator
+internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
 {
     private readonly PromptDraftCoordinator _promptDrafts;
+    private readonly ThreadPromptDraftPersistenceCoordinator _promptDraftPersistence;
+    private readonly Func<string?> _getSelectedThreadId;
+    private readonly Action _onThreadPromptEditedStateChanged;
     private readonly PromptDraftViewModel _viewModel;
-    private readonly Action<ThreadSessionState?, PromptDraftChange> _onPromptChanged;
     private ThreadSessionState? _selectedSession;
     private bool _syncingPromptText;
 
     public PromptDraftUiCoordinator(
         PromptDraftCoordinator promptDrafts,
-        Action<ThreadSessionState?, PromptDraftChange> onPromptChanged)
+        CatalogOptions catalogOptions,
+        Func<string?> getSelectedThreadId,
+        Action onThreadPromptEditedStateChanged)
     {
         ArgumentNullException.ThrowIfNull(promptDrafts);
-        ArgumentNullException.ThrowIfNull(onPromptChanged);
+        ArgumentNullException.ThrowIfNull(catalogOptions);
+        ArgumentNullException.ThrowIfNull(getSelectedThreadId);
+        ArgumentNullException.ThrowIfNull(onThreadPromptEditedStateChanged);
 
         _promptDrafts = promptDrafts;
-        _onPromptChanged = onPromptChanged;
+        _promptDraftPersistence = new ThreadPromptDraftPersistenceCoordinator(catalogOptions);
+        _getSelectedThreadId = getSelectedThreadId;
+        _onThreadPromptEditedStateChanged = onThreadPromptEditedStateChanged;
         _viewModel = new PromptDraftViewModel(OnPromptTextChanged);
     }
 
@@ -56,13 +65,24 @@ internal sealed class PromptDraftUiCoordinator
 
     public void ClearDraftPromptText()
     {
-        var change = _promptDrafts.RememberPrompt(null, string.Empty);
-        _onPromptChanged(null, change);
+        _promptDrafts.RememberPrompt(null, string.Empty);
         if (_selectedSession is null)
         {
             PromptText = string.Empty;
         }
     }
+
+    public string? LoadPromptDraft(string threadId)
+        => _promptDraftPersistence.LoadPromptDraft(threadId);
+
+    public bool HasPersistedPromptDraft(string threadId)
+        => _promptDraftPersistence.HasPromptDraft(threadId);
+
+    public void DeletePersistedPromptDraft(string threadId)
+        => _promptDraftPersistence.DeletePromptDraft(threadId);
+
+    public ValueTask DisposeAsync()
+        => _promptDraftPersistence.DisposeAsync();
 
     private void OnPromptTextChanged(string? value)
     {
@@ -72,6 +92,13 @@ internal sealed class PromptDraftUiCoordinator
         }
 
         var change = _promptDrafts.RememberPrompt(_selectedSession, value);
-        _onPromptChanged(_selectedSession, change);
+        if (_selectedSession is not null && _getSelectedThreadId() is { } selectedThreadId)
+        {
+            _promptDraftPersistence.ObservePromptDraft(selectedThreadId, _selectedSession.PromptDraftText);
+            if (change.EditedStateChanged)
+            {
+                _onThreadPromptEditedStateChanged();
+            }
+        }
     }
 }

@@ -2195,7 +2195,11 @@ public sealed class CodeAltaAppTests
     [TestMethod]
     public void PromptDraftUiCoordinator_PreservesPromptTextPerSelection()
     {
-        var coordinator = new PromptDraftUiCoordinator(new PromptDraftCoordinator(), static (_, _) => { });
+        var coordinator = new PromptDraftUiCoordinator(
+            new PromptDraftCoordinator(),
+            new CatalogOptions { GlobalRoot = Path.GetTempPath() },
+            static () => "thread-1",
+            static () => { });
         var first = new ThreadSessionState();
         var second = new ThreadSessionState();
 
