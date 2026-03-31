@@ -9,7 +9,7 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
 {
     private readonly PromptDraftCoordinator _promptDrafts;
     private readonly ThreadPromptDraftPersistenceCoordinator _promptDraftPersistence;
-    private readonly Func<string?> _getSelectedThreadId;
+    private readonly Func<ShellSelection> _getSelection;
     private readonly Action _onThreadPromptEditedStateChanged;
     private readonly PromptDraftViewModel _viewModel;
     private ThreadSessionState? _selectedSession;
@@ -18,17 +18,17 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
     public PromptDraftUiCoordinator(
         PromptDraftCoordinator promptDrafts,
         CatalogOptions catalogOptions,
-        Func<string?> getSelectedThreadId,
+        Func<ShellSelection> getSelection,
         Action onThreadPromptEditedStateChanged)
     {
         ArgumentNullException.ThrowIfNull(promptDrafts);
         ArgumentNullException.ThrowIfNull(catalogOptions);
-        ArgumentNullException.ThrowIfNull(getSelectedThreadId);
+        ArgumentNullException.ThrowIfNull(getSelection);
         ArgumentNullException.ThrowIfNull(onThreadPromptEditedStateChanged);
 
         _promptDrafts = promptDrafts;
         _promptDraftPersistence = new ThreadPromptDraftPersistenceCoordinator(catalogOptions);
-        _getSelectedThreadId = getSelectedThreadId;
+        _getSelection = getSelection;
         _onThreadPromptEditedStateChanged = onThreadPromptEditedStateChanged;
         _viewModel = new PromptDraftViewModel(OnPromptTextChanged);
     }
@@ -92,7 +92,8 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
         }
 
         var change = _promptDrafts.RememberPrompt(_selectedSession, value);
-        if (_selectedSession is not null && _getSelectedThreadId() is { } selectedThreadId)
+        if (_selectedSession is not null &&
+            _getSelection().Target is WorkspaceTarget.Thread { ThreadId: { Length: > 0 } selectedThreadId })
         {
             _promptDraftPersistence.ObservePromptDraft(selectedThreadId, _selectedSession.PromptDraftText);
             if (change.EditedStateChanged)

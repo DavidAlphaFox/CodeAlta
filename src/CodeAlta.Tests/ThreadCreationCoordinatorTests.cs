@@ -2,6 +2,7 @@ using CodeAlta.Agent;
 using CodeAlta.App;
 using CodeAlta.Catalog;
 using CodeAlta.Catalog.Roles;
+using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Persistence;
 
@@ -48,7 +49,7 @@ public sealed class ThreadCreationCoordinatorTests
             catalogOptions,
             () => backend.BackendId,
             () => project,
-            static () => false,
+            () => ShellSelection.ProjectDraft(project.Id),
             static () => "Planned review title",
             static (backendId, workingDirectory, projectRoots) => new WorkThreadExecutionOptions
             {

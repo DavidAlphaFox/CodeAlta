@@ -522,6 +522,19 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void ThreadSelectionContext_ExposesSelectionModelInsteadOfLegacySelectionBooleans()
+    {
+        var contextSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "Context", "ThreadSelectionContext.cs"));
+
+        Assert.IsTrue(contextSource.Contains("public ShellSelection Selection", StringComparison.Ordinal));
+        Assert.IsTrue(contextSource.Contains("public WorkspaceTarget Target", StringComparison.Ordinal));
+        Assert.IsFalse(contextSource.Contains("public bool DraftTabOpen", StringComparison.Ordinal));
+        Assert.IsFalse(contextSource.Contains("public bool GlobalScopeSelected", StringComparison.Ordinal));
+        Assert.IsFalse(contextSource.Contains("public string? SelectedProjectId", StringComparison.Ordinal));
+        Assert.IsFalse(contextSource.Contains("public string? SelectedThreadId", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void FleetConcepts_ReuseAgentIdentityAndAvoidFrontendAgentRegistry()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();

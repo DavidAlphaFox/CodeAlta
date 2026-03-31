@@ -164,8 +164,12 @@ internal sealed class ShellWorkspaceCoordinator
 
     public void SetReadyStatusForCurrentSelection()
     {
-        var selectedThread = _threadSelection.GetSelectedThread();
-        var readyMessage = ShellTextFormatter.BuildReadyStatusText(selectedThread, _threadSelection.GetSelectedProject(), _threadSelection.GlobalScopeSelected);
+        var selection = _threadSelection.Selection;
+        var selectedThread = selection.Target is WorkspaceTarget.Thread ? _threadSelection.GetSelectedThread() : null;
+        var readyMessage = ShellTextFormatter.BuildReadyStatusText(
+            selectedThread,
+            _threadSelection.GetSelectedProject(),
+            selection.Target is WorkspaceTarget.Draft { IsGlobal: true });
         var promptUnavailable = _workspaceContext.GetPromptUnavailableStatus();
         if (selectedThread is not null)
         {
@@ -198,12 +202,13 @@ internal sealed class ShellWorkspaceCoordinator
 
     public string BuildHeaderText()
     {
+        var selection = _threadSelection.Selection;
         return ShellTextFormatter.BuildHeaderText(
-            _threadSelection.GetSelectedThread(),
+            selection.Target is WorkspaceTarget.Thread ? _threadSelection.GetSelectedThread() : null,
             _threadSelection.GetSelectedProject(),
             _globalRoot,
             _workspaceContext.GetPreferredBackendId().Value,
-            _threadSelection.GlobalScopeSelected);
+            selection.Target is WorkspaceTarget.Draft { IsGlobal: true });
     }
 
     private void RefreshHeaderAndThreadWorkspaceCore()
@@ -255,6 +260,20 @@ internal sealed class ShellWorkspaceCoordinator
 
         _workspaceContext.SyncThreadTabControl();
 
+        if (_threadSelection.Selection.Target is not WorkspaceTarget.Thread)
+        {
+            _workspaceContext.RefreshQueuedPromptList();
+            _workspaceContext.RefreshChatSelectorsForDraftScope();
+            _workspaceContext.SyncPromptDraftText(session: null);
+            _workspaceContext.UpdatePromptAvailabilityUi();
+            _workspaceContext.SetThreadPaneContent(WelcomePaneFactory.Build(
+                _threadSelection.GetSelectedProject(),
+                _threadSelection.IsGlobalDraftSelected(),
+                _welcomeAnimationPhase01));
+            SetReadyStatusForCurrentSelection();
+            return;
+        }
+
         var selectedThread = _threadSelection.GetSelectedThread();
         if (selectedThread is null)
         {
@@ -262,7 +281,10 @@ internal sealed class ShellWorkspaceCoordinator
             _workspaceContext.RefreshChatSelectorsForDraftScope();
             _workspaceContext.SyncPromptDraftText(session: null);
             _workspaceContext.UpdatePromptAvailabilityUi();
-            _workspaceContext.SetThreadPaneContent(WelcomePaneFactory.Build(_threadSelection.GetSelectedProject(), _threadSelection.GlobalScopeSelected, _welcomeAnimationPhase01));
+            _workspaceContext.SetThreadPaneContent(WelcomePaneFactory.Build(
+                _threadSelection.GetSelectedProject(),
+                _threadSelection.IsGlobalDraftSelected(),
+                _welcomeAnimationPhase01));
             SetReadyStatusForCurrentSelection();
             return;
         }
@@ -279,9 +301,14 @@ internal sealed class ShellWorkspaceCoordinator
     private void SyncSelectedSessionUsageViewModel()
     {
         _workspaceContext.VerifyBindableAccess();
-        var selectedThread = _threadSelection.GetSelectedThread();
-        if (selectedThread is not null)
+        if (_threadSelection.Selection.Target is WorkspaceTarget.Thread)
         {
+            var selectedThread = _threadSelection.GetSelectedThread();
+            if (selectedThread is null)
+            {
+                return;
+            }
+
             var tab = _threadSelection.EnsureThreadTab(selectedThread);
             var backendState = _chatBackendStates[tab.BackendId.Value];
             _sessionUsageViewModel.Usage = tab.Usage;

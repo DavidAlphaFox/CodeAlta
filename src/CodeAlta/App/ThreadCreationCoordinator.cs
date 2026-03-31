@@ -12,7 +12,7 @@ internal sealed class ThreadCreationCoordinator
     private readonly CatalogOptions _catalogOptions;
     private readonly Func<AgentBackendId> _getPreferredBackendId;
     private readonly Func<ProjectDescriptor?> _getSelectedProject;
-    private readonly Func<bool> _getGlobalScopeSelected;
+    private readonly Func<ShellSelection> _getSelection;
     private readonly Func<string?> _readDraftTitle;
     private readonly Func<AgentBackendId, string, IReadOnlyList<string>, WorkThreadExecutionOptions> _buildPreferredExecutionOptions;
     private readonly Action<string, string?, AgentReasoningEffort?, bool, bool> _rememberThreadPreference;
@@ -25,7 +25,7 @@ internal sealed class ThreadCreationCoordinator
         CatalogOptions catalogOptions,
         Func<AgentBackendId> getPreferredBackendId,
         Func<ProjectDescriptor?> getSelectedProject,
-        Func<bool> getGlobalScopeSelected,
+        Func<ShellSelection> getSelection,
         Func<string?> readDraftTitle,
         Func<AgentBackendId, string, IReadOnlyList<string>, WorkThreadExecutionOptions> buildPreferredExecutionOptions,
         Action<string, string?, AgentReasoningEffort?, bool, bool> rememberThreadPreference,
@@ -37,7 +37,7 @@ internal sealed class ThreadCreationCoordinator
         ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(getPreferredBackendId);
         ArgumentNullException.ThrowIfNull(getSelectedProject);
-        ArgumentNullException.ThrowIfNull(getGlobalScopeSelected);
+        ArgumentNullException.ThrowIfNull(getSelection);
         ArgumentNullException.ThrowIfNull(readDraftTitle);
         ArgumentNullException.ThrowIfNull(buildPreferredExecutionOptions);
         ArgumentNullException.ThrowIfNull(rememberThreadPreference);
@@ -49,7 +49,7 @@ internal sealed class ThreadCreationCoordinator
         _catalogOptions = catalogOptions;
         _getPreferredBackendId = getPreferredBackendId;
         _getSelectedProject = getSelectedProject;
-        _getGlobalScopeSelected = getGlobalScopeSelected;
+        _getSelection = getSelection;
         _readDraftTitle = readDraftTitle;
         _buildPreferredExecutionOptions = buildPreferredExecutionOptions;
         _rememberThreadPreference = rememberThreadPreference;
@@ -73,7 +73,7 @@ internal sealed class ThreadCreationCoordinator
             await _registerCreatedThreadAsync(thread).ConfigureAwait(false);
             _clearThreadTitleDraft();
             _setStatus(
-                ShellTextFormatter.BuildReadyStatusText(thread, _getSelectedProject(), _getGlobalScopeSelected()),
+                ShellTextFormatter.BuildReadyStatusText(thread, _getSelectedProject(), IsGlobalDraftSelected()),
                 false,
                 StatusTone.Ready);
             return thread;
@@ -107,7 +107,7 @@ internal sealed class ThreadCreationCoordinator
             await _registerCreatedThreadAsync(thread).ConfigureAwait(false);
             _clearThreadTitleDraft();
             _setStatus(
-                ShellTextFormatter.BuildReadyStatusText(thread, _getSelectedProject(), _getGlobalScopeSelected()),
+                ShellTextFormatter.BuildReadyStatusText(thread, _getSelectedProject(), IsGlobalDraftSelected()),
                 false,
                 StatusTone.Ready);
             return thread;
@@ -129,4 +129,7 @@ internal sealed class ThreadCreationCoordinator
 
         return string.IsNullOrWhiteSpace(titleOverride) ? null : titleOverride.Trim();
     }
+
+    private bool IsGlobalDraftSelected()
+        => _getSelection().Target is WorkspaceTarget.Draft { IsGlobal: true };
 }

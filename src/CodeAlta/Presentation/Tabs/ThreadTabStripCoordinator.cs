@@ -93,9 +93,10 @@ internal sealed class ThreadTabStripCoordinator
             return;
         }
 
+        var selection = _threadSelection.Selection;
         if (string.Equals(tabControl.Tabs[selectedIndex].Data as string, CodeAltaApp.DraftTabId, StringComparison.Ordinal))
         {
-            if (string.IsNullOrWhiteSpace(_threadSelection.SelectedThreadId))
+            if (selection.Target is WorkspaceTarget.Draft)
             {
                 return;
             }
@@ -105,7 +106,7 @@ internal sealed class ThreadTabStripCoordinator
         }
 
         if (tabControl.Tabs[selectedIndex].Data is not string threadId ||
-            string.Equals(threadId, _threadSelection.SelectedThreadId, StringComparison.OrdinalIgnoreCase))
+            string.Equals(threadId, selection.SelectedThreadId, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -147,6 +148,7 @@ internal sealed class ThreadTabStripCoordinator
 
     private ThreadTabStripProjection BuildProjection()
     {
+        var selection = _threadSelection.Selection;
         var availableThreadIds = _threadSelection.OpenThreadIds
             .Select(_threadSelection.FindThread)
             .Where(static thread => thread is not null)
@@ -160,9 +162,9 @@ internal sealed class ThreadTabStripCoordinator
         return ThreadTabStripProjectionBuilder.Build(
             _threadSelection.OpenThreadIds,
             availableThreadIds,
-            _threadSelection.DraftTabOpen,
+            selection.Target is WorkspaceTarget.Draft,
             CodeAltaApp.DraftTabId,
-            _threadSelection.SelectedThreadId);
+            selection.SelectedThreadId);
     }
 
     private List<TabPage> BuildDesiredPages(ThreadTabStripProjection projection)
@@ -244,7 +246,9 @@ internal sealed class ThreadTabStripCoordinator
             () => new HStack(
             [
                 ThreadTabVisualFactory.CreateIndicator(isBusy: false, StatusTone.Info),
-                ThreadTabVisualFactory.CreateTitle(ShellTextFormatter.BuildDraftTabTitle(_threadSelection.GetSelectedProject(), _threadSelection.GlobalScopeSelected)),
+                ThreadTabVisualFactory.CreateTitle(ShellTextFormatter.BuildDraftTabTitle(
+                    _threadSelection.GetSelectedProject(),
+                    _threadSelection.IsGlobalDraftSelected())),
             ])
             {
                 Spacing = 1,

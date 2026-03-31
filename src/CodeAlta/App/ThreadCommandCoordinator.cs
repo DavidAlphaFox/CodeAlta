@@ -87,7 +87,7 @@ internal sealed class ThreadCommandCoordinator
             }
 
             var initialThreadTitle = ThreadPromptDispatchCoordinator.CreateInitialThreadTitle(prompt);
-            thread = _threadSelection.GlobalScopeSelected
+            thread = _threadSelection.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true }
                 ? await _commandContext.CreateGlobalThreadAsync(initialThreadTitle).ConfigureAwait(false)
                 : await _commandContext.CreateProjectThreadAsync(initialThreadTitle).ConfigureAwait(false);
             if (thread is null)
@@ -155,7 +155,7 @@ internal sealed class ThreadCommandCoordinator
             return;
         }
 
-        var targetProject = _threadSelection.GetProjectById(thread.ProjectRef ?? _threadSelection.SelectedProjectId);
+        var targetProject = _threadSelection.GetProjectById(thread.ProjectRef ?? _threadSelection.GetSelectedProjectId());
         if (targetProject is null)
         {
             _commandContext.SetShellStatus("Select a project before delegating internal work.", false, StatusTone.Warning);

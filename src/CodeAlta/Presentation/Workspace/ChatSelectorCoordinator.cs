@@ -378,7 +378,8 @@ internal sealed class ChatSelectorCoordinator
 
     private PromptComposerProjection BuildPromptComposerProjection()
     {
-        var selectedThread = _threadSelection.GetSelectedThread();
+        var selection = _threadSelection.Selection;
+        var selectedThread = selection.Target is WorkspaceTarget.Thread ? _threadSelection.GetSelectedThread() : null;
         var backendId = selectedThread is not null ? new AgentBackendId(selectedThread.BackendId) : GetPreferredBackendId();
         if (!_chatBackendStates.TryGetValue(backendId.Value, out var backendState) ||
             string.IsNullOrWhiteSpace(backendState.DisplayName))
@@ -389,12 +390,12 @@ internal sealed class ChatSelectorCoordinator
         return PromptComposerProjectionBuilder.Build(
             selectedThread,
             _threadSelection.GetSelectedProject(),
-            _threadSelection.GlobalScopeSelected,
+            selection.Target is WorkspaceTarget.Draft { IsGlobal: true },
             backendState.DisplayName,
             backendState.Availability,
             HasAnyReadyChatBackend(),
-            _threadSelection.DraftTabOpen,
-            _threadSelection.SelectedThreadId,
+            selection.Target is WorkspaceTarget.Draft,
+            selectedThread?.ThreadId,
             selectedThread is not null &&
             _threadSelection.FindOpenThread(selectedThread.ThreadId) is { } selectedTab &&
             selectedTab.QueuedPrompts.Count > 0,

@@ -1,6 +1,7 @@
 using CodeAlta.Agent;
 using CodeAlta.App;
 using CodeAlta.Catalog;
+using CodeAlta.Models;
 using CodeAlta.Threading;
 
 namespace CodeAlta.Tests;
@@ -68,6 +69,8 @@ public sealed class ShellThreadStateCoordinatorTests
         Assert.IsFalse(coordinator.GlobalScopeSelected);
         Assert.AreEqual(project.Id, coordinator.SelectedProjectId);
         Assert.IsNull(coordinator.SelectedThreadId);
+        Assert.AreEqual(ShellSurface.DraftWorkspace, coordinator.Selection.Surface);
+        Assert.IsInstanceOfType<WorkspaceTarget.Draft>(coordinator.Selection.Target);
     }
 
     [TestMethod]
@@ -123,6 +126,8 @@ public sealed class ShellThreadStateCoordinatorTests
         Assert.IsTrue(coordinator.DraftTabOpen);
         Assert.IsTrue(coordinator.GlobalScopeSelected);
         Assert.IsNull(coordinator.SelectedThreadId);
+        Assert.AreEqual(ShellSurface.DraftWorkspace, coordinator.Selection.Surface);
+        Assert.IsInstanceOfType<WorkspaceTarget.Draft>(coordinator.Selection.Target);
     }
 
     [TestMethod]

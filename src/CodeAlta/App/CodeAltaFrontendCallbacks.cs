@@ -13,7 +13,7 @@ namespace CodeAlta.App;
 internal sealed class CodeAltaFrontendCallbacks
 {
     public required CodeAltaApp App { get; init; }
-    public required Func<string?> GetSelectedThreadId { get; init; }
+    public required Func<ShellSelection> GetSelection { get; init; }
     public required Action<IUiDispatcher> AssignUiDispatcher { get; init; }
     public required Action ApplyPendingSidebarSelection { get; init; }
     public required Func<IUiDispatcher> GetUiDispatcher { get; init; }
@@ -39,7 +39,6 @@ internal sealed class CodeAltaFrontendCallbacks
     public required Action RefreshHeaderAndThreadWorkspace { get; init; }
     public required Func<AgentBackendId> GetPreferredBackendId { get; init; }
     public required Func<ProjectDescriptor?> GetSelectedProject { get; init; }
-    public required Func<bool> GetGlobalScopeSelected { get; init; }
     public required Func<(bool HasStatus, string Message, StatusTone Tone)> GetPromptUnavailableStatus { get; init; }
     public required Func<bool> HasWorkspaceSurface { get; init; }
     public required Action<Visual> SetThreadPaneContent { get; init; }

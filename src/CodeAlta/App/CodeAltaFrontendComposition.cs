@@ -69,7 +69,7 @@ internal sealed class CodeAltaFrontendComposition
         var promptDraftUiCoordinator = new PromptDraftUiCoordinator(
             new PromptDraftCoordinator(),
             catalogOptions,
-            callbacks.GetSelectedThreadId,
+            callbacks.GetSelection,
             callbacks.RefreshCatalogAndThreadWorkspace);
         var shellController = new CodeAltaShellController(
             new CodeAltaShellBridge(callbacks.App),
@@ -193,7 +193,7 @@ internal sealed class CodeAltaFrontendComposition
             catalogOptions,
             callbacks.GetPreferredBackendId,
             callbacks.GetSelectedProject,
-            callbacks.GetGlobalScopeSelected,
+            callbacks.GetSelection,
             static () => null,
             (backendId, workingDirectory, projectRoots) => threadCommandCoordinator!.BuildPreferredExecutionOptions(backendId, workingDirectory, projectRoots),
             callbacks.RememberThreadPreference,

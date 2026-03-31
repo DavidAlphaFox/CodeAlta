@@ -30,13 +30,9 @@ internal sealed class ThreadSelectionContext
 
     public IReadOnlyList<string> OpenThreadIds => _threadStateCoordinator.ViewState.OpenThreadIds;
 
-    public bool DraftTabOpen => _threadStateCoordinator.DraftTabOpen;
+    public ShellSelection Selection => _threadStateCoordinator.Selection;
 
-    public bool GlobalScopeSelected => _threadStateCoordinator.GlobalScopeSelected;
-
-    public string? SelectedProjectId => _threadStateCoordinator.SelectedProjectId;
-
-    public string? SelectedThreadId => _threadStateCoordinator.SelectedThreadId;
+    public WorkspaceTarget Target => Selection.Target;
 
     public OpenThreadState EnsureThreadTab(WorkThreadDescriptor thread)
         => _threadStateCoordinator.EnsureThreadTab(thread);
@@ -63,6 +59,18 @@ internal sealed class ThreadSelectionContext
         WorkThreadDescriptor thread,
         CancellationToken cancellationToken = default)
         => _ensureThreadHistoryLoadedAsync(thread, cancellationToken);
+
+    public bool IsGlobalDraftSelected()
+        => Target is WorkspaceTarget.Draft { IsGlobal: true };
+
+    public bool IsDraftSelected()
+        => Target is WorkspaceTarget.Draft;
+
+    public string? GetSelectedProjectId()
+        => Selection.SelectedProjectId;
+
+    public string? GetSelectedThreadId()
+        => Selection.SelectedThreadId;
 
     public bool IsSelectedThread(string threadId)
         => _isSelectedThread(threadId);

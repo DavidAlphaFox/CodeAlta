@@ -78,36 +78,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         get => _threadStateCoordinator.ViewState;
         set => _threadStateCoordinator.ViewState = value;
     }
-
-    private bool _draftTabOpen
-    {
-        get => _threadStateCoordinator.DraftTabOpen;
-        set => _threadStateCoordinator.DraftTabOpen = value;
-    }
-
-    private bool _globalScopeSelected
-    {
-        get => _threadStateCoordinator.GlobalScopeSelected;
-        set => _threadStateCoordinator.GlobalScopeSelected = value;
-    }
-
-    private string? _selectedProjectId
-    {
-        get => _threadStateCoordinator.SelectedProjectId;
-        set => _threadStateCoordinator.SelectedProjectId = value;
-    }
-
-    private string? _selectedThreadId
-    {
-        get => _threadStateCoordinator.SelectedThreadId;
-        set => _threadStateCoordinator.SelectedThreadId = value;
-    }
-
-    private string? _pendingStartupThreadRestoreId
-    {
-        get => _threadStateCoordinator.PendingStartupThreadRestoreId;
-        set => _threadStateCoordinator.PendingStartupThreadRestoreId = value;
-    }
     private Visual? ThreadPaneLayout => _threadWorkspaceView?.ThreadPaneLayout;
     private VSplitter? ThreadBodySplitter => _threadWorkspaceView?.ThreadBodySplitter;
     private ChatPromptEditor? ThreadInput => _threadWorkspaceView?.ThreadInput;
@@ -183,7 +153,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             new CodeAltaFrontendCallbacks
             {
                 App = this,
-                GetSelectedThreadId = () => _selectedThreadId,
+                GetSelection = () => _threadStateCoordinator?.Selection ?? ShellSelection.GlobalDraft(),
                 AssignUiDispatcher = dispatcher => _uiDispatcher = dispatcher,
                 ApplyPendingSidebarSelection = ApplyPendingSidebarSelection,
                 GetUiDispatcher = GetUiDispatcher,
@@ -209,7 +179,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
                 RefreshHeaderAndThreadWorkspace = RefreshHeaderAndThreadWorkspace,
                 GetPreferredBackendId = GetPreferredBackendId,
                 GetSelectedProject = GetSelectedProject,
-                GetGlobalScopeSelected = () => _globalScopeSelected,
                 GetPromptUnavailableStatus = () =>
                 {
                     var hasStatus = TryGetPromptUnavailableStatus(out var message, out var tone);
@@ -340,7 +309,9 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     }
 
     private string? GetDraftProjectRoot()
-        => _globalScopeSelected ? null : GetSelectedProject()?.ProjectPath;
+        => _threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true }
+            ? null
+            : GetSelectedProject()?.ProjectPath;
 
     private string? GetThreadProjectRoot(WorkThreadDescriptor thread)
         => GetProjectById(thread.ProjectRef)?.ProjectPath;
@@ -372,13 +343,13 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     }
 
     private string? GetExpandedSidebarProjectId()
-        => GetSelectedThread()?.ProjectRef ?? _selectedProjectId;
+        => GetSelectedThread()?.ProjectRef ?? _threadStateCoordinator.Selection.SelectedProjectId;
 
     private SidebarSelectionTarget ResolveSidebarTargetForCurrentState()
         => SidebarSelectionResolver.ResolveCurrentTarget(
-            _selectedThreadId,
-            _selectedProjectId,
-            _globalScopeSelected);
+            _threadStateCoordinator.Selection.SelectedThreadId,
+            _threadStateCoordinator.Selection.SelectedProjectId,
+            _threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true });
 
     private void RefreshSidebarProjection()
     {
@@ -596,7 +567,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
 
     private bool IsSelectedThread(string threadId)
         => !string.IsNullOrWhiteSpace(threadId) &&
-           string.Equals(_selectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
+           string.Equals(_threadStateCoordinator.Selection.SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
 
     internal void SetReadyStatusForCurrentSelection()
         => _workspaceCoordinator.SetReadyStatusForCurrentSelection();
@@ -671,8 +642,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private async Task ActivateDraftTabAsync()
     {
         ResetPendingThreadTabSelection();
-        _draftTabOpen = true;
-        _selectedThreadId = null;
+        _threadStateCoordinator.DraftTabOpen = true;
+        _threadStateCoordinator.SelectedThreadId = null;
         _viewState.SelectedThreadId = null;
         _viewState.UpdatedAt = DateTimeOffset.UtcNow;
         await PersistViewStateAsync().ConfigureAwait(false);
@@ -681,11 +652,10 @@ internal sealed class CodeAltaApp : IAsyncDisposable
 
     private async Task CloseDraftTabAsync()
     {
-        _draftTabOpen = false;
-        if (string.IsNullOrWhiteSpace(_selectedThreadId))
+        if (_threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft)
         {
-            _selectedThreadId = _viewState.OpenThreadIds.FirstOrDefault();
-            _viewState.SelectedThreadId = _selectedThreadId;
+            _threadStateCoordinator.SelectedThreadId = _viewState.OpenThreadIds.FirstOrDefault();
+            _viewState.SelectedThreadId = _threadStateCoordinator.Selection.SelectedThreadId;
         }
 
         _viewState.UpdatedAt = DateTimeOffset.UtcNow;
