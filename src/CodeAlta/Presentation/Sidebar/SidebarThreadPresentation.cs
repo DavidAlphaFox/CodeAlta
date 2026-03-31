@@ -1,6 +1,7 @@
 using CodeAlta.Agent;
 using CodeAlta.Catalog;
 using CodeAlta.Presentation.Styling;
+using XenoAtom.Ansi;
 using XenoAtom.Terminal.UI;
 
 namespace CodeAlta.Presentation.Sidebar;
@@ -32,6 +33,29 @@ internal static class SidebarThreadPresentation
         return normalized.Length <= maxLength
             ? normalized
             : normalized[..Math.Max(1, maxLength - 1)].TrimEnd() + "…";
+    }
+
+    public static string ResolveBackendDisplayName(string? backendId)
+    {
+        if (string.Equals(backendId, AgentBackendIds.Copilot.Value, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Copilot";
+        }
+
+        if (string.Equals(backendId, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Codex";
+        }
+
+        return string.IsNullOrWhiteSpace(backendId)
+            ? "Unknown"
+            : backendId.Trim();
+    }
+
+    public static string BuildBackendMarkup(string? backendId, WorkThreadKind kind)
+    {
+        var accent = ResolveThreadAccent(backendId, kind);
+        return $"[{UiPalette.GetSidebarAccentMarkup(accent)}]{NerdFont.MdCircleSmall}[/] {AnsiMarkup.Escape(ResolveBackendDisplayName(backendId))}";
     }
 
     public static string BuildEditedPromptIconMarkup(SidebarAccent accent)

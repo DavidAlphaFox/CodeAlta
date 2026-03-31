@@ -408,11 +408,14 @@ public sealed class ArchitectureGuardrailTests
         var dialogSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ProjectThreadsDialog.cs"));
 
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🧵 Thread\")", StringComparison.Ordinal));
+        Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🤖 Model\")", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🕒 Updated\")", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"💬 Messages\")", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🚀 Open\")", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("return new TextBlock(() => row.LastUpdatedRelative)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains(".Tooltip(new TextBlock(() => row.LastUpdatedExact));", StringComparison.Ordinal));
+        Assert.IsTrue(dialogSource.Contains("CellTemplate = new DataTemplate<ProjectThreadsDialogRowViewModel>(BuildBackendCell, null)", StringComparison.Ordinal));
+        Assert.IsTrue(dialogSource.Contains("SidebarThreadPresentation.BuildBackendMarkup(row.BackendId, row.ThreadKind)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains(".FilterRowVisible(_viewModel.Bind.FilterRowVisible)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("new CheckBox(\"Filter row\").IsChecked(_viewModel.Bind.FilterRowVisible)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("CellActivationMode = DataGridCellActivationMode.DirectActivate", StringComparison.Ordinal));

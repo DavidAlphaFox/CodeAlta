@@ -70,6 +70,7 @@ internal sealed class ProjectThreadsDialog
             _document
                 .AddColumn(new DataGridColumnInfo<bool>("select", "✅", false, ProjectThreadsDialogRowViewModel.Accessor.IsSelected))
                 .AddColumn(new DataGridColumnInfo<string>("title", "🧵 Thread", false, ProjectThreadsDialogRowViewModel.Accessor.Title))
+                .AddColumn(new DataGridColumnInfo<string>("backend", "🤖 Model", true, ProjectThreadsDialogRowViewModel.Accessor.BackendDisplayName))
                 .AddColumn(new DataGridColumnInfo<ProjectThreadsDialogRowViewModel>("updated", "🕒 Updated", true, rowAccessor))
                 .AddColumn(new DataGridColumnInfo<int?>("messages", "💬 Messages", true, ProjectThreadsDialogRowViewModel.Accessor.MessageCount))
                 .AddColumn(new DataGridColumnInfo<ProjectThreadsDialogRowViewModel>("open", "🚀 Open", false, rowAccessor));
@@ -98,6 +99,16 @@ internal sealed class ProjectThreadsDialog
 
         static Visual BuildMessageCountCell(DataTemplateValue<int?> value, in DataTemplateContext _)
             => new TextBlock(value.GetValue()?.ToString() ?? "—");
+
+        static Visual BuildBackendCell(DataTemplateValue<ProjectThreadsDialogRowViewModel> value, in DataTemplateContext _)
+        {
+            var row = value.GetValue();
+            return new Markup(() => SidebarThreadPresentation.BuildBackendMarkup(row.BackendId, row.ThreadKind))
+                .Wrap(false)
+                .Tooltip(new TextBlock(() => string.IsNullOrWhiteSpace(row.BackendId)
+                    ? row.BackendDisplayName
+                    : $"{row.BackendDisplayName} ({row.BackendId})"));
+        }
 
         static Visual BuildOpenButtonDisplay(DataTemplateValue<ProjectThreadsDialogRowViewModel> value, in DataTemplateContext context)
         {
@@ -133,6 +144,22 @@ internal sealed class ProjectThreadsDialog
             TypedValueAccessor = ProjectThreadsDialogRowViewModel.Accessor.Title,
             Width = GridLength.Star(2),
             Sortable = true,
+        });
+        grid.Columns.Add(new DataGridColumn<ProjectThreadsDialogRowViewModel>
+        {
+            Key = "backend",
+            Header = new TextBlock("🤖 Model"),
+            TypedValueAccessor = rowAccessor,
+            Width = GridLength.Auto,
+            Sortable = true,
+            SortComparer = Comparer<ProjectThreadsDialogRowViewModel>.Create(static (left, right) =>
+            {
+                var compare = string.Compare(left.BackendDisplayName, right.BackendDisplayName, StringComparison.OrdinalIgnoreCase);
+                return compare != 0
+                    ? compare
+                    : string.Compare(left.ThreadId, right.ThreadId, StringComparison.OrdinalIgnoreCase);
+            }),
+            CellTemplate = new DataTemplate<ProjectThreadsDialogRowViewModel>(BuildBackendCell, null),
         });
         grid.Columns.Add(new DataGridColumn<ProjectThreadsDialogRowViewModel>
         {
@@ -310,6 +337,9 @@ internal sealed class ProjectThreadsDialog
         {
             ThreadId = thread.ThreadId,
             Title = thread.Title,
+            BackendId = thread.BackendId,
+            BackendDisplayName = SidebarThreadPresentation.ResolveBackendDisplayName(thread.BackendId),
+            ThreadKind = thread.Kind,
             LastUpdatedAt = thread.LastActiveAt,
             LastUpdatedRelative = display.RelativeText,
             LastUpdatedExact = display.ExactText,

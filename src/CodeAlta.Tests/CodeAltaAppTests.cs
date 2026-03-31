@@ -2167,6 +2167,16 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
+    public void BuildSidebarThreadBackendMarkup_UsesSidebarAccentAndBackendLabel()
+    {
+        var markup = SidebarThreadPresentation.BuildBackendMarkup(AgentBackendIds.Copilot.Value, WorkThreadKind.ProjectThread);
+
+        StringAssert.Contains(markup, UiPalette.GetSidebarAccentMarkup(SidebarAccent.CopilotThread));
+        StringAssert.Contains(markup, "Copilot");
+        StringAssert.Contains(markup, NerdFont.MdCircleSmall.ToString());
+    }
+
+    [TestMethod]
     public void ScrollToTailIfFollowing_DoesNotThrowForDocumentFlow()
     {
         var flow = new DocumentFlow();
