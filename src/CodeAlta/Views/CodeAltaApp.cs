@@ -48,12 +48,12 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private readonly ShellCommandSurfaceCoordinator _shellCommandSurfaceCoordinator;
     private readonly ThreadCreationCoordinator _threadCreationCoordinator;
     private readonly PromptDraftUiCoordinator _promptDraftUiCoordinator;
-    private readonly CodeAltaShellViewModel _shellViewModel = new();
-    private readonly SidebarViewModel _sidebarViewModel = new();
-    private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel = new();
-    private readonly PromptComposerViewModel _promptComposerViewModel = new();
-    private readonly SessionUsageViewModel _sessionUsageViewModel = new();
-    private readonly Dictionary<string, ChatBackendState> _chatBackendStates = ChatBackendPresentation.CreateBackendStates();
+    private readonly CodeAltaShellViewModel _shellViewModel;
+    private readonly SidebarViewModel _sidebarViewModel;
+    private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel;
+    private readonly PromptComposerViewModel _promptComposerViewModel;
+    private readonly SessionUsageViewModel _sessionUsageViewModel;
+    private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly SidebarCoordinator _sidebarCoordinator;
     private readonly NavigatorActionCoordinator _navigatorActionCoordinator;
     private readonly ChatSelectorCoordinator _chatSelectorCoordinator;
@@ -172,118 +172,106 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         _agentHub = agentHub;
         _knownProjectImporter = knownProjectImporter ?? new KnownProjectImporter(agentHub, projectCatalog);
         _ownedServices = ownedServices;
-        _promptDraftUiCoordinator = new PromptDraftUiCoordinator(new PromptDraftCoordinator(), _catalogOptions, () => _selectedThreadId, RefreshCatalogAndThreadWorkspace);
-        _shellController = new CodeAltaShellController(
-            new CodeAltaShellBridge(this),
-            _knownProjectImporter,
-            new ProjectCatalogStore(projectCatalog),
-            new RecoverableThreadSource(_runtimeService),
-            new WorkThreadDeleter(_runtimeService));
-        _runtimeEventPump = new RuntimeEventPump(_runtimeService, _shellController);
-        _terminalLoopCoordinator = new TerminalLoopCoordinator(
-            _shellController,
-            _runtimeEventPump,
-            dispatcher => _uiDispatcher = dispatcher,
-            ApplyPendingSidebarSelection);
-        _threadStateCoordinator = new ShellThreadStateCoordinator(
+        var composition = CodeAltaFrontendComposition.Create(
             projectCatalog,
             threadCatalog,
-            GetUiDispatcher,
-            () => ThreadPaneLayout?.GetAbsoluteBounds(),
-            thread => IsChatBackendReady(new AgentBackendId(thread.BackendId)),
-            _promptDraftUiCoordinator.LoadPromptDraft,
-            _promptDraftUiCoordinator.DeletePersistedPromptDraft,
-            ApplyThreadPreference,
-            RememberThreadPreference,
-            EnsureThreadHistoryLoadedAsync,
-            RefreshSelectionAndThreadWorkspace,
-            RefreshCatalogAndThreadWorkspace,
-            ResetPendingThreadTabSelection,
-            threadId => _threadWorkspaceView?.RemoveTabPage(threadId),
-            SetStatus);
-        _threadSelectionContext = new ThreadSelectionContext(
-            _threadStateCoordinator,
-            EnsureThreadHistoryLoadedAsync,
-            IsSelectedThread);
-        _chatSelectorUiContext = new ChatSelectorUiContext(
-            () => ChatBackendSelect,
-            () => ChatModelSelect,
-            () => ChatReasoningSelect,
-            GetUiDispatcher,
-            VerifyBindableAccess);
-        _chatPreferenceContext = new ChatPreferenceContext(
-            ApplyDraftBackendPreference,
-            ApplyThreadPreference,
-            RememberGlobalBackendPreference,
-            RememberThreadPreference);
-        _workspaceRefreshContext = new WorkspaceRefreshContext(
-            InvalidateSelectedSessionUsage,
-            RefreshHeaderAndThreadWorkspace);
-        (_navigatorActionCoordinator, _sidebarCoordinator) = SidebarServicesFactory.Create(
-            _sidebarViewModel,
-            _catalogOptions,
-            _shellController,
-            _threadStateCoordinator,
-            GetUiDispatcher,
-            RefreshCatalogAndThreadWorkspace,
-            SetStatus,
-            SetReadyStatusForCurrentSelection);
-        _chatSelectorCoordinator = new ChatSelectorCoordinator(
-            _threadWorkspaceViewModel,
-            _promptComposerViewModel,
-            _chatBackendStates,
-            _chatSelectorUiContext,
-            _threadSelectionContext,
-            _chatPreferenceContext,
-            _workspaceRefreshContext);
-        _shellWorkspaceContext = new ShellWorkspaceContext(
-            GetPreferredBackendId,
-            () =>
-            {
-                var hasStatus = TryGetPromptUnavailableStatus(out var message, out var tone);
-                return (hasStatus, message, tone);
-            },
-            () => _threadWorkspaceView is not null,
-            content =>
-            {
-                if (ThreadBodySplitter is not null)
-                {
-                    ThreadBodySplitter.First = content;
-                }
-            },
-            EnsureSelectionDefaults,
-            RefreshSidebarProjection,
-            SyncSidebarSelectionToCurrentState,
-            () => _threadPromptQueueCoordinator!.RefreshSelectedThreadQueueUi(),
-            () => RefreshChatSelectorsForDraftScope(),
-            RefreshChatSelectorsForThread,
-            _promptDraftUiCoordinator.SyncPromptText,
-            UpdatePromptAvailabilityUi,
-            SyncThreadTabControl,
-            DispatchToUi,
-            VerifyBindableAccess);
-        _workspaceCoordinator = new ShellWorkspaceCoordinator(
-            _shellViewModel,
-            _threadWorkspaceViewModel,
-            _sessionUsageViewModel,
-            _chatBackendStates,
-            _threadSelectionContext,
-            _shellWorkspaceContext,
+            runtimeService,
+            catalogOptions,
+            agentHub,
+            _knownProjectImporter,
             _shellAnimationRuntime.WelcomePhase01,
-            _catalogOptions.GlobalRoot);
-        _threadPromptQueueCoordinator = new ThreadPromptQueueCoordinator(
-            _threadWorkspaceViewModel,
-            _threadSelectionContext,
-            UpdatePromptAvailabilityUi,
-            DispatchToUi,
-            VerifyBindableAccess,
-            (tab, prompt, cancellationToken) => _threadCommandCoordinator!.DispatchQueuedPromptAsync(tab, prompt, steer: false, cancellationToken),
-            (tab, prompt, cancellationToken) => _threadCommandCoordinator!.DispatchQueuedPromptAsync(tab, prompt, steer: true, cancellationToken));
-        _chatBackendInitializationCoordinator = new ChatBackendInitializationCoordinator(
-            _agentHub,
-            _chatBackendStates,
-            DispatchToUi,
-            RefreshHeaderAndThreadWorkspace);
+            new CodeAltaFrontendCallbacks
+            {
+                App = this,
+                GetSelectedThreadId = () => _selectedThreadId,
+                AssignUiDispatcher = dispatcher => _uiDispatcher = dispatcher,
+                ApplyPendingSidebarSelection = ApplyPendingSidebarSelection,
+                GetUiDispatcher = GetUiDispatcher,
+                GetThreadPaneBounds = () => ThreadPaneLayout?.GetAbsoluteBounds(),
+                IsChatBackendReady = IsChatBackendReady,
+                LoadPromptDraft = threadId => _promptDraftUiCoordinator.LoadPromptDraft(threadId),
+                DeletePromptDraft = threadId => _promptDraftUiCoordinator.DeletePersistedPromptDraft(threadId),
+                ApplyThreadPreference = ApplyThreadPreference,
+                RememberThreadPreference = RememberThreadPreference,
+                EnsureThreadHistoryLoadedAsync = EnsureThreadHistoryLoadedAsync,
+                RefreshSelectionAndThreadWorkspace = RefreshSelectionAndThreadWorkspace,
+                RefreshCatalogAndThreadWorkspace = RefreshCatalogAndThreadWorkspace,
+                ResetPendingThreadTabSelection = ResetPendingThreadTabSelection,
+                RemoveThreadTabPage = threadId => _threadWorkspaceView?.RemoveTabPage(threadId),
+                SetStatus = SetStatus,
+                IsSelectedThread = IsSelectedThread,
+                GetChatBackendSelect = () => ChatBackendSelect,
+                GetChatModelSelect = () => ChatModelSelect,
+                GetChatReasoningSelect = () => ChatReasoningSelect,
+                ApplyDraftBackendPreference = ApplyDraftBackendPreference,
+                RememberGlobalBackendPreference = RememberGlobalBackendPreference,
+                InvalidateSelectedSessionUsage = InvalidateSelectedSessionUsage,
+                RefreshHeaderAndThreadWorkspace = RefreshHeaderAndThreadWorkspace,
+                GetPreferredBackendId = GetPreferredBackendId,
+                GetSelectedProject = GetSelectedProject,
+                GetGlobalScopeSelected = () => _globalScopeSelected,
+                GetPromptUnavailableStatus = () =>
+                {
+                    var hasStatus = TryGetPromptUnavailableStatus(out var message, out var tone);
+                    return (hasStatus, message, tone);
+                },
+                HasWorkspaceSurface = () => _threadWorkspaceView is not null,
+                SetThreadPaneContent = content =>
+                {
+                    if (ThreadBodySplitter is not null)
+                    {
+                        ThreadBodySplitter.First = content;
+                    }
+                },
+                EnsureSelectionDefaults = EnsureSelectionDefaults,
+                RefreshSidebarProjection = RefreshSidebarProjection,
+                SyncSidebarSelectionToCurrentState = SyncSidebarSelectionToCurrentState,
+                RefreshChatSelectorsForDraftScope = () => RefreshChatSelectorsForDraftScope(),
+                RefreshChatSelectorsForThread = RefreshChatSelectorsForThread,
+                SyncPromptText = session => _promptDraftUiCoordinator.SyncPromptText(session),
+                UpdatePromptAvailabilityUi = UpdatePromptAvailabilityUi,
+                SyncThreadTabControl = SyncThreadTabControl,
+                DispatchToUi = DispatchToUi,
+                VerifyBindableAccess = VerifyBindableAccess,
+                GetAutoApproveEnabled = GetAutoApproveEnabled,
+                RefreshShellChrome = RefreshShellChrome,
+                SetThreadStatus = (tab, message, showSpinner, tone) => SetThreadStatus(tab, message, showSpinner, tone),
+                ClearThreadStatus = ClearThreadStatus,
+                TrySetPromptUnavailableStatus = TrySetPromptUnavailableStatus,
+                SetReadyStatusForCurrentSelection = SetReadyStatusForCurrentSelection,
+                ClearDraftPromptText = () => _promptDraftUiCoordinator.ClearDraftPromptText(),
+                ClearPromptText = () => _promptDraftUiCoordinator.ClearPromptText(),
+                IsPromptTextEmpty = () => ReadBindableState(() => string.IsNullOrWhiteSpace(_promptDraftUiCoordinator.PromptText)),
+                RestorePromptText = prompt => DispatchToUi(() => _promptDraftUiCoordinator.PromptText = prompt),
+                PersistViewStateAsync = PersistViewStateAsync,
+                RegisterCreatedThreadAsync = RegisterCreatedThreadAsync,
+            });
+        _backendPreferences = composition.BackendPreferences;
+        _shellController = composition.ShellController;
+        _runtimeEventPump = composition.RuntimeEventPump;
+        _terminalLoopCoordinator = composition.TerminalLoopCoordinator;
+        _chatBackendInitializationCoordinator = composition.ChatBackendInitializationCoordinator;
+        _threadStateCoordinator = composition.ThreadStateCoordinator;
+        _workspaceCoordinator = composition.WorkspaceCoordinator;
+        _threadRuntimeEventCoordinator = composition.ThreadRuntimeEventCoordinator;
+        _threadPromptQueueCoordinator = composition.ThreadPromptQueueCoordinator;
+        _threadCommandCoordinator = composition.ThreadCommandCoordinator;
+        _threadCreationCoordinator = composition.ThreadCreationCoordinator;
+        _promptDraftUiCoordinator = composition.PromptDraftUiCoordinator;
+        _shellViewModel = composition.ShellViewModel;
+        _sidebarViewModel = composition.SidebarViewModel;
+        _threadWorkspaceViewModel = composition.ThreadWorkspaceViewModel;
+        _promptComposerViewModel = composition.PromptComposerViewModel;
+        _sessionUsageViewModel = composition.SessionUsageViewModel;
+        _chatBackendStates = composition.ChatBackendStates;
+        _sidebarCoordinator = composition.SidebarCoordinator;
+        _navigatorActionCoordinator = composition.NavigatorActionCoordinator;
+        _chatSelectorCoordinator = composition.ChatSelectorCoordinator;
+        _chatPreferenceContext = composition.ChatPreferenceContext;
+        _chatSelectorUiContext = composition.ChatSelectorUiContext;
+        _shellWorkspaceContext = composition.ShellWorkspaceContext;
+        _threadSelectionContext = composition.ThreadSelectionContext;
+        _workspaceRefreshContext = composition.WorkspaceRefreshContext;
         _threadTabContext = new ThreadTabContext(
             () => ThreadTabControl,
             () => _threadWorkspaceView,
@@ -296,62 +284,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         _threadTabStripCoordinator = new ThreadTabStripCoordinator(
             _threadSelectionContext,
             _threadTabContext);
-        _threadRuntimeEventCoordinator = new ThreadRuntimeEventCoordinator(
-            threadId => FindThread(threadId),
-            threadId => _threadStateCoordinator.FindOpenThread(threadId),
-            GetAutoApproveEnabled,
-            IsSelectedThread,
-            InvalidateSelectedSessionUsage,
-            RefreshShellChrome,
-            SetStatus,
-            (tab, message, showSpinner, tone) => SetThreadStatus(tab, message, showSpinner, tone),
-            ClearThreadStatus,
-            (tab, contentId) => _threadPromptQueueCoordinator.ConsumePendingSteerForLiveUserContent(tab, contentId),
-            tab => _threadPromptQueueCoordinator.ClearPendingSteers(tab),
-            (tab, cancellationToken) => _threadCommandCoordinator!.DrainQueuedPromptAsync(tab, cancellationToken));
-        _threadCreationCoordinator = new ThreadCreationCoordinator(
-            _runtimeService,
-            _catalogOptions,
-            GetPreferredBackendId,
-            GetSelectedProject,
-            () => _globalScopeSelected,
-            static () => null,
-            (backendId, workingDirectory, projectRoots) => _threadCommandCoordinator!.BuildPreferredExecutionOptions(backendId, workingDirectory, projectRoots),
-            RememberThreadPreference,
-            RegisterCreatedThreadAsync,
-            static () => { },
-            SetStatus);
-        _threadCommandCoordinator = new ThreadCommandCoordinator(
-            _runtimeService,
-            _catalogOptions,
-            _chatBackendStates,
-            _threadSelectionContext,
-            _chatSelectorUiContext,
-            _chatPreferenceContext,
-            new ThreadCommandContext(
-                TrySetPromptUnavailableStatus,
-                title => _threadCreationCoordinator.CreateGlobalThreadAsync(title),
-                title => _threadCreationCoordinator.CreateProjectThreadAsync(title),
-                PersistViewStateAsync,
-                () => DefaultAutoApproveEnabled,
-                _promptDraftUiCoordinator.ClearDraftPromptText,
-                SetReadyStatusForCurrentSelection,
-                () => UiDispatch.Invoke(
-                    GetUiDispatcher(),
-                    () =>
-                    {
-                        _promptDraftUiCoordinator.ClearPromptText();
-                        return 0;
-                    }),
-                () => ReadBindableState(() => string.IsNullOrWhiteSpace(_promptDraftUiCoordinator.PromptText)),
-                prompt => DispatchToUi(() => _promptDraftUiCoordinator.PromptText = prompt),
-                RefreshHeaderAndThreadWorkspace,
-                RefreshCatalogAndThreadWorkspace,
-                SetStatus,
-                (tab, message, showSpinner, tone) => SetThreadStatus(tab, message, showSpinner, tone),
-                _threadRuntimeEventCoordinator.TryRenderInteraction),
-            _threadPromptQueueCoordinator,
-            _promptComposerViewModel);
         _shellCommandSurfaceCoordinator = new ShellCommandSurfaceCoordinator(
             _promptComposerViewModel,
             _threadWorkspaceViewModel,

@@ -190,9 +190,10 @@ public sealed class ArchitectureGuardrailTests
     public void CodeAltaApp_DelegatesRuntimeEventWorkflow()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
 
         Assert.IsTrue(appSource.Contains("_threadRuntimeEventCoordinator.ApplyRuntimeEvent", StringComparison.Ordinal));
-        Assert.IsTrue(appSource.Contains("_threadRuntimeEventCoordinator.TryRenderInteraction", StringComparison.Ordinal));
+        Assert.IsTrue(compositionSource.Contains("new ThreadRuntimeEventCoordinator(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal static bool ShouldPromoteAgentEventToThinking(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal static bool ShouldRefreshShellChromeAfterRuntimeEvent(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private void UpdateThreadFromAgentEvent(", StringComparison.Ordinal));
@@ -204,13 +205,16 @@ public sealed class ArchitectureGuardrailTests
     public void CodeAltaApp_DelegatesThreadCommandWorkflow()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
         var creationSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadCreationCoordinator.cs"));
         var shellCommandSurfaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Frontend", "Commands", "ShellCommandSurfaceCoordinator.cs"));
         var threadCommandSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadCommandCoordinator.cs"));
         var executionOptionsSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadExecutionOptionsFactory.cs"));
 
+        Assert.IsTrue(appSource.Contains("CodeAltaFrontendComposition.Create(", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_shellCommandSurfaceCoordinator.SubmitCurrentDelegationAsync", StringComparison.Ordinal));
+        Assert.IsTrue(compositionSource.Contains("new ThreadCommandCoordinator(", StringComparison.Ordinal));
         Assert.IsTrue(shellCommandSurfaceSource.Contains("new ShellInputCoordinator(", StringComparison.Ordinal));
         Assert.IsFalse(threadCommandSource.Contains("GetThreadInput()", StringComparison.Ordinal));
         Assert.IsFalse(threadCommandSource.Contains("/help", StringComparison.Ordinal));
@@ -234,11 +238,19 @@ public sealed class ArchitectureGuardrailTests
     public void CodeAltaApp_DelegatesThreadStateWorkflow()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
+        var threadStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ShellThreadStateCoordinator.cs"));
 
+        Assert.IsTrue(appSource.Contains("CodeAltaFrontendComposition.Create(", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_threadStateCoordinator.LoadInitialCatalogStateAsync", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("TryResolveInitialCatalogState(cancellationToken)", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_threadStateCoordinator.ApplyRecoveredCatalogState", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_threadStateCoordinator.EnsureThreadTab", StringComparison.Ordinal));
+        Assert.IsTrue(compositionSource.Contains("new ShellThreadStateCoordinator(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("new ShellThreadStateCoordinator(", StringComparison.Ordinal));
+        Assert.IsTrue(threadStateSource.Contains("new ShellCatalogStateCoordinator(", StringComparison.Ordinal));
+        Assert.IsFalse(threadStateSource.Contains("_projectCatalog.LoadAsync", StringComparison.Ordinal));
+        Assert.IsFalse(threadStateSource.Contains("_threadCatalog.LoadInternalAsync", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private readonly Dictionary<string, OpenThreadState>", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private readonly ShellSelectionState", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private IReadOnlyList<ProjectDescriptor>", StringComparison.Ordinal));
@@ -432,11 +444,11 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void SidebarStateIndicators_KeepTreeIconsAndRefreshOnDraftOrRunChanges()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
         var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ShellWorkspaceCoordinator.cs"));
         var sidebarViewSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "SidebarView.cs"));
 
-        Assert.IsTrue(appSource.Contains("new PromptDraftUiCoordinator(new PromptDraftCoordinator(), _catalogOptions, () => _selectedThreadId, RefreshCatalogAndThreadWorkspace)", StringComparison.Ordinal));
+        Assert.IsTrue(compositionSource.Contains("new PromptDraftUiCoordinator(", StringComparison.Ordinal));
         Assert.IsTrue(workspaceSource.Contains("_workspaceContext.DispatchToUi(_workspaceContext.RefreshSidebarProjection);", StringComparison.Ordinal));
         Assert.IsFalse(sidebarViewSource.Contains("new Rune(' ')", StringComparison.Ordinal));
         Assert.IsTrue(sidebarViewSource.Contains("Icon = projection.Icon,", StringComparison.Ordinal));

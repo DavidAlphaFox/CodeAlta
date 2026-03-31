@@ -16,9 +16,8 @@ internal sealed class ShellThreadStateCoordinator
         IReadOnlyList<WorkThreadDescriptor> Threads,
         WorkThreadViewState ViewState);
 
-    private readonly ProjectCatalog _projectCatalog;
-    private readonly WorkThreadCatalog _threadCatalog;
     private readonly ShellSelectionCoordinator _selectionCoordinator = new();
+    private readonly ShellCatalogStateCoordinator _catalogStateCoordinator;
     private readonly OpenThreadRegistry _openThreadRegistry;
     private readonly ThreadViewStateCoordinator _viewStateCoordinator;
     private readonly Func<WorkThreadDescriptor, bool> _isBackendReady;
@@ -29,9 +28,6 @@ internal sealed class ShellThreadStateCoordinator
     private readonly Action _resetPendingThreadTabSelection;
     private readonly Action<string> _removeTabPage;
     private readonly Action<string, bool, StatusTone> _setStatus;
-    private IReadOnlyList<ProjectDescriptor> _projects = [];
-    private IReadOnlyList<WorkThreadDescriptor> _threads = [];
-
     public ShellThreadStateCoordinator(
         ProjectCatalog projectCatalog,
         WorkThreadCatalog threadCatalog,
@@ -65,8 +61,6 @@ internal sealed class ShellThreadStateCoordinator
         ArgumentNullException.ThrowIfNull(removeTabPage);
         ArgumentNullException.ThrowIfNull(setStatus);
 
-        _projectCatalog = projectCatalog;
-        _threadCatalog = threadCatalog;
         _viewStateCoordinator = new ThreadViewStateCoordinator(threadCatalog);
         _openThreadRegistry = new OpenThreadRegistry(
             getUiDispatcher,
@@ -75,6 +69,7 @@ internal sealed class ShellThreadStateCoordinator
             applyThreadPreference,
             rememberThreadPreference,
             GetSelectedProject);
+        _catalogStateCoordinator = new ShellCatalogStateCoordinator(projectCatalog, threadCatalog, _viewStateCoordinator, _openThreadRegistry);
         _isBackendReady = isBackendReady;
         _deletePromptDraft = deletePromptDraft;
         _ensureThreadHistoryLoadedAsync = ensureThreadHistoryLoadedAsync;
@@ -85,9 +80,9 @@ internal sealed class ShellThreadStateCoordinator
         _setStatus = setStatus;
     }
 
-    public IReadOnlyList<ProjectDescriptor> Projects => _projects;
+    public IReadOnlyList<ProjectDescriptor> Projects => _catalogStateCoordinator.Projects;
 
-    public IReadOnlyList<WorkThreadDescriptor> Threads => _threads;
+    public IReadOnlyList<WorkThreadDescriptor> Threads => _catalogStateCoordinator.Threads;
 
     public WorkThreadViewState ViewState
     {
@@ -131,20 +126,15 @@ internal sealed class ShellThreadStateCoordinator
 
     public async Task<InitialCatalogState> LoadInitialCatalogStateAsync(CancellationToken cancellationToken)
     {
-        var projects = await _projectCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
-        var threads = await _threadCatalog.LoadInternalAsync(cancellationToken).ConfigureAwait(false);
-        var viewState = await _viewStateCoordinator.LoadViewStateAsync(cancellationToken).ConfigureAwait(false);
-        _viewStateCoordinator.ApplyThreadLocalState(threads, viewState);
-        return new InitialCatalogState(projects, threads, viewState);
+        return await _catalogStateCoordinator.LoadInitialCatalogStateAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public void ApplyInitialCatalogState(InitialCatalogState state)
     {
         ArgumentNullException.ThrowIfNull(state);
 
-        _projects = state.Projects;
-        _threads = state.Threads;
-        _selectionCoordinator.ApplyInitialSelection(state.ViewState, _projects, _threads);
+        _catalogStateCoordinator.ApplyInitialCatalogState(state);
+        _selectionCoordinator.ApplyInitialSelection(state.ViewState, Projects, Threads);
     }
 
     public async Task LoadCatalogStateAsync(CancellationToken cancellationToken)
@@ -162,27 +152,16 @@ internal sealed class ShellThreadStateCoordinator
         ArgumentNullException.ThrowIfNull(projects);
         ArgumentNullException.ThrowIfNull(threads);
 
-        _projects = projects;
-        _threads = _viewStateCoordinator.ApplyThreadLocalState(threads, ViewState);
-        _openThreadRegistry.PruneRetainedThreadState(_threads);
-
-        ViewState.OpenThreadIds.RemoveAll(id => _threads.All(thread => !string.Equals(thread.ThreadId, id, StringComparison.OrdinalIgnoreCase)));
-        if (!string.IsNullOrWhiteSpace(ViewState.SelectedThreadId) &&
-            ViewState.OpenThreadIds.All(id => !string.Equals(id, ViewState.SelectedThreadId, StringComparison.OrdinalIgnoreCase)))
-        {
-            ViewState.SelectedThreadId = null;
-        }
+        var recovery = _catalogStateCoordinator.ApplyRecoveredCatalogState(
+            projects,
+            threads,
+            ViewState,
+            PendingStartupThreadRestoreId);
 
         if (string.IsNullOrWhiteSpace(SelectedThreadId) &&
-            !string.IsNullOrWhiteSpace(PendingStartupThreadRestoreId) &&
-            FindThread(PendingStartupThreadRestoreId) is { } restoredThread)
+            recovery.RestoredThreadId is { } restoredThreadId &&
+            FindThread(restoredThreadId) is { } restoredThread)
         {
-            if (!ViewState.OpenThreadIds.Contains(restoredThread.ThreadId, StringComparer.OrdinalIgnoreCase))
-            {
-                ViewState.OpenThreadIds.Insert(0, restoredThread.ThreadId);
-            }
-
-            ViewState.SelectedThreadId = restoredThread.ThreadId;
             _selectionCoordinator.SelectThread(restoredThread);
         }
 
@@ -225,7 +204,7 @@ internal sealed class ShellThreadStateCoordinator
     public void SelectGlobalScope()
     {
         _resetPendingThreadTabSelection();
-        _selectionCoordinator.SelectGlobalScope(_projects);
+        _selectionCoordinator.SelectGlobalScope(Projects);
         ViewState.SelectedThreadId = null;
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
         _ = PersistViewStateAsync();
@@ -237,7 +216,7 @@ internal sealed class ShellThreadStateCoordinator
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
         _resetPendingThreadTabSelection();
-        _selectionCoordinator.SelectProjectScope(projectId, _projects);
+        _selectionCoordinator.SelectProjectScope(projectId, Projects);
         ViewState.SelectedThreadId = null;
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
         _ = PersistViewStateAsync();
@@ -245,19 +224,13 @@ internal sealed class ShellThreadStateCoordinator
     }
 
     public void EnsureSelectionDefaults()
-        => _selectionCoordinator.EnsureSelectionDefaults(_projects, _threads);
+        => _selectionCoordinator.EnsureSelectionDefaults(Projects, Threads);
 
     public async Task RegisterCreatedThreadAsync(WorkThreadDescriptor thread)
     {
         ArgumentNullException.ThrowIfNull(thread);
 
-        var threads = _threads.ToList();
-        threads.RemoveAll(existing => string.Equals(existing.ThreadId, thread.ThreadId, StringComparison.OrdinalIgnoreCase));
-        threads.Add(thread);
-        _threads = threads
-            .OrderByDescending(static item => item.LastActiveAt)
-            .ToArray();
-
+        _catalogStateCoordinator.UpsertThread(thread);
         OpenThread(thread.ThreadId);
         await _ensureThreadHistoryLoadedAsync(thread, CancellationToken.None).ConfigureAwait(false);
     }
@@ -267,11 +240,7 @@ internal sealed class ShellThreadStateCoordinator
         ArgumentNullException.ThrowIfNull(child);
         ArgumentNullException.ThrowIfNull(sourceTab);
 
-        _threads = _threads
-            .Where(existing => !string.Equals(existing.ThreadId, child.ThreadId, StringComparison.OrdinalIgnoreCase))
-            .Append(child)
-            .OrderByDescending(static item => item.LastActiveAt)
-            .ToArray();
+        _catalogStateCoordinator.UpsertThread(child);
 
         if (!ViewState.OpenThreadIds.Contains(child.ThreadId, StringComparer.OrdinalIgnoreCase))
         {
@@ -341,7 +310,7 @@ internal sealed class ShellThreadStateCoordinator
         {
             var nextThreadId = ViewState.OpenThreadIds.FirstOrDefault();
             ViewState.SelectedThreadId = nextThreadId;
-            _selectionCoordinator.ApplyThreadRemovalFallback(nextThreadId, removedThread?.ProjectRef, _projects, _threads);
+            _selectionCoordinator.ApplyThreadRemovalFallback(nextThreadId, removedThread?.ProjectRef, Projects, Threads);
         }
 
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
@@ -367,7 +336,7 @@ internal sealed class ShellThreadStateCoordinator
 
         if (removedSelectedThread)
         {
-            _selectionCoordinator.ApplyThreadRemovalFallback(nextSelectedThreadId: null, fallbackProjectId, _projects, _threads);
+            _selectionCoordinator.ApplyThreadRemovalFallback(nextSelectedThreadId: null, fallbackProjectId, Projects, Threads);
         }
 
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
@@ -400,11 +369,11 @@ internal sealed class ShellThreadStateCoordinator
 
         if (removedSelectedThread)
         {
-            _selectionCoordinator.ApplyThreadRemovalFallback(nextSelectedThreadId: null, fallbackProjectId: null, _projects, _threads);
+            _selectionCoordinator.ApplyThreadRemovalFallback(nextSelectedThreadId: null, fallbackProjectId: null, Projects, Threads);
         }
         else if (removedSelectedProject && string.IsNullOrWhiteSpace(SelectedThreadId))
         {
-            _selectionCoordinator.SelectGlobalScope(_projects);
+            _selectionCoordinator.SelectGlobalScope(Projects);
         }
 
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
@@ -440,7 +409,7 @@ internal sealed class ShellThreadStateCoordinator
             return null;
         }
 
-        return _projects.FirstOrDefault(project => string.Equals(project.Id, projectId, StringComparison.OrdinalIgnoreCase));
+        return _catalogStateCoordinator.GetProjectById(projectId);
     }
 
     public WorkThreadDescriptor? GetSelectedThread()
@@ -453,7 +422,7 @@ internal sealed class ShellThreadStateCoordinator
             return null;
         }
 
-        return _threads.FirstOrDefault(thread => string.Equals(thread.ThreadId, threadId, StringComparison.OrdinalIgnoreCase));
+        return _catalogStateCoordinator.FindThread(threadId);
     }
 
     public async Task RestoreStartupThreadHistoryAsync(string? threadId, CancellationToken cancellationToken)
