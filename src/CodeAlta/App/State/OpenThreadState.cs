@@ -1,6 +1,6 @@
-using CodeAlta.Models;
 using CodeAlta.Agent;
 using CodeAlta.Catalog;
+using CodeAlta.Models;
 using CodeAlta.Presentation.Timeline;
 using CodeAlta.ViewModels;
 
@@ -10,23 +10,31 @@ internal sealed class OpenThreadState
 {
     public OpenThreadState(WorkThreadDescriptor thread, ThreadTimelinePresenter timeline)
     {
+        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(timeline);
+
         Thread = thread;
-        Timeline = timeline;
         Session = new ThreadSessionState();
-        ViewModel = new ThreadTabViewModel
-        {
-            ThreadId = thread.ThreadId,
-            Title = thread.Title,
-        };
+        Workspace = new ThreadWorkspaceState(
+            new ThreadTabViewModel
+            {
+                ThreadId = thread.ThreadId,
+                Title = thread.Title,
+            });
+        TimelineState = new ThreadTimelineState(timeline);
     }
 
     public WorkThreadDescriptor Thread { get; set; }
 
-    public ThreadTimelinePresenter Timeline { get; }
-
     public ThreadSessionState Session { get; }
 
-    public ThreadTabViewModel ViewModel { get; }
+    public ThreadWorkspaceState Workspace { get; }
+
+    public ThreadTimelineState TimelineState { get; }
+
+    public ThreadTimelinePresenter Timeline => TimelineState.Presenter;
+
+    public ThreadTabViewModel ViewModel => Workspace.ViewModel;
 
     public AgentBackendId BackendId
     {

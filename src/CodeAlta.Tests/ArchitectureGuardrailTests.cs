@@ -482,6 +482,27 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void ShellSelectionState_UsesExplicitSelectionModel()
+    {
+        var selectionStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Models", "ShellSelectionState.cs"));
+
+        Assert.IsTrue(selectionStateSource.Contains("ShellSelection Selection", StringComparison.Ordinal));
+        Assert.IsFalse(selectionStateSource.Contains("bool DraftTabOpen", StringComparison.Ordinal));
+        Assert.IsFalse(selectionStateSource.Contains("bool GlobalScopeSelected", StringComparison.Ordinal));
+        Assert.IsFalse(selectionStateSource.Contains("string? SelectedThreadId", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void OpenThreadState_SplitsSessionWorkspaceAndTimelineLayers()
+    {
+        var openThreadStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "State", "OpenThreadState.cs"));
+
+        Assert.IsTrue(openThreadStateSource.Contains("ThreadWorkspaceState Workspace", StringComparison.Ordinal));
+        Assert.IsTrue(openThreadStateSource.Contains("ThreadTimelineState TimelineState", StringComparison.Ordinal));
+        Assert.IsTrue(openThreadStateSource.Contains("ThreadSessionState Session", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void CodeAltaApp_IsNoLongerPartial()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();

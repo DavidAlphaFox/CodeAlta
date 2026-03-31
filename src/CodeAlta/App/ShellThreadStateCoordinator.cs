@@ -4,9 +4,7 @@ using CodeAlta.Agent;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Shell;
-using CodeAlta.Presentation.Timeline;
 using CodeAlta.Views;
-using XenoAtom.Logging;
 using XenoAtom.Terminal.UI.Geometry;
 
 namespace CodeAlta.App;
@@ -20,15 +18,11 @@ internal sealed class ShellThreadStateCoordinator
 
     private readonly ProjectCatalog _projectCatalog;
     private readonly WorkThreadCatalog _threadCatalog;
-    private readonly ShellSelectionState _selection = new();
-    private readonly Dictionary<string, OpenThreadState> _threadTabs = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Func<IUiDispatcher> _getUiDispatcher;
-    private readonly Func<Rectangle?> _getTimelineBounds;
+    private readonly ShellSelectionCoordinator _selectionCoordinator = new();
+    private readonly OpenThreadRegistry _openThreadRegistry;
+    private readonly ThreadViewStateCoordinator _viewStateCoordinator;
     private readonly Func<WorkThreadDescriptor, bool> _isBackendReady;
-    private readonly Func<string, string?> _loadPromptDraft;
     private readonly Action<string> _deletePromptDraft;
-    private readonly Action<OpenThreadState> _applyThreadPreference;
-    private readonly Action<string, string?, AgentReasoningEffort?, bool, bool> _rememberThreadPreference;
     private readonly Func<WorkThreadDescriptor, CancellationToken, Task> _ensureThreadHistoryLoadedAsync;
     private readonly Action _refreshSelectionAndThreadWorkspace;
     private readonly Action _refreshCatalogAndThreadWorkspace;
@@ -73,13 +67,16 @@ internal sealed class ShellThreadStateCoordinator
 
         _projectCatalog = projectCatalog;
         _threadCatalog = threadCatalog;
-        _getUiDispatcher = getUiDispatcher;
-        _getTimelineBounds = getTimelineBounds;
+        _viewStateCoordinator = new ThreadViewStateCoordinator(threadCatalog);
+        _openThreadRegistry = new OpenThreadRegistry(
+            getUiDispatcher,
+            getTimelineBounds,
+            loadPromptDraft,
+            applyThreadPreference,
+            rememberThreadPreference,
+            GetSelectedProject);
         _isBackendReady = isBackendReady;
-        _loadPromptDraft = loadPromptDraft;
         _deletePromptDraft = deletePromptDraft;
-        _applyThreadPreference = applyThreadPreference;
-        _rememberThreadPreference = rememberThreadPreference;
         _ensureThreadHistoryLoadedAsync = ensureThreadHistoryLoadedAsync;
         _refreshSelectionAndThreadWorkspace = refreshSelectionAndThreadWorkspace;
         _refreshCatalogAndThreadWorkspace = refreshCatalogAndThreadWorkspace;
@@ -94,39 +91,41 @@ internal sealed class ShellThreadStateCoordinator
 
     public WorkThreadViewState ViewState
     {
-        get => _selection.ViewState;
-        set => _selection.ViewState = value;
+        get => _selectionCoordinator.ViewState;
+        set => _selectionCoordinator.ViewState = value;
     }
 
     public bool DraftTabOpen
     {
-        get => _selection.DraftTabOpen;
-        set => _selection.DraftTabOpen = value;
+        get => _selectionCoordinator.DraftTabOpen;
+        set => _selectionCoordinator.DraftTabOpen = value;
     }
 
     public bool GlobalScopeSelected
     {
-        get => _selection.GlobalScopeSelected;
-        set => _selection.GlobalScopeSelected = value;
+        get => _selectionCoordinator.GlobalScopeSelected;
+        set => _selectionCoordinator.GlobalScopeSelected = value;
     }
 
     public string? SelectedProjectId
     {
-        get => _selection.SelectedProjectId;
-        set => _selection.SelectedProjectId = value;
+        get => _selectionCoordinator.SelectedProjectId;
+        set => _selectionCoordinator.SelectedProjectId = value;
     }
 
     public string? SelectedThreadId
     {
-        get => _selection.SelectedThreadId;
-        set => _selection.SelectedThreadId = value;
+        get => _selectionCoordinator.SelectedThreadId;
+        set => _selectionCoordinator.SelectedThreadId = value;
     }
 
     public string? PendingStartupThreadRestoreId
     {
-        get => _selection.PendingStartupThreadRestoreId;
-        set => _selection.PendingStartupThreadRestoreId = value;
+        get => _selectionCoordinator.PendingStartupThreadRestoreId;
+        set => _selectionCoordinator.PendingStartupThreadRestoreId = value;
     }
+
+    public ShellSelection Selection => _selectionCoordinator.Selection;
 
     public NavigatorSettings NavigatorSettings => ViewState.Navigator;
 
@@ -134,8 +133,8 @@ internal sealed class ShellThreadStateCoordinator
     {
         var projects = await _projectCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
         var threads = await _threadCatalog.LoadInternalAsync(cancellationToken).ConfigureAwait(false);
-        var viewState = await _threadCatalog.LoadViewStateAsync(cancellationToken).ConfigureAwait(false);
-        ApplyThreadLocalState(threads, viewState);
+        var viewState = await _viewStateCoordinator.LoadViewStateAsync(cancellationToken).ConfigureAwait(false);
+        _viewStateCoordinator.ApplyThreadLocalState(threads, viewState);
         return new InitialCatalogState(projects, threads, viewState);
     }
 
@@ -145,16 +144,7 @@ internal sealed class ShellThreadStateCoordinator
 
         _projects = state.Projects;
         _threads = state.Threads;
-        ViewState = state.ViewState;
-
-        var desiredThreadId = ViewState.SelectedThreadId ?? ViewState.OpenThreadIds.FirstOrDefault();
-        SelectedThreadId = string.IsNullOrWhiteSpace(desiredThreadId)
-            ? null
-            : _threads.FirstOrDefault(thread => string.Equals(thread.ThreadId, desiredThreadId, StringComparison.OrdinalIgnoreCase))?.ThreadId;
-        DraftTabOpen = SelectedThreadId is null;
-        PendingStartupThreadRestoreId = desiredThreadId;
-        var selectedThread = GetSelectedThread();
-        SelectedProjectId = selectedThread?.ProjectRef ?? _projects.FirstOrDefault()?.Id;
+        _selectionCoordinator.ApplyInitialSelection(state.ViewState, _projects, _threads);
     }
 
     public async Task LoadCatalogStateAsync(CancellationToken cancellationToken)
@@ -163,19 +153,7 @@ internal sealed class ShellThreadStateCoordinator
     }
 
     public async Task PersistViewStateAsync()
-    {
-        try
-        {
-            await _threadCatalog.SaveViewStateAsync(ViewState, CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            if (LogManager.IsInitialized && CodeAltaApp.UiLogger.IsEnabled(LogLevel.Error))
-            {
-                CodeAltaApp.UiLogger.Error(ex, "Failed to persist thread view state.");
-            }
-        }
-    }
+        => await _viewStateCoordinator.PersistViewStateAsync(ViewState).ConfigureAwait(false);
 
     public void ApplyRecoveredCatalogState(
         IReadOnlyList<ProjectDescriptor> projects,
@@ -185,8 +163,8 @@ internal sealed class ShellThreadStateCoordinator
         ArgumentNullException.ThrowIfNull(threads);
 
         _projects = projects;
-        _threads = ApplyThreadLocalState(threads, ViewState);
-        PruneRetainedThreadState();
+        _threads = _viewStateCoordinator.ApplyThreadLocalState(threads, ViewState);
+        _openThreadRegistry.PruneRetainedThreadState(_threads);
 
         ViewState.OpenThreadIds.RemoveAll(id => _threads.All(thread => !string.Equals(thread.ThreadId, id, StringComparison.OrdinalIgnoreCase)));
         if (!string.IsNullOrWhiteSpace(ViewState.SelectedThreadId) &&
@@ -205,9 +183,7 @@ internal sealed class ShellThreadStateCoordinator
             }
 
             ViewState.SelectedThreadId = restoredThread.ThreadId;
-            SelectedThreadId = restoredThread.ThreadId;
-            SelectedProjectId = restoredThread.ProjectRef ?? SelectedProjectId;
-            DraftTabOpen = false;
+            _selectionCoordinator.SelectThread(restoredThread);
         }
 
         EnsureSelectionDefaults();
@@ -215,39 +191,17 @@ internal sealed class ShellThreadStateCoordinator
     }
 
     public async Task PersistThreadLocalStateAsync(WorkThreadDescriptor thread)
-    {
-        ArgumentNullException.ThrowIfNull(thread);
-
-        ViewState.ThreadStates[thread.ThreadId] = new WorkThreadLocalState
-        {
-            Archived = thread.Status == WorkThreadStatus.Archived,
-            MessageCount = thread.MessageCount,
-        };
-        ViewState.UpdatedAt = DateTimeOffset.UtcNow;
-        await PersistViewStateAsync().ConfigureAwait(false);
-    }
+        => await _viewStateCoordinator.PersistThreadLocalStateAsync(ViewState, thread).ConfigureAwait(false);
 
     public NavigatorSettings GetNavigatorSettingsSnapshot()
-    {
-        return new NavigatorSettings
-        {
-            SortMode = ViewState.Navigator.SortMode,
-            RecentThreadsPerProject = ViewState.Navigator.RecentThreadsPerProject,
-        };
-    }
+        => _viewStateCoordinator.GetNavigatorSettingsSnapshot(ViewState);
 
     public async Task SaveNavigatorSettingsAsync(NavigatorSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         settings.Validate();
 
-        ViewState.Navigator = new NavigatorSettings
-        {
-            SortMode = settings.SortMode,
-            RecentThreadsPerProject = settings.RecentThreadsPerProject,
-        };
-        ViewState.UpdatedAt = DateTimeOffset.UtcNow;
-        await PersistViewStateAsync().ConfigureAwait(false);
+        await _viewStateCoordinator.SaveNavigatorSettingsAsync(ViewState, settings).ConfigureAwait(false);
     }
 
     public void TrySchedulePendingStartupThreadRestore(CancellationToken cancellationToken)
@@ -271,9 +225,7 @@ internal sealed class ShellThreadStateCoordinator
     public void SelectGlobalScope()
     {
         _resetPendingThreadTabSelection();
-        DraftTabOpen = true;
-        GlobalScopeSelected = true;
-        SelectedThreadId = null;
+        _selectionCoordinator.SelectGlobalScope(_projects);
         ViewState.SelectedThreadId = null;
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
         _ = PersistViewStateAsync();
@@ -285,10 +237,7 @@ internal sealed class ShellThreadStateCoordinator
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
         _resetPendingThreadTabSelection();
-        DraftTabOpen = true;
-        GlobalScopeSelected = false;
-        SelectedProjectId = projectId;
-        SelectedThreadId = null;
+        _selectionCoordinator.SelectProjectScope(projectId, _projects);
         ViewState.SelectedThreadId = null;
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
         _ = PersistViewStateAsync();
@@ -296,24 +245,7 @@ internal sealed class ShellThreadStateCoordinator
     }
 
     public void EnsureSelectionDefaults()
-    {
-        if (!string.IsNullOrWhiteSpace(SelectedThreadId) &&
-            _threads.All(thread => !string.Equals(thread.ThreadId, SelectedThreadId, StringComparison.OrdinalIgnoreCase)))
-        {
-            SelectedThreadId = null;
-        }
-
-        if (string.IsNullOrWhiteSpace(SelectedProjectId) ||
-            _projects.All(project => !string.Equals(project.Id, SelectedProjectId, StringComparison.OrdinalIgnoreCase)))
-        {
-            SelectedProjectId = _projects.FirstOrDefault()?.Id;
-        }
-
-        if (!GlobalScopeSelected && SelectedProjectId is null)
-        {
-            GlobalScopeSelected = true;
-        }
-    }
+        => _selectionCoordinator.EnsureSelectionDefaults(_projects, _threads);
 
     public async Task RegisterCreatedThreadAsync(WorkThreadDescriptor thread)
     {
@@ -326,7 +258,6 @@ internal sealed class ShellThreadStateCoordinator
             .OrderByDescending(static item => item.LastActiveAt)
             .ToArray();
 
-        DraftTabOpen = false;
         OpenThread(thread.ThreadId);
         await _ensureThreadHistoryLoadedAsync(thread, CancellationToken.None).ConfigureAwait(false);
     }
@@ -376,7 +307,7 @@ internal sealed class ShellThreadStateCoordinator
 
         ViewState.SelectedThreadId = threadId;
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
-        SelectedThreadId = threadId;
+        _selectionCoordinator.SelectThread(thread);
         if (ThreadHistoryCoordinator.CanLoadThreadHistory(thread) && !_isBackendReady(thread))
         {
             PendingStartupThreadRestoreId = thread.ThreadId;
@@ -408,9 +339,9 @@ internal sealed class ShellThreadStateCoordinator
         _removeTabPage(threadId);
         if (removedSelectedThread)
         {
-            SelectedThreadId = ViewState.OpenThreadIds.FirstOrDefault();
-            ViewState.SelectedThreadId = SelectedThreadId;
-            ApplySelectionFallbackAfterThreadRemoval(removedThread?.ProjectRef);
+            var nextThreadId = ViewState.OpenThreadIds.FirstOrDefault();
+            ViewState.SelectedThreadId = nextThreadId;
+            _selectionCoordinator.ApplyThreadRemovalFallback(nextThreadId, removedThread?.ProjectRef, _projects, _threads);
         }
 
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
@@ -426,7 +357,7 @@ internal sealed class ShellThreadStateCoordinator
         var removedSelectedThread = string.Equals(SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
         ViewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
         _removeTabPage(threadId);
-        _threadTabs.Remove(threadId);
+        _openThreadRegistry.RemoveThreadTab(threadId);
         _deletePromptDraft(threadId);
 
         if (string.Equals(ViewState.SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase))
@@ -436,8 +367,7 @@ internal sealed class ShellThreadStateCoordinator
 
         if (removedSelectedThread)
         {
-            SelectedThreadId = null;
-            ApplySelectionFallbackAfterThreadRemoval(fallbackProjectId);
+            _selectionCoordinator.ApplyThreadRemovalFallback(nextSelectedThreadId: null, fallbackProjectId, _projects, _threads);
         }
 
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
@@ -459,7 +389,7 @@ internal sealed class ShellThreadStateCoordinator
         {
             ViewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
             _removeTabPage(threadId);
-            _threadTabs.Remove(threadId);
+            _openThreadRegistry.RemoveThreadTab(threadId);
             _deletePromptDraft(threadId);
 
             if (string.Equals(ViewState.SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase))
@@ -470,13 +400,11 @@ internal sealed class ShellThreadStateCoordinator
 
         if (removedSelectedThread)
         {
-            SelectedThreadId = null;
-            ApplySelectionFallbackAfterThreadRemoval(fallbackProjectId: null);
+            _selectionCoordinator.ApplyThreadRemovalFallback(nextSelectedThreadId: null, fallbackProjectId: null, _projects, _threads);
         }
         else if (removedSelectedProject && string.IsNullOrWhiteSpace(SelectedThreadId))
         {
-            DraftTabOpen = true;
-            GlobalScopeSelected = true;
+            _selectionCoordinator.SelectGlobalScope(_projects);
         }
 
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
@@ -488,45 +416,14 @@ internal sealed class ShellThreadStateCoordinator
     {
         ArgumentNullException.ThrowIfNull(thread);
 
-        if (_threadTabs.TryGetValue(thread.ThreadId, out var existing))
-        {
-            existing.Thread = thread;
-            existing.ViewModel.ThreadId = thread.ThreadId;
-            existing.ViewModel.Title = thread.Title;
-            return existing;
-        }
-
-        OpenThreadState? state = null;
-        var timeline = new ThreadTimelinePresenter(
-            _getUiDispatcher(),
-            () => state!.AutoScroll,
-            _getTimelineBounds);
-        state = new OpenThreadState(thread, timeline);
-        state.BackendId = new AgentBackendId(thread.BackendId);
-        state.Session.PromptDraftText = _loadPromptDraft(thread.ThreadId) ?? string.Empty;
-        state.ViewModel.Title = thread.Title;
-        state.StatusMessage = ShellTextFormatter.BuildReadyStatusText(thread, GetSelectedProject(), globalScopeSelected: false);
-
-        _applyThreadPreference(state);
-        _rememberThreadPreference(thread.ThreadId, state.ModelId, state.ReasoningEffort, state.AutoScroll, false);
-
-        _threadTabs[thread.ThreadId] = state;
-        return state;
+        return _openThreadRegistry.EnsureThreadTab(thread);
     }
 
     public void ResetThreadTab(OpenThreadState tab)
-    {
-        ArgumentNullException.ThrowIfNull(tab);
-        tab.Timeline.Reset();
-        tab.PermissionRequests.Clear();
-        tab.UserInputRequests.Clear();
-    }
+        => _openThreadRegistry.ResetThreadTab(tab);
 
     public OpenThreadState? FindOpenThread(string threadId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
-        return _threadTabs.GetValueOrDefault(threadId);
-    }
+        => _openThreadRegistry.FindOpenThread(threadId);
 
     public ProjectDescriptor? GetSelectedProject()
     {
@@ -570,73 +467,4 @@ internal sealed class ShellThreadStateCoordinator
         await _ensureThreadHistoryLoadedAsync(thread, cancellationToken).ConfigureAwait(false);
     }
 
-    private static IReadOnlyList<WorkThreadDescriptor> ApplyThreadLocalState(
-        IReadOnlyList<WorkThreadDescriptor> threads,
-        WorkThreadViewState viewState)
-    {
-        ArgumentNullException.ThrowIfNull(threads);
-        ArgumentNullException.ThrowIfNull(viewState);
-
-        foreach (var thread in threads)
-        {
-            if (!viewState.ThreadStates.TryGetValue(thread.ThreadId, out var localState))
-            {
-                continue;
-            }
-
-            if (localState.Archived)
-            {
-                thread.Status = WorkThreadStatus.Archived;
-            }
-
-            if (localState.MessageCount is { } messageCount)
-            {
-                thread.MessageCount = messageCount;
-            }
-        }
-
-        return threads;
-    }
-
-    private void PruneRetainedThreadState()
-    {
-        var knownThreadIds = _threads
-            .Select(static thread => thread.ThreadId)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var threadId in _threadTabs.Keys.ToArray())
-        {
-            if (!knownThreadIds.Contains(threadId))
-            {
-                _threadTabs.Remove(threadId);
-            }
-        }
-    }
-
-    private void ApplySelectionFallbackAfterThreadRemoval(string? fallbackProjectId)
-    {
-        if (!string.IsNullOrWhiteSpace(SelectedThreadId))
-        {
-            DraftTabOpen = false;
-            var selectedThread = FindThread(SelectedThreadId);
-            GlobalScopeSelected = string.IsNullOrWhiteSpace(selectedThread?.ProjectRef);
-            if (!string.IsNullOrWhiteSpace(selectedThread?.ProjectRef))
-            {
-                SelectedProjectId = selectedThread.ProjectRef;
-            }
-
-            return;
-        }
-
-        DraftTabOpen = true;
-        if (!string.IsNullOrWhiteSpace(fallbackProjectId) &&
-            GetProjectById(fallbackProjectId) is not null)
-        {
-            GlobalScopeSelected = false;
-            SelectedProjectId = fallbackProjectId;
-            return;
-        }
-
-        GlobalScopeSelected = true;
-    }
 }
