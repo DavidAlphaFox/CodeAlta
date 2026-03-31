@@ -9,6 +9,7 @@ namespace CodeAlta.CodexSdk;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(ApiKeyv2), typeDiscriminator: "apiKey")]
 [JsonDerivedType(typeof(Chatgptv2), typeDiscriminator: "chatgpt")]
+[JsonDerivedType(typeof(ChatgptDeviceCodev2), typeDiscriminator: "chatgptDeviceCode")]
 [JsonDerivedType(typeof(ChatgptAuthTokensv2), typeDiscriminator: "chatgptAuthTokens")]
 public abstract partial record LoginAccountResponse
 {
@@ -21,6 +22,18 @@ public abstract partial record LoginAccountResponse
         public string AuthUrl { get; set; } = string.Empty;
         [JsonPropertyName("loginId")]
         public string LoginId { get; set; } = string.Empty;
+    }
+
+    public sealed partial record ChatgptDeviceCodev2 : LoginAccountResponse
+    {
+        [JsonPropertyName("loginId")]
+        public string LoginId { get; set; } = string.Empty;
+        /// <summary>One-time code the user must enter after signing in.</summary>
+        [JsonPropertyName("userCode")]
+        public string UserCode { get; set; } = string.Empty;
+        /// <summary>URL the client should open in a browser to complete device code authorization.</summary>
+        [JsonPropertyName("verificationUrl")]
+        public string VerificationUrl { get; set; } = string.Empty;
     }
 
     public sealed partial record ChatgptAuthTokensv2 : LoginAccountResponse;

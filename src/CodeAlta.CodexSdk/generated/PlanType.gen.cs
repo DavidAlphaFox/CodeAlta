@@ -19,8 +19,12 @@ public enum PlanType
     Pro,
     [JsonStringEnumMemberName("team")]
     Team,
+    [JsonStringEnumMemberName("self_serve_business_usage_based")]
+    SelfServeBusinessUsageBased,
     [JsonStringEnumMemberName("business")]
     Business,
+    [JsonStringEnumMemberName("enterprise_cbp_usage_based")]
+    EnterpriseCbpUsageBased,
     [JsonStringEnumMemberName("enterprise")]
     Enterprise,
     [JsonStringEnumMemberName("edu")]
