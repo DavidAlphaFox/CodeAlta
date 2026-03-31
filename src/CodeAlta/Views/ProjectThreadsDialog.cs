@@ -59,21 +59,16 @@ internal sealed class ProjectThreadsDialog
                 .Select(thread => CreateRow(thread, nowUtc))
                 .ToArray());
 
-        var rowAccessor = new BindingAccessor<ProjectThreadsDialogRowViewModel>(
-            "row",
-            static value => (ProjectThreadsDialogRowViewModel)value,
-            static (_, _) => { });
-
         _document = new DataGridListDocument<ProjectThreadsDialogRowViewModel>();
         using (_document.BeginUpdate())
         {
             _document
                 .AddColumn(new DataGridColumnInfo<bool>("select", "✅", false, ProjectThreadsDialogRowViewModel.Accessor.IsSelected))
-                .AddColumn(new DataGridColumnInfo<string>("title", "🧵 Thread", false, ProjectThreadsDialogRowViewModel.Accessor.Title))
                 .AddColumn(new DataGridColumnInfo<string>("backend", "🤖 Model", true, ProjectThreadsDialogRowViewModel.Accessor.BackendDisplayName))
-                .AddColumn(new DataGridColumnInfo<ProjectThreadsDialogRowViewModel>("updated", "🕒 Updated", true, rowAccessor))
+                .AddColumn(new DataGridColumnInfo<string>("title", "🧵 Thread", false, ProjectThreadsDialogRowViewModel.Accessor.Title))
+                .AddColumn(new DataGridColumnInfo<DateTimeOffset?>("updated", "🕒 Updated", true, ProjectThreadsDialogRowViewModel.Accessor.LastUpdatedAt))
                 .AddColumn(new DataGridColumnInfo<int?>("messages", "💬 Messages", true, ProjectThreadsDialogRowViewModel.Accessor.MessageCount))
-                .AddColumn(new DataGridColumnInfo<ProjectThreadsDialogRowViewModel>("open", "🚀 Open", false, rowAccessor));
+                .AddColumn(new DataGridColumnInfo<string>("open", "🚀 Open", false, ProjectThreadsDialogRowViewModel.Accessor.ThreadId));
 
             foreach (var row in _state.Rows)
             {
@@ -90,9 +85,9 @@ internal sealed class ProjectThreadsDialog
             .ShowHeader(true)
             .ShowRowAnchor(false);
 
-        static Visual BuildLastUpdatedCell(DataTemplateValue<ProjectThreadsDialogRowViewModel> value, in DataTemplateContext _)
+        static Visual BuildLastUpdatedCell(DataTemplateValue<DateTimeOffset?> value, in DataTemplateContext _)
         {
-            var row = value.GetValue();
+            var row = (ProjectThreadsDialogRowViewModel)value.GetBinding().Owner;
             return new TextBlock(() => row.LastUpdatedRelative)
                 .Tooltip(new TextBlock(() => row.LastUpdatedExact));
         }
@@ -100,9 +95,9 @@ internal sealed class ProjectThreadsDialog
         static Visual BuildMessageCountCell(DataTemplateValue<int?> value, in DataTemplateContext _)
             => new TextBlock(value.GetValue()?.ToString() ?? "—");
 
-        static Visual BuildBackendCell(DataTemplateValue<ProjectThreadsDialogRowViewModel> value, in DataTemplateContext _)
+        static Visual BuildBackendCell(DataTemplateValue<string> value, in DataTemplateContext _)
         {
-            var row = value.GetValue();
+            var row = (ProjectThreadsDialogRowViewModel)value.GetBinding().Owner;
             return new Markup(() => SidebarThreadPresentation.BuildBackendMarkup(row.BackendId, row.ThreadKind))
                 .Wrap(false)
                 .Tooltip(new TextBlock(() => string.IsNullOrWhiteSpace(row.BackendId)
@@ -110,7 +105,7 @@ internal sealed class ProjectThreadsDialog
                     : $"{row.BackendDisplayName} ({row.BackendId})"));
         }
 
-        static Visual BuildOpenButtonDisplay(DataTemplateValue<ProjectThreadsDialogRowViewModel> value, in DataTemplateContext context)
+        static Visual BuildOpenButtonDisplay(DataTemplateValue<string> value, in DataTemplateContext context)
         {
             _ = value;
             _ = context;
@@ -121,12 +116,12 @@ internal sealed class ProjectThreadsDialog
                 .Tone(ControlTone.Primary);
         }
 
-        Visual BuildOpenButtonEditor(Binding<ProjectThreadsDialogRowViewModel> binding, in DataTemplateContext context)
+        Visual BuildOpenButtonEditor(Binding<string> binding, in DataTemplateContext context)
         {
             _ = context;
             return new Button("Open")
                 .Tone(ControlTone.Primary)
-                .Click(() => _ = OpenThreadAsync(binding.GetValue().ThreadId));
+                .Click(() => _ = OpenThreadAsync(binding.GetValue()));
         }
 
         grid.Columns.Add(new DataGridColumn<bool>
@@ -145,37 +140,24 @@ internal sealed class ProjectThreadsDialog
             Width = GridLength.Star(2),
             Sortable = true,
         });
-        grid.Columns.Add(new DataGridColumn<ProjectThreadsDialogRowViewModel>
+        grid.Columns.Add(new DataGridColumn<string>
         {
             Key = "backend",
             Header = new TextBlock("🤖 Model"),
-            TypedValueAccessor = rowAccessor,
+            TypedValueAccessor = ProjectThreadsDialogRowViewModel.Accessor.BackendDisplayName,
             Width = GridLength.Auto,
             Sortable = true,
-            SortComparer = Comparer<ProjectThreadsDialogRowViewModel>.Create(static (left, right) =>
-            {
-                var compare = string.Compare(left.BackendDisplayName, right.BackendDisplayName, StringComparison.OrdinalIgnoreCase);
-                return compare != 0
-                    ? compare
-                    : string.Compare(left.ThreadId, right.ThreadId, StringComparison.OrdinalIgnoreCase);
-            }),
-            CellTemplate = new DataTemplate<ProjectThreadsDialogRowViewModel>(BuildBackendCell, null),
+            CellTemplate = new DataTemplate<string>(BuildBackendCell, null),
         });
-        grid.Columns.Add(new DataGridColumn<ProjectThreadsDialogRowViewModel>
+        grid.Columns.Add(new DataGridColumn<DateTimeOffset?>
         {
             Key = "updated",
             Header = new TextBlock("🕒 Updated"),
-            TypedValueAccessor = rowAccessor,
+            TypedValueAccessor = ProjectThreadsDialogRowViewModel.Accessor.LastUpdatedAt,
             Width = GridLength.Auto,
             Sortable = true,
-            SortComparer = Comparer<ProjectThreadsDialogRowViewModel>.Create(static (left, right) =>
-            {
-                var compare = Nullable.Compare(left.LastUpdatedAt, right.LastUpdatedAt);
-                return compare != 0
-                    ? compare
-                    : string.Compare(left.ThreadId, right.ThreadId, StringComparison.OrdinalIgnoreCase);
-            }),
-            CellTemplate = new DataTemplate<ProjectThreadsDialogRowViewModel>(BuildLastUpdatedCell, null),
+            SortComparer = Comparer<DateTimeOffset?>.Create(static (left, right) => Nullable.Compare(left, right)),
+            CellTemplate = new DataTemplate<DateTimeOffset?>(BuildLastUpdatedCell, null),
         });
         grid.Columns.Add(new DataGridColumn<int?>
         {
@@ -206,15 +188,15 @@ internal sealed class ProjectThreadsDialog
             }),
             CellTemplate = new DataTemplate<int?>(BuildMessageCountCell, null),
         });
-        grid.Columns.Add(new DataGridColumn<ProjectThreadsDialogRowViewModel>
+        grid.Columns.Add(new DataGridColumn<string>
         {
             Key = "open",
             Header = new TextBlock("🚀 Open"),
-            TypedValueAccessor = rowAccessor,
+            TypedValueAccessor = ProjectThreadsDialogRowViewModel.Accessor.ThreadId,
             Width = GridLength.Auto,
             CellActivationMode = DataGridCellActivationMode.DirectActivate,
-            CellTemplate = new DataTemplate<ProjectThreadsDialogRowViewModel>(BuildOpenButtonDisplay, null),
-            CellEditorTemplate = new DataTemplate<ProjectThreadsDialogRowViewModel>(null, BuildOpenButtonEditor),
+            CellTemplate = new DataTemplate<string>(BuildOpenButtonDisplay, null),
+            CellEditorTemplate = new DataTemplate<string>(null, BuildOpenButtonEditor),
         });
 
         var closeButton = new Button(new TextBlock($"{NerdFont.MdClose} Close"))
