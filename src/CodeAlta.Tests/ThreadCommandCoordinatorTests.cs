@@ -69,7 +69,6 @@ public sealed class ThreadCommandCoordinatorTests
             static () => null,
             static () => null,
             static () => null,
-            () => threadInput,
             () => dispatcher,
             static () => { });
         var backendState = new ChatBackendState(backend.BackendId, "Fake Chat")
@@ -205,7 +204,6 @@ public sealed class ThreadCommandCoordinatorTests
             static () => null,
             static () => null,
             static () => null,
-            () => threadInput,
             () => dispatcher,
             static () => { });
         var backendState = new ChatBackendState(backend.BackendId, "Fake Chat")
@@ -403,7 +401,6 @@ public sealed class ThreadCommandCoordinatorTests
             static () => null,
             static () => null,
             static () => null,
-            () => threadInput,
             () => dispatcher,
             static () => { });
         var backendState = new ChatBackendState(backend.BackendId, "Fake Chat")

@@ -1,9 +1,7 @@
 using CodeAlta.App.State;
 using CodeAlta.Agent;
 using CodeAlta.Models;
-using CodeAlta.Views;
 using XenoAtom.Terminal.UI;
-using XenoAtom.Terminal.UI.Controls;
 
 namespace CodeAlta.App.Context;
 
@@ -11,9 +9,8 @@ internal sealed class ShellWorkspaceContext
 {
     private readonly Func<AgentBackendId> _getPreferredBackendId;
     private readonly Func<(bool HasStatus, string Message, StatusTone Tone)> _getPromptUnavailableStatus;
-    private readonly Func<Visual?> _getThreadPaneLayout;
-    private readonly Func<VSplitter?> _getThreadBodySplitter;
-    private readonly Func<ChatPromptEditor?> _getThreadInput;
+    private readonly Func<bool> _hasWorkspaceSurface;
+    private readonly Action<Visual> _setThreadPaneContent;
     private readonly Action _ensureSelectionDefaults;
     private readonly Action _refreshSidebarProjection;
     private readonly Action _syncSidebarSelectionToCurrentState;
@@ -29,9 +26,8 @@ internal sealed class ShellWorkspaceContext
     public ShellWorkspaceContext(
         Func<AgentBackendId> getPreferredBackendId,
         Func<(bool HasStatus, string Message, StatusTone Tone)> getPromptUnavailableStatus,
-        Func<Visual?> getThreadPaneLayout,
-        Func<VSplitter?> getThreadBodySplitter,
-        Func<ChatPromptEditor?> getThreadInput,
+        Func<bool> hasWorkspaceSurface,
+        Action<Visual> setThreadPaneContent,
         Action ensureSelectionDefaults,
         Action refreshSidebarProjection,
         Action syncSidebarSelectionToCurrentState,
@@ -46,9 +42,8 @@ internal sealed class ShellWorkspaceContext
     {
         ArgumentNullException.ThrowIfNull(getPreferredBackendId);
         ArgumentNullException.ThrowIfNull(getPromptUnavailableStatus);
-        ArgumentNullException.ThrowIfNull(getThreadPaneLayout);
-        ArgumentNullException.ThrowIfNull(getThreadBodySplitter);
-        ArgumentNullException.ThrowIfNull(getThreadInput);
+        ArgumentNullException.ThrowIfNull(hasWorkspaceSurface);
+        ArgumentNullException.ThrowIfNull(setThreadPaneContent);
         ArgumentNullException.ThrowIfNull(ensureSelectionDefaults);
         ArgumentNullException.ThrowIfNull(refreshSidebarProjection);
         ArgumentNullException.ThrowIfNull(syncSidebarSelectionToCurrentState);
@@ -63,9 +58,8 @@ internal sealed class ShellWorkspaceContext
 
         _getPreferredBackendId = getPreferredBackendId;
         _getPromptUnavailableStatus = getPromptUnavailableStatus;
-        _getThreadPaneLayout = getThreadPaneLayout;
-        _getThreadBodySplitter = getThreadBodySplitter;
-        _getThreadInput = getThreadInput;
+        _hasWorkspaceSurface = hasWorkspaceSurface;
+        _setThreadPaneContent = setThreadPaneContent;
         _ensureSelectionDefaults = ensureSelectionDefaults;
         _refreshSidebarProjection = refreshSidebarProjection;
         _syncSidebarSelectionToCurrentState = syncSidebarSelectionToCurrentState;
@@ -85,14 +79,14 @@ internal sealed class ShellWorkspaceContext
     public (bool HasStatus, string Message, StatusTone Tone) GetPromptUnavailableStatus()
         => _getPromptUnavailableStatus();
 
-    public Visual? GetThreadPaneLayout()
-        => _getThreadPaneLayout();
+    public bool HasWorkspaceSurface()
+        => _hasWorkspaceSurface();
 
-    public VSplitter? GetThreadBodySplitter()
-        => _getThreadBodySplitter();
-
-    public ChatPromptEditor? GetThreadInput()
-        => _getThreadInput();
+    public void SetThreadPaneContent(Visual content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        _setThreadPaneContent(content);
+    }
 
     public void EnsureSelectionDefaults()
         => _ensureSelectionDefaults();

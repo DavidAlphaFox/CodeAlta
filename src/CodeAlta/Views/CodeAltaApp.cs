@@ -209,7 +209,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             () => ChatBackendSelect,
             () => ChatModelSelect,
             () => ChatReasoningSelect,
-            () => ThreadInput,
             GetUiDispatcher,
             VerifyBindableAccess);
         _chatPreferenceContext = new ChatPreferenceContext(
@@ -244,9 +243,14 @@ internal sealed class CodeAltaApp : IAsyncDisposable
                 var hasStatus = TryGetPromptUnavailableStatus(out var message, out var tone);
                 return (hasStatus, message, tone);
             },
-            () => ThreadPaneLayout,
-            () => ThreadBodySplitter,
-            () => ThreadInput,
+            () => _threadWorkspaceView is not null,
+            content =>
+            {
+                if (ThreadBodySplitter is not null)
+                {
+                    ThreadBodySplitter.First = content;
+                }
+            },
             EnsureSelectionDefaults,
             RefreshSidebarProjection,
             SyncSidebarSelectionToCurrentState,

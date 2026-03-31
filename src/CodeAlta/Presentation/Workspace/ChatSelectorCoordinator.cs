@@ -55,36 +55,33 @@ internal sealed class ChatSelectorCoordinator
         _selectorsRefreshing = true;
         try
         {
-            var backendSelect = _uiContext.GetChatBackendSelect()!;
-            var modelSelect = _uiContext.GetChatModelSelect()!;
-            var reasoningSelect = _uiContext.GetChatReasoningSelect()!;
             var backendOptions = ChatBackendPresentation.BuildBackendOptions();
-            ChatBackendPresentation.ReplaceSelectItems(backendSelect, backendOptions);
 
             var backendId = preferredBackendId ?? GetPreferredDraftBackendId(backendOptions);
             var backendIndex = Math.Max(0, backendOptions.FindIndex(option => string.Equals(option.BackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase)));
-            backendSelect.SelectedIndex = backendIndex;
-            backendSelect.IsEnabled = true;
+            _uiContext.UpdateBackendOptions(backendOptions, backendIndex, isEnabled: true);
 
             var backendState = _chatBackendStates[backendOptions[backendIndex].BackendId.Value];
             _preferences.ApplyDraftBackendPreference(backendState);
             var modelOptions = ChatBackendPresentation.BuildModelOptions(backendState);
-            ChatBackendPresentation.ReplaceSelectItems(modelSelect, modelOptions);
-            modelSelect.SelectedIndex = Math.Clamp(
+            _uiContext.UpdateModelOptions(
+                modelOptions,
+                Math.Clamp(
                 modelOptions.FindIndex(option => string.Equals(option.ModelId, backendState.SelectedModelId, StringComparison.Ordinal)),
                 0,
-                Math.Max(0, modelOptions.Count - 1));
-            modelSelect.IsEnabled = backendState.Availability == ChatBackendAvailability.Ready;
+                Math.Max(0, modelOptions.Count - 1)),
+                backendState.Availability == ChatBackendAvailability.Ready);
 
             var selectedModel = backendState.Models.FirstOrDefault(model => string.Equals(model.Id, backendState.SelectedModelId, StringComparison.Ordinal))
                                 ?? ChatBackendPresentation.GetSelectedModel(backendState);
             var reasoningOptions = ChatBackendPresentation.BuildReasoningOptions(selectedModel);
-            ChatBackendPresentation.ReplaceSelectItems(reasoningSelect, reasoningOptions);
-            reasoningSelect.SelectedIndex = Math.Clamp(
+            _uiContext.UpdateReasoningOptions(
+                reasoningOptions,
+                Math.Clamp(
                 reasoningOptions.FindIndex(option => option.Effort == backendState.SelectedReasoningEffort),
                 0,
-                Math.Max(0, reasoningOptions.Count - 1));
-            reasoningSelect.IsEnabled = backendState.Availability == ChatBackendAvailability.Ready;
+                Math.Max(0, reasoningOptions.Count - 1)),
+                backendState.Availability == ChatBackendAvailability.Ready);
             _workspaceViewModel.AutoScroll = true;
 
             _workspaceViewModel.BackendStatusMarkup = ChatBackendPresentation.BuildBackendStatusMarkup(_chatBackendStates.Values, backendOptions[backendIndex].BackendId, isInitializing: false);
@@ -107,40 +104,40 @@ internal sealed class ChatSelectorCoordinator
         _selectorsRefreshing = true;
         try
         {
-            var backendSelect = _uiContext.GetChatBackendSelect()!;
-            var modelSelect = _uiContext.GetChatModelSelect()!;
-            var reasoningSelect = _uiContext.GetChatReasoningSelect()!;
             var backendOptions = ChatBackendPresentation.BuildBackendOptions();
-            ChatBackendPresentation.ReplaceSelectItems(backendSelect, backendOptions);
-            backendSelect.SelectedIndex = Math.Clamp(
+            _uiContext.UpdateBackendOptions(
+                backendOptions,
+                Math.Clamp(
                 backendOptions.FindIndex(option => string.Equals(option.BackendId.Value, tab.BackendId.Value, StringComparison.OrdinalIgnoreCase)),
                 0,
-                Math.Max(0, backendOptions.Count - 1));
+                Math.Max(0, backendOptions.Count - 1)),
+                isEnabled: false);
 
             var backendState = _chatBackendStates[tab.BackendId.Value];
             _preferences.ApplyThreadPreference(tab);
 
             var modelOptions = ChatBackendPresentation.BuildModelOptions(backendState);
-            ChatBackendPresentation.ReplaceSelectItems(modelSelect, modelOptions);
-            modelSelect.SelectedIndex = Math.Clamp(
+            _uiContext.UpdateModelOptions(
+                modelOptions,
+                Math.Clamp(
                 modelOptions.FindIndex(option => string.Equals(option.ModelId, tab.ModelId ?? backendState.SelectedModelId, StringComparison.Ordinal)),
                 0,
-                Math.Max(0, modelOptions.Count - 1));
-            modelSelect.IsEnabled = backendState.Availability == ChatBackendAvailability.Ready;
+                Math.Max(0, modelOptions.Count - 1)),
+                backendState.Availability == ChatBackendAvailability.Ready);
 
             var selectedModel = backendState.Models.FirstOrDefault(model =>
                                     string.Equals(model.Id, tab.ModelId, StringComparison.Ordinal))
                                 ?? ChatBackendPresentation.GetSelectedModel(backendState);
             var reasoningOptions = ChatBackendPresentation.BuildReasoningOptions(selectedModel);
-            ChatBackendPresentation.ReplaceSelectItems(reasoningSelect, reasoningOptions);
-            reasoningSelect.SelectedIndex = Math.Clamp(
+            _uiContext.UpdateReasoningOptions(
+                reasoningOptions,
+                Math.Clamp(
                 reasoningOptions.FindIndex(option => option.Effort == tab.ReasoningEffort),
                 0,
-                Math.Max(0, reasoningOptions.Count - 1));
-            reasoningSelect.IsEnabled = backendState.Availability == ChatBackendAvailability.Ready;
+                Math.Max(0, reasoningOptions.Count - 1)),
+                backendState.Availability == ChatBackendAvailability.Ready);
             _workspaceViewModel.AutoScroll = tab.AutoScroll;
 
-            backendSelect.IsEnabled = false;
             _workspaceViewModel.BackendStatusMarkup = ChatBackendPresentation.BuildBackendStatusMarkup(_chatBackendStates.Values, tab.BackendId, isInitializing: false);
             _workspaceViewModel.CanSelectBackend = false;
             _workspaceViewModel.CanSelectModel = backendState.Availability == ChatBackendAvailability.Ready;
@@ -300,11 +297,10 @@ internal sealed class ChatSelectorCoordinator
             () =>
             {
                 var options = ChatBackendPresentation.BuildBackendOptions();
-                var chatBackendSelect = _uiContext.GetChatBackendSelect();
-                if (chatBackendSelect is not null &&
-                    (uint)chatBackendSelect.SelectedIndex < (uint)options.Count)
+                if (_uiContext.GetSelectedBackendIndex() is { } backendIndex &&
+                    (uint)backendIndex < (uint)options.Count)
                 {
-                    return options[chatBackendSelect.SelectedIndex].BackendId;
+                    return options[backendIndex].BackendId;
                 }
 
                 var readyBackend = options.FirstOrDefault(option => IsChatBackendReady(option.BackendId));
@@ -356,11 +352,10 @@ internal sealed class ChatSelectorCoordinator
 
     private AgentBackendId GetPreferredDraftBackendId(IReadOnlyList<ChatBackendOption> backendOptions)
     {
-        var chatBackendSelect = _uiContext.GetChatBackendSelect();
-        if (chatBackendSelect is not null &&
-            (uint)chatBackendSelect.SelectedIndex < (uint)backendOptions.Count)
+        if (_uiContext.GetSelectedBackendIndex() is { } backendIndex &&
+            (uint)backendIndex < (uint)backendOptions.Count)
         {
-            var current = backendOptions[chatBackendSelect.SelectedIndex].BackendId;
+            var current = backendOptions[backendIndex].BackendId;
             if (IsChatBackendReady(current))
             {
                 return current;

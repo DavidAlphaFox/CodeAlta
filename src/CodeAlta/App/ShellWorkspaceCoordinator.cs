@@ -248,9 +248,7 @@ internal sealed class ShellWorkspaceCoordinator
 
     private void RefreshThreadPaneContent()
     {
-        if (_workspaceContext.GetThreadPaneLayout() is null ||
-            _workspaceContext.GetThreadBodySplitter() is not { } threadBodySplitter ||
-            _workspaceContext.GetThreadInput() is null)
+        if (!_workspaceContext.HasWorkspaceSurface())
         {
             return;
         }
@@ -264,7 +262,7 @@ internal sealed class ShellWorkspaceCoordinator
             _workspaceContext.RefreshChatSelectorsForDraftScope();
             _workspaceContext.SyncPromptDraftText(session: null);
             _workspaceContext.UpdatePromptAvailabilityUi();
-            threadBodySplitter.First = WelcomePaneFactory.Build(_threadSelection.GetSelectedProject(), _threadSelection.GlobalScopeSelected, _welcomeAnimationPhase01);
+            _workspaceContext.SetThreadPaneContent(WelcomePaneFactory.Build(_threadSelection.GetSelectedProject(), _threadSelection.GlobalScopeSelected, _welcomeAnimationPhase01));
             SetReadyStatusForCurrentSelection();
             return;
         }
@@ -274,7 +272,7 @@ internal sealed class ShellWorkspaceCoordinator
         _workspaceContext.RefreshChatSelectorsForThread(tab);
         _workspaceContext.SyncPromptDraftText(tab.Session);
         _workspaceContext.UpdatePromptAvailabilityUi();
-        threadBodySplitter.First = tab.Timeline.Flow;
+        _workspaceContext.SetThreadPaneContent(tab.Timeline.Flow);
         SetReadyStatusForCurrentSelection();
     }
 

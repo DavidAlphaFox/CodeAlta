@@ -5,8 +5,6 @@ using CodeAlta.App.Context;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
-using CodeAlta.Presentation.Chat;
-using CodeAlta.Presentation.Formatting;
 using CodeAlta.Presentation.Shell;
 using CodeAlta.ViewModels;
 using CodeAlta.Views;
@@ -17,9 +15,7 @@ namespace CodeAlta.App;
 
 internal sealed class ThreadCommandCoordinator
 {
-    private const int MaxInitialThreadTitleLength = 80;
     private readonly WorkThreadRuntimeService _runtimeService;
-    private readonly CatalogOptions _catalogOptions;
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly ThreadSelectionContext _threadSelection;
     private readonly ChatSelectorUiContext _selectorUi;
@@ -27,6 +23,8 @@ internal sealed class ThreadCommandCoordinator
     private readonly ThreadCommandContext _commandContext;
     private readonly ThreadPromptQueueCoordinator _queueCoordinator;
     private readonly PromptComposerViewModel _promptComposerViewModel;
+    private readonly ThreadExecutionOptionsFactory _executionOptionsFactory;
+    private readonly ThreadPromptDispatchCoordinator _promptDispatchCoordinator;
 
     public ThreadCommandCoordinator(
         WorkThreadRuntimeService runtimeService,
@@ -40,7 +38,6 @@ internal sealed class ThreadCommandCoordinator
         PromptComposerViewModel promptComposerViewModel)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
-        ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(chatBackendStates);
         ArgumentNullException.ThrowIfNull(threadSelection);
         ArgumentNullException.ThrowIfNull(selectorUi);
@@ -50,7 +47,6 @@ internal sealed class ThreadCommandCoordinator
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
 
         _runtimeService = runtimeService;
-        _catalogOptions = catalogOptions;
         _chatBackendStates = chatBackendStates;
         _threadSelection = threadSelection;
         _selectorUi = selectorUi;
@@ -58,6 +54,10 @@ internal sealed class ThreadCommandCoordinator
         _commandContext = commandContext;
         _queueCoordinator = queueCoordinator;
         _promptComposerViewModel = promptComposerViewModel;
+        var permissionRequests = new ThreadPermissionRequestCoordinator(threadSelection, commandContext);
+        var userInputRequests = new ThreadUserInputRequestCoordinator(threadSelection, commandContext);
+        _executionOptionsFactory = new ThreadExecutionOptionsFactory(catalogOptions, chatBackendStates, threadSelection, selectorUi, permissionRequests, userInputRequests);
+        _promptDispatchCoordinator = new ThreadPromptDispatchCoordinator(runtimeService, _executionOptionsFactory, queueCoordinator, commandContext);
     }
 
     public async Task SendPromptAsync(
@@ -86,7 +86,7 @@ internal sealed class ThreadCommandCoordinator
                 return;
             }
 
-            var initialThreadTitle = CreateInitialThreadTitle(prompt);
+            var initialThreadTitle = ThreadPromptDispatchCoordinator.CreateInitialThreadTitle(prompt);
             thread = _threadSelection.GlobalScopeSelected
                 ? await _commandContext.CreateGlobalThreadAsync(initialThreadTitle).ConfigureAwait(false)
                 : await _commandContext.CreateProjectThreadAsync(initialThreadTitle).ConfigureAwait(false);
@@ -127,7 +127,7 @@ internal sealed class ThreadCommandCoordinator
         }
 
         _commandContext.ClearThreadInput();
-        await DispatchPromptAsync(thread, tab, prompt, steer, cancellationToken).ConfigureAwait(false);
+        await _promptDispatchCoordinator.DispatchPromptAsync(thread, tab, prompt, steer, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DelegateThreadAsync(
@@ -165,17 +165,12 @@ internal sealed class ThreadCommandCoordinator
         try
         {
             _commandContext.SetThreadStatus(tab, $"Delegating internal work from '{thread.Title}'...", true, StatusTone.Info);
-            var transientThreadKey = CreateTransientThreadKey(tab.BackendId, targetProject.ProjectPath);
-            var executionOptions = new WorkThreadExecutionOptions
-            {
-                BackendId = tab.BackendId,
-                WorkingDirectory = targetProject.ProjectPath,
-                ProjectRoots = [targetProject.ProjectPath],
-                Model = tab.ModelId,
-                ReasoningEffort = tab.ReasoningEffort,
-                OnPermissionRequest = (request, cancellationToken) => HandleThreadPermissionRequestAsync(transientThreadKey, request, cancellationToken),
-                OnUserInputRequest = (request, cancellationToken) => HandleThreadUserInputRequestAsync(transientThreadKey, request, cancellationToken),
-            };
+            var transientThreadKey = ThreadExecutionOptionsFactory.CreateTransientThreadKey(tab.BackendId, targetProject.ProjectPath);
+            var executionOptions = _promptDispatchCoordinator.BuildDelegationExecutionOptions(
+                transientThreadKey,
+                tab,
+                targetProject.ProjectPath,
+                [targetProject.ProjectPath]);
 
             var child = await _runtimeService.CreateInternalThreadAsync(
                     thread,
@@ -190,16 +185,11 @@ internal sealed class ThreadCommandCoordinator
 
             _ = await _runtimeService.SendAsync(
                     child,
-                    new WorkThreadExecutionOptions
-                    {
-                        BackendId = tab.BackendId,
-                        WorkingDirectory = targetProject.ProjectPath,
-                        ProjectRoots = [targetProject.ProjectPath],
-                        Model = tab.ModelId,
-                        ReasoningEffort = tab.ReasoningEffort,
-                        OnPermissionRequest = (request, cancellationToken) => HandleThreadPermissionRequestAsync(child.ThreadId, request, cancellationToken),
-                        OnUserInputRequest = (request, cancellationToken) => HandleThreadUserInputRequestAsync(child.ThreadId, request, cancellationToken),
-                    },
+                    _promptDispatchCoordinator.BuildDelegationExecutionOptions(
+                        child.ThreadId,
+                        tab,
+                        targetProject.ProjectPath,
+                        [targetProject.ProjectPath]),
                     new AgentSendOptions
                     {
                         Input = AgentInput.Text(
@@ -328,323 +318,21 @@ internal sealed class ThreadCommandCoordinator
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
 
-        return DispatchPromptAsync(tab.Thread, tab, prompt, steer, cancellationToken);
+        return _promptDispatchCoordinator.DispatchPromptAsync(tab.Thread, tab, prompt, steer, cancellationToken);
     }
 
     public WorkThreadExecutionOptions BuildPreferredExecutionOptions(
         AgentBackendId backendId,
         string workingDirectory,
         IReadOnlyList<string> projectRoots)
-    {
-        ArgumentNullException.ThrowIfNull(projectRoots);
-
-        var backendState = _chatBackendStates[backendId.Value];
-        var model = UiDispatch.Invoke(
-            _selectorUi.GetUiDispatcher(),
-            () =>
-            {
-                if (_selectorUi.GetChatBackendSelect() is not { } backendSelect || _selectorUi.GetChatModelSelect() is not { } modelSelect)
-                {
-                    return backendState.SelectedModelId;
-                }
-
-                var backendOptions = ChatBackendPresentation.BuildBackendOptions();
-                if ((uint)backendSelect.SelectedIndex < (uint)backendOptions.Count &&
-                    string.Equals(backendOptions[backendSelect.SelectedIndex].BackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase))
-                {
-                    var modelOptions = ChatBackendPresentation.BuildModelOptions(backendState);
-                    if ((uint)modelSelect.SelectedIndex < (uint)modelOptions.Count)
-                    {
-                        return modelOptions[modelSelect.SelectedIndex].ModelId;
-                    }
-                }
-
-                return backendState.SelectedModelId;
-            });
-
-        var reasoning = UiDispatch.Invoke(
-            _selectorUi.GetUiDispatcher(),
-            () =>
-            {
-                if (_selectorUi.GetChatBackendSelect() is not { } backendSelect || _selectorUi.GetChatReasoningSelect() is not { } reasoningSelect)
-                {
-                    return backendState.SelectedReasoningEffort;
-                }
-
-                var backendOptions = ChatBackendPresentation.BuildBackendOptions();
-                if ((uint)backendSelect.SelectedIndex < (uint)backendOptions.Count &&
-                    string.Equals(backendOptions[backendSelect.SelectedIndex].BackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase))
-                {
-                    var selectedModel = backendState.Models.FirstOrDefault(candidate => string.Equals(candidate.Id, model, StringComparison.Ordinal));
-                    var reasoningOptions = ChatBackendPresentation.BuildReasoningOptions(selectedModel);
-                    if ((uint)reasoningSelect.SelectedIndex < (uint)reasoningOptions.Count)
-                    {
-                        return reasoningOptions[reasoningSelect.SelectedIndex].Effort;
-                    }
-                }
-
-                return backendState.SelectedReasoningEffort;
-            });
-
-        return new WorkThreadExecutionOptions
-        {
-            BackendId = backendId,
-            WorkingDirectory = workingDirectory,
-            ProjectRoots = projectRoots,
-            Model = model,
-            ReasoningEffort = reasoning,
-            OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
-            OnUserInputRequest = (request, cancellationToken) => HandleThreadUserInputRequestAsync(CreateTransientThreadKey(backendId, workingDirectory), request, cancellationToken),
-        };
-    }
-
-    private async Task<AgentPermissionDecision> HandleThreadPermissionRequestAsync(
-        string threadId,
-        AgentPermissionRequest request,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var autoApproveEnabled = _commandContext.GetAutoApproveEnabled();
-        var decision = autoApproveEnabled
-            ? new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)
-            : new AgentPermissionDecision(AgentPermissionDecisionKind.Deny);
-
-        if (ChatMarkdownFormatter.ShouldDisplayPermissionRequest(autoApproveEnabled) && _threadSelection.FindOpenThread(threadId) is { } tab)
-        {
-            _commandContext.TryRenderInteraction(
-                tab,
-                () =>
-                {
-                    tab.Timeline.UpsertInteraction(
-                        request.InteractionId,
-                        request.Timestamp,
-                        ChatMarkdownFormatter.FormatChatPermissionRequestMarkdown(request),
-                        ChatMarkdownFormatter.FormatChatImmediatePermissionDecisionMarkdown(decision, autoApproveEnabled),
-                        ChatTimelineTone.Interaction,
-                        "Action Required",
-                        "Permission Request");
-                },
-                "permission request");
-        }
-
-        return decision;
-    }
-
-    private async Task<AgentUserInputResponse> HandleThreadUserInputRequestAsync(
-        string threadId,
-        AgentUserInputRequest request,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var autoApproveEnabled = _commandContext.GetAutoApproveEnabled();
-        var response = ChatPromptResponseBuilder.CreateResponse(request, autoApproveEnabled);
-        if (_threadSelection.FindOpenThread(threadId) is { } tab)
-        {
-            _commandContext.TryRenderInteraction(
-                tab,
-                () =>
-                {
-                    tab.Timeline.UpsertInteraction(
-                        request.InteractionId,
-                        request.Timestamp,
-                        ChatMarkdownFormatter.FormatChatUserInputRequestMarkdown(request, autoApproveEnabled),
-                        ChatMarkdownFormatter.FormatChatImmediateUserInputResponseMarkdown(response, autoApproveEnabled),
-                        ChatTimelineTone.Interaction,
-                        "Action Required",
-                        "User Input Request");
-                },
-                "user input request");
-        }
-
-        return response;
-    }
+        => _promptDispatchCoordinator.BuildPreferredExecutionOptions(backendId, workingDirectory, projectRoots);
 
     public WorkThreadExecutionOptions BuildExecutionOptions(WorkThreadDescriptor thread, OpenThreadState tab)
-    {
-        var workingDirectory = ResolveWorkingDirectory(thread);
-        var projectRoots = ResolveProjectRoots(thread);
-        return new WorkThreadExecutionOptions
-        {
-            BackendId = new AgentBackendId(thread.BackendId),
-            WorkingDirectory = workingDirectory,
-            ProjectRoots = projectRoots,
-            Model = tab.ModelId,
-            ReasoningEffort = tab.ReasoningEffort,
-            OnPermissionRequest = (request, cancellationToken) => HandleThreadPermissionRequestAsync(thread.ThreadId, request, cancellationToken),
-            OnUserInputRequest = (request, cancellationToken) => HandleThreadUserInputRequestAsync(thread.ThreadId, request, cancellationToken),
-        };
-    }
-
-    private static string CreateTransientThreadKey(AgentBackendId backendId, string workingDirectory)
-        => $"{backendId.Value}:{workingDirectory}";
-
-    private static string CreateInitialThreadTitle(string prompt)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
-
-        var normalized = prompt
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\n', ' ')
-            .Trim();
-
-        normalized = string.Join(" ", normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries));
-        if (normalized.Length == 0)
-        {
-            return prompt.Trim();
-        }
-
-        var sentenceLength = FindFirstSentenceLength(normalized);
-        var candidate = sentenceLength > 0
-            ? normalized[..sentenceLength]
-            : normalized;
-
-        if (candidate.Length <= MaxInitialThreadTitleLength)
-        {
-            return candidate;
-        }
-
-        return candidate[..(MaxInitialThreadTitleLength - 3)].TrimEnd() + "...";
-    }
-
-    private static int FindFirstSentenceLength(string content)
-    {
-        for (var i = 0; i < content.Length; i++)
-        {
-            var ch = content[i];
-            if (ch is not ('.' or '!' or '?'))
-            {
-                continue;
-            }
-
-            if (i == content.Length - 1 || char.IsWhiteSpace(content[i + 1]))
-            {
-                return i + 1;
-            }
-        }
-
-        return 0;
-    }
-
-    private async Task DispatchPromptAsync(
-        WorkThreadDescriptor thread,
-        OpenThreadState tab,
-        string prompt,
-        bool steer,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(thread);
-        ArgumentNullException.ThrowIfNull(tab);
-        ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
-
-        string? pendingSteerId = null;
-        try
-        {
-            _commandContext.SetThreadStatus(tab, StatusVisualFormatter.BuildThinkingStatusText(), true, StatusTone.Info);
-            var executionOptions = BuildExecutionOptions(thread, tab);
-            var dispatchAsSteer = steer && tab.ActiveRunId is not null;
-            AgentRunId runId;
-            if (dispatchAsSteer)
-            {
-                pendingSteerId = _queueCoordinator.AddPendingSteer(tab, prompt);
-                runId = await _runtimeService.SteerAsync(
-                        thread,
-                        executionOptions,
-                        new AgentSteerOptions
-                        {
-                            Input = AgentInput.Text(prompt),
-                            ExpectedRunId = tab.ActiveRunId,
-                        },
-                        cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            else
-            {
-                runId = await _runtimeService.SendAsync(
-                        thread,
-                        executionOptions,
-                        new AgentSendOptions { Input = AgentInput.Text(prompt) },
-                        cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            tab.ActiveRunId = runId;
-            thread.MarkStarted(DateTimeOffset.UtcNow);
-            tab.HistoryLoaded = true;
-            _commandContext.RefreshHeaderAndThreadWorkspace();
-        }
-        catch (Exception ex)
-        {
-            if (steer && !string.IsNullOrWhiteSpace(pendingSteerId))
-            {
-                _queueCoordinator.RemovePendingSteer(tab, pendingSteerId);
-            }
-
-            if (LogManager.IsInitialized && CodeAltaApp.UiLogger.IsEnabled(LogLevel.Error))
-            {
-                CodeAltaApp.UiLogger.Error(ex, $"Failed to send prompt for thread {thread.ThreadId}");
-            }
-
-            var restoredToDraft = false;
-            if (_commandContext.IsThreadInputEmpty())
-            {
-                _commandContext.RestoreThreadInput(prompt);
-                restoredToDraft = true;
-            }
-
-            tab.Timeline.RenderFailure(BuildPromptDispatchFailureMarkdown(ex.Message, prompt, restoredToDraft));
-            _commandContext.SetThreadStatus(tab, $"Failed to send prompt: {ex.Message}", false, StatusTone.Error);
-        }
-    }
-
-    private static string BuildPromptDispatchFailureMarkdown(string errorMessage, string prompt, bool restoredToDraft)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(errorMessage);
-        ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
-
-        var normalizedPrompt = prompt.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd();
-        var builder = new System.Text.StringBuilder();
-        builder.Append("Failed to send prompt: ").Append(errorMessage);
-        builder.AppendLine();
-        builder.AppendLine();
-        builder.AppendLine(restoredToDraft
-            ? "Prompt restored to the editor for retry."
-            : "Prompt preserved below because the current editor draft is no longer empty.");
-        builder.AppendLine();
-        builder.AppendLine("Prompt:");
-
-        foreach (var line in normalizedPrompt.Split('\n'))
-        {
-            builder.Append("> ");
-            builder.AppendLine(line);
-        }
-
-        return builder.ToString().TrimEnd();
-    }
+        => _promptDispatchCoordinator.BuildExecutionOptions(thread, tab);
 
     private bool IsChatBackendReady(AgentBackendId backendId)
     {
         return _chatBackendStates[backendId.Value].Availability == ChatBackendAvailability.Ready;
     }
 
-    private string ResolveWorkingDirectory(WorkThreadDescriptor thread)
-    {
-        return thread.Kind switch
-        {
-            WorkThreadKind.GlobalThread => _catalogOptions.GlobalRoot,
-            WorkThreadKind.ProjectThread or WorkThreadKind.InternalThread when _threadSelection.GetProjectById(thread.ProjectRef) is { } project => project.ProjectPath,
-            _ => thread.WorkingDirectory,
-        };
-    }
-
-    private IReadOnlyList<string> ResolveProjectRoots(WorkThreadDescriptor thread)
-    {
-        if (_threadSelection.GetProjectById(thread.ProjectRef) is { } project)
-        {
-            return [project.ProjectPath];
-        }
-
-        return [];
-    }
 }

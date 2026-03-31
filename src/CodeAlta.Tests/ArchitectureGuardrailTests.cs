@@ -207,13 +207,18 @@ public sealed class ArchitectureGuardrailTests
         var creationSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadCreationCoordinator.cs"));
         var shellCommandSurfaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Frontend", "Commands", "ShellCommandSurfaceCoordinator.cs"));
         var threadCommandSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadCommandCoordinator.cs"));
+        var executionOptionsSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadExecutionOptionsFactory.cs"));
 
         Assert.IsTrue(appSource.Contains("_shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_shellCommandSurfaceCoordinator.SubmitCurrentDelegationAsync", StringComparison.Ordinal));
         Assert.IsTrue(shellCommandSurfaceSource.Contains("new ShellInputCoordinator(", StringComparison.Ordinal));
         Assert.IsFalse(threadCommandSource.Contains("GetThreadInput()", StringComparison.Ordinal));
         Assert.IsFalse(threadCommandSource.Contains("/help", StringComparison.Ordinal));
+        Assert.IsFalse(threadCommandSource.Contains("AgentPermissionRequest", StringComparison.Ordinal));
+        Assert.IsFalse(threadCommandSource.Contains("AgentUserInputRequest", StringComparison.Ordinal));
+        Assert.IsFalse(threadCommandSource.Contains("new WorkThreadExecutionOptions", StringComparison.Ordinal));
         Assert.IsTrue(creationSource.Contains("_buildPreferredExecutionOptions(", StringComparison.Ordinal));
+        Assert.IsTrue(executionOptionsSource.Contains("BuildDelegationExecutionOptions(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private async Task<AgentPermissionDecision> HandleThreadPermissionRequestAsync(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private async Task<AgentUserInputResponse> HandleThreadUserInputRequestAsync(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private WorkThreadExecutionOptions BuildExecutionOptions(", StringComparison.Ordinal));
@@ -500,6 +505,19 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsTrue(openThreadStateSource.Contains("ThreadWorkspaceState Workspace", StringComparison.Ordinal));
         Assert.IsTrue(openThreadStateSource.Contains("ThreadTimelineState TimelineState", StringComparison.Ordinal));
         Assert.IsTrue(openThreadStateSource.Contains("ThreadSessionState Session", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void AppContexts_DoNotExposeConcreteSelectorEditorOrLayoutControls()
+    {
+        var chatSelectorContextSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "Context", "ChatSelectorUiContext.cs"));
+        var workspaceContextSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "Context", "ShellWorkspaceContext.cs"));
+
+        Assert.IsFalse(chatSelectorContextSource.Contains("public Select<", StringComparison.Ordinal));
+        Assert.IsFalse(chatSelectorContextSource.Contains("GetThreadInput()", StringComparison.Ordinal));
+        Assert.IsFalse(workspaceContextSource.Contains("GetThreadPaneLayout()", StringComparison.Ordinal));
+        Assert.IsFalse(workspaceContextSource.Contains("GetThreadBodySplitter()", StringComparison.Ordinal));
+        Assert.IsFalse(workspaceContextSource.Contains("GetThreadInput()", StringComparison.Ordinal));
     }
 
     [TestMethod]
