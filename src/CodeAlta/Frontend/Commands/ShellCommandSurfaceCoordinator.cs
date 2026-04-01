@@ -13,7 +13,6 @@ namespace CodeAlta.Frontend.Commands;
 
 internal sealed class ShellCommandSurfaceCoordinator
 {
-    internal const string SlashCommandPaletteQuery = "/";
     internal static CommandPaletteStyle CommandPalettePopupStyle { get; } = CommandPaletteStyle.Default with
     {
         PopupWidthPercent = 50,
@@ -133,10 +132,7 @@ internal sealed class ShellCommandSurfaceCoordinator
         => ExecuteHelpAsync(filterText, cancellationToken);
 
     public void ShowCommandPalette()
-        => ShowCommandPalette(initialQuery: null);
-
-    public void ShowSlashCommandPalette()
-        => ShowCommandPalette(SlashCommandPaletteQuery);
+        => (_commandPalette ??= CreateCommandPalette()).Show();
 
     public Task ShowCommandPaletteAsync()
     {
@@ -178,20 +174,6 @@ internal sealed class ShellCommandSurfaceCoordinator
     {
         _ = cancellationToken;
         return ShowShellHelpAsync(filterText);
-    }
-
-    internal static void ConfigureCommandPaletteForShow(CommandPalette commandPalette, string? initialQuery)
-    {
-        ArgumentNullException.ThrowIfNull(commandPalette);
-
-        if (initialQuery is null)
-        {
-            commandPalette.ClearQueryOnShow(true);
-            return;
-        }
-
-        commandPalette.ClearQueryOnShow(false);
-        commandPalette.QueryText(initialQuery);
     }
 
     private Task ShowShellHelpAsync(string? filterText = null)
@@ -241,14 +223,6 @@ internal sealed class ShellCommandSurfaceCoordinator
 
     private Task ClearSelectedThreadQueueAsync()
         => _threadCommandCoordinator.ClearSelectedThreadQueueAsync();
-
-    private void ShowCommandPalette(string? initialQuery)
-    {
-        var commandPalette = _commandPalette ??= CreateCommandPalette();
-        ConfigureCommandPaletteForShow(commandPalette, initialQuery);
-        commandPalette.Show();
-        commandPalette.ClearQueryOnShow(true);
-    }
 
     private static CommandPalette CreateCommandPalette()
         => new CommandPalette().Style(() => CommandPalettePopupStyle);

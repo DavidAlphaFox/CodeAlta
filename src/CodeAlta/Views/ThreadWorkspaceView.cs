@@ -358,7 +358,7 @@ internal sealed class ThreadWorkspaceView
             Id = metadata.Id,
             LabelMarkup = metadata.SlashCommandText,
             Name = metadata.CommandName,
-            DescriptionMarkup = metadata.Description,
+            DescriptionMarkup = metadata.DescriptionMarkup,
             SearchText = metadata.CommandSearchText,
             Execute = _ => binding.Execute(),
             CanExecute = _ => binding.CanExecute(),

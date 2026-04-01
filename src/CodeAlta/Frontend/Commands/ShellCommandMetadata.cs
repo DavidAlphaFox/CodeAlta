@@ -1,3 +1,4 @@
+using XenoAtom.Ansi;
 using XenoAtom.Terminal.UI.Input;
 
 namespace CodeAlta.Frontend.Commands;
@@ -47,6 +48,7 @@ internal sealed record ShellCommandMetadata(
 {
     public string CommandName { get; } = ResolveCommandName(CommandName, Label);
     internal string SlashCommandText { get; } = $"/{ResolveCommandName(CommandName, Label)}";
+    internal string DescriptionMarkup { get; } = $"[dim]{AnsiMarkup.Escape(Description)}[/]";
 
     public IReadOnlyList<string> Aliases { get; } = BuildAliases(
         ResolveCommandName(CommandName, Label),
