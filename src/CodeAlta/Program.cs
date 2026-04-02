@@ -2,6 +2,8 @@ using CodeAlta;
 using CodeAlta.Views;
 using XenoAtom.Logging;
 
+var mainThreadId = Environment.CurrentManagedThreadId;
+
 if (!CodeAltaCliOptions.TryParse(args, out var options, out var error))
 {
     Console.Error.WriteLine(error);
@@ -39,6 +41,7 @@ if (options.TestMode)
 
 // Enter the terminal immediately after synchronous setup; DeferredCodeAltaApp finishes async
 // initialization from inside the loop instead of before Terminal.RunAsync starts.
+Program.ThrowIfCurrentThreadIsNotMainThread(mainThreadId);
 await app.RunAsync(cancellationTokenSource.Token);
 
 if (options.TestMode)
@@ -50,4 +53,19 @@ if (options.TestMode)
     }
 
     Console.WriteLine("[CodeAlta] Terminal smoke test exited cleanly.");
+}
+
+internal partial class Program
+{
+    internal static void ThrowIfCurrentThreadIsNotMainThread(int mainThreadId)
+    {
+        var currentThreadId = Environment.CurrentManagedThreadId;
+        if (currentThreadId == mainThreadId)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Program.RunAsync must start on the process main thread. Expected thread {mainThreadId}, but the current thread is {currentThreadId}.");
+    }
 }
