@@ -4,88 +4,15 @@ using System.Text.Json.Serialization.Metadata;
 using CodeAlta.CodexSdk;
 using GitHub.Copilot.SDK;
 using RawCaptureApp;
-
-Console.OutputEncoding = Encoding.UTF8;
+using XenoAtom.Terminal;
 
 const string model = "gpt-5.4";
 const string reasoningEffort = "high";
 const string clientName = "codealta_playground_capture";
 
-if (args.Any(static argument =>
-        string.Equals(argument, "--help", StringComparison.Ordinal) ||
-        string.Equals(argument, "-h", StringComparison.Ordinal))) {
-    PrintUsage();
-    return;
-}
-
-if (!CaptureRunOptionsParser.TryParse(args, AppContext.BaseDirectory, out var runOptions, out var errorMessage)) {
-    Console.Error.WriteLine(errorMessage);
-    Console.Error.WriteLine();
-    PrintUsage();
-    Environment.ExitCode = 1;
-    return;
-}
-
-var options = runOptions!;
-using var shutdown = new CancellationTokenSource();
-
-Console.CancelKeyPress += (_, eventArgs) => {
-    eventArgs.Cancel = true;
-    shutdown.Cancel();
-};
-
-Console.WriteLine($"Prompt: {options.Prompt}");
-Console.WriteLine($"Source folder: {options.SourceWorkingDirectory}");
-Console.WriteLine($"Test case: {options.TestCaseName}");
-Console.WriteLine($"Model: {model}");
-Console.WriteLine($"Reasoning: {reasoningEffort}");
-Console.WriteLine($"Output directory: {options.OutputDirectory}");
-Console.WriteLine($"Targets: {FormatCaptureTargets(options.Targets)}");
-Console.WriteLine();
-
-if (options.Targets.HasFlag(CaptureTargets.Copilot)) {
-    var copilotWorkingDirectory = PrepareCaptureWorkspace(
-        options.SourceWorkingDirectory,
-        options.OutputDirectory,
-        options.TestCaseName,
-        "copilot");
-
-    Console.WriteLine($"Copilot workspace: {copilotWorkingDirectory}");
-    await RunCopilotCaptureAsync(
-            options.CopilotOutputPath,
-            copilotWorkingDirectory,
-            options.Prompt,
-            model,
-            reasoningEffort,
-            shutdown.Token)
-        .ConfigureAwait(false);
-}
-
-if (options.Targets.HasFlag(CaptureTargets.Codex)) {
-    var codexWorkingDirectory = PrepareCaptureWorkspace(
-        options.SourceWorkingDirectory,
-        options.OutputDirectory,
-        options.TestCaseName,
-        "codex");
-
-    Console.WriteLine($"Codex workspace: {codexWorkingDirectory}");
-    await RunCodexCaptureAsync(
-            options.CodexOutputPath,
-            codexWorkingDirectory,
-            options.Prompt,
-            model,
-            shutdown.Token)
-        .ConfigureAwait(false);
-}
-
-Console.WriteLine();
-if (options.Targets.HasFlag(CaptureTargets.Copilot)) {
-    Console.WriteLine($"Wrote {options.CopilotOutputPath}");
-}
-
-if (options.Targets.HasFlag(CaptureTargets.Codex)) {
-    Console.WriteLine($"Wrote {options.CodexOutputPath}");
-}
+using var session = Terminal.Open(options: new TerminalOptions { PreferUtf8Output = true });
+var app = CaptureRunOptionsParser.CreateCommandApp(AppContext.BaseDirectory, ExecuteAsync);
+return await app.RunAsync(args).ConfigureAwait(false);
 
 static string FormatCaptureTargets(CaptureTargets targets) =>
     targets switch {
@@ -95,10 +22,75 @@ static string FormatCaptureTargets(CaptureTargets targets) =>
         _ => "None"
     };
 
-static void PrintUsage() {
-    Console.WriteLine("Usage: dotnet run --project src/RawCaptureApp/RawCaptureApp.csproj -- [--copilot] [--codex] <prompt> <folder> [test-name]");
-    Console.WriteLine("If no target is specified, both Copilot and Codex captures are run.");
-    Console.WriteLine("If test-name is omitted, it is inferred from the folder name.");
+static async ValueTask<int> ExecuteAsync(CaptureRunOptions options) {
+    ArgumentNullException.ThrowIfNull(options);
+
+    using var shutdown = new CancellationTokenSource();
+    using var stopSignalPump = new CancellationTokenSource();
+    var signalPumpTask = PumpSignalsAsync(shutdown, stopSignalPump.Token);
+
+    try {
+        Terminal.WriteLine($"Prompt: {options.Prompt}");
+        Terminal.WriteLine($"Source folder: {options.SourceWorkingDirectory}");
+        Terminal.WriteLine($"Test case: {options.TestCaseName}");
+        Terminal.WriteLine($"Model: {model}");
+        Terminal.WriteLine($"Reasoning: {reasoningEffort}");
+        Terminal.WriteLine($"Output directory: {options.OutputDirectory}");
+        Terminal.WriteLine($"Targets: {FormatCaptureTargets(options.Targets)}");
+        Terminal.WriteLine();
+
+        if (options.Targets.HasFlag(CaptureTargets.Copilot)) {
+            var copilotWorkingDirectory = PrepareCaptureWorkspace(
+                options.SourceWorkingDirectory,
+                options.OutputDirectory,
+                options.TestCaseName,
+                "copilot");
+
+            Terminal.WriteLine($"Copilot workspace: {copilotWorkingDirectory}");
+            await RunCopilotCaptureAsync(
+                    options.CopilotOutputPath,
+                    copilotWorkingDirectory,
+                    options.Prompt,
+                    model,
+                    reasoningEffort,
+                    shutdown.Token)
+                .ConfigureAwait(false);
+        }
+
+        if (options.Targets.HasFlag(CaptureTargets.Codex)) {
+            var codexWorkingDirectory = PrepareCaptureWorkspace(
+                options.SourceWorkingDirectory,
+                options.OutputDirectory,
+                options.TestCaseName,
+                "codex");
+
+            Terminal.WriteLine($"Codex workspace: {codexWorkingDirectory}");
+            await RunCodexCaptureAsync(
+                    options.CodexOutputPath,
+                    codexWorkingDirectory,
+                    options.Prompt,
+                    model,
+                    shutdown.Token)
+                .ConfigureAwait(false);
+        }
+
+        Terminal.WriteLine();
+        if (options.Targets.HasFlag(CaptureTargets.Copilot)) {
+            Terminal.WriteLine($"Wrote {options.CopilotOutputPath}");
+        }
+
+        if (options.Targets.HasFlag(CaptureTargets.Codex)) {
+            Terminal.WriteLine($"Wrote {options.CodexOutputPath}");
+        }
+
+        return 0;
+    } finally {
+        stopSignalPump.Cancel();
+        try {
+            await signalPumpTask.ConfigureAwait(false);
+        } catch (OperationCanceledException) when (stopSignalPump.IsCancellationRequested) {
+        }
+    }
 }
 
 static string PrepareCaptureWorkspace(
@@ -147,7 +139,7 @@ static async Task RunCopilotCaptureAsync(
     string model,
     string reasoningEffort,
     CancellationToken cancellationToken) {
-    Console.WriteLine("Running Copilot capture...");
+    Terminal.WriteLine("Running Copilot capture...");
 
     using var writer = new JsonlWriter(outputPath);
     writer.WriteMarker("COPILOT capture started");
@@ -194,7 +186,7 @@ static async Task RunCodexCaptureAsync(
     string prompt,
     string model,
     CancellationToken cancellationToken) {
-    Console.WriteLine("Running Codex capture...");
+    Terminal.WriteLine("Running Codex capture...");
 
     using var writer = new JsonlWriter(outputPath);
     writer.WriteMarker("CODEX capture started");
@@ -376,6 +368,20 @@ static async Task WaitForCompletionCoreAsync(Task task, string backendName, Canc
     timeoutCancellation.Cancel();
 }
 
+static async Task PumpSignalsAsync(CancellationTokenSource shutdown, CancellationToken cancellationToken) {
+    ArgumentNullException.ThrowIfNull(shutdown);
+
+    try {
+        await foreach (var ev in Terminal.ReadEventsAsync(cancellationToken).ConfigureAwait(false)) {
+            if (ev is TerminalSignalEvent { Kind: TerminalSignalKind.Interrupt or TerminalSignalKind.Break }) {
+                shutdown.Cancel();
+                break;
+            }
+        }
+    } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+    }
+}
+
 file sealed class JsonlWriter : IDisposable {
     private readonly object _gate = new();
     private readonly StreamWriter _writer;
@@ -395,7 +401,7 @@ file sealed class JsonlWriter : IDisposable {
         lock (_gate) {
             _writer.WriteLine(json);
             _writer.Flush();
-            Console.WriteLine(json);
+            Terminal.WriteLine(json);
         }
     }
 

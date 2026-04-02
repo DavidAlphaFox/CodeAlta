@@ -2,6 +2,7 @@ using CodeAlta.Models;
 using CodeAlta.Presentation.Shell;
 using CodeAlta.Views;
 using XenoAtom.Logging;
+using XenoAtom.Terminal;
 
 namespace CodeAlta.App;
 
@@ -35,7 +36,7 @@ internal static class UiTaskDiagnostics
 
             try
             {
-                Console.Error.WriteLine($"[CodeAlta.UI] {message} {ex}");
+                Terminal.Error.WriteLine($"[CodeAlta.UI] {message} {ex}");
             }
             catch
             {

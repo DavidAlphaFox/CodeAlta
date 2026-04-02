@@ -1,4 +1,7 @@
 using System.Text;
+using System.Diagnostics.CodeAnalysis;
+using XenoAtom.CommandLine;
+using XenoAtom.CommandLine.Terminal;
 
 namespace RawCaptureApp;
 
@@ -33,54 +36,114 @@ internal static class CaptureRunOptionsParser
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
 
-        var targets = CaptureTargets.None;
-        var positionals = new List<string>(capacity: 3);
+        var state = new ParseState();
+        var app = CreateCommandAppCore(
+            outputDirectory,
+            state,
+            static _ => ValueTask.FromResult(0));
 
-        foreach (var argument in arguments) {
-            switch (argument) {
-                case "--copilot":
-                    targets |= CaptureTargets.Copilot;
-                    break;
-                case "--codex":
-                    targets |= CaptureTargets.Codex;
-                    break;
-                default:
-                    if (argument.StartsWith("--", StringComparison.Ordinal)) {
-                        options = null;
-                        errorMessage = $"Unknown argument '{argument}'. Use --copilot, --codex, or both.";
-                        return false;
-                    }
-
-                    positionals.Add(argument);
-                    break;
-            }
-        }
-
-        if (positionals.Count < 2 || positionals.Count > 3) {
+        var result = app.Parse(arguments);
+        if (result.HasErrors)
+        {
             options = null;
-            errorMessage = "Specify <prompt> <folder> and optionally [test-name].";
+            errorMessage = result.Errors[0].Message;
             return false;
         }
 
-        var prompt = positionals[0].Trim();
-        var sourceWorkingDirectory = Path.GetFullPath(positionals[1]);
-        if (prompt.Length == 0) {
+        return TryCreateOptions(outputDirectory, state, out options, out errorMessage);
+    }
+
+    public static CommandApp CreateCommandApp(
+        string outputDirectory,
+        Func<CaptureRunOptions, ValueTask<int>> execute)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        ArgumentNullException.ThrowIfNull(execute);
+
+        return CreateCommandAppCore(
+            outputDirectory,
+            new ParseState(),
+            execute);
+    }
+
+    private static CommandApp CreateCommandAppCore(
+        string outputDirectory,
+        ParseState state,
+        Func<CaptureRunOptions, ValueTask<int>> execute)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(execute);
+
+        const string _ = "";
+
+        return new CommandApp(
+            "RawCaptureApp",
+            config: new CommandConfig
+            {
+                OutputFactory = static _ => new TerminalVisualCommandOutput(new TerminalVisualOutputOptions
+                {
+                    UseTableForOptions = true,
+                    UseTableForArguments = true,
+                    SectionGroupMinWidth = 70,
+                    ErrorGroupMinWidth = 70,
+                }),
+            })
+        {
+            new CommandUsage("Usage: {NAME} [--copilot] [--codex] <prompt> <folder> [test-name]"),
+            _,
+            "Options:",
+            { "copilot", "Run the Copilot capture", value => state.Targets |= value is not null ? CaptureTargets.Copilot : CaptureTargets.None },
+            { "codex", "Run the Codex capture", value => state.Targets |= value is not null ? CaptureTargets.Codex : CaptureTargets.None },
+            new HelpOption(),
+            _,
+            "Arguments:",
+            { "<prompt>", "Capture {PROMPT}", value => state.Prompt = value },
+            { "<folder>", "Source {FOLDER}", value => state.SourceWorkingDirectory = value },
+            { "<test-name>?", "Optional {TEST-NAME}", value => state.TestCaseName = value },
+            (_, _) =>
+            {
+                if (!TryCreateOptions(outputDirectory, state, out var options, out var errorMessage))
+                {
+                    throw new CommandException(errorMessage!);
+                }
+
+                return execute(options!);
+            },
+        };
+    }
+
+    private static bool TryCreateOptions(
+        string outputDirectory,
+        ParseState state,
+        [NotNullWhen(true)] out CaptureRunOptions? options,
+        [NotNullWhen(false)] out string? errorMessage)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        ArgumentNullException.ThrowIfNull(state);
+
+        var prompt = state.Prompt?.Trim() ?? string.Empty;
+        if (prompt.Length == 0)
+        {
             options = null;
             errorMessage = "Prompt must not be empty.";
             return false;
         }
 
-        if (!Directory.Exists(sourceWorkingDirectory)) {
+        var sourceWorkingDirectory = Path.GetFullPath(state.SourceWorkingDirectory ?? string.Empty);
+        if (!Directory.Exists(sourceWorkingDirectory))
+        {
             options = null;
             errorMessage = $"Folder '{sourceWorkingDirectory}' does not exist.";
             return false;
         }
 
         var testCaseName = SanitizeTestCaseName(
-            positionals.Count == 3
-                ? positionals[2]
-                : Path.GetFileName(Path.TrimEndingDirectorySeparator(sourceWorkingDirectory)));
-        if (testCaseName.Length == 0) {
+            string.IsNullOrWhiteSpace(state.TestCaseName)
+                ? Path.GetFileName(Path.TrimEndingDirectorySeparator(sourceWorkingDirectory))
+                : state.TestCaseName);
+        if (testCaseName.Length == 0)
+        {
             options = null;
             errorMessage = "Unable to infer a test name from the provided folder.";
             return false;
@@ -91,7 +154,7 @@ internal static class CaptureRunOptionsParser
             sourceWorkingDirectory,
             testCaseName,
             outputDirectory,
-            targets is CaptureTargets.None ? CaptureTargets.Copilot | CaptureTargets.Codex : targets);
+            state.Targets is CaptureTargets.None ? CaptureTargets.Copilot | CaptureTargets.Codex : state.Targets);
         errorMessage = null;
         return true;
     }
@@ -124,5 +187,16 @@ internal static class CaptureRunOptionsParser
         }
 
         return builder.ToString().Trim('_', '-');
+    }
+
+    private sealed class ParseState
+    {
+        public string? Prompt { get; set; }
+
+        public string? SourceWorkingDirectory { get; set; }
+
+        public string? TestCaseName { get; set; }
+
+        public CaptureTargets Targets { get; set; }
     }
 }

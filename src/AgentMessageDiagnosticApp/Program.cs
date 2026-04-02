@@ -2,6 +2,7 @@ using System.Text.Json;
 using CodeAlta.Agent;
 using CodeAlta.Agent.Codex;
 using CodeAlta.Agent.Copilot;
+using XenoAtom.Terminal;
 
 namespace AgentMessageDiagnosticApp;
 
@@ -9,20 +10,13 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
-        if (!DiagnosticCliOptions.TryParse(args, out var options, out var error))
-        {
-            if (!string.IsNullOrWhiteSpace(error))
-            {
-                Console.Error.WriteLine(error);
-                Console.Error.WriteLine();
-            }
+        using var session = Terminal.Open();
+        var app = DiagnosticCliOptions.CreateCommandApp(ExecuteAsync);
+        return await app.RunAsync(args).ConfigureAwait(false);
+    }
 
-            Console.Error.WriteLine(DiagnosticCliOptions.GetUsage());
-            return string.IsNullOrWhiteSpace(error) ? 0 : 1;
-        }
-
-        ArgumentNullException.ThrowIfNull(options);
-
+    private static async ValueTask<int> ExecuteAsync(DiagnosticCliOptions options)
+    {
         await using var backend = CreateBackend(options.BackendId);
         await backend.StartAsync().ConfigureAwait(false);
 
@@ -40,7 +34,7 @@ internal static class Program
         var history = await session.GetHistoryAsync().ConfigureAwait(false);
         foreach (var @event in history)
         {
-            Console.WriteLine(@event.ToJson(options.Indented));
+            Terminal.WriteLine(@event.ToJson(options.Indented));
         }
 
         return 0;
@@ -79,6 +73,6 @@ internal static class Program
             workspacePath = metadata?.WorkspacePath,
         };
 
-        Console.WriteLine(JsonSerializer.Serialize(payload));
+        Terminal.WriteLine(JsonSerializer.Serialize(payload));
     }
 }

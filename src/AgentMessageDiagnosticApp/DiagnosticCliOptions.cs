@@ -1,4 +1,6 @@
 using CodeAlta.Agent;
+using XenoAtom.CommandLine;
+using XenoAtom.CommandLine.Terminal;
 
 namespace AgentMessageDiagnosticApp;
 
@@ -14,91 +16,100 @@ internal sealed record DiagnosticCliOptions(
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        options = null;
-        error = null;
+        var state = new ParseState();
+        var app = CreateCommandAppCore(
+            state,
+            static _ => ValueTask.FromResult(0));
 
-        string? codexSessionId = null;
-        string? copilotSessionId = null;
-        var indented = false;
-
-        for (var index = 0; index < args.Count; index++)
+        var result = app.Parse(args);
+        if (result.HasErrors)
         {
-            var argument = args[index];
-            switch (argument)
-            {
-                case "--codex":
-                    if (!TryReadValue(args, ref index, out codexSessionId, out error))
-                    {
-                        return false;
-                    }
-
-                    break;
-
-                case "--copilot":
-                    if (!TryReadValue(args, ref index, out copilotSessionId, out error))
-                    {
-                        return false;
-                    }
-
-                    break;
-
-                case "--indented":
-                    indented = true;
-                    break;
-
-                case "--help":
-                case "-h":
-                    error = null;
-                    return false;
-
-                default:
-                    error = $"Unknown argument '{argument}'.";
-                    return false;
-            }
+            options = null;
+            error = result.Errors[0].Message;
+            return false;
         }
 
-        var backendCount = (codexSessionId is null ? 0 : 1) + (copilotSessionId is null ? 0 : 1);
+        return TryCreateOptions(state, out options, out error);
+    }
+
+    public static CommandApp CreateCommandApp(Func<DiagnosticCliOptions, ValueTask<int>> execute)
+    {
+        ArgumentNullException.ThrowIfNull(execute);
+
+        return CreateCommandAppCore(
+            new ParseState(),
+            execute);
+    }
+
+    private static CommandApp CreateCommandAppCore(
+        ParseState state,
+        Func<DiagnosticCliOptions, ValueTask<int>> execute)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(execute);
+
+        const string _ = "";
+
+        return new CommandApp(
+            "AgentMessageDiagnosticApp",
+            config: new CommandConfig
+            {
+                OutputFactory = static _ => new TerminalVisualCommandOutput(new TerminalVisualOutputOptions
+                {
+                    UseTableForOptions = true,
+                    SectionGroupMinWidth = 70,
+                    ErrorGroupMinWidth = 70,
+                }),
+            })
+        {
+            new CommandUsage("Usage: {NAME} --codex <session-id> [--indented]"),
+            new CommandUsage("Usage: {NAME} --copilot <session-id> [--indented]"),
+            _,
+            "Options:",
+            { "codex=", "Dump the specified Codex {SESSION-ID}", value => state.CodexSessionId = value },
+            { "copilot=", "Dump the specified Copilot {SESSION-ID}", value => state.CopilotSessionId = value },
+            { "indented", "Pretty-print each JSON payload", value => state.Indented = value is not null },
+            new HelpOption(),
+            (_, _) =>
+            {
+                if (!TryCreateOptions(state, out var options, out var error))
+                {
+                    throw new CommandException(error!);
+                }
+
+                return execute(options!);
+            },
+        };
+    }
+
+    private static bool TryCreateOptions(
+        ParseState state,
+        out DiagnosticCliOptions? options,
+        out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        var backendCount = (state.CodexSessionId is null ? 0 : 1) + (state.CopilotSessionId is null ? 0 : 1);
         if (backendCount != 1)
         {
             error = "Specify exactly one of --codex <session-id> or --copilot <session-id>.";
+            options = null;
             return false;
         }
 
-        options = codexSessionId is not null
-            ? new DiagnosticCliOptions(AgentBackendIds.Codex, codexSessionId, indented)
-            : new DiagnosticCliOptions(AgentBackendIds.Copilot, copilotSessionId!, indented);
+        options = state.CodexSessionId is not null
+            ? new DiagnosticCliOptions(AgentBackendIds.Codex, state.CodexSessionId, state.Indented)
+            : new DiagnosticCliOptions(AgentBackendIds.Copilot, state.CopilotSessionId!, state.Indented);
+        error = null;
         return true;
     }
 
-    public static string GetUsage()
-        => """
-           Usage:
-             AgentMessageDiagnosticApp --codex <session-id> [--indented]
-             AgentMessageDiagnosticApp --copilot <session-id> [--indented]
-           """;
-
-    private static bool TryReadValue(
-        IReadOnlyList<string> args,
-        ref int index,
-        out string? value,
-        out string? error)
+    private sealed class ParseState
     {
-        value = null;
-        error = null;
+        public string? CodexSessionId { get; set; }
 
-        if (index + 1 >= args.Count)
-        {
-            error = $"Missing value for '{args[index]}'.";
-            return false;
-        }
+        public string? CopilotSessionId { get; set; }
 
-        value = args[++index];
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            error = $"Missing value for '{args[index - 1]}'.";
-            return false;
-        }
-
-        return true;
+        public bool Indented { get; set; }
     }
 }

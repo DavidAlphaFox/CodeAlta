@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="GitHub.Copilot.SDK" />
+    <PackageReference Include="XenoAtom.CommandLine.Terminal" />
   </ItemGroup>
 
   <ItemGroup>

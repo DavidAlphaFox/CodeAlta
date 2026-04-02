@@ -1,5 +1,6 @@
 using XenoAtom.Logging;
 using XenoAtom.Logging.Writers;
+using XenoAtom.Terminal;
 
 namespace CodeAlta;
 
@@ -27,7 +28,7 @@ internal static class CodeAltaLogging
             {
                 try
                 {
-                    Console.Error.WriteLine($"[CodeAlta logging] {exception}");
+                    Terminal.Error.WriteLine($"[CodeAlta logging] {exception}");
                 }
                 catch
                 {

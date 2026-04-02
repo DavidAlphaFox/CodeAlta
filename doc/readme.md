@@ -100,6 +100,8 @@ Launch helpers:
 - `dotnet run --project src/CodeAlta -- --test`
 - `dotnet run --project src/CodeAlta -- --test --test-duration 15`
 
+`CodeAlta` and the small CLI utilities under `src/` now use `XenoAtom.CommandLine` with `TerminalVisualCommandOutput`, so `--help` and parse errors render through the shared visual command help/error path.
+
 `--test` still starts the real terminal UI, but it schedules cancellation after the requested duration so a smoke test can verify startup and a short steady-state run without manual Ctrl+C. Smoke-test lifecycle markers and normal diagnostic activity are written to the rolling logs under `~/.codealta/logs/`.
 
 Current terminal shell capabilities:
@@ -157,3 +159,4 @@ Current terminal shell capabilities:
 - `dotnet run --project src/AgentMessageDiagnosticApp/AgentMessageDiagnosticApp.csproj -- --codex <session-id>`
 - `dotnet run --project src/AgentMessageDiagnosticApp/AgentMessageDiagnosticApp.csproj -- --copilot <session-id>`
 - Add `--indented` to pretty-print each JSON payload instead of emitting compact JSONL.
+- Run with `--help` to see the generated visual usage and option reference.

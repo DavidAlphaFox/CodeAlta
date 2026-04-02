@@ -44,6 +44,6 @@ public sealed class CodeAltaCliOptionsTests
 
         Assert.IsFalse(result);
         Assert.IsNull(options);
-        Assert.AreEqual("Unknown argument '--wat'. Supported arguments: --test [--test-duration <seconds>].", error);
+        Assert.AreEqual("Unknown option: --wat", error);
     }
 }

@@ -26,6 +26,7 @@ An agentic AI coding CLI assistant developed in .NET.
 - Codex backend sessions default to no sandbox in CodeAlta, so prompts can inspect sibling projects outside the current working directory without requiring the session cwd to be moved first
 - CodeAlta writes rolling diagnostic logs under `~/.codealta/logs/` for chat/backend troubleshooting
 - `CodeAlta --test` runs the real terminal app for a short smoke-test window and exits automatically after 10 seconds by default
+- CLI entry points use generated visual `--help` / parse-error output via `XenoAtom.CommandLine`
 - In-memory MCP transport tests for tool discovery and roundtrip tool calls
 
 ## 📖 User Guide

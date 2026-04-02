@@ -1,9 +1,13 @@
 using System.Diagnostics.CodeAnalysis;
+using XenoAtom.CommandLine;
+using XenoAtom.CommandLine.Terminal;
 
 namespace CodeAlta;
 
 internal sealed class CodeAltaCliOptions
 {
+    private static readonly TimeSpan DefaultTestDuration = TimeSpan.FromSeconds(10);
+
     private CodeAltaCliOptions(bool testMode, TimeSpan? testDuration)
     {
         TestMode = testMode;
@@ -21,42 +25,85 @@ internal sealed class CodeAltaCliOptions
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        var testMode = false;
-        TimeSpan? testDuration = null;
+        var state = new ParseState();
+        var app = CreateCommandAppCore(
+            state,
+            static _ => ValueTask.FromResult(0));
 
-        for (var index = 0; index < args.Count; index++)
+        var result = app.Parse(args);
+        if (result.HasErrors)
         {
-            var arg = args[index];
-            switch (arg)
-            {
-                case "--test":
-                    testMode = true;
-                    break;
-                case "--test-duration":
-                    if (index + 1 >= args.Count)
-                    {
-                        options = null;
-                        error = "Specify a duration in seconds after --test-duration.";
-                        return false;
-                    }
-
-                    if (!int.TryParse(args[++index], out var durationSeconds) || durationSeconds <= 0)
-                    {
-                        options = null;
-                        error = "The value for --test-duration must be a positive integer number of seconds.";
-                        return false;
-                    }
-
-                    testDuration = TimeSpan.FromSeconds(durationSeconds);
-                    break;
-                default:
-                    options = null;
-                    error = $"Unknown argument '{arg}'. Supported arguments: --test [--test-duration <seconds>].";
-                    return false;
-            }
+            options = null;
+            error = result.Errors[0].Message;
+            return false;
         }
 
-        if (!testMode && testDuration is not null)
+        return TryCreateOptions(state, out options, out error);
+    }
+
+    public static CommandApp CreateCommandApp(Func<CodeAltaCliOptions, ValueTask<int>> execute)
+    {
+        ArgumentNullException.ThrowIfNull(execute);
+
+        return CreateCommandAppCore(
+            new ParseState(),
+            execute);
+    }
+
+    private static CommandApp CreateCommandAppCore(
+        ParseState state,
+        Func<CodeAltaCliOptions, ValueTask<int>> execute)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(execute);
+
+        const string _ = "";
+
+        return new CommandApp(
+            "alta",
+            config: new CommandConfig
+            {
+                OutputFactory = static _ => new TerminalVisualCommandOutput(new TerminalVisualOutputOptions
+                {
+                    UseTableForOptions = true,
+                    SectionGroupMinWidth = 70,
+                    ErrorGroupMinWidth = 70,
+                }),
+            })
+        {
+            new CommandUsage(),
+            _,
+            "Options:",
+            { "test", "Run the terminal smoke test", value => state.TestMode = value is not null },
+            { "test-duration=", "Smoke-test duration in {SECONDS}", (int value) => state.TestDurationSeconds = value },
+            new HelpOption(),
+            (_, _) =>
+            {
+                if (!TryCreateOptions(state, out var options, out var error))
+                {
+                    throw new CommandException(error!);
+                }
+
+                return execute(options!);
+            },
+        };
+    }
+
+    private static bool TryCreateOptions(
+        ParseState state,
+        [NotNullWhen(true)] out CodeAltaCliOptions? options,
+        [NotNullWhen(false)] out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        if (state.TestDurationSeconds is <= 0)
+        {
+            options = null;
+            error = "The value for --test-duration must be a positive integer number of seconds.";
+            return false;
+        }
+
+        if (!state.TestMode && state.TestDurationSeconds is not null)
         {
             options = null;
             error = "--test-duration requires --test.";
@@ -64,9 +111,18 @@ internal sealed class CodeAltaCliOptions
         }
 
         options = new CodeAltaCliOptions(
-            testMode,
-            testMode ? testDuration ?? TimeSpan.FromSeconds(10) : null);
+            state.TestMode,
+            state.TestMode
+                ? TimeSpan.FromSeconds(state.TestDurationSeconds ?? DefaultTestDuration.TotalSeconds)
+                : null);
         error = null;
         return true;
+    }
+
+    private sealed class ParseState
+    {
+        public bool TestMode { get; set; }
+
+        public int? TestDurationSeconds { get; set; }
     }
 }
