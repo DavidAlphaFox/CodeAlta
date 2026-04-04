@@ -5,6 +5,7 @@ using CodeAlta.Catalog;
 using CodeAlta.Catalog.Roles;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Persistence;
+using CodeAlta.Search;
 using XenoAtom.Logging;
 
 namespace CodeAlta.App;
@@ -21,7 +22,8 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         ProjectCatalog projectCatalog,
         WorkThreadCatalog threadCatalog,
         AgentHub agentHub,
-        WorkThreadRuntimeService runtimeService)
+        WorkThreadRuntimeService runtimeService,
+        IProjectFileSearchService projectFileSearchService)
     {
         _ownsLogging = ownsLogging;
         _db = db;
@@ -30,6 +32,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         ThreadCatalog = threadCatalog;
         AgentHub = agentHub;
         RuntimeService = runtimeService;
+        ProjectFileSearchService = projectFileSearchService;
     }
 
     public CatalogOptions CatalogOptions { get; }
@@ -41,6 +44,8 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
     public AgentHub AgentHub { get; }
 
     public WorkThreadRuntimeService RuntimeService { get; }
+
+    public IProjectFileSearchService ProjectFileSearchService { get; }
 
     public static async Task<CodeAltaOwnedServices> CreateAsync(CancellationToken cancellationToken)
     {
@@ -84,6 +89,9 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             roleProfileStore,
             instructionTemplateProvider,
             catalogOptions);
+        var projectFileSearchService = new ProjectFileSearchService(
+            new ProjectFileSnapshotCache(),
+            new PersistentProjectFileUsageStore(new ProjectFileUsageRepository(db)));
 
         return new CodeAltaOwnedServices(
             ownsLogging,
@@ -92,7 +100,8 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             projectCatalog,
             threadCatalog,
             agentHub,
-            runtimeService);
+            runtimeService,
+            projectFileSearchService);
     }
 
     public async ValueTask DisposeAsync()

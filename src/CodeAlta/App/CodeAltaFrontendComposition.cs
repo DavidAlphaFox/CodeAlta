@@ -7,6 +7,7 @@ using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Presentation.Chat;
 using CodeAlta.Presentation.Workspace;
 using CodeAlta.ViewModels;
+using CodeAlta.Search;
 using XenoAtom.Terminal.UI;
 
 namespace CodeAlta.App;
@@ -46,6 +47,7 @@ internal sealed class CodeAltaFrontendComposition
         WorkThreadRuntimeService runtimeService,
         CatalogOptions catalogOptions,
         AgentHub agentHub,
+        IProjectFileSearchService projectFileSearchService,
         ICodeAltaShell shell,
         KnownProjectImporter knownProjectImporter,
         State<float> welcomePhase01,
@@ -56,6 +58,7 @@ internal sealed class CodeAltaFrontendComposition
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(agentHub);
+        ArgumentNullException.ThrowIfNull(projectFileSearchService);
         ArgumentNullException.ThrowIfNull(shell);
         ArgumentNullException.ThrowIfNull(knownProjectImporter);
         ArgumentNullException.ThrowIfNull(welcomePhase01);
@@ -228,7 +231,8 @@ internal sealed class CodeAltaFrontendComposition
                 callbacks.SetThreadStatus,
                 threadRuntimeEventCoordinator.TryRenderInteraction),
             threadPromptQueueCoordinator,
-            promptComposerViewModel);
+            promptComposerViewModel,
+            projectFileSearchService);
 
         return new CodeAltaFrontendComposition
         {

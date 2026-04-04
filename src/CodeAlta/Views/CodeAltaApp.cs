@@ -8,12 +8,14 @@ using CodeAlta.Frontend.Commands;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Presentation.Chat;
+using CodeAlta.Presentation.Prompting;
 using CodeAlta.Presentation.Sidebar;
 using CodeAlta.Presentation.Tabs;
 using CodeAlta.Presentation.Threads;
 using CodeAlta.Presentation.Usage;
 using CodeAlta.Presentation.Workspace;
 using CodeAlta.ViewModels;
+using CodeAlta.Search;
 using XenoAtom.Logging;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI;
@@ -95,6 +97,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             runtimeService,
             catalogOptions,
             agentHub,
+            NullProjectFileSearchService.Instance,
             knownProjectImporter: null,
             ownedServices: null)
     {
@@ -114,6 +117,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             ownedServices.RuntimeService,
             ownedServices.CatalogOptions,
             ownedServices.AgentHub,
+            ownedServices.ProjectFileSearchService,
             new KnownProjectImporter(ownedServices.AgentHub, ownedServices.ProjectCatalog),
             ownedServices);
     }
@@ -124,6 +128,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         WorkThreadRuntimeService runtimeService,
         CatalogOptions catalogOptions,
         AgentHub agentHub,
+        IProjectFileSearchService projectFileSearchService,
         KnownProjectImporter? knownProjectImporter,
         CodeAltaOwnedServices? ownedServices)
     {
@@ -132,6 +137,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(agentHub);
+        ArgumentNullException.ThrowIfNull(projectFileSearchService);
         _backendPreferences = new ChatBackendPreferenceCoordinator(new CodeAltaConfigStore(catalogOptions), UiLogger);
         _runtimeService = runtimeService;
         _catalogOptions = catalogOptions;
@@ -144,6 +150,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             runtimeService,
             catalogOptions,
             agentHub,
+            projectFileSearchService,
             new CodeAltaShellBridge(this),
             _knownProjectImporter,
             _shellAnimationRuntime.WelcomePhase01,
@@ -480,6 +487,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             anchor => EnsureThreadInfoPresenter().TogglePopup(anchor),
             () => ObserveUiTask(_shellCommandSurfaceCoordinator.ShowHelpAsync(), "show help"),
             () => _shellCommandSurfaceCoordinator.ShowCommandPalette(),
+            () => PromptReferenceProjectRootResolver.Resolve(GetSelectedThread(), GetProjectById, GetSelectedProject),
             acceptedPrompt => ObserveUiTask(_shellCommandSurfaceCoordinator.HandleAcceptedPromptAsync(acceptedPrompt), "submit the current prompt"),
             () => ObserveUiTask(_shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync(steer: false), "submit the current prompt"),
             () => ObserveUiTask(_shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync(steer: true), "steer the current thread"),

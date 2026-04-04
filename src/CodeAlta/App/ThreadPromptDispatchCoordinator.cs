@@ -4,9 +4,11 @@ using CodeAlta.App.State;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
+using CodeAlta.Presentation.Prompting;
 using CodeAlta.Presentation.Shell;
 using CodeAlta.Views;
 using XenoAtom.Logging;
+using CodeAlta.Search;
 
 namespace CodeAlta.App;
 
@@ -17,22 +19,26 @@ internal sealed class ThreadPromptDispatchCoordinator
     private readonly ThreadExecutionOptionsFactory _executionOptionsFactory;
     private readonly ThreadPromptQueueCoordinator _queueCoordinator;
     private readonly ThreadCommandContext _commandContext;
+    private readonly IProjectFileSearchService _projectFileSearchService;
 
     public ThreadPromptDispatchCoordinator(
         WorkThreadRuntimeService runtimeService,
         ThreadExecutionOptionsFactory executionOptionsFactory,
         ThreadPromptQueueCoordinator queueCoordinator,
-        ThreadCommandContext commandContext)
+        ThreadCommandContext commandContext,
+        IProjectFileSearchService projectFileSearchService)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(executionOptionsFactory);
         ArgumentNullException.ThrowIfNull(queueCoordinator);
         ArgumentNullException.ThrowIfNull(commandContext);
+        ArgumentNullException.ThrowIfNull(projectFileSearchService);
 
         _runtimeService = runtimeService;
         _executionOptionsFactory = executionOptionsFactory;
         _queueCoordinator = queueCoordinator;
         _commandContext = commandContext;
+        _projectFileSearchService = projectFileSearchService;
     }
 
     public Task DispatchPromptAsync(
@@ -124,6 +130,11 @@ internal sealed class ThreadPromptDispatchCoordinator
         {
             _commandContext.SetThreadStatus(tab, StatusVisualFormatter.BuildThinkingStatusText(), true, StatusTone.Info);
             var executionOptions = _executionOptionsFactory.BuildExecutionOptions(thread, tab);
+            var promptInput = await ProjectFilePromptInputBuilder.BuildAsync(
+                    prompt,
+                    ResolveReferenceProjectRoot(executionOptions),
+                    _projectFileSearchService,
+                    cancellationToken);
             var dispatchAsSteer = steer && tab.ActiveRunId is not null;
             AgentRunId runId;
             if (dispatchAsSteer)
@@ -134,7 +145,7 @@ internal sealed class ThreadPromptDispatchCoordinator
                         executionOptions,
                         new AgentSteerOptions
                         {
-                            Input = AgentInput.Text(prompt),
+                            Input = promptInput.Input,
                             ExpectedRunId = tab.ActiveRunId,
                         },
                         cancellationToken)
@@ -145,7 +156,7 @@ internal sealed class ThreadPromptDispatchCoordinator
                 runId = await _runtimeService.SendAsync(
                         thread,
                         executionOptions,
-                        new AgentSendOptions { Input = AgentInput.Text(prompt) },
+                        new AgentSendOptions { Input = promptInput.Input },
                         cancellationToken)
                     ;
             }
@@ -177,6 +188,13 @@ internal sealed class ThreadPromptDispatchCoordinator
             tab.Timeline.RenderFailure(BuildPromptDispatchFailureMarkdown(ex.Message, prompt, restoredToDraft));
             _commandContext.SetThreadStatus(tab, $"Failed to send prompt: {ex.Message}", false, StatusTone.Error);
         }
+    }
+
+    private static string? ResolveReferenceProjectRoot(WorkThreadExecutionOptions executionOptions)
+    {
+        ArgumentNullException.ThrowIfNull(executionOptions);
+
+        return executionOptions.ProjectRoots.FirstOrDefault() ?? executionOptions.WorkingDirectory;
     }
 
     private static string BuildPromptDispatchFailureMarkdown(string errorMessage, string prompt, bool restoredToDraft)

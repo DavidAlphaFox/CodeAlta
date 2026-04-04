@@ -6,10 +6,12 @@ using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Presentation.Shell;
+using CodeAlta.Presentation.Prompting;
 using CodeAlta.ViewModels;
 using CodeAlta.Views;
 using XenoAtom.Logging;
 using XenoAtom.Terminal.UI.Controls;
+using CodeAlta.Search;
 
 namespace CodeAlta.App;
 
@@ -35,7 +37,8 @@ internal sealed class ThreadCommandCoordinator
         ChatPreferenceContext preferences,
         ThreadCommandContext commandContext,
         ThreadPromptQueueCoordinator queueCoordinator,
-        PromptComposerViewModel promptComposerViewModel)
+        PromptComposerViewModel promptComposerViewModel,
+        IProjectFileSearchService? projectFileSearchService = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(chatBackendStates);
@@ -57,7 +60,12 @@ internal sealed class ThreadCommandCoordinator
         var permissionRequests = new ThreadPermissionRequestCoordinator(threadSelection, commandContext);
         var userInputRequests = new ThreadUserInputRequestCoordinator(threadSelection, commandContext);
         _executionOptionsFactory = new ThreadExecutionOptionsFactory(catalogOptions, chatBackendStates, threadSelection, selectorState, permissionRequests, userInputRequests);
-        _promptDispatchCoordinator = new ThreadPromptDispatchCoordinator(runtimeService, _executionOptionsFactory, queueCoordinator, commandContext);
+        _promptDispatchCoordinator = new ThreadPromptDispatchCoordinator(
+            runtimeService,
+            _executionOptionsFactory,
+            queueCoordinator,
+            commandContext,
+            projectFileSearchService ?? NullProjectFileSearchService.Instance);
     }
 
     public async Task SendPromptAsync(

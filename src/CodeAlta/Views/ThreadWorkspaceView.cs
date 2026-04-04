@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using CodeAlta.Frontend.Commands;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Chat;
+using CodeAlta.Presentation.Prompting;
 using CodeAlta.Presentation.Shell;
 using CodeAlta.Presentation.Styling;
 using CodeAlta.ViewModels;
@@ -58,6 +59,69 @@ internal sealed class ThreadWorkspaceView
         Binding<string?> promptText,
         State<float> thinkingAnimationPhase01,
         Action onAutoScrollChanged)
+        : this(
+            shellViewModel,
+            workspaceViewModel,
+            promptComposerViewModel,
+            commandBindings,
+            buildSessionUsageIndicatorVisual,
+            openSessionUsagePopup,
+            toggleThreadInfoPopup,
+            openHelp,
+            openCommandPalette,
+            static () => null,
+            acceptPrompt,
+            sendPrompt,
+            steerPrompt,
+            clearQueuedPrompts,
+            convertQueuedPromptToSteer,
+            deleteQueuedPrompt,
+            updateQueuedPromptCount,
+            updateQueuedPromptText,
+            delegateThread,
+            abortThread,
+            compactThread,
+            closeTab,
+            onChatBackendSelectionChanged,
+            onChatModelSelectionChanged,
+            onChatReasoningSelectionChanged,
+            onSelectedTabChanged,
+            promptText,
+            thinkingAnimationPhase01,
+            onAutoScrollChanged)
+    {
+    }
+
+    public ThreadWorkspaceView(
+        CodeAltaShellViewModel shellViewModel,
+        ThreadWorkspaceViewModel workspaceViewModel,
+        PromptComposerViewModel promptComposerViewModel,
+        IReadOnlyList<ThreadWorkspaceCommandBinding> commandBindings,
+        Func<Visual> buildSessionUsageIndicatorVisual,
+        Action openSessionUsagePopup,
+        Action<Visual> toggleThreadInfoPopup,
+        Action openHelp,
+        Action openCommandPalette,
+        Func<string?> getPromptReferenceProjectRoot,
+        Action<string> acceptPrompt,
+        Action sendPrompt,
+        Action steerPrompt,
+        Action clearQueuedPrompts,
+        Action<string> convertQueuedPromptToSteer,
+        Action<string> deleteQueuedPrompt,
+        Action<string, int> updateQueuedPromptCount,
+        Action<string, string> updateQueuedPromptText,
+        Action delegateThread,
+        Action abortThread,
+        Action compactThread,
+        Action closeTab,
+        Action<int> onChatBackendSelectionChanged,
+        Action<int> onChatModelSelectionChanged,
+        Action<int> onChatReasoningSelectionChanged,
+        Action<int> onSelectedTabChanged,
+        Binding<string?> promptText,
+        State<float> thinkingAnimationPhase01,
+        Action onAutoScrollChanged)
     {
         ArgumentNullException.ThrowIfNull(shellViewModel);
         ArgumentNullException.ThrowIfNull(workspaceViewModel);
@@ -68,6 +132,7 @@ internal sealed class ThreadWorkspaceView
         ArgumentNullException.ThrowIfNull(toggleThreadInfoPopup);
         ArgumentNullException.ThrowIfNull(openHelp);
         ArgumentNullException.ThrowIfNull(openCommandPalette);
+        ArgumentNullException.ThrowIfNull(getPromptReferenceProjectRoot);
         ArgumentNullException.ThrowIfNull(acceptPrompt);
         ArgumentNullException.ThrowIfNull(sendPrompt);
         ArgumentNullException.ThrowIfNull(steerPrompt);
@@ -104,6 +169,7 @@ internal sealed class ThreadWorkspaceView
             promptComposerViewModel,
             openHelp,
             openCommandPalette,
+            getPromptReferenceProjectRoot,
             acceptPrompt,
             commandBindings,
             promptText)
@@ -194,7 +260,7 @@ internal sealed class ThreadWorkspaceView
                     deleteQueuedPrompt,
                     updateQueuedPromptCount,
                     updateQueuedPromptText,
-                    (onAccepted, placeholder) => CreateStyledPromptEditor(onAccepted, openHelp, openCommandPalette, placeholder)));
+                    (onAccepted, placeholder) => CreateStyledPromptEditor(onAccepted, openHelp, openCommandPalette, getPromptReferenceProjectRoot, placeholder)));
 
         var selectionControls = new HStack(
         [
@@ -326,6 +392,7 @@ internal sealed class ThreadWorkspaceView
         PromptComposerViewModel promptComposerViewModel,
         Action openHelp,
         Action openCommandPalette,
+        Func<string?> getPromptReferenceProjectRoot,
         Action<string> acceptPrompt,
         IReadOnlyList<ThreadWorkspaceCommandBinding> commandBindings,
         Binding<string?> promptText)
@@ -333,9 +400,10 @@ internal sealed class ThreadWorkspaceView
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
         ArgumentNullException.ThrowIfNull(openHelp);
         ArgumentNullException.ThrowIfNull(openCommandPalette);
+        ArgumentNullException.ThrowIfNull(getPromptReferenceProjectRoot);
         ArgumentNullException.ThrowIfNull(acceptPrompt);
         ArgumentNullException.ThrowIfNull(commandBindings);
-        var editor = CreateStyledPromptEditor(acceptPrompt, openHelp, openCommandPalette, placeholder: null)
+        var editor = CreateStyledPromptEditor(acceptPrompt, openHelp, openCommandPalette, getPromptReferenceProjectRoot, placeholder: null)
             .Placeholder(promptComposerViewModel.Bind.Placeholder)
             .Text(promptText);
 
@@ -380,7 +448,7 @@ internal sealed class ThreadWorkspaceView
             return;
         }
 
-        var editor = CreateStyledPromptEditor(_ => { }, onOpenHelp: null, onOpenCommandPalette: null, placeholder: null)
+        var editor = CreateStyledPromptEditor(_ => { }, onOpenHelp: null, onOpenCommandPalette: null, getPromptReferenceProjectRoot: null, placeholder: null)
             .Placeholder(promptComposerViewModel.Bind.Placeholder)
             .Text(promptText)
             .MinHeight(12)
@@ -477,6 +545,14 @@ internal sealed class ThreadWorkspaceView
         Action? onOpenHelp,
         Action? onOpenCommandPalette,
         string? placeholder)
+        => CreateStyledPromptEditor(onAccepted, onOpenHelp, onOpenCommandPalette, getPromptReferenceProjectRoot: null, placeholder);
+
+    internal static ChatPromptEditor CreateStyledPromptEditor(
+        Action<string> onAccepted,
+        Action? onOpenHelp,
+        Action? onOpenCommandPalette,
+        Func<string?>? getPromptReferenceProjectRoot,
+        string? placeholder)
     {
         ArgumentNullException.ThrowIfNull(onAccepted);
 
@@ -484,6 +560,7 @@ internal sealed class ThreadWorkspaceView
         ITextSnapshot? cachedSnapshot = null;
         Theme? cachedTheme = null;
         string? cachedText = null;
+        string? cachedProjectRoot = null;
         List<StyledRun>? cachedRuns = null;
         return new ChatPromptEditor(onAccepted, onOpenHelp, onOpenCommandPalette)
             .PromptMarkup("[primary]>[/] ")
@@ -504,16 +581,19 @@ internal sealed class ThreadWorkspaceView
         {
             if (cachedRuns is not null &&
                 ReferenceEquals(cachedSnapshot, request.Snapshot) &&
-                Equals(cachedTheme, request.Theme))
+                Equals(cachedTheme, request.Theme) &&
+                string.Equals(cachedProjectRoot, getPromptReferenceProjectRoot?.Invoke(), StringComparison.Ordinal))
             {
                 runs.AddRange(cachedRuns);
                 return;
             }
 
             var text = SnapshotToString(request.Snapshot);
+            var projectRoot = getPromptReferenceProjectRoot?.Invoke();
             if (cachedRuns is not null &&
                 string.Equals(cachedText, text, StringComparison.Ordinal) &&
-                Equals(cachedTheme, request.Theme))
+                Equals(cachedTheme, request.Theme) &&
+                string.Equals(cachedProjectRoot, projectRoot, StringComparison.Ordinal))
             {
                 cachedSnapshot = request.Snapshot;
                 runs.AddRange(cachedRuns);
@@ -522,9 +602,11 @@ internal sealed class ThreadWorkspaceView
 
             converter.Theme = request.Theme;
             converter.Highlight(text, runs);
+            ProjectFilePromptHighlighter.AddRuns(text, projectRoot, runs);
             cachedSnapshot = request.Snapshot;
             cachedTheme = request.Theme;
             cachedText = text;
+            cachedProjectRoot = projectRoot;
             cachedRuns = [.. runs];
         }
 
