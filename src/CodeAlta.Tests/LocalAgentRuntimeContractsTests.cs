@@ -10,17 +10,17 @@ public sealed class LocalAgentRuntimeContractsTests
     [TestMethod]
     public void LocalAgentRuntimePathLayout_UsesProviderFirstDateShardedStructure()
     {
-        var layout = new LocalAgentRuntimePathLayout(@"C:\Users\alexa\.codealta\machine\agents");
+        var layout = new LocalAgentRuntimePathLayout(@"C:\codealta-test-root\machine\agents");
         var createdAt = DateTimeOffset.Parse("2026-04-06T14:15:00+00:00");
 
         var providerRoot = layout.GetProviderRootPath("openai", "openrouter");
         var providerDescriptorPath = layout.GetProviderDescriptorPath("openai", "openrouter");
         var sessionRoot = layout.GetSessionRootPath("openai", "openrouter", "session-123", createdAt);
 
-        Assert.AreEqual(@"C:\Users\alexa\.codealta\machine\agents\openai\openrouter", providerRoot);
+        Assert.AreEqual(@"C:\codealta-test-root\machine\agents\openai\openrouter", providerRoot);
         Assert.AreEqual(Path.Combine(providerRoot, "provider.json"), providerDescriptorPath);
         Assert.AreEqual(
-            @"C:\Users\alexa\.codealta\machine\agents\openai\openrouter\sessions\2026\04\06\session-123",
+            @"C:\codealta-test-root\machine\agents\openai\openrouter\sessions\2026\04\06\session-123",
             sessionRoot);
         Assert.AreEqual(Path.Combine(sessionRoot, "events.jsonl"), layout.GetSessionEventsPath(sessionRoot));
         Assert.AreEqual(Path.Combine(sessionRoot, "state.json"), layout.GetSessionStatePath(sessionRoot));
