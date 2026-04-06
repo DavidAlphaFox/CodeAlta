@@ -51,8 +51,7 @@ internal static class CodeAltaShellViewFactory
             CommandPresentation.CommandPalette));
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.Acp.Manage"),
-            openAcpManager,
-            CommandPresentation.CommandPalette));
+            openAcpManager));
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.Shell.FocusSidebar"),
             focusSidebar));

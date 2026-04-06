@@ -68,7 +68,7 @@ internal static class ShellCommandCatalog
             ShellCommandAvailability.Always,
             CommandName: "acp_agents",
             Aliases: ["acp"],
-            ShowInCommandBar: false),
+            ShowInCommandBar: true),
         new(
             "CodeAlta.Shell.FocusSidebar",
             "Go to Sidebar",

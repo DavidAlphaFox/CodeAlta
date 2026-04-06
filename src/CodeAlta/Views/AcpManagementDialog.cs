@@ -1,13 +1,16 @@
 using CodeAlta.App;
 using CodeAlta.Models;
+using CodeAlta.ViewModels;
 using XenoAtom.Ansi;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Commands;
 using XenoAtom.Terminal.UI.Controls;
+using XenoAtom.Terminal.UI.DataGrid;
 using XenoAtom.Terminal.UI.Geometry;
 using XenoAtom.Terminal.UI.Input;
 using XenoAtom.Terminal.UI.Styling;
+using XenoAtom.Terminal.UI.Templating;
 
 namespace CodeAlta.Views;
 
@@ -20,15 +23,16 @@ internal sealed class AcpManagementDialog
     private readonly Dialog _dialog;
     private readonly EnumSelect<AcpManagementScope> _scopeSelect;
     private readonly Select<AcpManagementFilterOption> _filterSelect;
-    private readonly Select<AcpDialogListItem> _itemSelect;
+    private readonly DataGridListDocument<AcpManagementRowViewModel> _document;
+    private readonly DataGridControl _grid;
     private readonly Markup _summaryMarkup;
     private readonly TextBlock _detailText;
     private AcpManagementSnapshot _snapshot = new(null, null, null, []);
-    private IReadOnlyList<AcpDialogListItem> _visibleItems = [];
+    private IReadOnlyList<AcpManagementRowViewModel> _visibleRows = [];
     private string? _selectedAgentId;
     private bool _rebuilding;
+    private int _documentRowCount;
     private string _summaryText = "Loading ACP registry and installed agents...";
-    private string _detailValue = "Select an ACP agent to inspect its registry, install, and runtime details.";
 
     public AcpManagementDialog(
         AcpManagementService service,
@@ -66,13 +70,50 @@ internal sealed class AcpManagementDialog
             .MinWidth(22);
         _filterSelect.SelectionChanged((_, _) => RebuildVisibleItems());
 
+        _document = new DataGridListDocument<AcpManagementRowViewModel>();
+        using (_document.BeginUpdate())
+        {
+            _document
+                .AddColumn(new DataGridColumnInfo<string>("state", "State", true, AcpManagementRowViewModel.Accessor.StateMarkup))
+                .AddColumn(new DataGridColumnInfo<string>("installed", "Inst", true, AcpManagementRowViewModel.Accessor.InstalledText))
+                .AddColumn(new DataGridColumnInfo<string>("enabled", "On", true, AcpManagementRowViewModel.Accessor.EnabledText))
+                .AddColumn(new DataGridColumnInfo<string>("name", "Agent", true, AcpManagementRowViewModel.Accessor.Name))
+                .AddColumn(new DataGridColumnInfo<string>("id", "Id", true, AcpManagementRowViewModel.Accessor.AgentId))
+                .AddColumn(new DataGridColumnInfo<string>("version", "Version", true, AcpManagementRowViewModel.Accessor.Version))
+                .AddColumn(new DataGridColumnInfo<string>("dist", "Dist", true, AcpManagementRowViewModel.Accessor.Distribution))
+                .AddColumn(new DataGridColumnInfo<string>("runtime", "Runtime", true, AcpManagementRowViewModel.Accessor.RuntimeMarkup));
+        }
+
+        var view = new DataGridDocumentView(_document);
+        _grid = new DataGridControl { View = view }
+            .SelectionMode(DataGridSelectionMode.Row)
+            .EditMode(DataGridEditMode.OnEnter)
+            .ReadOnly(true)
+            .ShowHeader(true)
+            .ShowRowAnchor(false)
+            .HorizontalAlignment(Align.Stretch)
+            .VerticalAlignment(Align.Stretch);
+        ConfigureColumns(_grid);
+
+        _summaryMarkup = new Markup(() => _summaryText)
+        {
+            Wrap = true,
+        };
+
+        _detailText = new TextBlock(BuildDetailText)
+        {
+            Wrap = true,
+            HorizontalAlignment = Align.Stretch,
+            VerticalAlignment = Align.Stretch,
+        };
+
         var refreshButton = new Button("Refresh Registry")
             .Tone(ControlTone.Primary)
             .Click(() => _ = ReloadSnapshotAsync(refreshRegistry: true));
         var installButton = new Button("Install")
             .Click(() => _ = InstallSelectedAsync());
         var configureButton = new Button("Configure")
-            .Click(() => EditSelectedItem());
+            .Click(EditSelectedItem);
         var resetButton = new Button("Reset Config")
             .Click(() => _ = ResetSelectedAsync());
         var probeButton = new Button("Probe")
@@ -105,21 +146,9 @@ internal sealed class AcpManagementDialog
             0,
             3);
 
-        _summaryMarkup = new Markup(() => _summaryText)
+        var introText = new Markup("[dim]Browse the official ACP registry and the ACP backends currently known to CodeAlta. Use the grid to inspect installation state, runtime state, and agent identity.[/]")
         {
             Wrap = true,
-        };
-
-        _itemSelect = new Select<AcpDialogListItem>()
-            .HorizontalAlignment(Align.Stretch)
-            .VerticalAlignment(Align.Stretch);
-        _itemSelect.SelectionChanged((_, e) => OnSelectionChanged(e.NewIndex));
-
-        _detailText = new TextBlock(() => _detailValue)
-        {
-            Wrap = true,
-            HorizontalAlignment = Align.Stretch,
-            VerticalAlignment = Align.Stretch,
         };
 
         var contentGrid = new Grid
@@ -130,16 +159,31 @@ internal sealed class AcpManagementDialog
             .Rows(
                 new RowDefinition { Height = GridLength.Auto },
                 new RowDefinition { Height = GridLength.Auto },
+                new RowDefinition { Height = GridLength.Auto },
                 new RowDefinition { Height = GridLength.Star(1) })
             .Columns(
-                new ColumnDefinition { Width = GridLength.Star(1) },
-                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = GridLength.Star(3) },
                 new ColumnDefinition { Width = GridLength.Star(2) });
 
-        contentGrid.Cell(toolbar, 0, 0, columnSpan: 3);
-        contentGrid.Cell(_summaryMarkup, 1, 0, columnSpan: 3);
-        contentGrid.Cell(new ScrollViewer(_itemSelect) { HorizontalAlignment = Align.Stretch, VerticalAlignment = Align.Stretch }, 2, 0);
-        contentGrid.Cell(new ScrollViewer(_detailText) { HorizontalAlignment = Align.Stretch, VerticalAlignment = Align.Stretch }, 2, 2);
+        contentGrid.Cell(toolbar, 0, 0, columnSpan: 2);
+        contentGrid.Cell(introText, 1, 0, columnSpan: 2);
+        contentGrid.Cell(_summaryMarkup, 2, 0, columnSpan: 2);
+        contentGrid.Cell(
+            new Border(new ScrollViewer(_grid.Stretch()).Stretch())
+                .Style(BorderStyle.Rounded)
+                .Padding(new Thickness(1, 0, 1, 0))
+                .HorizontalAlignment(Align.Stretch)
+                .VerticalAlignment(Align.Stretch),
+            3,
+            0);
+        contentGrid.Cell(
+            new Border(new ScrollViewer(_detailText).Stretch())
+                .Style(BorderStyle.Rounded)
+                .Padding(new Thickness(1, 0, 1, 0))
+                .HorizontalAlignment(Align.Stretch)
+                .VerticalAlignment(Align.Stretch),
+            3,
+            1);
 
         _dialog = new Dialog()
             .Title("ACP Agents")
@@ -148,7 +192,7 @@ internal sealed class AcpManagementDialog
             .IsModal(true)
             .Padding(1)
             .Content(contentGrid);
-        ResponsiveDialogSize.Apply(_dialog, getBounds(), minWidth: 96, minHeight: 22, widthFactor: 0.88, heightFactor: 0.82);
+        ResponsiveDialogSize.Apply(_dialog, getBounds(), minWidth: 112, minHeight: 26, widthFactor: 0.9, heightFactor: 0.82);
         _dialog.AddCommand(new Command
         {
             Id = "CodeAlta.Acp.Manage.Close",
@@ -200,39 +244,42 @@ internal sealed class AcpManagementDialog
         try
         {
             PopulateFilterOptionsIfNeeded();
+            var previousSelectedAgentId = GetSelectedItem()?.AgentId ?? _selectedAgentId;
             var scope = _scopeSelect.Value;
             var filter = _filterSelect.SelectedIndex >= 0 && _filterSelect.SelectedIndex < _filterSelect.Items.Count
                 ? _filterSelect.Items[_filterSelect.SelectedIndex]
                 : GetFilterOptions(scope)[0];
 
-            var filteredItems = _snapshot.Items
+            _visibleRows = _snapshot.Items
                 .Where(item => scope == AcpManagementScope.Catalog ? item.IsInRegistry : item.IsInstalled || item.HasConfiguration || item.IsManual)
                 .Where(item => MatchesFilter(item, filter.Kind))
-                .Select(item => new AcpDialogListItem(item, scope == AcpManagementScope.Catalog ? item.CatalogLabel : item.InstalledLabel))
+                .Select(BuildRow)
                 .ToArray();
 
-            _visibleItems = filteredItems;
-            var selectedAgentId = _selectedAgentId;
-            _itemSelect.Items.Clear();
-            foreach (var item in filteredItems)
-            {
-                _itemSelect.Items.Add(item);
-            }
+            RebuildDocumentRows();
 
-            if (_itemSelect.Items.Count == 0)
+            if (_visibleRows.Count == 0)
             {
-                _itemSelect.SelectedIndex = -1;
                 _selectedAgentId = null;
-                _detailValue = "No ACP agents match the current view.";
+                _grid.SelectedRow = -1;
+                _grid.CurrentCell = DataGridCell.None;
                 _summaryText = BuildSummaryMarkup();
                 return;
             }
 
-            var newIndex = selectedAgentId is null
+            var newIndex = previousSelectedAgentId is null
                 ? 0
-                : Array.FindIndex(filteredItems, item => string.Equals(item.Item.AgentId, selectedAgentId, StringComparison.OrdinalIgnoreCase));
-            _itemSelect.SelectedIndex = newIndex >= 0 ? newIndex : 0;
-            OnSelectionChanged(_itemSelect.SelectedIndex);
+                : Array.FindIndex(
+                    _visibleRows.ToArray(),
+                    row => string.Equals(row.Item.AgentId, previousSelectedAgentId, StringComparison.OrdinalIgnoreCase));
+            if (newIndex < 0 || newIndex >= _visibleRows.Count)
+            {
+                newIndex = 0;
+            }
+
+            _grid.SelectedRow = newIndex;
+            _grid.CurrentCell = new DataGridCell(newIndex, 0);
+            _selectedAgentId = _visibleRows[newIndex].Item.AgentId;
             _summaryText = BuildSummaryMarkup();
         }
         finally
@@ -253,23 +300,17 @@ internal sealed class AcpManagementDialog
         PopulateFilterOptions();
     }
 
-    private void OnSelectionChanged(int newIndex)
-    {
-        if ((uint)newIndex >= (uint)_visibleItems.Count)
-        {
-            _selectedAgentId = null;
-            _detailValue = "Select an ACP agent to inspect its registry, install, and runtime details.";
-            return;
-        }
-
-        var item = _visibleItems[newIndex].Item;
-        _selectedAgentId = item.AgentId;
-        _detailValue = BuildDetailText();
-    }
-
     private AcpAgentSummaryItem? GetSelectedItem()
     {
-        return _visibleItems.FirstOrDefault(entry => string.Equals(entry.Item.AgentId, _selectedAgentId, StringComparison.OrdinalIgnoreCase))?.Item;
+        var rowIndex = _grid.SelectedRow >= 0 ? _grid.SelectedRow : _grid.CurrentCell.Row;
+        if ((uint)rowIndex < (uint)_visibleRows.Count)
+        {
+            return _visibleRows[rowIndex].Item;
+        }
+
+        return _selectedAgentId is null
+            ? null
+            : _visibleRows.FirstOrDefault(row => string.Equals(row.Item.AgentId, _selectedAgentId, StringComparison.OrdinalIgnoreCase))?.Item;
     }
 
     private async Task InstallSelectedAsync()
@@ -462,10 +503,10 @@ internal sealed class AcpManagementDialog
 
     private string BuildDetailText()
     {
-        var selected = _visibleItems.FirstOrDefault(entry => string.Equals(entry.Item.AgentId, _selectedAgentId, StringComparison.OrdinalIgnoreCase))?.Item;
+        var selected = GetSelectedItem();
         if (selected is null)
         {
-            return "Select an ACP agent to inspect its registry, install, and runtime details.";
+            return "Choose an ACP agent from the grid to inspect its registry metadata, install state, and runtime state.";
         }
 
         var authors = selected.Authors.Count == 0 ? "Unknown" : string.Join(", ", selected.Authors);
@@ -482,28 +523,181 @@ internal sealed class AcpManagementDialog
         };
 
         return
-            $"Name: {selected.DisplayName}\n" +
+            $"Agent\n" +
+            $"{selected.DisplayName}\n" +
+            $"{selected.Description ?? "No description."}\n\n" +
+            $"Identity\n" +
             $"Agent Id: {selected.AgentId}\n" +
             $"Registry Id: {selected.RegistryId ?? "None"}\n" +
-            $"Registry Version: {selected.RegistryVersion ?? "Unknown"}\n" +
+            $"Version: {selected.RegistryVersion ?? "Unknown"}\n" +
+            $"Authors: {authors}\n" +
+            $"License: {selected.License ?? "Unknown"}\n\n" +
+            $"Install\n" +
             $"In Registry: {(selected.IsInRegistry ? "Yes" : "No")}\n" +
             $"Installed: {(selected.IsInstalled ? "Yes" : "No")}\n" +
             $"Configured: {(selected.HasConfiguration ? "Yes" : "No")}\n" +
             $"Enabled: {(selected.IsEnabled ? "Yes" : "No")}\n" +
             $"Manual: {(selected.IsManual ? "Yes" : "No")}\n" +
-            $"Broken: {(selected.IsBroken ? "Yes" : "No")}\n\n" +
-            $"Description:\n{selected.Description ?? "No description."}\n\n" +
-            $"Authors: {authors}\n" +
-            $"License: {selected.License ?? "Unknown"}\n" +
-            $"Repository: {selected.Repository ?? "Unavailable"}\n" +
-            $"Website: {selected.Website ?? "Unavailable"}\n\n" +
-            $"Distribution: {distributions}\n" +
             $"Installability: {selected.InstallabilityMessage}\n" +
+            $"Distribution: {distributions}\n" +
             $"Command: {selected.CommandSummary ?? "Unavailable"}\n" +
             $"Working Directory: {selected.WorkingDirectory ?? "Default"}\n\n" +
-            $"Runtime: {runtimeState}\n" +
-            $"Runtime Status: {selected.RuntimeStatus ?? "No runtime probe yet."}\n" +
-            $"Models ({selected.RuntimeModelCount ?? 0}, runtime-discovered): {runtimeModels}";
+            $"Runtime\n" +
+            $"Status: {runtimeState}\n" +
+            $"Runtime Detail: {selected.RuntimeStatus ?? "No runtime probe yet."}\n" +
+            $"Models ({selected.RuntimeModelCount ?? 0}, runtime-discovered): {runtimeModels}\n\n" +
+            $"Links\n" +
+            $"Repository: {selected.Repository ?? "Unavailable"}\n" +
+            $"Website: {selected.Website ?? "Unavailable"}";
+    }
+
+    private void RebuildDocumentRows()
+    {
+        using (_document.BeginUpdate())
+        {
+            if (_documentRowCount > 0)
+            {
+                _document.RemoveRows(0, _documentRowCount);
+            }
+
+            foreach (var row in _visibleRows)
+            {
+                _document.AddRow(row);
+            }
+        }
+
+        _documentRowCount = _visibleRows.Count;
+    }
+
+    private static void ConfigureColumns(DataGridControl grid)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+
+        static Visual BuildStateCell(DataTemplateValue<string> value, in DataTemplateContext _)
+            => new Markup(value.GetValue()).Wrap(false);
+
+        static Visual BuildRuntimeCell(DataTemplateValue<string> value, in DataTemplateContext _)
+            => new Markup(value.GetValue()).Wrap(false);
+
+        static Visual BuildNameCell(DataTemplateValue<string> value, in DataTemplateContext _)
+        {
+            var row = (AcpManagementRowViewModel)value.GetBinding().Owner;
+            return new TextBlock(value.GetValue())
+                .Tooltip(new TextBlock(() => string.IsNullOrWhiteSpace(row.Item.Description)
+                    ? $"{row.Item.AgentId}"
+                    : $"{row.Item.AgentId}\n{row.Item.Description}").Wrap(true));
+        }
+
+        static Visual BuildIdCell(DataTemplateValue<string> value, in DataTemplateContext _)
+        {
+            var row = (AcpManagementRowViewModel)value.GetBinding().Owner;
+            return new TextBlock(value.GetValue())
+                .Tooltip(new TextBlock(() => row.Item.RegistryId is null || string.Equals(row.Item.RegistryId, row.Item.AgentId, StringComparison.OrdinalIgnoreCase)
+                    ? row.Item.AgentId
+                    : $"Agent Id: {row.Item.AgentId}\nRegistry Id: {row.Item.RegistryId}").Wrap(true));
+        }
+
+        grid.Columns.Add(new DataGridColumn<string>
+        {
+            Key = "state",
+            Header = new TextBlock("State"),
+            TypedValueAccessor = AcpManagementRowViewModel.Accessor.StateMarkup,
+            Width = GridLength.Auto,
+            Sortable = true,
+            CellTemplate = new DataTemplate<string>(BuildStateCell, null),
+        });
+        grid.Columns.Add(new DataGridColumn<string>
+        {
+            Key = "installed",
+            Header = new TextBlock("Inst"),
+            TypedValueAccessor = AcpManagementRowViewModel.Accessor.InstalledText,
+            Width = GridLength.Auto,
+            Sortable = true,
+        });
+        grid.Columns.Add(new DataGridColumn<string>
+        {
+            Key = "enabled",
+            Header = new TextBlock("On"),
+            TypedValueAccessor = AcpManagementRowViewModel.Accessor.EnabledText,
+            Width = GridLength.Auto,
+            Sortable = true,
+        });
+        grid.Columns.Add(new DataGridColumn<string>
+        {
+            Key = "name",
+            Header = new TextBlock("Agent"),
+            TypedValueAccessor = AcpManagementRowViewModel.Accessor.Name,
+            Width = GridLength.Star(2),
+            Sortable = true,
+            CellTemplate = new DataTemplate<string>(BuildNameCell, null),
+        });
+        grid.Columns.Add(new DataGridColumn<string>
+        {
+            Key = "id",
+            Header = new TextBlock("Id"),
+            TypedValueAccessor = AcpManagementRowViewModel.Accessor.AgentId,
+            Width = GridLength.Star(2),
+            Sortable = true,
+            CellTemplate = new DataTemplate<string>(BuildIdCell, null),
+        });
+        grid.Columns.Add(new DataGridColumn<string>
+        {
+            Key = "version",
+            Header = new TextBlock("Version"),
+            TypedValueAccessor = AcpManagementRowViewModel.Accessor.Version,
+            Width = GridLength.Auto,
+            Sortable = true,
+        });
+        grid.Columns.Add(new DataGridColumn<string>
+        {
+            Key = "dist",
+            Header = new TextBlock("Dist"),
+            TypedValueAccessor = AcpManagementRowViewModel.Accessor.Distribution,
+            Width = GridLength.Auto,
+            Sortable = true,
+        });
+        grid.Columns.Add(new DataGridColumn<string>
+        {
+            Key = "runtime",
+            Header = new TextBlock("Runtime"),
+            TypedValueAccessor = AcpManagementRowViewModel.Accessor.RuntimeMarkup,
+            Width = GridLength.Auto,
+            Sortable = true,
+            CellTemplate = new DataTemplate<string>(BuildRuntimeCell, null),
+        });
+    }
+
+    private static AcpManagementRowViewModel BuildRow(AcpAgentSummaryItem item)
+    {
+        var stateMarkup = item switch
+        {
+            { IsBroken: true } => "[warning]Broken[/]",
+            { IsInstalled: true } => "[success]Installed[/]",
+            { IsManual: true } => "[accent]Manual[/]",
+            { Installability: AcpInstallabilityState.Unavailable } => "[dim]Unavailable[/]",
+            _ => "[primary]Catalog[/]",
+        };
+        var runtimeMarkup = item.RuntimeAvailability switch
+        {
+            ChatBackendAvailability.Ready => "[success]Ready[/]",
+            ChatBackendAvailability.Connecting => "[primary]Loading[/]",
+            ChatBackendAvailability.Unsupported => "[warning]Unsupported[/]",
+            ChatBackendAvailability.Failed => "[warning]Failed[/]",
+            _ => "[dim]-[/]",
+        };
+
+        return new AcpManagementRowViewModel
+        {
+            Item = item,
+            StateMarkup = stateMarkup,
+            InstalledText = item.IsInstalled ? "Yes" : "No",
+            EnabledText = item.IsInstalled || item.HasConfiguration ? (item.IsEnabled ? "Yes" : "No") : "-",
+            Name = item.DisplayName,
+            AgentId = item.AgentId,
+            Version = item.RegistryVersion ?? "-",
+            Distribution = item.DistributionKinds.Count == 0 ? "-" : string.Join("/", item.DistributionKinds),
+            RuntimeMarkup = runtimeMarkup,
+        };
     }
 
     private static bool MatchesFilter(AcpAgentSummaryItem item, AcpManagementFilterKind filterKind)
@@ -575,11 +769,6 @@ internal enum AcpManagementFilterKind
 }
 
 internal sealed record AcpManagementFilterOption(AcpManagementFilterKind Kind, string Label)
-{
-    public override string ToString() => Label;
-}
-
-internal sealed record AcpDialogListItem(AcpAgentSummaryItem Item, string Label)
 {
     public override string ToString() => Label;
 }
