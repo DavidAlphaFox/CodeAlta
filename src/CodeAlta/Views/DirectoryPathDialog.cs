@@ -114,7 +114,9 @@ internal sealed class DirectoryPathDialog
         };
         submitButton.Click(() => _ = SubmitAsync(selectedSuggestionPreferred: true));
 
-        var validatedEditor = _editor.Validation(_validationMessage);
+        var validatedEditor = _editor
+            .Validation(_validationMessage)
+            .HorizontalAlignment(Align.Stretch);
 
         var descriptionBlock = new TextBlock(description)
         {
