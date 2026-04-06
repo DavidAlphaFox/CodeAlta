@@ -113,4 +113,18 @@ public interface ILocalAgentSessionStore
         string providerKey,
         string sessionId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a persisted session when present.
+    /// </summary>
+    /// <param name="protocolFamily">Protocol family.</param>
+    /// <param name="providerKey">Provider key.</param>
+    /// <param name="sessionId">Local session identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns><see langword="true" /> when the session existed and was deleted; otherwise <see langword="false" />.</returns>
+    Task<bool> DeleteSessionAsync(
+        string protocolFamily,
+        string providerKey,
+        string sessionId,
+        CancellationToken cancellationToken = default);
 }

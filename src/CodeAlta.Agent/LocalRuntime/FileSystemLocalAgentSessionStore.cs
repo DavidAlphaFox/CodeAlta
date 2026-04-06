@@ -323,6 +323,42 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    public async Task<bool> DeleteSessionAsync(
+        string protocolFamily,
+        string providerKey,
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        var sessionRoot = await TryGetSessionRootPathAsync(
+            protocolFamily,
+            providerKey,
+            sessionId,
+            cancellationToken).ConfigureAwait(false);
+        if (sessionRoot is null || !Directory.Exists(sessionRoot))
+        {
+            return false;
+        }
+
+        var pathLock = GetPathLock(sessionRoot);
+        await pathLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!Directory.Exists(sessionRoot))
+            {
+                return false;
+            }
+
+            Directory.Delete(sessionRoot, recursive: true);
+            _sessionRoots.TryRemove(GetSessionCacheKey(protocolFamily, providerKey, sessionId), out _);
+            return true;
+        }
+        finally
+        {
+            pathLock.Release();
+        }
+    }
+
     private async Task<string> GetOrCreateSessionRootPathAsync(
         string protocolFamily,
         string providerKey,
