@@ -170,7 +170,7 @@ internal sealed class AcpManagementDialog
     private async Task ReloadSnapshotAsync(bool refreshRegistry)
     {
         _summaryText = "[primary]Loading ACP registry and installed agents...[/]";
-        _snapshot = await _service.LoadSnapshotAsync(refreshRegistry).ConfigureAwait(false);
+        _snapshot = await _service.LoadSnapshotAsync(refreshRegistry);
         RebuildVisibleItems();
     }
 
@@ -285,16 +285,18 @@ internal sealed class AcpManagementDialog
             [
                 $"Install '{item.DisplayName}'?",
                 $"Version: {item.RegistryVersion ?? "unknown"}",
+                $"Source: {item.Repository ?? item.Website ?? "Unavailable"}",
                 $"Distribution: {(item.DistributionKinds.Count == 0 ? "unknown" : string.Join(", ", item.DistributionKinds))}",
+                $"Command preview: {item.CommandSummary ?? "Unavailable"}",
                 item.InstallabilityMessage,
             ],
             "Install",
             ControlTone.Primary,
             async () =>
             {
-                await _service.InstallAgentAsync(item.AgentId).ConfigureAwait(false);
-                await _reloadAcpBackendsAsync().ConfigureAwait(false);
-                await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+                await _service.InstallAgentAsync(item.AgentId);
+                await _reloadAcpBackendsAsync();
+                await ReloadSnapshotAsync(refreshRegistry: false);
             },
             () => _dialog.GetAbsoluteBounds(),
             () => _dialog)
@@ -319,8 +321,8 @@ internal sealed class AcpManagementDialog
             async savedDefinition =>
             {
                 _service.SaveConfiguration(savedDefinition);
-                await _reloadAcpBackendsAsync().ConfigureAwait(false);
-                await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+                await _reloadAcpBackendsAsync();
+                await ReloadSnapshotAsync(refreshRegistry: false);
             },
             () => _dialog.GetAbsoluteBounds(),
             () => _dialog)
@@ -338,8 +340,8 @@ internal sealed class AcpManagementDialog
             async savedDefinition =>
             {
                 _service.SaveConfiguration(savedDefinition);
-                await _reloadAcpBackendsAsync().ConfigureAwait(false);
-                await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+                await _reloadAcpBackendsAsync();
+                await ReloadSnapshotAsync(refreshRegistry: false);
             },
             () => _dialog.GetAbsoluteBounds(),
             () => _dialog)
@@ -362,13 +364,13 @@ internal sealed class AcpManagementDialog
             async () =>
             {
                 _service.ResetConfiguration(item.AgentId);
-                await _reloadAcpBackendsAsync().ConfigureAwait(false);
-                await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+                await _reloadAcpBackendsAsync();
+                await ReloadSnapshotAsync(refreshRegistry: false);
             },
             () => _dialog.GetAbsoluteBounds(),
             () => _dialog)
             .Show();
-        await Task.CompletedTask.ConfigureAwait(false);
+        await Task.CompletedTask;
     }
 
     private async Task RemoveSelectedAsync()
@@ -392,13 +394,13 @@ internal sealed class AcpManagementDialog
             async () =>
             {
                 _service.RemoveAgent(item.AgentId, removeArtifacts: true);
-                await _reloadAcpBackendsAsync().ConfigureAwait(false);
-                await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+                await _reloadAcpBackendsAsync();
+                await ReloadSnapshotAsync(refreshRegistry: false);
             },
             () => _dialog.GetAbsoluteBounds(),
             () => _dialog)
             .Show();
-        await Task.CompletedTask.ConfigureAwait(false);
+        await Task.CompletedTask;
     }
 
     private async Task ProbeSelectedAsync()
@@ -409,8 +411,8 @@ internal sealed class AcpManagementDialog
             return;
         }
 
-        await _probeAcpBackendAsync(item.AgentId).ConfigureAwait(false);
-        await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+        await _probeAcpBackendAsync(item.AgentId);
+        await ReloadSnapshotAsync(refreshRegistry: false);
     }
 
     private string? ValidateAgentId(string? candidateAgentId, string? exceptAgentId)
@@ -468,7 +470,7 @@ internal sealed class AcpManagementDialog
 
         var authors = selected.Authors.Count == 0 ? "Unknown" : string.Join(", ", selected.Authors);
         var distributions = selected.DistributionKinds.Count == 0 ? "Unknown" : string.Join(", ", selected.DistributionKinds);
-        var runtimeModels = selected.RuntimeModels.Count == 0 ? "No models discovered." : string.Join(", ", selected.RuntimeModels);
+        var runtimeModels = selected.RuntimeModels.Count == 0 ? "No runtime-discovered models." : string.Join(", ", selected.RuntimeModels);
         var runtimeState = selected.RuntimeAvailability switch
         {
             ChatBackendAvailability.Ready => "Ready",
@@ -501,7 +503,7 @@ internal sealed class AcpManagementDialog
             $"Working Directory: {selected.WorkingDirectory ?? "Default"}\n\n" +
             $"Runtime: {runtimeState}\n" +
             $"Runtime Status: {selected.RuntimeStatus ?? "No runtime probe yet."}\n" +
-            $"Models ({selected.RuntimeModelCount ?? 0}): {runtimeModels}";
+            $"Models ({selected.RuntimeModelCount ?? 0}, runtime-discovered): {runtimeModels}";
     }
 
     private static bool MatchesFilter(AcpAgentSummaryItem item, AcpManagementFilterKind filterKind)

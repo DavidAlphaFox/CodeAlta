@@ -46,8 +46,8 @@ internal sealed class AcpManagementService
         try
         {
             registry = refreshRegistry
-                ? await _registryService.RefreshRegistryAsync(cancellationToken).ConfigureAwait(false)
-                : await _registryService.LoadCachedRegistryAsync(cancellationToken).ConfigureAwait(false);
+                ? await _registryService.RefreshRegistryAsync(cancellationToken)
+                : await _registryService.LoadCachedRegistryAsync(cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or HttpRequestException or InvalidOperationException)
         {
@@ -189,7 +189,7 @@ internal sealed class AcpManagementService
 
     public async Task<AcpBackendDefinition> InstallAgentAsync(string agentId, CancellationToken cancellationToken = default)
     {
-        var definition = await _registryService.InstallAgentAsync(agentId, cancellationToken).ConfigureAwait(false);
+        var definition = await _registryService.InstallAgentAsync(agentId, cancellationToken);
         return CloneDefinition(definition);
     }
 
@@ -254,7 +254,7 @@ internal sealed class AcpManagementService
         var installability = ResolveInstallability(manifest);
 
         var commandDefinition = effectiveDefinition ?? configuredDefinition ?? installedDefinition;
-        var commandSummary = BuildCommandSummary(commandDefinition);
+        var commandSummary = BuildCommandSummary(commandDefinition) ?? BuildInstallCommandPreview(manifest, _installResolver);
         var isBroken = commandDefinition is not null && !IsCommandAvailable(commandDefinition);
 
         return new AcpAgentSummaryItem(
@@ -354,6 +354,26 @@ internal sealed class AcpManagementService
         return definition.Arguments is { Count: > 0 }
             ? $"{definition.Command} {string.Join(' ', definition.Arguments)}"
             : definition.Command;
+    }
+
+    private static string? BuildInstallCommandPreview(AcpRegistryAgentManifest? manifest, AcpInstallResolver installResolver)
+    {
+        if (manifest is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var plan = installResolver.Resolve(manifest);
+            return plan.Arguments is { Count: > 0 }
+                ? $"{plan.Command} {string.Join(' ', plan.Arguments)}"
+                : plan.Command;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or PlatformNotSupportedException)
+        {
+            return null;
+        }
     }
 
     private static bool IsCommandAvailable(AcpBackendDefinition definition)

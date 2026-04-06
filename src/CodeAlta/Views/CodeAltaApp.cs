@@ -67,6 +67,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private readonly ThreadTabContext _threadTabContext;
     private readonly WorkspaceRefreshContext _workspaceRefreshContext;
     private readonly AcpManagementCoordinator? _acpManagementCoordinator;
+    private readonly AcpFrontendCoordinator _acpUi;
     private CodeAltaShellView? _shellView;
     private ThreadWorkspaceView? _threadWorkspaceView;
     private SessionUsagePresenter? _sessionUsagePresenter;
@@ -237,19 +238,21 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         _shellWorkspaceContext = composition.ShellWorkspaceContext;
         _threadSelectionContext = composition.ThreadSelectionContext;
         _workspaceRefreshContext = composition.WorkspaceRefreshContext;
-        _acpManagementCoordinator = _ownedServices is null
-            ? null
-            : new AcpManagementCoordinator(
-                new AcpManagementService(
-                    _catalogOptions,
-                    _ownedServices.AcpAgentRegistryService,
-                    new CodeAltaConfigStore(_catalogOptions),
-                    new AcpInstalledBackendStore(_catalogOptions),
-                    _chatBackendStates),
-                () => RefreshAcpBackendsAsync(),
-                agentId => ProbeAcpBackendAsync(agentId),
-                () => DialogBoundsResolver.ResolveAppBounds(ThreadInput is Visual threadInput ? threadInput : _sidebarCoordinator.View.Tree),
-                () => ThreadInput is Visual threadInput ? threadInput : _sidebarCoordinator.View.Tree);
+        _acpUi = new AcpFrontendCoordinator(
+            _ownedServices,
+            _chatBackendInitializationCoordinator,
+            _chatBackendStates,
+            DispatchToUi,
+            RefreshSelectionAndThreadWorkspace,
+            SetStatus);
+        _acpManagementCoordinator = AcpManagementCoordinatorFactory.Create(
+            _ownedServices,
+            _catalogOptions,
+            _chatBackendStates,
+            () => _acpUi.RefreshBackendsAsync(),
+            agentId => _acpUi.ProbeBackendAsync(agentId),
+            () => DialogBoundsResolver.ResolveAppBounds(ThreadInput is Visual threadInput ? threadInput : _sidebarCoordinator.View.Tree),
+            () => ThreadInput is Visual threadInput ? threadInput : _sidebarCoordinator.View.Tree);
         _threadTabContext = new ThreadTabContext(
             () => ThreadTabControl,
             () => _threadWorkspaceView,
@@ -379,13 +382,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private void ApplyPendingSidebarSelection()
         => _sidebarCoordinator.ApplyPendingSelection();
 
-    internal void PrepareForRun()
-    {
-        SetStatus("Connecting to available backends...", showSpinner: true);
-    }
-
-    internal Visual GetRoot()
-        => EnsureShellView().Root;
+    internal void PrepareForRun() => SetStatus("Connecting to available backends...", showSpinner: true);
+    internal Visual GetRoot() => EnsureShellView().Root;
 
     internal TerminalLoopResult Tick(CancellationToken cancellationToken)
     {
@@ -471,14 +469,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         => _chatSelectorCoordinator.IsChatBackendReady(backendId);
     private bool TryGetPromptUnavailableStatus(out string message, out StatusTone tone)
         => _chatSelectorCoordinator.TryGetPromptUnavailableStatus(out message, out tone);
-
-    private bool TrySetPromptUnavailableStatus()
-    {
-        if (!TryGetPromptUnavailableStatus(out var message, out var tone)) return false;
-        SetStatus(message, tone: tone);
-        return true;
-    }
-
+    private bool TrySetPromptUnavailableStatus() { if (!TryGetPromptUnavailableStatus(out var message, out var tone)) return false; SetStatus(message, tone: tone); return true; }
     private void UpdatePromptAvailabilityUi()
         => _chatSelectorCoordinator.UpdatePromptAvailabilityUi();
     private void SyncThreadTabControl()
@@ -693,8 +684,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private Task OpenFolderAsync(string folderPath, bool includeHidden)
         => _shellController.OpenFolderAsync(folderPath, includeHidden, CancellationToken.None);
 
-    private bool GetAutoApproveEnabled()
-        => DefaultAutoApproveEnabled;
+    private bool GetAutoApproveEnabled() => DefaultAutoApproveEnabled;
 
     private async Task PersistViewStateAsync()
         => await _threadStateCoordinator.PersistViewStateAsync();
@@ -716,82 +706,10 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     internal void OpenThread(string threadId)
         => _threadStateCoordinator.OpenThread(threadId);
 
-    internal void FocusPromptEditor()
-        => ThreadPaneLayout?.App?.Focus(ThreadInput);
+    internal void FocusPromptEditor() => ThreadPaneLayout?.App?.Focus(ThreadInput);
 
-    internal void OpenAcpManagement()
-    {
-        if (_acpManagementCoordinator is null)
-        {
-            SetStatus("ACP management is unavailable in this app instance.", tone: StatusTone.Warning);
-            return;
-        }
-
-        _acpManagementCoordinator.Open();
-    }
-
-    private async Task RefreshAcpBackendsAsync()
-    {
-        if (_ownedServices is null)
-        {
-            return;
-        }
-
-        await _ownedServices.RefreshAcpBackendsAsync().ConfigureAwait(false);
-        DispatchToUi(
-            () =>
-            {
-                SyncChatBackendCatalog();
-                RefreshSelectionAndThreadWorkspace();
-            });
-        await _chatBackendInitializationCoordinator.InitializeAsync(CancellationToken.None).ConfigureAwait(false);
-        DispatchToUi(
-            () =>
-            {
-                SyncChatBackendCatalog();
-                RefreshSelectionAndThreadWorkspace();
-                SetStatus("ACP backends refreshed.", tone: StatusTone.Info);
-            });
-    }
-
-    private async Task ProbeAcpBackendAsync(string agentId)
-    {
-        var backendId = CodeAlta.Agent.Acp.AcpAgentBackendFactoryExtensions.CreateBackendId(agentId);
-        await _chatBackendInitializationCoordinator.RefreshBackendAsync(backendId, CancellationToken.None).ConfigureAwait(false);
-        DispatchToUi(RefreshSelectionAndThreadWorkspace);
-    }
-
-    private void SyncChatBackendCatalog()
-    {
-        var backendDescriptors = _ownedServices?.BackendDescriptors
-            ?? CodeAltaOwnedServices.CreateBuiltInBackendDescriptors();
-        var activeBackendIds = new HashSet<string>(
-            backendDescriptors.Select(static descriptor => descriptor.BackendId.Value),
-            StringComparer.OrdinalIgnoreCase);
-
-        foreach (var descriptor in backendDescriptors)
-        {
-            if (_chatBackendStates.TryGetValue(descriptor.BackendId.Value, out var existing))
-            {
-                existing.DisplayName = descriptor.DisplayName;
-                continue;
-            }
-
-            _chatBackendStates[descriptor.BackendId.Value] = new ChatBackendState(descriptor.BackendId, descriptor.DisplayName);
-        }
-
-        foreach (var backendId in _chatBackendStates.Keys.Where(key => !activeBackendIds.Contains(key)).ToArray())
-        {
-            _chatBackendStates.Remove(backendId);
-        }
-    }
-
-    internal void FocusSidebar()
-    {
-        SyncSidebarSelectionToCurrentState();
-        ApplyPendingSidebarSelection();
-        _sidebarCoordinator.View.Tree.App?.Focus(_sidebarCoordinator.View.Tree);
-    }
+    internal void OpenAcpManagement() { if (_acpManagementCoordinator is null) { SetStatus("ACP management is unavailable in this app instance.", tone: StatusTone.Warning); return; } _acpManagementCoordinator.Open(); }
+    internal void FocusSidebar() { SyncSidebarSelectionToCurrentState(); ApplyPendingSidebarSelection(); _sidebarCoordinator.View.Tree.App?.Focus(_sidebarCoordinator.View.Tree); }
 
     private async Task CloseSelectedThreadAsync()
         => await _threadStateCoordinator.CloseSelectedThreadAsync();

@@ -206,7 +206,7 @@ internal sealed class AcpAgentSettingsDialog
             EnableElicitation = _elicitationBox.IsChecked,
         };
 
-        await _onSaveAsync(definition).ConfigureAwait(false);
+        await _onSaveAsync(definition);
         Close();
     }
 

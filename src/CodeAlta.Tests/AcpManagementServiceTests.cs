@@ -91,6 +91,7 @@ public sealed class AcpManagementServiceTests
         Assert.IsTrue(item.HasConfiguration);
         Assert.IsTrue(item.IsEnabled);
         Assert.AreEqual("Configured Sample Agent", item.DisplayName);
+        Assert.AreEqual("npx --yes @sample/agent@2.0.0 --debug", item.CommandSummary);
         Assert.AreEqual("Connected · debug", item.RuntimeStatus);
         Assert.AreEqual(1, item.RuntimeModelCount);
         CollectionAssert.AreEqual(new[] { "Model A" }, item.RuntimeModels.ToArray());
@@ -129,6 +130,57 @@ public sealed class AcpManagementServiceTests
         Assert.IsTrue(item.IsManual);
         Assert.IsFalse(item.IsEnabled);
         Assert.IsTrue(item.IsBroken);
+    }
+
+    [TestMethod]
+    public async Task LoadSnapshotAsync_BuildsInstallCommandPreviewForRegistryOnlyAgent()
+    {
+        using var temp = TempDirectory.Create();
+        var catalogOptions = new CatalogOptions { GlobalRoot = temp.Path };
+        var installedStore = new AcpInstalledBackendStore(catalogOptions);
+        var configStore = new CodeAltaConfigStore(catalogOptions);
+        using var registryService = new AcpAgentRegistryService(catalogOptions, installedStore);
+        using var registryClient = new AcpRegistryClient();
+
+        await registryClient.SaveToFileAsync(
+            registryService.RegistryCachePath,
+            new AcpRegistryDocument
+            {
+                Version = "1.0.0",
+                Agents =
+                [
+                    new AcpRegistryAgentManifest
+                    {
+                        Id = "registry-only-agent",
+                        Name = "Registry Only Agent",
+                        Version = "1.2.3",
+                        Distribution = new AcpRegistryDistribution
+                        {
+                            Npx = new AcpRegistryPackageDistribution
+                            {
+                                Package = "@sample/registry-only-agent@1.2.3",
+                                Arguments = ["--stdio"],
+                            },
+                        },
+                    },
+                ],
+            }).ConfigureAwait(false);
+
+        var service = new AcpManagementService(
+            catalogOptions,
+            registryService,
+            configStore,
+            installedStore,
+            new Dictionary<string, ChatBackendState>(StringComparer.OrdinalIgnoreCase));
+
+        var snapshot = await service.LoadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+        var item = snapshot.Items.Single(static candidate => candidate.AgentId == "registry-only-agent");
+
+        Assert.IsNotNull(item.CommandSummary);
+        StringAssert.Contains(item.CommandSummary, "@sample/registry-only-agent@1.2.3");
+        StringAssert.Contains(item.CommandSummary, "--stdio");
+        Assert.IsFalse(item.IsInstalled);
+        Assert.IsFalse(item.HasConfiguration);
     }
 
     [TestMethod]
