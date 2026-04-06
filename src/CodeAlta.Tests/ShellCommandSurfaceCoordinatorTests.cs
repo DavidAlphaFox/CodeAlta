@@ -1,5 +1,6 @@
 using CodeAlta.Frontend.Commands;
 using XenoAtom.Terminal.UI;
+using XenoAtom.Terminal.UI.Controls;
 
 namespace CodeAlta.Tests;
 
@@ -16,5 +17,29 @@ public sealed class ShellCommandSurfaceCoordinatorTests
         Assert.AreEqual(Align.Center, style.PopupHorizontalAlignment);
         Assert.AreEqual(Align.End, style.PopupVerticalAlignment);
         Assert.AreEqual(-2, style.PopupOffsetY);
+    }
+
+    [TestMethod]
+    public void DialogCommandPalettePopupStyle_IsCentered()
+    {
+        var style = ShellCommandSurfaceCoordinator.DialogCommandPalettePopupStyle;
+
+        Assert.AreEqual(50d, style.PopupWidthPercent.GetValueOrDefault());
+        Assert.AreEqual(int.MaxValue, style.MaxWidth);
+        Assert.AreEqual(Align.Center, style.PopupHorizontalAlignment);
+        Assert.AreEqual(Align.Center, style.PopupVerticalAlignment);
+        Assert.AreEqual(0, style.PopupOffsetY);
+    }
+
+    [TestMethod]
+    public void ResolveCommandPalettePopupStyle_UsesCenteredStyleInsideDialog()
+    {
+        var editor = new TextBox();
+        var dialog = new Dialog(editor);
+
+        var style = ShellCommandSurfaceCoordinator.ResolveCommandPalettePopupStyle(editor);
+
+        Assert.AreSame(ShellCommandSurfaceCoordinator.DialogCommandPalettePopupStyle, style);
+        Assert.AreSame(dialog, editor.Parent);
     }
 }

@@ -281,6 +281,73 @@ public sealed class ThreadWorkspaceViewTests
         }
     }
 
+    [TestMethod]
+    public void ExpandedPromptEditor_UsesHelpAndCommandPaletteShortcuts()
+    {
+        var helpCount = 0;
+        var commandPaletteCount = 0;
+        var shellViewModel = new CodeAltaShellViewModel();
+        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var promptComposerViewModel = new PromptComposerViewModel();
+        var view = new ThreadWorkspaceView(
+            shellViewModel,
+            workspaceViewModel,
+            promptComposerViewModel,
+            [],
+            static () => new TextBlock(string.Empty),
+            static () => { },
+            static _ => { },
+            () => helpCount++,
+            () => commandPaletteCount++,
+            static _ => { },
+            static () => { },
+            static () => { },
+            static () => { },
+            static _ => { },
+            static _ => { },
+            static _ => { },
+            static (_, _) => { },
+            static (_, _) => { },
+            static () => { },
+            static () => { },
+            static () => { },
+            static () => { },
+            static _ => { },
+            static _ => { },
+            static _ => { },
+            static _ => { },
+            new State<string?>(string.Empty),
+            new State<float>(0),
+            static () => { });
+
+        using var terminalSession = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(120, 40)), new TerminalOptions { ImplicitStartInput = true }, force: true);
+        var app = new TerminalApp(
+            view.Root,
+            terminalSession.Instance,
+            new TerminalAppOptions
+            {
+                HostKind = TerminalHostKind.Fullscreen,
+            });
+
+        InvokeTerminalApp(app, "BeginRun");
+        try
+        {
+            view.OpenExpandedPromptDialog();
+
+            var editor = GetExpandedPromptEditor(view);
+
+            Assert.IsTrue(editor.TryHandleTransientShortcutInput("/"));
+            Assert.IsTrue(editor.TryHandleTransientShortcutInput("?"));
+            Assert.AreEqual(1, helpCount);
+            Assert.AreEqual(1, commandPaletteCount);
+            Assert.AreEqual(string.Empty, editor.Text);
+        }
+        finally
+        {
+            InvokeTerminalApp(app, "EndRun");
+        }
+    }
+
     private static T GetPrivateField<T>(object instance, string fieldName)
         where T : class
     {
@@ -293,6 +360,13 @@ public sealed class ThreadWorkspaceViewTests
         var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.IsNotNull(field);
         return Assert.IsInstanceOfType<T>(field.GetValue(instance));
+    }
+
+    private static ChatPromptEditor GetExpandedPromptEditor(ThreadWorkspaceView view)
+    {
+        var dialog = GetPrivateField<Dialog>(view, "_expandedPromptDialog");
+        var scrollViewer = Assert.IsInstanceOfType<ScrollViewer>(dialog.Content);
+        return Assert.IsInstanceOfType<ChatPromptEditor>(scrollViewer.Content);
     }
 
     private static ProjectFileSearchState CreateState(

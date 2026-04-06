@@ -21,6 +21,13 @@ internal sealed class ShellCommandSurfaceCoordinator
         PopupVerticalAlignment = Align.End,
         PopupOffsetY = -2,
     };
+    internal static CommandPaletteStyle DialogCommandPalettePopupStyle { get; } = CommandPaletteStyle.Default with
+    {
+        PopupWidthPercent = 50,
+        MaxWidth = int.MaxValue,
+        PopupHorizontalAlignment = Align.Center,
+        PopupVerticalAlignment = Align.Center,
+    };
 
     private readonly PromptComposerViewModel _promptComposerViewModel;
     private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel;
@@ -40,6 +47,7 @@ internal sealed class ShellCommandSurfaceCoordinator
     private readonly Func<Task> _selectTabLeftAsync;
     private readonly Func<Task> _selectTabRightAsync;
     private readonly ShellInputCoordinator _shellInputCoordinator;
+    private CommandPaletteStyle _activeCommandPaletteStyle = CommandPalettePopupStyle;
     private CommandPalette? _commandPalette;
     private ShellHelpDialog? _helpDialog;
 
@@ -165,7 +173,11 @@ internal sealed class ShellCommandSurfaceCoordinator
         => ExecuteHelpAsync(filterText, cancellationToken);
 
     public void ShowCommandPalette()
-        => (_commandPalette ??= CreateCommandPalette()).Show();
+    {
+        var app = _getHelpFocusTarget()?.App ?? _commandPalette?.App;
+        _activeCommandPaletteStyle = ResolveCommandPalettePopupStyle(app?.FocusedElement);
+        (_commandPalette ??= CreateCommandPalette(() => _activeCommandPaletteStyle)).Show();
+    }
 
     public Task ShowCommandPaletteAsync()
     {
@@ -301,6 +313,26 @@ internal sealed class ShellCommandSurfaceCoordinator
     private Task ClearSelectedThreadQueueAsync()
         => _threadCommandCoordinator.ClearSelectedThreadQueueAsync();
 
-    private static CommandPalette CreateCommandPalette()
-        => new CommandPalette().Style(() => CommandPalettePopupStyle);
+    internal static CommandPaletteStyle ResolveCommandPalettePopupStyle(Visual? focusElement)
+    {
+        return IsInsideDialog(focusElement)
+            ? DialogCommandPalettePopupStyle
+            : CommandPalettePopupStyle;
+    }
+
+    private static bool IsInsideDialog(Visual? visual)
+    {
+        for (var current = visual; current is not null; current = current.Parent)
+        {
+            if (current is Dialog)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static CommandPalette CreateCommandPalette(Func<CommandPaletteStyle> getStyle)
+        => new CommandPalette().Style(() => getStyle());
 }
