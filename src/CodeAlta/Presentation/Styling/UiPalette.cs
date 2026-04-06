@@ -195,7 +195,7 @@ namespace CodeAlta.Presentation.Styling
             };
         }
 
-        private static Color GetSidebarAccentColor(SidebarAccent accent)
+        internal static Color GetSidebarAccentColor(SidebarAccent accent)
         {
             return accent switch
             {

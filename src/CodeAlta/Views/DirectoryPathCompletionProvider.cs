@@ -1,9 +1,19 @@
 using CodeAlta.App;
 using CodeAlta.Catalog;
-using XenoAtom.Terminal.UI.Controls;
-using XenoAtom.Terminal.UI.Text;
 
 namespace CodeAlta.Views;
+
+internal enum OpenProjectSuggestionKind
+{
+    Project,
+    Directory,
+}
+
+internal sealed record OpenProjectSuggestion(
+    OpenProjectSuggestionKind Kind,
+    string ReplaceText,
+    string PrimaryText,
+    string? SecondaryText = null);
 
 internal sealed class DirectoryPathCompletionProvider
 {
@@ -23,66 +33,37 @@ internal sealed class DirectoryPathCompletionProvider
         _getProjects = projects;
     }
 
-    public PromptEditorCompletion Complete(in PromptEditorCompletionRequest request)
+    public IReadOnlyList<OpenProjectSuggestion> GetSuggestions(string? currentText)
     {
-        var input = SnapshotToString(request.Snapshot);
-        var caret = Math.Clamp(request.CaretIndex, 0, input.Length);
-        var currentText = input[..caret];
-
-        if (!TryResolveCandidates(currentText, out var candidates))
+        var text = currentText ?? string.Empty;
+        if (text.Length == 0)
         {
-            return default;
+            return GetDefaultSuggestions();
         }
 
-        var ghostText = caret == input.Length && candidates.Count > 0 &&
-                        candidates[0].StartsWith(currentText, StringComparison.OrdinalIgnoreCase)
-            ? candidates[0][currentText.Length..]
-            : null;
-
-        return new PromptEditorCompletion(
-            Handled: true,
-            Candidates: candidates,
-            ReplaceStart: 0,
-            ReplaceLength: request.Snapshot.Length,
-            SelectedIndex: 0,
-            GhostText: ghostText);
-    }
-
-    private bool TryResolveCandidates(string currentText, out IReadOnlyList<string> candidates)
-    {
-        if (string.IsNullOrEmpty(currentText))
+        if (!OpenProjectRequestResolver.LooksLikePath(text))
         {
-            candidates = GetDefaultCandidates();
-            return candidates.Count > 0;
+            return GetProjectMatches(text);
         }
 
-        if (!OpenProjectRequestResolver.LooksLikePath(currentText))
+        if (!TryResolveSearchContext(text, out var searchRoot, out var prefix))
         {
-            candidates = GetProjectMatches(currentText);
-            return candidates.Count > 0;
-        }
-
-        if (!TryResolveSearchContext(currentText, out var searchRoot, out var prefix))
-        {
-            candidates = [];
-            return false;
+            return [];
         }
 
         try
         {
             if (!Directory.Exists(searchRoot))
             {
-                candidates = [];
-                return false;
+                return [];
             }
 
-            candidates = Directory
+            return Directory
                 .EnumerateDirectories(searchRoot)
                 .Where(directory => prefix.Length == 0 || Path.GetFileName(directory).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                .Select(AppendTrailingSeparator)
-                .OrderBy(static candidate => candidate, StringComparer.OrdinalIgnoreCase)
+                .Select(static directory => BuildDirectorySuggestion(directory))
+                .OrderBy(static candidate => candidate.ReplaceText, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            return candidates.Count > 0;
         }
         catch (IOException)
         {
@@ -94,11 +75,10 @@ internal sealed class DirectoryPathCompletionProvider
         {
         }
 
-        candidates = [];
-        return false;
+        return [];
     }
 
-    private IReadOnlyList<string> GetRootCandidates()
+    private IReadOnlyList<OpenProjectSuggestion> GetRootSuggestions()
     {
         try
         {
@@ -107,8 +87,8 @@ internal sealed class DirectoryPathCompletionProvider
                 return DriveInfo
                     .GetDrives()
                     .Where(static drive => drive.IsReady)
-                    .Select(static drive => drive.RootDirectory.FullName)
-                    .OrderBy(static drive => drive, StringComparer.OrdinalIgnoreCase)
+                    .Select(static drive => BuildDirectorySuggestion(drive.RootDirectory.FullName))
+                    .OrderBy(static drive => drive.ReplaceText, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
             }
         }
@@ -119,34 +99,34 @@ internal sealed class DirectoryPathCompletionProvider
         {
         }
 
-        return [AppendTrailingSeparator(Path.GetPathRoot(_currentDirectory) ?? Path.DirectorySeparatorChar.ToString())];
+        return [BuildDirectorySuggestion(Path.GetPathRoot(_currentDirectory) ?? Path.DirectorySeparatorChar.ToString())];
     }
 
-    private IReadOnlyList<string> GetDefaultCandidates()
+    private IReadOnlyList<OpenProjectSuggestion> GetDefaultSuggestions()
     {
-        var projectCandidates = BuildProjectCandidates(_getProjects, _includeHidden());
-        var rootCandidates = GetRootCandidates();
-        if (projectCandidates.Count == 0)
+        var projectSuggestions = BuildProjectSuggestions(_getProjects, _includeHidden());
+        var rootSuggestions = GetRootSuggestions();
+        if (projectSuggestions.Count == 0)
         {
-            return rootCandidates;
+            return rootSuggestions;
         }
 
-        var candidates = new List<string>(projectCandidates.Count + rootCandidates.Count);
-        candidates.AddRange(projectCandidates);
-        candidates.AddRange(rootCandidates);
-        return candidates;
+        var suggestions = new List<OpenProjectSuggestion>(projectSuggestions.Count + rootSuggestions.Count);
+        suggestions.AddRange(projectSuggestions);
+        suggestions.AddRange(rootSuggestions);
+        return suggestions;
     }
 
-    private IReadOnlyList<string> GetProjectMatches(string currentText)
+    private IReadOnlyList<OpenProjectSuggestion> GetProjectMatches(string currentText)
     {
         var trimmed = currentText.Trim();
         if (trimmed.Length == 0)
         {
-            return BuildProjectCandidates(_getProjects, _includeHidden());
+            return BuildProjectSuggestions(_getProjects, _includeHidden());
         }
 
-        return BuildProjectCandidates(_getProjects, _includeHidden())
-            .Where(candidate => candidate.StartsWith(trimmed, StringComparison.OrdinalIgnoreCase))
+        return BuildProjectSuggestions(_getProjects, _includeHidden())
+            .Where(candidate => candidate.PrimaryText.StartsWith(trimmed, StringComparison.OrdinalIgnoreCase))
             .ToArray();
     }
 
@@ -212,6 +192,37 @@ internal sealed class DirectoryPathCompletionProvider
             : Path.Combine(_currentDirectory, effectivePath));
     }
 
+    private static IReadOnlyList<OpenProjectSuggestion> BuildProjectSuggestions(
+        Func<IEnumerable<ProjectDescriptor>>? getProjects,
+        bool includeHidden)
+    {
+        if (getProjects is null)
+        {
+            return [];
+        }
+
+        return getProjects()
+            .Where(project => includeHidden || !project.Archived)
+            .OrderBy(static project => project.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static project => project.ProjectPath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static project => project.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(static project => new OpenProjectSuggestion(
+                OpenProjectSuggestionKind.Project,
+                project.DisplayName,
+                project.DisplayName,
+                project.ProjectPath))
+            .ToArray();
+    }
+
+    private static OpenProjectSuggestion BuildDirectorySuggestion(string directory)
+    {
+        var normalized = AppendTrailingSeparator(directory);
+        return new OpenProjectSuggestion(
+            OpenProjectSuggestionKind.Directory,
+            normalized,
+            normalized);
+    }
+
     private static bool EndsWithDirectorySeparator(string path)
         => path.Length > 0 &&
            (path[^1] == Path.DirectorySeparatorChar || path[^1] == Path.AltDirectorySeparatorChar);
@@ -224,50 +235,5 @@ internal sealed class DirectoryPathCompletionProvider
         }
 
         return path + Path.DirectorySeparatorChar;
-    }
-
-    private static string SnapshotToString(ITextSnapshot snapshot)
-    {
-        if (snapshot.Length == 0)
-        {
-            return string.Empty;
-        }
-
-        return string.Create(snapshot.Length, snapshot, static (span, source) => source.CopyTo(0, span));
-    }
-
-    private static IReadOnlyList<string> BuildProjectCandidates(
-        Func<IEnumerable<ProjectDescriptor>>? getProjects,
-        bool includeHidden)
-    {
-        if (getProjects is null)
-        {
-            return [];
-        }
-
-        var candidates = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var project in getProjects()
-                     .Where(project => includeHidden || !project.Archived)
-                     .OrderBy(static candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
-                     .ThenBy(static candidate => candidate.Name, StringComparer.OrdinalIgnoreCase)
-                     .ThenBy(static candidate => candidate.Slug, StringComparer.OrdinalIgnoreCase))
-        {
-            AddCandidate(candidates, seen, project.DisplayName);
-            AddCandidate(candidates, seen, project.Name);
-            AddCandidate(candidates, seen, project.Slug);
-        }
-
-        return candidates;
-    }
-
-    private static void AddCandidate(List<string> candidates, HashSet<string> seen, string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value) || !seen.Add(value))
-        {
-            return;
-        }
-
-        candidates.Add(value);
     }
 }

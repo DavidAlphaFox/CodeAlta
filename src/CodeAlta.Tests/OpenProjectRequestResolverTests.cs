@@ -16,16 +16,26 @@ public sealed class OpenProjectRequestResolverTests
     }
 
     [TestMethod]
-    public void ResolveProjectReference_UsesSlugBeforeDisplayName()
+    public void ResolveProjectReference_UsesDisplayNameOnly()
     {
-        var slugProject = CreateProject("project-1", "codealta", "Project One");
-        var displayNameProject = CreateProject("project-2", "project-two", "codealta");
+        var project = CreateProject("project-1", "codealta", "CodeAlta");
 
         var result = OpenProjectRequestResolver.ResolveProjectReference(
-            [slugProject, displayNameProject],
-            "codealta");
+            [project],
+            "CodeAlta");
 
-        Assert.AreSame(slugProject, result);
+        Assert.AreSame(project, result);
+    }
+
+    [TestMethod]
+    public void ResolveProjectReference_DoesNotMatchSlug()
+    {
+        var project = CreateProject("project-1", "codealta", "Main Repo");
+
+        var ex = Assert.ThrowsExactly<InvalidOperationException>(
+            () => OpenProjectRequestResolver.ResolveProjectReference([project], "codealta"));
+
+        StringAssert.Contains(ex.Message, "project name from the sidebar");
     }
 
     [TestMethod]
@@ -41,6 +51,8 @@ public sealed class OpenProjectRequestResolverTests
             () => OpenProjectRequestResolver.ResolveProjectReference(projects, "CodeAlta"));
 
         StringAssert.Contains(ex.Message, "matched multiple entries");
+        StringAssert.Contains(ex.Message, Path.Combine(Path.GetTempPath(), "codealta-a"));
+        StringAssert.Contains(ex.Message, Path.Combine(Path.GetTempPath(), "codealta-b"));
     }
 
     private static ProjectDescriptor CreateProject(string id, string slug, string displayName)

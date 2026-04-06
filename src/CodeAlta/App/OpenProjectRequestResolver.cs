@@ -46,28 +46,13 @@ internal static class OpenProjectRequestResolver
 
         var trimmedReference = projectReference.Trim();
 
-        if (TryResolveSingle(projects, trimmedReference, static (project, value) => string.Equals(project.Id, value, StringComparison.OrdinalIgnoreCase), out var exactIdMatch))
-        {
-            return exactIdMatch;
-        }
-
-        if (TryResolveSingle(projects, trimmedReference, static (project, value) => string.Equals(project.Slug, value, StringComparison.OrdinalIgnoreCase), out var exactSlugMatch))
-        {
-            return exactSlugMatch;
-        }
-
-        if (TryResolveSingle(projects, trimmedReference, static (project, value) => string.Equals(project.Name, value, StringComparison.OrdinalIgnoreCase), out var exactNameMatch))
-        {
-            return exactNameMatch;
-        }
-
         if (TryResolveSingle(projects, trimmedReference, static (project, value) => string.Equals(project.DisplayName, value, StringComparison.OrdinalIgnoreCase), out var exactDisplayNameMatch))
         {
             return exactDisplayNameMatch;
         }
 
         throw new InvalidOperationException(
-            $"Project '{trimmedReference}' was not found. Enter a rooted path or use an existing project id, slug, name, or display name.");
+            $"Project '{trimmedReference}' was not found. Enter a rooted path or use an existing project name from the sidebar.");
     }
 
     private static bool TryResolveSingle(
@@ -94,9 +79,9 @@ internal static class OpenProjectRequestResolver
         {
             var matchList = string.Join(
                 ", ",
-                matches.Select(static candidate => $"{candidate.DisplayName} ({candidate.Slug})"));
+                matches.Select(static candidate => $"{candidate.DisplayName} ({candidate.ProjectPath})"));
             throw new InvalidOperationException(
-                $"Project '{projectReference}' matched multiple entries: {matchList}. Use the project id or slug instead.");
+                $"Project '{projectReference}' matched multiple entries: {matchList}. Enter the rooted folder path instead.");
         }
 
         project = matches[0];

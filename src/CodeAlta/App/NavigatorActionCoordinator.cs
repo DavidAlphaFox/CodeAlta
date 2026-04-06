@@ -176,14 +176,14 @@ internal sealed class NavigatorActionCoordinator
     {
         new DirectoryPathDialog(
             "Open Project",
-            "Type a rooted folder path or an existing project id, slug, name, or display name.",
+            "Type a project name from the sidebar or a rooted folder path.",
             "Open",
             OpenFolderAsync,
             _getDialogBounds,
             _getFocusTarget,
             _getPromptFocusTarget,
             () => _threadStateCoordinator.Projects,
-            placeholder: "C:\\code\\SomeFolder or CodeAlta")
+            placeholder: "CodeAlta or C:\\code\\SomeFolder")
             .Show();
     }
 

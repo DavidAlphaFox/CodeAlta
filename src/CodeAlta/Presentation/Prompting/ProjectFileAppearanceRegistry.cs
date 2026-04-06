@@ -79,6 +79,16 @@ internal sealed class ProjectFileAppearanceRegistry : IProjectFileAppearanceRegi
             descriptor.Category);
     }
 
+    public ProjectFileAppearance GetDirectoryAppearance()
+    {
+        var descriptor = ResolveDirectoryDescriptor();
+        return new ProjectFileAppearance(
+            descriptor.Icon,
+            descriptor.Foreground,
+            Style.None,
+            descriptor.Category);
+    }
+
     private ProjectFileAppearanceDescriptor? ResolveDescriptor(ProjectFileSearchItem item)
     {
         if (item.Kind == ProjectFileSearchItemKind.Directory)

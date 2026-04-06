@@ -43,7 +43,7 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Project.OpenFolder",
             "Open Project",
-            "Open a rooted path or switch to a known project from the same dialog.",
+            "Open a rooted path or switch to a visible project by name from the same dialog.",
             ShellCommandHelpCategory.General,
             ShellCommandScope.AnyShell,
             ShellCommandAvailability.Always,
