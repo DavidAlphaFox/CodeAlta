@@ -21,6 +21,11 @@ public class AgentSessionCreateOptions
     public string? WorkingDirectory { get; init; }
 
     /// <summary>
+    /// Gets or initializes the project roots used for local instruction overlays.
+    /// </summary>
+    public IReadOnlyList<string> ProjectRoots { get; init; } = [];
+
+    /// <summary>
     /// Gets or initializes whether streaming is enabled.
     /// </summary>
     public bool Streaming { get; init; }

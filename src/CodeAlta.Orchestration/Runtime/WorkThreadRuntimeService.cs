@@ -335,6 +335,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             ReasoningEffort = options.ReasoningEffort ?? ParseReasoningEffort(coordinatorProfile.DefaultReasoningEffort),
             Streaming = true,
             WorkingDirectory = options.WorkingDirectory,
+            ProjectRoots = options.ProjectRoots,
             SystemMessage = instructions.SystemMessage,
             DeveloperInstructions = instructions.DeveloperInstructions,
             Tools = options.Tools,
