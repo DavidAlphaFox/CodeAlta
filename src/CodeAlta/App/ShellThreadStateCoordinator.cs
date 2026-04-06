@@ -70,7 +70,8 @@ internal sealed class ShellThreadStateCoordinator
             loadPromptDraft,
             applyThreadPreference,
             rememberThreadPreference,
-            GetSelectedProject);
+            GetSelectedProject,
+            GetProjectById);
         _catalogStateCoordinator = new ShellCatalogStateCoordinator(projectCatalog, threadCatalog, _viewStateCoordinator, _openThreadRegistry);
         _isBackendReady = isBackendReady;
         _deletePromptDraft = deletePromptDraft;

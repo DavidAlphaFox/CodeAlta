@@ -23,11 +23,13 @@ internal sealed class ThreadTimelinePresenter
     private PendingAssistantState? _pendingAssistant;
     private TruncatedHistoryState? _truncatedHistory;
     private bool _hasSeenUserPrompt;
+    private string? _localFileRootPath;
 
     public ThreadTimelinePresenter(
         IUiDispatcher uiDispatcher,
         Func<bool> isAutoScrollEnabled,
-        Func<Rectangle?> getDialogBounds)
+        Func<Rectangle?> getDialogBounds,
+        string? localFileRootPath = null)
     {
         ArgumentNullException.ThrowIfNull(uiDispatcher);
         ArgumentNullException.ThrowIfNull(isAutoScrollEnabled);
@@ -35,6 +37,7 @@ internal sealed class ThreadTimelinePresenter
 
         _uiDispatcher = uiDispatcher;
         _isAutoScrollEnabled = isAutoScrollEnabled;
+        _localFileRootPath = localFileRootPath;
         Flow = UiDispatch.Invoke(
             _uiDispatcher,
             static () => new DocumentFlow
@@ -49,13 +52,15 @@ internal sealed class ThreadTimelinePresenter
             _uiDispatcher,
             _isAutoScrollEnabled,
             item => AppendTimelineItem(item, resetActiveToolCallGroup: false),
-            getDialogBounds);
+            getDialogBounds,
+            localFileRootPath);
         FileChanges = new FileChangePresenter(
             Flow,
             _uiDispatcher,
             _isAutoScrollEnabled,
             item => AppendTimelineItem(item, resetActiveToolCallGroup: true),
-            getDialogBounds);
+            getDialogBounds,
+            localFileRootPath);
     }
 
     public DocumentFlow Flow { get; }
@@ -63,6 +68,47 @@ internal sealed class ThreadTimelinePresenter
     public ToolCallPresenter ToolCalls { get; }
 
     public FileChangePresenter FileChanges { get; }
+
+    public string? LocalFileRootPath => _localFileRootPath;
+
+    public void SetLocalFileRootPath(string? localFileRootPath)
+    {
+        if (string.Equals(_localFileRootPath, localFileRootPath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _localFileRootPath = localFileRootPath;
+        ToolCalls.SetLocalFileRootPath(localFileRootPath);
+        FileChanges.SetLocalFileRootPath(localFileRootPath);
+        UiDispatch.Post(_uiDispatcher, () =>
+        {
+            foreach (var state in _contentStates.Values)
+            {
+                ChatTimelineVisualFactory.ApplyLocalFileRootPath(state.Markdown, _localFileRootPath);
+            }
+
+            foreach (var state in _activityStates.Values)
+            {
+                ChatTimelineVisualFactory.ApplyLocalFileRootPath(state.Markdown, _localFileRootPath);
+            }
+
+            foreach (var state in _interactionStates.Values)
+            {
+                ChatTimelineVisualFactory.ApplyLocalFileRootPath(state.Markdown, _localFileRootPath);
+            }
+
+            foreach (var state in _planStates.Values)
+            {
+                ChatTimelineVisualFactory.ApplyLocalFileRootPath(state.Markdown, _localFileRootPath);
+            }
+
+            if (_pendingAssistant is { } pendingAssistant)
+            {
+                ChatTimelineVisualFactory.ApplyLocalFileRootPath(pendingAssistant.Markdown, _localFileRootPath);
+            }
+        });
+    }
 
     public void BeginBufferedHistoryLoad()
         => _bufferedHistoryItems = [];
@@ -248,7 +294,7 @@ internal sealed class ThreadTimelinePresenter
             return;
         }
 
-        var entry = ChatTimelineVisualFactory.CreateMarkdownItem(message, ChatTimelineTone.Interaction, headerOverride: "Error");
+        var entry = ChatTimelineVisualFactory.CreateMarkdownItem(message, ChatTimelineTone.Interaction, headerOverride: "Error", localFileRootPath: _localFileRootPath);
         ChatTimelineVisualFactory.ApplyTimestamp(entry.TimestampText, timestamp);
         UiDispatch.Invoke(
             _uiDispatcher,
@@ -278,7 +324,7 @@ internal sealed class ThreadTimelinePresenter
             return;
         }
 
-        var entry = ChatTimelineVisualFactory.CreateMarkdownItem(markdown, ChatTimelineTone.Interaction, headerOverride: "Error");
+        var entry = ChatTimelineVisualFactory.CreateMarkdownItem(markdown, ChatTimelineTone.Interaction, headerOverride: "Error", localFileRootPath: _localFileRootPath);
         UiDispatch.Invoke(
             _uiDispatcher,
             static state =>
@@ -396,7 +442,8 @@ internal sealed class ThreadTimelinePresenter
             ChatMarkdownFormatter.FormatChatContentMarkdown(kind, string.Empty),
             ChatTimelineVisualFactory.GetContentTone(kind),
             headerOverride: ChatTimelineVisualFactory.GetContentHeader(kind),
-            headerSecondary: ChatMarkdownFormatter.GetChatContentHeaderSecondary(kind, string.Empty));
+            headerSecondary: ChatMarkdownFormatter.GetChatContentHeaderSecondary(kind, string.Empty),
+            localFileRootPath: _localFileRootPath);
         ChatTimelineVisualFactory.ApplyTimestamp(entry.TimestampText, timestamp);
         var state = new ChatContentState(entry.Item, entry.Markdown, entry.TimestampText, entry.HeaderText, new StringBuilder(), kind);
         _contentStates[key] = state;
@@ -447,14 +494,14 @@ internal sealed class ThreadTimelinePresenter
         });
     }
 
-    private static ChatStatusState CreateChatStatusState(
+    private ChatStatusState CreateChatStatusState(
         string markdown,
         ChatTimelineTone tone,
         DateTimeOffset timestamp,
         string? headerOverride = null,
         string? headerSecondary = null)
     {
-        var entry = ChatTimelineVisualFactory.CreateMarkdownItem(markdown, tone, headerOverride, headerSecondary);
+        var entry = ChatTimelineVisualFactory.CreateMarkdownItem(markdown, tone, headerOverride, headerSecondary, localFileRootPath: _localFileRootPath);
         ChatTimelineVisualFactory.ApplyTimestamp(entry.TimestampText, timestamp);
         return new ChatStatusState(entry.Item, entry.Markdown, entry.TimestampText)
         {

@@ -4,6 +4,7 @@ using CodeAlta.Catalog;
 using CodeAlta.Presentation.Shell;
 using CodeAlta.Presentation.Timeline;
 using CodeAlta.Threading;
+using CodeAlta.Views;
 using XenoAtom.Terminal.UI.Geometry;
 
 namespace CodeAlta.App;
@@ -17,6 +18,7 @@ internal sealed class OpenThreadRegistry
     private readonly Action<OpenThreadState> _applyThreadPreference;
     private readonly Action<string, string?, AgentReasoningEffort?, bool, bool> _rememberThreadPreference;
     private readonly Func<ProjectDescriptor?> _getSelectedProject;
+    private readonly Func<string?, ProjectDescriptor?> _getProjectById;
 
     public OpenThreadRegistry(
         Func<IUiDispatcher> getUiDispatcher,
@@ -24,7 +26,8 @@ internal sealed class OpenThreadRegistry
         Func<string, string?> loadPromptDraft,
         Action<OpenThreadState> applyThreadPreference,
         Action<string, string?, AgentReasoningEffort?, bool, bool> rememberThreadPreference,
-        Func<ProjectDescriptor?> getSelectedProject)
+        Func<ProjectDescriptor?> getSelectedProject,
+        Func<string?, ProjectDescriptor?> getProjectById)
     {
         ArgumentNullException.ThrowIfNull(getUiDispatcher);
         ArgumentNullException.ThrowIfNull(getTimelineBounds);
@@ -32,6 +35,7 @@ internal sealed class OpenThreadRegistry
         ArgumentNullException.ThrowIfNull(applyThreadPreference);
         ArgumentNullException.ThrowIfNull(rememberThreadPreference);
         ArgumentNullException.ThrowIfNull(getSelectedProject);
+        ArgumentNullException.ThrowIfNull(getProjectById);
 
         _getUiDispatcher = getUiDispatcher;
         _getTimelineBounds = getTimelineBounds;
@@ -39,6 +43,7 @@ internal sealed class OpenThreadRegistry
         _applyThreadPreference = applyThreadPreference;
         _rememberThreadPreference = rememberThreadPreference;
         _getSelectedProject = getSelectedProject;
+        _getProjectById = getProjectById;
     }
 
     public OpenThreadState EnsureThreadTab(WorkThreadDescriptor thread)
@@ -48,6 +53,7 @@ internal sealed class OpenThreadRegistry
         if (_threadTabs.TryGetValue(thread.ThreadId, out var existing))
         {
             existing.Thread = thread;
+            existing.Timeline.SetLocalFileRootPath(ResolveThreadProjectRoot(thread));
             existing.ViewModel.ThreadId = thread.ThreadId;
             existing.ViewModel.Title = thread.Title;
             return existing;
@@ -57,7 +63,8 @@ internal sealed class OpenThreadRegistry
         var timeline = new ThreadTimelinePresenter(
             _getUiDispatcher(),
             () => state!.AutoScroll,
-            _getTimelineBounds);
+            _getTimelineBounds,
+            ResolveThreadProjectRoot(thread));
         state = new OpenThreadState(thread, timeline);
         state.BackendId = new AgentBackendId(thread.BackendId);
         state.Session.PromptDraftText = _loadPromptDraft(thread.ThreadId) ?? string.Empty;
@@ -69,6 +76,13 @@ internal sealed class OpenThreadRegistry
 
         _threadTabs[thread.ThreadId] = state;
         return state;
+    }
+
+    private string? ResolveThreadProjectRoot(WorkThreadDescriptor thread)
+    {
+        ArgumentNullException.ThrowIfNull(thread);
+
+        return PromptReferenceProjectRootResolver.Resolve(thread, _getProjectById, _getSelectedProject);
     }
 
     public void ResetThreadTab(OpenThreadState tab)

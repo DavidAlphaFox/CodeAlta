@@ -15,12 +15,12 @@ namespace CodeAlta.Presentation.Timeline;
 
 internal static class ChatTimelineVisualFactory
 {
-    public static PendingChatMessage CreatePendingChatMessage(string userMarkdown)
+    public static PendingChatMessage CreatePendingChatMessage(string userMarkdown, string? localFileRootPath = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userMarkdown);
 
-        var userItem = CreateUserChatItem(userMarkdown);
-        var assistantItem = CreateAssistantStreamingChatItem(out var streamingMarkdown, out var timestampText);
+        var userItem = CreateUserChatItem(userMarkdown, localFileRootPath);
+        var assistantItem = CreateAssistantStreamingChatItem(out var streamingMarkdown, out var timestampText, localFileRootPath);
         return new PendingChatMessage(userItem, assistantItem, streamingMarkdown, timestampText);
     }
 
@@ -75,10 +75,28 @@ internal static class ChatTimelineVisualFactory
         ChatTimelineTone tone,
         string? headerOverride = null,
         string? headerSecondary = null,
-        int maxCodeBlockHeight = 14)
+        int maxCodeBlockHeight = 14,
+        string? localFileRootPath = null)
         => UiDispatch.InvokeCurrent(
-            static state => CreateChatMarkdownItemCore(state.markdown, state.tone, state.headerOverride, state.headerSecondary, state.maxCodeBlockHeight),
-            (markdown, tone, headerOverride, headerSecondary, maxCodeBlockHeight));
+            static state => CreateChatMarkdownItemCore(state.markdown, state.tone, state.headerOverride, state.headerSecondary, state.maxCodeBlockHeight, state.localFileRootPath),
+            (markdown, tone, headerOverride, headerSecondary, maxCodeBlockHeight, localFileRootPath));
+
+    public static MarkdownRenderOptions CreateThreadMarkdownOptions(int maxCodeBlockHeight, string? localFileRootPath = null)
+        => MarkdownRenderOptions.Default with
+        {
+            WrapCodeBlocks = true,
+            MaxCodeBlockHeight = maxCodeBlockHeight,
+            LocalFileRootPath = localFileRootPath,
+        };
+
+    public static void ApplyLocalFileRootPath(MarkdownControl markdownControl, string? localFileRootPath)
+    {
+        ArgumentNullException.ThrowIfNull(markdownControl);
+        markdownControl.Options = markdownControl.Options with
+        {
+            LocalFileRootPath = localFileRootPath,
+        };
+    }
 
     public static string CreateContentKey(AgentContentKind kind, string contentId)
         => $"content:{kind}:{contentId}";
@@ -119,12 +137,13 @@ internal static class ChatTimelineVisualFactory
         return () => UiDispatch.PostCurrentDeferred(action);
     }
 
-    private static DocumentFlowItem CreateUserChatItem(string markdown)
+    private static DocumentFlowItem CreateUserChatItem(string markdown, string? localFileRootPath)
         => CreateMarkdownItem(
             markdown,
             ChatTimelineTone.User,
             headerOverride: "User Prompt",
-            maxCodeBlockHeight: 10).Item;
+            maxCodeBlockHeight: 10,
+            localFileRootPath: localFileRootPath).Item;
 
     private static DocumentFlowItem CreateUserPromptSeparatorItem()
         => UiDispatch.InvokeCurrent(
@@ -135,9 +154,9 @@ internal static class ChatTimelineVisualFactory
                 Padding = new Thickness(0, 1, 0, 0),
             });
 
-    private static DocumentFlowItem CreateAssistantStreamingChatItem(out MarkdownControl markdownControl, out Markup timestampText)
+    private static DocumentFlowItem CreateAssistantStreamingChatItem(out MarkdownControl markdownControl, out Markup timestampText, string? localFileRootPath)
     {
-        var entry = CreateMarkdownItem(string.Empty, ChatTimelineTone.Assistant);
+        var entry = CreateMarkdownItem(string.Empty, ChatTimelineTone.Assistant, localFileRootPath: localFileRootPath);
         markdownControl = entry.Markdown;
         timestampText = entry.TimestampText;
         return entry.Item;
@@ -184,7 +203,8 @@ internal static class ChatTimelineVisualFactory
         ChatTimelineTone tone,
         string? headerOverride,
         string? headerSecondary,
-        int maxCodeBlockHeight)
+        int maxCodeBlockHeight,
+        string? localFileRootPath)
     {
         var headerText = CreateChatCardHeader(tone, headerOverride, headerSecondary);
         markdown = markdown.Trim();
@@ -192,11 +212,7 @@ internal static class ChatTimelineVisualFactory
         {
             HorizontalAlignment = Align.Stretch,
             VerticalAlignment = Align.Start,
-            Options = MarkdownRenderOptions.Default with
-            {
-                WrapCodeBlocks = true,
-                MaxCodeBlockHeight = maxCodeBlockHeight,
-            },
+            Options = CreateThreadMarkdownOptions(maxCodeBlockHeight, localFileRootPath),
         };
 
         var copyButton = new Button(new TextBlock($"{NerdFont.MdContentCopy}"))

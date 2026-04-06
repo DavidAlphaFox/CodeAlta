@@ -27,13 +27,15 @@ internal sealed class ToolCallPresenter
     private readonly Func<Rectangle?> _getDialogBounds;
     private readonly Dictionary<string, ToolCallEntryState> _toolCalls = new(StringComparer.Ordinal);
     private ToolCallGroupState? _activeGroup;
+    private string? _localFileRootPath;
 
     public ToolCallPresenter(
         DocumentFlow flow,
         IUiDispatcher uiDispatcher,
         Func<bool> isAutoScrollEnabled,
         Action<DocumentFlowItem> appendTimelineItem,
-        Func<Rectangle?> getDialogBounds)
+        Func<Rectangle?> getDialogBounds,
+        string? localFileRootPath = null)
     {
         ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(uiDispatcher);
@@ -46,6 +48,27 @@ internal sealed class ToolCallPresenter
         _isAutoScrollEnabled = isAutoScrollEnabled;
         _appendTimelineItem = appendTimelineItem;
         _getDialogBounds = getDialogBounds;
+        _localFileRootPath = localFileRootPath;
+    }
+
+    public void SetLocalFileRootPath(string? localFileRootPath)
+    {
+        if (string.Equals(_localFileRootPath, localFileRootPath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _localFileRootPath = localFileRootPath;
+        UiDispatch.Post(_uiDispatcher, () =>
+        {
+            foreach (var entry in _toolCalls.Values)
+            {
+                if (entry.DetailMetadata is { } metadata)
+                {
+                    ChatTimelineVisualFactory.ApplyLocalFileRootPath(metadata, _localFileRootPath);
+                }
+            }
+        });
     }
 
     public bool TryHandleActivity(AgentActivityEvent activity)
@@ -286,7 +309,7 @@ internal sealed class ToolCallPresenter
                 return;
             }
 
-            var metadata = new MarkdownControl(string.Empty) { HorizontalAlignment = Align.Stretch, VerticalAlignment = Align.Start, Options = XenoAtom.Terminal.UI.Extensions.Markdown.MarkdownRenderOptions.Default with { WrapCodeBlocks = true, MaxCodeBlockHeight = 5 } };
+            var metadata = new MarkdownControl(string.Empty) { HorizontalAlignment = Align.Stretch, VerticalAlignment = Align.Start, Options = ChatTimelineVisualFactory.CreateThreadMarkdownOptions(5, _localFileRootPath) };
             var wrapText = new State<bool>(true);
             var log = new LogControl { MaxCapacity = ToolCallDialogLogCapacity, HorizontalAlignment = Align.Stretch, VerticalAlignment = Align.Stretch }.WrapText(wrapText);
             var statsText = new Markup(string.Empty);

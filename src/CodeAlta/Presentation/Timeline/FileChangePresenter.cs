@@ -30,13 +30,15 @@ internal sealed class FileChangePresenter
     private bool _pendingHasAggregateDiff;
     private DateTimeOffset? _pendingFirstSeenAt;
     private DateTimeOffset? _pendingLastUpdatedAt;
+    private string? _localFileRootPath;
 
     public FileChangePresenter(
         DocumentFlow flow,
         IUiDispatcher uiDispatcher,
         Func<bool> isAutoScrollEnabled,
         Action<DocumentFlowItem> appendTimelineItem,
-        Func<Rectangle?> getDialogBounds)
+        Func<Rectangle?> getDialogBounds,
+        string? localFileRootPath = null)
     {
         ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(uiDispatcher);
@@ -49,6 +51,30 @@ internal sealed class FileChangePresenter
         _isAutoScrollEnabled = isAutoScrollEnabled;
         _appendTimelineItem = appendTimelineItem;
         _getDialogBounds = getDialogBounds;
+        _localFileRootPath = localFileRootPath;
+    }
+
+    public void SetLocalFileRootPath(string? localFileRootPath)
+    {
+        if (string.Equals(_localFileRootPath, localFileRootPath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _localFileRootPath = localFileRootPath;
+        UiDispatch.Post(_uiDispatcher, () =>
+        {
+            foreach (var group in _groups)
+            {
+                foreach (var entry in group.Files.Values)
+                {
+                    if (entry.DetailMetadata is { } metadata)
+                    {
+                        ChatTimelineVisualFactory.ApplyLocalFileRootPath(metadata, _localFileRootPath);
+                    }
+                }
+            }
+        });
     }
 
     public void ObserveActivity(AgentActivityEvent activity)
@@ -315,11 +341,7 @@ internal sealed class FileChangePresenter
             {
                 HorizontalAlignment = Align.Stretch,
                 VerticalAlignment = Align.Start,
-                Options = XenoAtom.Terminal.UI.Extensions.Markdown.MarkdownRenderOptions.Default with
-                {
-                    WrapCodeBlocks = true,
-                    MaxCodeBlockHeight = 5,
-                },
+                Options = ChatTimelineVisualFactory.CreateThreadMarkdownOptions(5, _localFileRootPath),
             };
             var wrapText = new State<bool>(false);
             var log = new LogControl
