@@ -162,6 +162,7 @@ internal sealed class ThreadWorkspaceView
         ThreadCommandBar = new CommandBar
         {
             HorizontalAlignment = Align.Stretch,
+            MultiLine = true,
         };
 
         ThreadTabControl = new TabControl();
