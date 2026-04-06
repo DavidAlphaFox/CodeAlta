@@ -18,6 +18,12 @@ public sealed class CodeAltaConfigDocument
     /// </summary>
     [JsonPropertyName("acp")]
     public CodeAltaAcpSettingsDocument Acp { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets raw-API provider configuration.
+    /// </summary>
+    [JsonPropertyName("raw_api")]
+    public CodeAltaRawApiSettingsDocument RawApi { get; set; } = new();
 }
 
 /// <summary>

@@ -1,7 +1,10 @@
 using CodeAlta.Agent;
 using CodeAlta.Agent.Acp;
+using CodeAlta.Agent.Anthropic;
 using CodeAlta.Agent.Codex;
 using CodeAlta.Agent.Copilot;
+using CodeAlta.Agent.GoogleGenAI;
+using CodeAlta.Agent.OpenAI;
 using CodeAlta.Acp;
 using CodeAlta.Catalog;
 using CodeAlta.Catalog.Roles;
@@ -104,6 +107,11 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         backendFactory.RegisterCodex(new CodexAgentBackendOptions());
         backendFactory.RegisterCopilot(new CopilotAgentBackendOptions());
         var backendDescriptors = new List<AgentBackendDescriptor>(CreateBuiltInBackendDescriptors());
+        backendDescriptors.AddRange(
+            RawApiBackendRegistrar.RegisterConfiguredBackends(
+                backendFactory,
+                configStore,
+                Path.Combine(machineRoot, "agents")));
         foreach (var definition in configStore.LoadEffectiveAcpBackendDefinitions(installedBackendStore.Load()))
         {
             if (TryCreateAcpBackendOptions(catalogOptions, definition, out var acpOptions))
