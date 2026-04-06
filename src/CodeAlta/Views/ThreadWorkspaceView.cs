@@ -431,7 +431,7 @@ internal sealed class ThreadWorkspaceView
         return new Command
         {
             Id = metadata.Id,
-            LabelMarkup = metadata.SlashCommandText,
+            LabelMarkup = metadata.DisplayLabelMarkup,
             Name = metadata.CommandName,
             DescriptionMarkup = metadata.DescriptionMarkup,
             SearchText = metadata.CommandSearchText,
@@ -439,10 +439,24 @@ internal sealed class ThreadWorkspaceView
             CanExecute = _ => binding.CanExecute(),
             Gesture = metadata.Gesture,
             Sequence = metadata.Sequence,
-            Presentation = metadata.ShowInCommandBar
-                ? CommandPresentation.CommandBar | CommandPresentation.CommandPalette
-                : CommandPresentation.CommandPalette,
+            Presentation = ResolvePresentation(metadata),
         };
+    }
+
+    private static CommandPresentation ResolvePresentation(ShellCommandMetadata metadata)
+    {
+        var presentation = CommandPresentation.None;
+        if (metadata.ShowInCommandBar)
+        {
+            presentation |= CommandPresentation.CommandBar;
+        }
+
+        if (metadata.ShowInCommandPalette)
+        {
+            presentation |= CommandPresentation.CommandPalette;
+        }
+
+        return presentation;
     }
 
     private void OpenExpandedPromptDialog(

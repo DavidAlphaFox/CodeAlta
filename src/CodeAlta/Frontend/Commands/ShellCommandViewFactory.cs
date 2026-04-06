@@ -15,7 +15,7 @@ internal static class ShellCommandViewFactory
         return new Command
         {
             Id = metadata.Id,
-            LabelMarkup = metadata.SlashCommandText,
+            LabelMarkup = metadata.DisplayLabelMarkup,
             Name = metadata.CommandName,
             SearchText = metadata.CommandSearchText,
             DescriptionMarkup = metadata.DescriptionMarkup,
@@ -27,7 +27,18 @@ internal static class ShellCommandViewFactory
     }
 
     private static CommandPresentation ResolvePresentation(ShellCommandMetadata metadata)
-        => metadata.ShowInCommandBar
-            ? CommandPresentation.CommandBar | CommandPresentation.CommandPalette
-            : CommandPresentation.CommandPalette;
+    {
+        var presentation = CommandPresentation.None;
+        if (metadata.ShowInCommandBar)
+        {
+            presentation |= CommandPresentation.CommandBar;
+        }
+
+        if (metadata.ShowInCommandPalette)
+        {
+            presentation |= CommandPresentation.CommandPalette;
+        }
+
+        return presentation;
+    }
 }

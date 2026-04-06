@@ -44,8 +44,8 @@ public sealed class ShellInputRouterTests
         Assert.IsInstanceOfType<OpenSessionUsageIntent>(_router.Route("/context_usage", steerRequested: false));
         Assert.IsInstanceOfType<OpenThreadInfoIntent>(_router.Route("/thread_info", steerRequested: false));
         Assert.IsInstanceOfType<OpenExpandedPromptIntent>(_router.Route("/full_prompt", steerRequested: false));
+        Assert.IsInstanceOfType<ExitAppIntent>(_router.Route("/exit", steerRequested: false));
         Assert.IsInstanceOfType<SendPromptIntent>(_router.Route("/send investigate the regression", steerRequested: false));
-        Assert.IsInstanceOfType<SteerPromptIntent>(_router.Route("/steer focus on tests", steerRequested: false));
         Assert.IsInstanceOfType<AbortThreadIntent>(_router.Route("/abort", steerRequested: false));
         Assert.IsInstanceOfType<ClearQueueIntent>(_router.Route("/clear_queue", steerRequested: false));
         Assert.IsInstanceOfType<CompactThreadIntent>(_router.Route("/compact", steerRequested: false));
@@ -56,24 +56,33 @@ public sealed class ShellInputRouterTests
     }
 
     [TestMethod]
-    public void Route_CommandNames_KeepRemainingTextAsPrompt()
+    public void Route_SendCommand_KeepsRemainingTextAsPrompt()
     {
-        var sendIntent = _router.Route("/send investigate the regression", steerRequested: false);
-        var steerIntent = _router.Route("/steer focus on tests", steerRequested: false);
+        var intent = _router.Route("/send investigate the regression", steerRequested: false);
 
-        Assert.IsInstanceOfType<SendPromptIntent>(sendIntent);
-        Assert.AreEqual("investigate the regression", ((SendPromptIntent)sendIntent).PromptText);
-        Assert.IsInstanceOfType<SteerPromptIntent>(steerIntent);
-        Assert.AreEqual("focus on tests", ((SteerPromptIntent)steerIntent).PromptText);
+        Assert.IsInstanceOfType<SendPromptIntent>(intent);
+        Assert.AreEqual("investigate the regression", ((SendPromptIntent)intent).PromptText);
     }
 
     [TestMethod]
-    public void Route_DelegateCommand_UsesRemainingTextAsPrompt()
+    public void Route_KeyboardOnlyCommands_AreTreatedAsPlainPromptText()
     {
-        var intent = _router.Route("/delegate review the test failures", steerRequested: false);
+        var steerIntent = _router.Route("/steer focus on tests", steerRequested: false);
+        var delegateIntent = _router.Route("/delegate review the test failures", steerRequested: false);
 
-        Assert.IsInstanceOfType<DelegateThreadIntent>(intent);
-        Assert.AreEqual("review the test failures", ((DelegateThreadIntent)intent).PromptText);
+        Assert.IsInstanceOfType<SendPromptIntent>(steerIntent);
+        Assert.AreEqual("/steer focus on tests", ((SendPromptIntent)steerIntent).PromptText);
+        Assert.IsInstanceOfType<SendPromptIntent>(delegateIntent);
+        Assert.AreEqual("/delegate review the test failures", ((SendPromptIntent)delegateIntent).PromptText);
+    }
+
+    [TestMethod]
+    public void Route_KeyboardOnlyCommands_StayPlainTextDuringSteerSubmission()
+    {
+        var intent = _router.Route("/steer focus on tests", steerRequested: true);
+
+        Assert.IsInstanceOfType<SteerPromptIntent>(intent);
+        Assert.AreEqual("/steer focus on tests", ((SteerPromptIntent)intent).PromptText);
     }
 
     [TestMethod]

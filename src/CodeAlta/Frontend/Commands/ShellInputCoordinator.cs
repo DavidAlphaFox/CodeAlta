@@ -12,6 +12,7 @@ internal sealed class ShellInputCoordinator
     private readonly Func<Task> _showHelpAsync;
     private readonly Func<string?, Task> _showHelpAsyncWithFilter;
     private readonly Func<Task> _showCommandPaletteAsync;
+    private readonly Func<Task> _exitAppAsync;
     private readonly Func<string?, Task> _showOpenFolderAsync;
     private readonly Func<Task> _focusSidebarAsync;
     private readonly Func<Task> _focusPromptAsync;
@@ -32,6 +33,7 @@ internal sealed class ShellInputCoordinator
         Func<Task> showHelpAsync,
         Func<string?, Task> showHelpAsyncWithFilter,
         Func<Task> showCommandPaletteAsync,
+        Func<Task> exitAppAsync,
         Func<string?, Task> showOpenFolderAsync,
         Func<Task> focusSidebarAsync,
         Func<Task> focusPromptAsync,
@@ -51,6 +53,7 @@ internal sealed class ShellInputCoordinator
         ArgumentNullException.ThrowIfNull(showHelpAsync);
         ArgumentNullException.ThrowIfNull(showHelpAsyncWithFilter);
         ArgumentNullException.ThrowIfNull(showCommandPaletteAsync);
+        ArgumentNullException.ThrowIfNull(exitAppAsync);
         ArgumentNullException.ThrowIfNull(showOpenFolderAsync);
         ArgumentNullException.ThrowIfNull(focusSidebarAsync);
         ArgumentNullException.ThrowIfNull(focusPromptAsync);
@@ -70,6 +73,7 @@ internal sealed class ShellInputCoordinator
         _showHelpAsync = showHelpAsync;
         _showHelpAsyncWithFilter = showHelpAsyncWithFilter;
         _showCommandPaletteAsync = showCommandPaletteAsync;
+        _exitAppAsync = exitAppAsync;
         _showOpenFolderAsync = showOpenFolderAsync;
         _focusSidebarAsync = focusSidebarAsync;
         _focusPromptAsync = focusPromptAsync;
@@ -169,6 +173,10 @@ internal sealed class ShellInputCoordinator
 
             case OpenCommandPaletteIntent:
                 await _showCommandPaletteAsync();
+                return;
+
+            case ExitAppIntent:
+                await _exitAppAsync();
                 return;
 
             case OpenFolderIntent openFolder:

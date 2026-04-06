@@ -8,11 +8,13 @@ internal sealed class CodeAltaShellView
     public CodeAltaShellView(
         Visual sidebar,
         Visual threadWorkspace,
-        Visual threadCommandBar)
+        Visual threadCommandBar,
+        Action<TerminalApp> configureApp)
     {
         ArgumentNullException.ThrowIfNull(sidebar);
         ArgumentNullException.ThrowIfNull(threadWorkspace);
         ArgumentNullException.ThrowIfNull(threadCommandBar);
+        ArgumentNullException.ThrowIfNull(configureApp);
 
         var mainLayout = new Grid
             {
@@ -36,7 +38,11 @@ internal sealed class CodeAltaShellView
             0);
         mainLayout.Cell(threadCommandBar, 1, 0);
 
-        Root = mainLayout;
+        Root = new CodeAltaRootView(mainLayout, configureApp)
+        {
+            HorizontalAlignment = Align.Stretch,
+            VerticalAlignment = Align.Stretch,
+        };
     }
 
     public Visual Root { get; }

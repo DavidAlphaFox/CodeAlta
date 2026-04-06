@@ -108,6 +108,7 @@ internal sealed class ShellCommandSurfaceCoordinator
             () => ShowShellHelpAsync(),
             ShowShellHelpAsync,
             ShowCommandPaletteAsync,
+            ExitAppAsync,
             ShowOpenFolderDialogAsync,
             FocusSidebarAsync,
             FocusPromptAsync,
@@ -169,6 +170,12 @@ internal sealed class ShellCommandSurfaceCoordinator
     public Task ShowCommandPaletteAsync()
     {
         ShowCommandPalette();
+        return Task.CompletedTask;
+    }
+
+    public Task ExitAppAsync()
+    {
+        _getHelpFocusTarget()?.App?.Stop();
         return Task.CompletedTask;
     }
 

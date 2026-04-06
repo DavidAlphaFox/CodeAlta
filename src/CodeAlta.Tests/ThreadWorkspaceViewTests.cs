@@ -89,14 +89,17 @@ public sealed class ThreadWorkspaceViewTests
         var shellViewModel = new CodeAltaShellViewModel();
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        var commandBinding = new ThreadWorkspaceCommandBinding(
+        var closeTabBinding = new ThreadWorkspaceCommandBinding(
             ShellCommandCatalog.Get("CodeAlta.Thread.CloseTab"),
+            static () => { });
+        var steerBinding = new ThreadWorkspaceCommandBinding(
+            ShellCommandCatalog.Get("CodeAlta.Thread.Steer"),
             static () => { });
         var view = new ThreadWorkspaceView(
             shellViewModel,
             workspaceViewModel,
             promptComposerViewModel,
-            [commandBinding],
+            [closeTabBinding, steerBinding],
             static () => new TextBlock(string.Empty),
             static () => { },
             static _ => { },
@@ -124,11 +127,17 @@ public sealed class ThreadWorkspaceViewTests
 
         var closeTabCommand = Assert.IsInstanceOfType<Command>(
             view.ThreadInput.Commands.Single(command => string.Equals(command.Id, "CodeAlta.Thread.CloseTab", StringComparison.Ordinal)));
+        var steerCommand = Assert.IsInstanceOfType<Command>(
+            view.ThreadInput.Commands.Single(command => string.Equals(command.Id, "CodeAlta.Thread.Steer", StringComparison.Ordinal)));
 
         Assert.AreEqual("/close_tab", closeTabCommand.LabelMarkup);
         Assert.AreEqual("close_tab", closeTabCommand.Name);
         StringAssert.Contains(closeTabCommand.SearchText, "/close_tab");
         StringAssert.Contains(closeTabCommand.SearchText, "/close");
+        Assert.AreEqual("Steer", steerCommand.LabelMarkup);
+        Assert.AreEqual(CommandPresentation.CommandBar, steerCommand.Presentation);
+        Assert.IsNotNull(steerCommand.SearchText);
+        Assert.IsFalse(steerCommand.SearchText.Contains("/steer", StringComparison.Ordinal));
     }
 
     private static T GetPrivateField<T>(object instance, string fieldName)

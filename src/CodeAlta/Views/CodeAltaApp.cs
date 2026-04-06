@@ -506,36 +506,14 @@ internal sealed class CodeAltaApp : IAsyncDisposable
 
         RefreshCatalogAndThreadWorkspace();
 
-        if (_shellView is null)
-        {
-            var commandPaletteMetadata = ShellCommandCatalog.Get("CodeAlta.Shell.CommandPalette");
-            var openFolderMetadata = ShellCommandCatalog.Get("CodeAlta.Project.OpenFolder");
-            var focusSidebarMetadata = ShellCommandCatalog.Get("CodeAlta.Shell.FocusSidebar");
-            var focusPromptMetadata = ShellCommandCatalog.Get("CodeAlta.Shell.FocusPrompt");
-            _shellView = new CodeAltaShellView(
-                _sidebarCoordinator.View.Root,
-                _threadWorkspaceView.Root,
-                ThreadCommandBar!);
-            _shellView.Root.AddCommand(new Command
-            {
-                Id = "CodeAlta.Diagnostics.ToggleTerminalLoop",
-                LabelMarkup = "Loop",
-                DescriptionMarkup = "Toggle per-frame loop work.",
-                Gesture = new KeyGesture(TerminalKey.F4),
-                Presentation = CommandPresentation.CommandBar,
-                Execute = _ => ToggleTerminalLoopCallback(),
-            });
-            _shellView.Root.AddCommand(ShellCommandViewFactory.Create(
-                commandPaletteMetadata,
-                _shellCommandSurfaceCoordinator.ShowCommandPalette,
-                CommandPresentation.CommandBar));
-            _shellView.Root.AddCommand(ShellCommandViewFactory.Create(
-                openFolderMetadata,
-                () => _ = _shellCommandSurfaceCoordinator.ShowOpenFolderDialogAsync(),
-                CommandPresentation.CommandPalette));
-            _shellView.Root.AddCommand(ShellCommandViewFactory.Create(focusSidebarMetadata, FocusSidebar));
-            _shellView.Root.AddCommand(ShellCommandViewFactory.Create(focusPromptMetadata, FocusPromptEditor));
-        }
+        _shellView ??= CodeAltaShellViewFactory.Create(
+            _sidebarCoordinator.View.Root,
+            _threadWorkspaceView.Root,
+            ThreadCommandBar!,
+            _shellCommandSurfaceCoordinator,
+            ToggleTerminalLoopCallback,
+            FocusSidebar,
+            FocusPromptEditor);
 
         return _shellView;
     }

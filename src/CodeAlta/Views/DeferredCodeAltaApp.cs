@@ -28,7 +28,8 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
             new CodeAltaShellView(
                 _sidebarHost,
                 _workspaceHost,
-                _commandBarHost).Root);
+                _commandBarHost,
+                CodeAltaGlobalCommandConfigurator.Configure).Root);
         _rootHost.RegisterClipboardScreenshotCommand();
     }
 

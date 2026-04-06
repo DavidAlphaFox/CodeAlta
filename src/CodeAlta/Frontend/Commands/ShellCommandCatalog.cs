@@ -41,6 +41,15 @@ internal static class ShellCommandCatalog
             ShellCommandAvailability.Always,
             Gesture: new KeyGesture(TerminalChar.CtrlP, TerminalModifiers.Ctrl)),
         new(
+            "CodeAlta.Shell.Exit",
+            "Exit",
+            "Quit CodeAlta.",
+            ShellCommandHelpCategory.General,
+            ShellCommandScope.AnyShell,
+            ShellCommandAvailability.Always,
+            Gesture: new KeyGesture(TerminalChar.CtrlQ, TerminalModifiers.Ctrl),
+            ShowInCommandBar: false),
+        new(
             "CodeAlta.Project.OpenFolder",
             "Open Project",
             "Open a rooted path or switch to a visible project by name from the same dialog.",
@@ -110,7 +119,9 @@ internal static class ShellCommandCatalog
             ShellCommandHelpCategory.Prompt,
             ShellCommandScope.ThreadOnly,
             ShellCommandAvailability.CanSteer,
-            Gesture: new KeyGesture(TerminalKey.F5)),
+            Gesture: new KeyGesture(TerminalKey.F5),
+            ShowInCommandPalette: false,
+            SupportsTextCommand: false),
         new(
             "CodeAlta.Thread.Delegate",
             "Delegate",
@@ -119,7 +130,9 @@ internal static class ShellCommandCatalog
             ShellCommandScope.ThreadOnly,
             ShellCommandAvailability.CanDelegate,
             Gesture: new KeyGesture(TerminalKey.F7),
-            Aliases: ["delegate"]),
+            Aliases: ["delegate"],
+            ShowInCommandPalette: false,
+            SupportsTextCommand: false),
         new(
             "CodeAlta.Thread.Abort",
             "Abort",

@@ -44,22 +44,33 @@ internal sealed record ShellCommandMetadata(
     string? CommandName = null,
     IReadOnlyList<string>? Aliases = null,
     bool ShowInCommandBar = true,
+    bool ShowInCommandPalette = true,
+    bool SupportsTextCommand = true,
     bool ShowInHelp = true)
 {
     public string CommandName { get; } = ResolveCommandName(CommandName, Label);
     internal string SlashCommandText { get; } = $"/{ResolveCommandName(CommandName, Label)}";
+    internal string DisplayLabelMarkup { get; } = SupportsTextCommand
+        ? $"/{ResolveCommandName(CommandName, Label)}"
+        : AnsiMarkup.Escape(Label);
     internal string DescriptionMarkup { get; } = $"[dim]{AnsiMarkup.Escape(Description)}[/]";
 
     public IReadOnlyList<string> Aliases { get; } = BuildAliases(
         ResolveCommandName(CommandName, Label),
         Aliases);
+    public IReadOnlyList<string> TextCommandAliases { get; } = SupportsTextCommand
+        ? BuildAliases(
+            ResolveCommandName(CommandName, Label),
+            Aliases)
+        : [];
 
     internal string CommandSearchText { get; } = BuildCommandSearchText(
         Label,
         ResolveCommandName(CommandName, Label),
         BuildAliases(
             ResolveCommandName(CommandName, Label),
-            Aliases));
+            Aliases),
+        SupportsTextCommand);
 
     private static string ResolveCommandName(string? commandName, string label)
     {
@@ -117,7 +128,11 @@ internal sealed record ShellCommandMetadata(
         return allAliases;
     }
 
-    private static string BuildCommandSearchText(string label, string commandName, IReadOnlyList<string> aliases)
+    private static string BuildCommandSearchText(
+        string label,
+        string commandName,
+        IReadOnlyList<string> aliases,
+        bool supportsTextCommand)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
         ArgumentException.ThrowIfNullOrWhiteSpace(commandName);
@@ -127,8 +142,12 @@ internal sealed record ShellCommandMetadata(
         {
             label,
             commandName,
-            $"/{commandName}",
         };
+
+        if (supportsTextCommand)
+        {
+            searchTerms.Add($"/{commandName}");
+        }
 
         foreach (var alias in aliases)
         {
@@ -138,7 +157,10 @@ internal sealed record ShellCommandMetadata(
             }
 
             searchTerms.Add(alias);
-            searchTerms.Add($"/{alias}");
+            if (supportsTextCommand)
+            {
+                searchTerms.Add($"/{alias}");
+            }
         }
 
         return string.Join(' ', searchTerms);

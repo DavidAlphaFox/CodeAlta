@@ -36,7 +36,7 @@ internal static class ShellHelpContentBuilder
             bindings.Add(FormatSequence(sequence));
         }
 
-        foreach (var alias in command.Aliases)
+        foreach (var alias in command.TextCommandAliases)
         {
             bindings.Add($"/{alias}");
         }
