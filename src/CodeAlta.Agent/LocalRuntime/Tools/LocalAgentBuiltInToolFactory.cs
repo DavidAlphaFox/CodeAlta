@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -61,6 +63,21 @@ public static class LocalAgentBuiltInToolFactory
             "timeoutSeconds": { "type": "integer", "description": "Optional timeout override in seconds.", "minimum": 1 }
           },
           "required": ["url"],
+          "additionalProperties": false
+        }
+        """);
+
+    private static readonly JsonElement ShellCommandSchema = ParseSchema(
+        """
+        {
+          "type": "object",
+          "properties": {
+            "command": { "type": "string", "description": "Shell command to execute." },
+            "workdir": { "type": "string", "description": "Optional working directory override." },
+            "timeoutMs": { "type": "integer", "description": "Optional timeout in milliseconds.", "minimum": 1 },
+            "login": { "type": "boolean", "description": "Whether to use login-shell semantics when supported." }
+          },
+          "required": ["command"],
           "additionalProperties": false
         }
         """);
@@ -151,6 +168,12 @@ public static class LocalAgentBuiltInToolFactory
                     "Fetch web content from a known URL with basic size and content-type safeguards.",
                     WebGetSchema),
                 (invocation, cancellationToken) => WebGetAsync(options, httpClient, invocation, cancellationToken)),
+            new AgentToolDefinition(
+                new AgentToolSpec(
+                    "shell_command",
+                    "Execute a local shell command using the platform-appropriate shell after permission approval.",
+                    ShellCommandSchema),
+                (invocation, cancellationToken) => ShellCommandAsync(options, invocation, cancellationToken)),
             new AgentToolDefinition(
                 new AgentToolSpec(
                     "view_image",
@@ -372,6 +395,107 @@ Done:
             [new AgentToolResultItem.Text(text.Trim())]);
     }
 
+    private static async Task<AgentToolResult> ShellCommandAsync(
+        LocalAgentBuiltInToolOptions options,
+        AgentToolInvocation invocation,
+        CancellationToken cancellationToken)
+    {
+        var command = GetRequiredString(invocation.Arguments, "command");
+        var workdir = ResolvePath(options.WorkingDirectory, GetOptionalString(invocation.Arguments, "workdir"));
+        if (!Directory.Exists(workdir))
+        {
+            return Failure($"Directory '{workdir}' was not found.");
+        }
+
+        var timeout = GetOptionalInt(invocation.Arguments, "timeoutMs");
+        var login = GetOptionalBool(invocation.Arguments, "login") ?? false;
+
+        var permissionRequest = new AgentCommandPermissionRequest(
+            options.BackendId,
+            options.SessionId,
+            DateTimeOffset.UtcNow,
+            RunId: null,
+            InteractionId: invocation.ToolCallId,
+            ApprovalId: null,
+            Command: command,
+            WorkingDirectory: workdir,
+            Actions: null,
+            Reason: "The agent requested local shell execution.",
+            Network: null,
+            ProposedExecPolicyAmendment: null,
+            ProposedNetworkPolicyAmendments: null);
+
+        var decision = await options.OnPermissionRequest(permissionRequest, cancellationToken).ConfigureAwait(false);
+        switch (decision.Kind)
+        {
+            case AgentPermissionDecisionKind.AllowOnce:
+            case AgentPermissionDecisionKind.AllowForSession:
+                break;
+            case AgentPermissionDecisionKind.Deny:
+                return Failure("shell_command was denied by the host.");
+            case AgentPermissionDecisionKind.Cancel:
+                return Failure("shell_command was canceled by the host.");
+            default:
+                return Failure($"Unsupported permission decision '{decision.Kind}'.");
+        }
+
+        var processSpec = CreateShellProcessSpec(command, workdir, login);
+        using var process = new Process
+        {
+            StartInfo = processSpec.StartInfo,
+            EnableRaisingEvents = true,
+        };
+
+        try
+        {
+            if (!process.Start())
+            {
+                return Failure("shell_command did not start a process.");
+            }
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
+        {
+            return Failure($"shell_command failed to start: {ex.Message}");
+        }
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
+        try
+        {
+            if (timeout is > 0)
+            {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeoutCts.CancelAfter(timeout.Value);
+                await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+            }
+            else
+            {
+                await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            TryKill(process);
+            return Failure(timeout is > 0
+                ? $"shell_command timed out after {timeout.Value} ms."
+                : "shell_command was canceled.");
+        }
+
+        var stdout = (await stdoutTask.ConfigureAwait(false)).Trim();
+        var stderr = (await stderrTask.ConfigureAwait(false)).Trim();
+        var output = FormatShellCommandOutput(process.ExitCode, stdout, stderr, workdir);
+        if (process.ExitCode != 0)
+        {
+            return new AgentToolResult(
+                false,
+                [new AgentToolResultItem.Text(output)],
+                $"shell_command exited with code {process.ExitCode}.");
+        }
+
+        return new AgentToolResult(true, [new AgentToolResultItem.Text(output)]);
+    }
+
     private static Task<AgentToolResult> ViewImageAsync(
         LocalAgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -484,6 +608,84 @@ Done:
         return Regex.IsMatch(fileName, pattern, RegexOptions.IgnoreCase);
     }
 
+    private static ShellProcessSpec CreateShellProcessSpec(string command, string workdir, bool login)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var fileName = "pwsh";
+            string[] shellArguments = login
+                ? ["-Command", command]
+                : ["-NoProfile", "-Command", command];
+            return new ShellProcessSpec(CreateProcessStartInfo(fileName, shellArguments, workdir));
+        }
+
+        var shellPath = Environment.GetEnvironmentVariable("SHELL");
+        if (string.IsNullOrWhiteSpace(shellPath))
+        {
+            shellPath = "/bin/sh";
+        }
+
+        var shellFileName = Path.GetFileName(shellPath);
+        string[] arguments;
+        if (login && shellFileName is "bash" or "zsh")
+        {
+            arguments = ["-lc", command];
+        }
+        else
+        {
+            arguments = ["-c", command];
+        }
+
+        return new ShellProcessSpec(CreateProcessStartInfo(shellPath, arguments, workdir));
+    }
+
+    private static ProcessStartInfo CreateProcessStartInfo(string fileName, IReadOnlyList<string> arguments, string workdir)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            WorkingDirectory = workdir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = false,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        return startInfo;
+    }
+
+    private static string FormatShellCommandOutput(int exitCode, string stdout, string stderr, string workdir)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($"exit_code: {exitCode}");
+        builder.AppendLine($"working_directory: {workdir}");
+        builder.AppendLine("stdout:");
+        builder.AppendLine(string.IsNullOrEmpty(stdout) ? "(empty)" : stdout);
+        builder.AppendLine("stderr:");
+        builder.Append(string.IsNullOrEmpty(stderr) ? "(empty)" : stderr);
+        return builder.ToString().TrimEnd();
+    }
+
+    private static void TryKill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
     private static string GetRequiredString(JsonElement element, string propertyName)
     {
         var value = GetOptionalString(element, propertyName);
@@ -529,4 +731,6 @@ Done:
 
         return Encoding.UTF8.GetString(stream.ToArray());
     }
+
+    private sealed record ShellProcessSpec(ProcessStartInfo StartInfo);
 }

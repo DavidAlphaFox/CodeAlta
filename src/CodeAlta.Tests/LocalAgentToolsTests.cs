@@ -118,6 +118,69 @@ public sealed class LocalAgentToolsTests
     }
 
     [TestMethod]
+    public async Task ShellCommandTool_UsesPlatformShellAndCapturesOutput()
+    {
+        using var temp = TestTempDirectory.Create();
+        AgentPermissionRequest? observedRequest = null;
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(
+            temp.Path,
+            onPermissionRequest: (request, _) =>
+            {
+                observedRequest = request;
+                return Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce));
+            }));
+        var tool = tools.Single(static tool => tool.Spec.Name == "shell_command");
+        var command = OperatingSystem.IsWindows()
+            ? "Write-Output 'hello from pwsh'"
+            : "printf 'hello from sh\\n'";
+        using var args = JsonDocument.Parse($$"""{"command":{{JsonSerializer.Serialize(command)}}}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsNotNull(observedRequest);
+        Assert.AreEqual("commandExecution", observedRequest.Kind);
+        Assert.IsTrue(result.Success);
+        var output = Assert.IsInstanceOfType<AgentToolResultItem.Text>(result.Items.Single()).Value;
+        StringAssert.Contains(output, "exit_code: 0");
+        StringAssert.Contains(output, "stdout:");
+        StringAssert.Contains(output, "hello from");
+        StringAssert.Contains(output, temp.Path);
+    }
+
+    [TestMethod]
+    public async Task ShellCommandTool_RespectsDeniedPermissionDecision()
+    {
+        using var temp = TestTempDirectory.Create();
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(
+            temp.Path,
+            onPermissionRequest: static (_, _) =>
+                Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.Deny))));
+        var tool = tools.Single(static tool => tool.Spec.Name == "shell_command");
+        using var args = JsonDocument.Parse("""{"command":"Write-Output 'should not run'"}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("shell_command was denied by the host.", result.Error);
+    }
+
+    [TestMethod]
     public void LocalAgentToolBridge_CreateDeclarations_PreservesSchemasAndUniqueNames()
     {
         AgentToolDefinition[] tools =
@@ -141,7 +204,8 @@ public sealed class LocalAgentToolsTests
     private static LocalAgentBuiltInToolOptions CreateOptions(
         string workingDirectory,
         HttpClient? httpClient = null,
-        AgentUserInputRequestHandler? onUserInputRequest = null)
+        AgentUserInputRequestHandler? onUserInputRequest = null,
+        AgentPermissionRequestHandler? onPermissionRequest = null)
     {
         return new LocalAgentBuiltInToolOptions
         {
@@ -149,7 +213,7 @@ public sealed class LocalAgentToolsTests
             SessionId = "session-1",
             WorkingDirectory = workingDirectory,
             HttpClient = httpClient,
-            OnPermissionRequest = (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+            OnPermissionRequest = onPermissionRequest ?? ((_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce))),
             OnUserInputRequest = onUserInputRequest,
         };
     }
