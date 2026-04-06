@@ -9,21 +9,27 @@ internal sealed class KnownProjectImporter : IKnownProjectImporter
 {
     private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.App");
     private readonly AgentHub _agentHub;
+    private readonly IReadOnlyList<AgentBackendDescriptor> _backendDescriptors;
     private readonly ProjectCatalog _projectCatalog;
 
-    public KnownProjectImporter(AgentHub agentHub, ProjectCatalog projectCatalog)
+    public KnownProjectImporter(
+        AgentHub agentHub,
+        IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
+        ProjectCatalog projectCatalog)
     {
         ArgumentNullException.ThrowIfNull(agentHub);
+        ArgumentNullException.ThrowIfNull(backendDescriptors);
         ArgumentNullException.ThrowIfNull(projectCatalog);
 
         _agentHub = agentHub;
+        _backendDescriptors = backendDescriptors;
         _projectCatalog = projectCatalog;
     }
 
     public async Task ImportAsync(CancellationToken cancellationToken)
     {
         var workingDirectories = new List<string?>();
-        foreach (var backendId in new[] { AgentBackendIds.Codex, AgentBackendIds.Copilot })
+        foreach (var backendId in _backendDescriptors.Select(static descriptor => descriptor.BackendId))
         {
             try
             {

@@ -14,6 +14,7 @@ namespace CodeAlta.Presentation.Workspace;
 
 internal sealed class ChatSelectorCoordinator
 {
+    private readonly IReadOnlyList<AgentBackendDescriptor> _backendDescriptors;
     private readonly ThreadWorkspaceViewModel _workspaceViewModel;
     private readonly PromptComposerViewModel _promptComposerViewModel;
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
@@ -33,7 +34,33 @@ internal sealed class ChatSelectorCoordinator
         ChatPreferenceContext preferences,
         WorkspaceRefreshContext workspaceRefresh,
         Action syncChatSelectorItems)
+        : this(
+            ChatBackendPresentation.CreateBackendStates().Values
+                .Select(static state => new AgentBackendDescriptor(state.BackendId, state.DisplayName))
+                .ToArray(),
+            workspaceViewModel,
+            promptComposerViewModel,
+            chatBackendStates,
+            selectorState,
+            threadSelection,
+            preferences,
+            workspaceRefresh,
+            syncChatSelectorItems)
     {
+    }
+
+    public ChatSelectorCoordinator(
+        IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
+        ThreadWorkspaceViewModel workspaceViewModel,
+        PromptComposerViewModel promptComposerViewModel,
+        Dictionary<string, ChatBackendState> chatBackendStates,
+        ChatSelectorStateContext selectorState,
+        ThreadSelectionContext threadSelection,
+        ChatPreferenceContext preferences,
+        WorkspaceRefreshContext workspaceRefresh,
+        Action syncChatSelectorItems)
+    {
+        ArgumentNullException.ThrowIfNull(backendDescriptors);
         ArgumentNullException.ThrowIfNull(workspaceViewModel);
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
         ArgumentNullException.ThrowIfNull(chatBackendStates);
@@ -43,6 +70,7 @@ internal sealed class ChatSelectorCoordinator
         ArgumentNullException.ThrowIfNull(workspaceRefresh);
         ArgumentNullException.ThrowIfNull(syncChatSelectorItems);
 
+        _backendDescriptors = backendDescriptors;
         _workspaceViewModel = workspaceViewModel;
         _promptComposerViewModel = promptComposerViewModel;
         _chatBackendStates = chatBackendStates;
@@ -59,7 +87,7 @@ internal sealed class ChatSelectorCoordinator
         _selectorsRefreshing = true;
         try
         {
-            var backendOptions = ChatBackendPresentation.BuildBackendOptions();
+            var backendOptions = ChatBackendPresentation.BuildBackendOptions(_backendDescriptors);
 
             var backendId = preferredBackendId ?? GetPreferredDraftBackendId(backendOptions);
             var backendIndex = Math.Max(0, backendOptions.FindIndex(option => string.Equals(option.BackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase)));
@@ -107,7 +135,7 @@ internal sealed class ChatSelectorCoordinator
         _selectorsRefreshing = true;
         try
         {
-            var backendOptions = ChatBackendPresentation.BuildBackendOptions();
+            var backendOptions = ChatBackendPresentation.BuildBackendOptions(_backendDescriptors);
             _selectorState.SetBackendSelection(
                 backendOptions,
                 Math.Clamp(
@@ -158,7 +186,7 @@ internal sealed class ChatSelectorCoordinator
             return;
         }
 
-        var options = ChatBackendPresentation.BuildBackendOptions();
+        var options = ChatBackendPresentation.BuildBackendOptions(_backendDescriptors);
         if ((uint)newIndex >= (uint)options.Count)
         {
             return;
@@ -297,7 +325,7 @@ internal sealed class ChatSelectorCoordinator
             _selectorState.GetUiDispatcher(),
             () =>
             {
-                var options = ChatBackendPresentation.BuildBackendOptions();
+                var options = ChatBackendPresentation.BuildBackendOptions(_backendDescriptors);
                 if (_selectorState.GetSelectedBackendIndex() is { } backendIndex &&
                     (uint)backendIndex < (uint)options.Count)
                 {
@@ -310,7 +338,7 @@ internal sealed class ChatSelectorCoordinator
                     return readyBackend.BackendId;
                 }
 
-                return AgentBackendIds.Codex;
+                return GetDefaultBackendId();
             });
     }
 
@@ -369,7 +397,7 @@ internal sealed class ChatSelectorCoordinator
             return readyBackend.BackendId;
         }
 
-        return backendOptions.FirstOrDefault()?.BackendId ?? AgentBackendIds.Codex;
+        return backendOptions.FirstOrDefault()?.BackendId ?? GetDefaultBackendId();
     }
 
     private bool HasAnyReadyChatBackend()
@@ -385,7 +413,8 @@ internal sealed class ChatSelectorCoordinator
         if (!_chatBackendStates.TryGetValue(backendId.Value, out var backendState) ||
             string.IsNullOrWhiteSpace(backendState.DisplayName))
         {
-            backendState = _chatBackendStates[AgentBackendIds.Codex.Value];
+            backendState = _chatBackendStates.Values.FirstOrDefault()
+                ?? new ChatBackendState(GetDefaultBackendId(), GetDefaultBackendId().Value);
         }
 
         return PromptComposerProjectionBuilder.Build(
@@ -409,5 +438,10 @@ internal sealed class ChatSelectorCoordinator
             selectedThread is not null &&
             _threadSelection.FindOpenThread(selectedThread.ThreadId) is { } selectedAbortTab &&
             selectedAbortTab.StatusBusy);
+    }
+
+    private AgentBackendId GetDefaultBackendId()
+    {
+        return _backendDescriptors.FirstOrDefault()?.BackendId ?? AgentBackendIds.Codex;
     }
 }

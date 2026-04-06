@@ -5,6 +5,7 @@ using CodeAlta.App.Context;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
+using CodeAlta.Presentation.Chat;
 using CodeAlta.Presentation.Shell;
 using CodeAlta.Presentation.Prompting;
 using CodeAlta.ViewModels;
@@ -39,8 +40,38 @@ internal sealed class ThreadCommandCoordinator
         ThreadPromptQueueCoordinator queueCoordinator,
         PromptComposerViewModel promptComposerViewModel,
         IProjectFileSearchService? projectFileSearchService = null)
+        : this(
+            runtimeService,
+            catalogOptions,
+            ChatBackendPresentation.CreateBackendStates().Values
+                .Select(static state => new AgentBackendDescriptor(state.BackendId, state.DisplayName))
+                .ToArray(),
+            chatBackendStates,
+            threadSelection,
+            selectorState,
+            preferences,
+            commandContext,
+            queueCoordinator,
+            promptComposerViewModel,
+            projectFileSearchService)
+    {
+    }
+
+    public ThreadCommandCoordinator(
+        WorkThreadRuntimeService runtimeService,
+        CatalogOptions catalogOptions,
+        IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
+        Dictionary<string, ChatBackendState> chatBackendStates,
+        ThreadSelectionContext threadSelection,
+        ChatSelectorStateContext selectorState,
+        ChatPreferenceContext preferences,
+        ThreadCommandContext commandContext,
+        ThreadPromptQueueCoordinator queueCoordinator,
+        PromptComposerViewModel promptComposerViewModel,
+        IProjectFileSearchService? projectFileSearchService = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
+        ArgumentNullException.ThrowIfNull(backendDescriptors);
         ArgumentNullException.ThrowIfNull(chatBackendStates);
         ArgumentNullException.ThrowIfNull(threadSelection);
         ArgumentNullException.ThrowIfNull(selectorState);
@@ -59,7 +90,7 @@ internal sealed class ThreadCommandCoordinator
         _promptComposerViewModel = promptComposerViewModel;
         var permissionRequests = new ThreadPermissionRequestCoordinator(threadSelection, commandContext);
         var userInputRequests = new ThreadUserInputRequestCoordinator(threadSelection, commandContext);
-        _executionOptionsFactory = new ThreadExecutionOptionsFactory(catalogOptions, chatBackendStates, threadSelection, selectorState, permissionRequests, userInputRequests);
+        _executionOptionsFactory = new ThreadExecutionOptionsFactory(catalogOptions, backendDescriptors, chatBackendStates, threadSelection, selectorState, permissionRequests, userInputRequests);
         _promptDispatchCoordinator = new ThreadPromptDispatchCoordinator(
             runtimeService,
             _executionOptionsFactory,

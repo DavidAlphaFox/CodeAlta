@@ -102,7 +102,7 @@ namespace CodeAlta.Presentation.Prompting
 
             return anyBackendReady
                 ? "Select a connected backend to start a thread..."
-                : "Install or connect Codex/Copilot to start a thread...";
+                : "Install or connect a backend to start a thread...";
         }
 
         internal static string BuildPromptUnavailableStatusText(

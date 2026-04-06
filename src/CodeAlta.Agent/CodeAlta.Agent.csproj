@@ -6,5 +6,9 @@
     <IsAotCompatible>true</IsAotCompatible>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
-</Project>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="CodeAlta.Agent.Acp" />
+    <InternalsVisibleTo Include="CodeAlta.Tests" />
+  </ItemGroup>
+</Project>

@@ -42,6 +42,7 @@ internal sealed class CodeAltaFrontendComposition
     public required WorkspaceRefreshContext WorkspaceRefreshContext { get; init; }
 
     public static CodeAltaFrontendComposition Create(
+        IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
         ProjectCatalog projectCatalog,
         WorkThreadCatalog threadCatalog,
         WorkThreadRuntimeService runtimeService,
@@ -58,6 +59,7 @@ internal sealed class CodeAltaFrontendComposition
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(agentHub);
+        ArgumentNullException.ThrowIfNull(backendDescriptors);
         ArgumentNullException.ThrowIfNull(projectFileSearchService);
         ArgumentNullException.ThrowIfNull(shell);
         ArgumentNullException.ThrowIfNull(knownProjectImporter);
@@ -69,7 +71,7 @@ internal sealed class CodeAltaFrontendComposition
         var threadWorkspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         var sessionUsageViewModel = new SessionUsageViewModel();
-        var chatBackendStates = ChatBackendPresentation.CreateBackendStates();
+        var chatBackendStates = ChatBackendPresentation.CreateBackendStates(backendDescriptors);
         var backendPreferences = new ChatBackendPreferenceCoordinator(new CodeAltaConfigStore(catalogOptions), CodeAlta.Views.CodeAltaApp.UiLogger);
         var shellController = new CodeAltaShellController(
             shell,
@@ -130,6 +132,7 @@ internal sealed class CodeAltaFrontendComposition
             callbacks.SetStatus,
             callbacks.SetReadyStatusForCurrentSelection);
         var chatSelectorCoordinator = new ChatSelectorCoordinator(
+            backendDescriptors,
             threadWorkspaceViewModel,
             promptComposerViewModel,
             chatBackendStates,
@@ -181,6 +184,7 @@ internal sealed class CodeAltaFrontendComposition
             (tab, prompt, cancellationToken) => threadCommandCoordinator!.DispatchQueuedPromptAsync(tab, prompt, steer: true, cancellationToken));
         var chatBackendInitializationCoordinator = new ChatBackendInitializationCoordinator(
             agentHub,
+            backendDescriptors,
             chatBackendStates,
             callbacks.DispatchToUi,
             callbacks.RefreshHeaderAndThreadWorkspace);
@@ -212,6 +216,7 @@ internal sealed class CodeAltaFrontendComposition
         threadCommandCoordinator = new ThreadCommandCoordinator(
             runtimeService,
             catalogOptions,
+            backendDescriptors,
             chatBackendStates,
             threadSelectionContext,
             chatSelectorStateContext,

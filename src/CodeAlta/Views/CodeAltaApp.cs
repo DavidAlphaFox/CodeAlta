@@ -92,6 +92,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         CatalogOptions catalogOptions,
         AgentHub agentHub)
         : this(
+            CodeAltaOwnedServices.CreateBuiltInBackendDescriptors(),
             projectCatalog,
             threadCatalog,
             runtimeService,
@@ -109,17 +110,19 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(ownedServices);
         return new(
+            ownedServices.BackendDescriptors,
             ownedServices.ProjectCatalog,
             ownedServices.ThreadCatalog,
             ownedServices.RuntimeService,
             ownedServices.CatalogOptions,
             ownedServices.AgentHub,
             ownedServices.ProjectFileSearchService,
-            new KnownProjectImporter(ownedServices.AgentHub, ownedServices.ProjectCatalog),
+            new KnownProjectImporter(ownedServices.AgentHub, ownedServices.BackendDescriptors, ownedServices.ProjectCatalog),
             ownedServices);
     }
 
     private CodeAltaApp(
+        IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
         ProjectCatalog projectCatalog,
         WorkThreadCatalog threadCatalog,
         WorkThreadRuntimeService runtimeService,
@@ -139,9 +142,10 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         _runtimeService = runtimeService;
         _catalogOptions = catalogOptions;
         _agentHub = agentHub;
-        _knownProjectImporter = knownProjectImporter ?? new KnownProjectImporter(agentHub, projectCatalog);
+        _knownProjectImporter = knownProjectImporter ?? new KnownProjectImporter(agentHub, backendDescriptors, projectCatalog);
         _ownedServices = ownedServices;
         var composition = CodeAltaFrontendComposition.Create(
+            backendDescriptors,
             projectCatalog,
             threadCatalog,
             runtimeService,

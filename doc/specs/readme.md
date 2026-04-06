@@ -47,11 +47,13 @@ Read these first, in order:
    - durable project, thread, agent, and catalog storage
 4. `doc/specs/agent_api_specs.md`
    - backend/session abstraction for Copilot and Codex
-5. `doc/specs/agent_instruction_templates_spec.md`
+5. `doc/specs/agent_acp_specs.md`
+   - ACP generator, runtime, registry, and backend adapter design
+6. `doc/specs/agent_instruction_templates_spec.md`
    - base instructions for coordinator, project, and internal agents
-6. `doc/specs/agent_configuration_spec.md`
+7. `doc/specs/agent_configuration_spec.md`
    - file format for agent definitions
-7. `doc/specs/template_system_spec.md`
+8. `doc/specs/template_system_spec.md`
    - scaffold/enrichment model for catalog files
 
 ## 3. Implement first
@@ -80,6 +82,7 @@ These documents drive the active MVP:
 - `doc/specs/codealta_adaptive_orchestration_architecture.md`
 - `doc/specs/filesystem_metadata_catalog_spec.md`
 - `doc/specs/agent_api_specs.md`
+- `doc/specs/agent_acp_specs.md`
 - `doc/specs/agent_instruction_templates_spec.md`
 - `doc/specs/agent_configuration_spec.md`
 - `doc/specs/template_system_spec.md`

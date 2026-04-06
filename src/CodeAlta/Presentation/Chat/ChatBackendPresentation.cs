@@ -10,20 +10,41 @@ internal static class ChatBackendPresentation
 {
     public static Dictionary<string, ChatBackendState> CreateBackendStates()
     {
-        return new Dictionary<string, ChatBackendState>(StringComparer.OrdinalIgnoreCase)
-        {
-            [AgentBackendIds.Codex.Value] = new(AgentBackendIds.Codex, "Codex"),
-            [AgentBackendIds.Copilot.Value] = new(AgentBackendIds.Copilot, "Copilot"),
-        };
+        return CreateBackendStates(
+        [
+            new AgentBackendDescriptor(AgentBackendIds.Codex, "Codex"),
+            new AgentBackendDescriptor(AgentBackendIds.Copilot, "Copilot"),
+        ]);
+    }
+
+    public static Dictionary<string, ChatBackendState> CreateBackendStates(
+        IReadOnlyList<AgentBackendDescriptor> backendDescriptors)
+    {
+        ArgumentNullException.ThrowIfNull(backendDescriptors);
+
+        return backendDescriptors.ToDictionary(
+            static descriptor => descriptor.BackendId.Value,
+            static descriptor => new ChatBackendState(descriptor.BackendId, descriptor.DisplayName),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     public static List<ChatBackendOption> BuildBackendOptions()
     {
-        return
+        return BuildBackendOptions(
         [
-            new ChatBackendOption(AgentBackendIds.Codex, "Codex"),
-            new ChatBackendOption(AgentBackendIds.Copilot, "Copilot"),
-        ];
+            new AgentBackendDescriptor(AgentBackendIds.Codex, "Codex"),
+            new AgentBackendDescriptor(AgentBackendIds.Copilot, "Copilot"),
+        ]);
+    }
+
+    public static List<ChatBackendOption> BuildBackendOptions(
+        IReadOnlyList<AgentBackendDescriptor> backendDescriptors)
+    {
+        ArgumentNullException.ThrowIfNull(backendDescriptors);
+
+        return backendDescriptors
+            .Select(static descriptor => new ChatBackendOption(descriptor.BackendId, descriptor.DisplayName))
+            .ToList();
     }
 
     public static List<ChatModelOption> BuildModelOptions(ChatBackendState backendState)

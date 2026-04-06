@@ -88,6 +88,47 @@ public sealed class CodeAltaConfigStore
         SaveDocument(_options.ConfigPath, document);
     }
 
+    /// <summary>
+    /// Loads globally configured ACP backend definitions.
+    /// </summary>
+    /// <returns>The configured ACP agent definitions.</returns>
+    public IReadOnlyList<AcpBackendDefinition> LoadGlobalAcpBackendDefinitions()
+    {
+        var document = LoadGlobal();
+        NormalizeDocument(document);
+        return document.Acp.Agents.Values
+            .Where(static definition => definition.Enabled)
+            .OrderBy(static definition => definition.DisplayName ?? definition.AgentId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Loads effective ACP backend definitions using installed manifests as defaults and global config as overrides.
+    /// </summary>
+    /// <param name="installedDefinitions">Installed ACP backend definitions.</param>
+    /// <returns>The effective ACP backend definitions.</returns>
+    public IReadOnlyList<AcpBackendDefinition> LoadEffectiveAcpBackendDefinitions(
+        IReadOnlyList<AcpBackendDefinition>? installedDefinitions = null)
+    {
+        var effective = new Dictionary<string, AcpBackendDefinition>(StringComparer.OrdinalIgnoreCase);
+        if (installedDefinitions is not null)
+        {
+            foreach (var installedDefinition in installedDefinitions.Where(static definition => definition.Enabled))
+            {
+                effective[installedDefinition.AgentId] = CloneAcpBackendDefinition(installedDefinition);
+            }
+        }
+
+        foreach (var configuredDefinition in LoadGlobalAcpBackendDefinitions())
+        {
+            effective[configuredDefinition.AgentId] = CloneAcpBackendDefinition(configuredDefinition);
+        }
+
+        return effective.Values
+            .OrderBy(static definition => definition.DisplayName ?? definition.AgentId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     internal static AgentReasoningEffort? ParseReasoningEffort(string? value)
     {
         return value?.Trim().ToLowerInvariant() switch
@@ -204,8 +245,92 @@ public sealed class CodeAltaConfigStore
                     ReasoningEffort = NormalizeReasoningEffortText(entry.Value?.ReasoningEffort),
                 },
                 StringComparer.OrdinalIgnoreCase);
+
+        document.Acp ??= new CodeAltaAcpSettingsDocument();
+        document.Acp.Agents = document.Acp.Agents
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
+            .Select(
+                static entry =>
+                {
+                    var definition = entry.Value ?? new AcpBackendDefinition();
+                    definition.AgentId = NormalizeAcpAgentId(definition.AgentId) ?? entry.Key.Trim();
+                    definition.DisplayName = NormalizeText(definition.DisplayName);
+                    definition.RegistryId = NormalizeAcpAgentId(definition.RegistryId);
+                    definition.Command = NormalizeText(definition.Command);
+                    definition.WorkingDirectory = NormalizeText(definition.WorkingDirectory);
+                    definition.Arguments = NormalizeList(definition.Arguments);
+                    definition.EnvironmentVariables = NormalizeDictionary(definition.EnvironmentVariables);
+                    return KeyValuePair.Create(entry.Key.Trim(), definition);
+                })
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Value.AgentId))
+            .ToDictionary(
+                static entry => entry.Value.AgentId,
+                static entry => entry.Value,
+                StringComparer.OrdinalIgnoreCase);
     }
 
     private static string? NormalizeReasoningEffortText(string? value)
         => FormatReasoningEffort(ParseReasoningEffort(value));
+
+    private static string? NormalizeText(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static List<string>? NormalizeList(List<string>? values)
+    {
+        if (values is null)
+        {
+            return null;
+        }
+
+        var normalized = values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value.Trim())
+            .ToList();
+        return normalized.Count == 0 ? null : normalized;
+    }
+
+    private static Dictionary<string, string>? NormalizeDictionary(Dictionary<string, string>? values)
+    {
+        if (values is null)
+        {
+            return null;
+        }
+
+        var normalized = values
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
+            .ToDictionary(
+                static entry => entry.Key.Trim(),
+                static entry => entry.Value ?? string.Empty,
+                StringComparer.OrdinalIgnoreCase);
+        return normalized.Count == 0 ? null : normalized;
+    }
+
+    private static string? NormalizeAcpAgentId(string? value)
+    {
+        var normalized = NormalizeText(value);
+        return normalized?.ToLowerInvariant();
+    }
+
+    private static AcpBackendDefinition CloneAcpBackendDefinition(AcpBackendDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        return new AcpBackendDefinition
+        {
+            AgentId = definition.AgentId,
+            DisplayName = definition.DisplayName,
+            Enabled = definition.Enabled,
+            RegistryId = definition.RegistryId,
+            Command = definition.Command,
+            Arguments = definition.Arguments is null ? null : [.. definition.Arguments],
+            WorkingDirectory = definition.WorkingDirectory,
+            EnvironmentVariables = definition.EnvironmentVariables is null
+                ? null
+                : new Dictionary<string, string>(definition.EnvironmentVariables, StringComparer.OrdinalIgnoreCase),
+            UseUnstable = definition.UseUnstable,
+            EnableTerminal = definition.EnableTerminal,
+            EnableFilesystem = definition.EnableFilesystem,
+            EnableElicitation = definition.EnableElicitation,
+        };
+    }
 }

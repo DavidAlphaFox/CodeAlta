@@ -12,6 +12,7 @@ namespace CodeAlta.App;
 internal sealed class ThreadExecutionOptionsFactory
 {
     private readonly CatalogOptions _catalogOptions;
+    private readonly IReadOnlyList<AgentBackendDescriptor> _backendDescriptors;
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly ThreadSelectionContext _threadSelection;
     private readonly ChatSelectorStateContext _selectorState;
@@ -20,6 +21,7 @@ internal sealed class ThreadExecutionOptionsFactory
 
     public ThreadExecutionOptionsFactory(
         CatalogOptions catalogOptions,
+        IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
         Dictionary<string, ChatBackendState> chatBackendStates,
         ThreadSelectionContext threadSelection,
         ChatSelectorStateContext selectorState,
@@ -27,6 +29,7 @@ internal sealed class ThreadExecutionOptionsFactory
         ThreadUserInputRequestCoordinator userInputRequests)
     {
         ArgumentNullException.ThrowIfNull(catalogOptions);
+        ArgumentNullException.ThrowIfNull(backendDescriptors);
         ArgumentNullException.ThrowIfNull(chatBackendStates);
         ArgumentNullException.ThrowIfNull(threadSelection);
         ArgumentNullException.ThrowIfNull(selectorState);
@@ -34,6 +37,7 @@ internal sealed class ThreadExecutionOptionsFactory
         ArgumentNullException.ThrowIfNull(userInputRequests);
 
         _catalogOptions = catalogOptions;
+        _backendDescriptors = backendDescriptors;
         _chatBackendStates = chatBackendStates;
         _threadSelection = threadSelection;
         _selectorState = selectorState;
@@ -58,7 +62,7 @@ internal sealed class ThreadExecutionOptionsFactory
                     return backendState.SelectedModelId;
                 }
 
-                var backendOptions = ChatBackendPresentation.BuildBackendOptions();
+                var backendOptions = ChatBackendPresentation.BuildBackendOptions(_backendDescriptors);
                 if ((uint)backendIndex < (uint)backendOptions.Count &&
                     string.Equals(backendOptions[backendIndex].BackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase))
                 {
@@ -81,7 +85,7 @@ internal sealed class ThreadExecutionOptionsFactory
                     return backendState.SelectedReasoningEffort;
                 }
 
-                var backendOptions = ChatBackendPresentation.BuildBackendOptions();
+                var backendOptions = ChatBackendPresentation.BuildBackendOptions(_backendDescriptors);
                 if ((uint)backendIndex < (uint)backendOptions.Count &&
                     string.Equals(backendOptions[backendIndex].BackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase))
                 {

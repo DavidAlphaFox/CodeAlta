@@ -9,22 +9,26 @@ namespace CodeAlta.App;
 internal sealed class ChatBackendInitializationCoordinator
 {
     private readonly AgentHub _agentHub;
+    private readonly IReadOnlyList<AgentBackendDescriptor> _backendDescriptors;
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly Action<Action> _dispatchToUi;
     private readonly Action _refreshHeaderAndThreadWorkspace;
 
     public ChatBackendInitializationCoordinator(
         AgentHub agentHub,
+        IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
         Dictionary<string, ChatBackendState> chatBackendStates,
         Action<Action> dispatchToUi,
         Action refreshHeaderAndThreadWorkspace)
     {
         ArgumentNullException.ThrowIfNull(agentHub);
+        ArgumentNullException.ThrowIfNull(backendDescriptors);
         ArgumentNullException.ThrowIfNull(chatBackendStates);
         ArgumentNullException.ThrowIfNull(dispatchToUi);
         ArgumentNullException.ThrowIfNull(refreshHeaderAndThreadWorkspace);
 
         _agentHub = agentHub;
+        _backendDescriptors = backendDescriptors;
         _chatBackendStates = chatBackendStates;
         _dispatchToUi = dispatchToUi;
         _refreshHeaderAndThreadWorkspace = refreshHeaderAndThreadWorkspace;
@@ -32,9 +36,7 @@ internal sealed class ChatBackendInitializationCoordinator
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
-        await Task.WhenAll(
-                RefreshAsync(AgentBackendIds.Codex, cancellationToken),
-                RefreshAsync(AgentBackendIds.Copilot, cancellationToken))
+        await Task.WhenAll(_backendDescriptors.Select(descriptor => RefreshAsync(descriptor.BackendId, cancellationToken)))
             .ConfigureAwait(false);
     }
 
