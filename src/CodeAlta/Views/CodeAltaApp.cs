@@ -260,14 +260,10 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             FocusSidebar,
             FocusPromptEditor,
             () => EnsureSessionUsagePresenter().TogglePopupFromIndicator(),
-            () =>
-            {
-                if (ThreadInput is not null)
-                {
-                    EnsureThreadInfoPresenter().TogglePopup(ThreadInput);
-                }
-            },
-            () => _threadWorkspaceView?.OpenExpandedPromptDialog());
+            () => { if (ThreadInput is not null) EnsureThreadInfoPresenter().TogglePopup(ThreadInput); },
+            () => _threadWorkspaceView?.OpenExpandedPromptDialog(),
+            () => { _ = _threadTabStripCoordinator.TrySelectRelativeTab(-1); return Task.CompletedTask; },
+            () => { _ = _threadTabStripCoordinator.TrySelectRelativeTab(1); return Task.CompletedTask; });
         _threadHistoryCoordinator = new ThreadHistoryCoordinator(
             _runtimeService,
             EnsureThreadTab,

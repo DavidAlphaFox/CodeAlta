@@ -66,6 +66,8 @@ public sealed class ShellCommandHelpTests
         var fullPromptCommand = ShellCommandCatalog.Get("CodeAlta.Thread.ExpandPrompt");
         var closeTabCommand = ShellCommandCatalog.Get("CodeAlta.Thread.CloseTab");
         var openFolderCommand = ShellCommandCatalog.Get("CodeAlta.Project.OpenFolder");
+        var tabLeftCommand = ShellCommandCatalog.Get("CodeAlta.Thread.TabLeft");
+        var tabRightCommand = ShellCommandCatalog.Get("CodeAlta.Thread.TabRight");
 
         Assert.AreEqual("full_prompt", fullPromptCommand.CommandName);
         Assert.AreEqual("/full_prompt", fullPromptCommand.SlashCommandText);
@@ -81,5 +83,15 @@ public sealed class ShellCommandHelpTests
         Assert.AreEqual("open_folder", openFolderCommand.CommandName);
         CollectionAssert.Contains(openFolderCommand.Aliases.ToArray(), "open");
         StringAssert.Contains(openFolderCommand.CommandSearchText, "/open");
+        Assert.AreEqual("tab_left", tabLeftCommand.CommandName);
+        Assert.AreEqual("/tab_left", tabLeftCommand.SlashCommandText);
+        CollectionAssert.Contains(tabLeftCommand.Aliases.ToArray(), "tab_left");
+        StringAssert.Contains(tabLeftCommand.CommandSearchText, "/tab_left");
+        Assert.AreEqual(new KeyGesture(TerminalKey.Left, TerminalModifiers.Alt), tabLeftCommand.Gesture);
+        Assert.AreEqual("tab_right", tabRightCommand.CommandName);
+        Assert.AreEqual("/tab_right", tabRightCommand.SlashCommandText);
+        CollectionAssert.Contains(tabRightCommand.Aliases.ToArray(), "tab_right");
+        StringAssert.Contains(tabRightCommand.CommandSearchText, "/tab_right");
+        Assert.AreEqual(new KeyGesture(TerminalKey.Right, TerminalModifiers.Alt), tabRightCommand.Gesture);
     }
 }

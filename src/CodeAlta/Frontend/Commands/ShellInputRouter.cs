@@ -53,6 +53,8 @@ internal sealed class ShellInputRouter
             { Id: "CodeAlta.Thread.Abort" } => new AbortThreadIntent(),
             { Id: "CodeAlta.Thread.Compact" } => new CompactThreadIntent(),
             { Id: "CodeAlta.Thread.CloseTab" } => new CloseTabIntent(),
+            { Id: "CodeAlta.Thread.TabLeft" } => new TabLeftIntent(),
+            { Id: "CodeAlta.Thread.TabRight" } => new TabRightIntent(),
             { Id: "CodeAlta.Thread.ClearQueue" } => new ClearQueueIntent(),
             { Id: "CodeAlta.Thread.Queue" } => new QueueStatusIntent(),
             { Id: "CodeAlta.Thread.Delegate" } when !string.IsNullOrWhiteSpace(arguments) => new DelegateThreadIntent(arguments),

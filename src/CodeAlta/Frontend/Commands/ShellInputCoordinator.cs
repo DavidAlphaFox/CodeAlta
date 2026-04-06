@@ -19,6 +19,8 @@ internal sealed class ShellInputCoordinator
     private readonly Func<Task> _showThreadInfoAsync;
     private readonly Func<Task> _showExpandedPromptAsync;
     private readonly Func<Task> _showQueueStatusAsync;
+    private readonly Func<Task> _selectTabLeftAsync;
+    private readonly Func<Task> _selectTabRightAsync;
     private readonly Func<Task> _clearQueueAsync;
     private readonly ThreadCommandCoordinator _threadCommandCoordinator;
     private readonly Action<string, bool, StatusTone> _setStatus;
@@ -37,6 +39,8 @@ internal sealed class ShellInputCoordinator
         Func<Task> showThreadInfoAsync,
         Func<Task> showExpandedPromptAsync,
         Func<Task> showQueueStatusAsync,
+        Func<Task> selectTabLeftAsync,
+        Func<Task> selectTabRightAsync,
         Func<Task> clearQueueAsync,
         ThreadCommandCoordinator threadCommandCoordinator,
         Action<string, bool, StatusTone> setStatus)
@@ -54,6 +58,8 @@ internal sealed class ShellInputCoordinator
         ArgumentNullException.ThrowIfNull(showThreadInfoAsync);
         ArgumentNullException.ThrowIfNull(showExpandedPromptAsync);
         ArgumentNullException.ThrowIfNull(showQueueStatusAsync);
+        ArgumentNullException.ThrowIfNull(selectTabLeftAsync);
+        ArgumentNullException.ThrowIfNull(selectTabRightAsync);
         ArgumentNullException.ThrowIfNull(clearQueueAsync);
         ArgumentNullException.ThrowIfNull(threadCommandCoordinator);
         ArgumentNullException.ThrowIfNull(setStatus);
@@ -71,6 +77,8 @@ internal sealed class ShellInputCoordinator
         _showThreadInfoAsync = showThreadInfoAsync;
         _showExpandedPromptAsync = showExpandedPromptAsync;
         _showQueueStatusAsync = showQueueStatusAsync;
+        _selectTabLeftAsync = selectTabLeftAsync;
+        _selectTabRightAsync = selectTabRightAsync;
         _clearQueueAsync = clearQueueAsync;
         _threadCommandCoordinator = threadCommandCoordinator;
         _setStatus = setStatus;
@@ -135,6 +143,14 @@ internal sealed class ShellInputCoordinator
 
             case CloseTabIntent:
                 await _closeCurrentTabAsync();
+                return;
+
+            case TabLeftIntent:
+                await _selectTabLeftAsync();
+                return;
+
+            case TabRightIntent:
+                await _selectTabRightAsync();
                 return;
 
             case QueueStatusIntent:

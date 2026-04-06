@@ -37,6 +37,8 @@ internal sealed class ShellCommandSurfaceCoordinator
     private readonly Action _openSessionUsage;
     private readonly Action _openThreadInfo;
     private readonly Action _openExpandedPromptEditor;
+    private readonly Func<Task> _selectTabLeftAsync;
+    private readonly Func<Task> _selectTabRightAsync;
     private readonly ShellInputCoordinator _shellInputCoordinator;
     private CommandPalette? _commandPalette;
     private ShellHelpDialog? _helpDialog;
@@ -58,7 +60,9 @@ internal sealed class ShellCommandSurfaceCoordinator
         Action focusPrompt,
         Action openSessionUsage,
         Action openThreadInfo,
-        Action openExpandedPromptEditor)
+        Action openExpandedPromptEditor,
+        Func<Task> selectTabLeftAsync,
+        Func<Task> selectTabRightAsync)
     {
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
         ArgumentNullException.ThrowIfNull(threadWorkspaceViewModel);
@@ -77,6 +81,8 @@ internal sealed class ShellCommandSurfaceCoordinator
         ArgumentNullException.ThrowIfNull(openSessionUsage);
         ArgumentNullException.ThrowIfNull(openThreadInfo);
         ArgumentNullException.ThrowIfNull(openExpandedPromptEditor);
+        ArgumentNullException.ThrowIfNull(selectTabLeftAsync);
+        ArgumentNullException.ThrowIfNull(selectTabRightAsync);
 
         _promptComposerViewModel = promptComposerViewModel;
         _threadWorkspaceViewModel = threadWorkspaceViewModel;
@@ -93,6 +99,8 @@ internal sealed class ShellCommandSurfaceCoordinator
         _openSessionUsage = openSessionUsage;
         _openThreadInfo = openThreadInfo;
         _openExpandedPromptEditor = openExpandedPromptEditor;
+        _selectTabLeftAsync = selectTabLeftAsync;
+        _selectTabRightAsync = selectTabRightAsync;
         _shellInputCoordinator = new ShellInputCoordinator(
             new ShellInputRouter(),
             getPromptText,
@@ -107,6 +115,8 @@ internal sealed class ShellCommandSurfaceCoordinator
             ShowSelectedThreadInfoAsync,
             ShowExpandedPromptEditorAsync,
             ShowSelectedThreadQueueStatusAsync,
+            SelectTabLeftAsync,
+            SelectTabRightAsync,
             ClearSelectedThreadQueueAsync,
             threadCommandCoordinator,
             setStatus);
@@ -127,6 +137,8 @@ internal sealed class ShellCommandSurfaceCoordinator
             CreateCommandBinding("CodeAlta.Thread.ClearQueue", () => ObserveUiTask(_threadCommandCoordinator.ClearSelectedThreadQueueAsync(), "clear the thread queue")),
             CreateCommandBinding("CodeAlta.Thread.Compact", () => ObserveUiTask(_shellInputCoordinator.CompactSelectedThreadAsync(), "compact the selected thread")),
             CreateCommandBinding("CodeAlta.Thread.CloseTab", () => ObserveUiTask(_shellInputCoordinator.CloseCurrentTabAsync(), "close the current tab")),
+            CreateCommandBinding("CodeAlta.Thread.TabLeft", () => ObserveUiTask(SelectTabLeftAsync(), "select the tab to the left")),
+            CreateCommandBinding("CodeAlta.Thread.TabRight", () => ObserveUiTask(SelectTabRightAsync(), "select the tab to the right")),
         ];
     }
 
@@ -272,6 +284,12 @@ internal sealed class ShellCommandSurfaceCoordinator
         _openExpandedPromptEditor();
         return Task.CompletedTask;
     }
+
+    private Task SelectTabLeftAsync()
+        => _selectTabLeftAsync();
+
+    private Task SelectTabRightAsync()
+        => _selectTabRightAsync();
 
     private Task ClearSelectedThreadQueueAsync()
         => _threadCommandCoordinator.ClearSelectedThreadQueueAsync();

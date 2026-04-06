@@ -50,6 +50,8 @@ public sealed class ShellInputRouterTests
         Assert.IsInstanceOfType<ClearQueueIntent>(_router.Route("/clear_queue", steerRequested: false));
         Assert.IsInstanceOfType<CompactThreadIntent>(_router.Route("/compact", steerRequested: false));
         Assert.IsInstanceOfType<CloseTabIntent>(_router.Route("/close", steerRequested: false));
+        Assert.IsInstanceOfType<TabLeftIntent>(_router.Route("/tab_left", steerRequested: false));
+        Assert.IsInstanceOfType<TabRightIntent>(_router.Route("/tab_right", steerRequested: false));
         Assert.IsInstanceOfType<QueueStatusIntent>(_router.Route("/queue", steerRequested: false));
     }
 

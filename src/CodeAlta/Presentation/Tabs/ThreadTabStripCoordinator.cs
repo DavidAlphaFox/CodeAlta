@@ -146,6 +146,48 @@ internal sealed class ThreadTabStripCoordinator
         _pendingThreadSelectionThreadId = null;
     }
 
+    public bool TrySelectRelativeTab(int delta)
+    {
+        var tabControl = _threadTabs.GetTabControl();
+        if (tabControl is null || tabControl.Tabs.Count == 0)
+        {
+            return false;
+        }
+
+        var selectedIndex = ResolveSelectedIndex(tabControl);
+        var targetIndex = GetAdjacentTabIndex(selectedIndex, tabControl.Tabs.Count, delta);
+        if (targetIndex == selectedIndex)
+        {
+            return false;
+        }
+
+        tabControl.SelectedIndex = targetIndex;
+        OnSelectionChanged(targetIndex);
+        return true;
+    }
+
+    internal static int GetAdjacentTabIndex(int selectedIndex, int tabCount, int delta)
+    {
+        if (tabCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(tabCount));
+        }
+
+        if (selectedIndex < 0 || selectedIndex >= tabCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(selectedIndex));
+        }
+
+        if (delta == 0 || tabCount == 1)
+        {
+            return selectedIndex;
+        }
+
+        var offset = delta % tabCount;
+        var targetIndex = (selectedIndex + offset) % tabCount;
+        return targetIndex < 0 ? targetIndex + tabCount : targetIndex;
+    }
+
     private ThreadTabStripProjection BuildProjection()
     {
         var selection = _threadSelection.Selection;
@@ -318,5 +360,32 @@ internal sealed class ThreadTabStripCoordinator
         {
             _syncingSelection = false;
         }
+    }
+
+    private int ResolveSelectedIndex(TabControl tabControl)
+    {
+        ArgumentNullException.ThrowIfNull(tabControl);
+
+        if (tabControl.SelectedIndex >= 0 && tabControl.SelectedIndex < tabControl.Tabs.Count)
+        {
+            return tabControl.SelectedIndex;
+        }
+
+        var selection = _threadSelection.Selection;
+        var selectedTabId = selection.Target is WorkspaceTarget.Draft
+            ? CodeAltaApp.DraftTabId
+            : selection.SelectedThreadId;
+        if (!string.IsNullOrWhiteSpace(selectedTabId))
+        {
+            for (var i = 0; i < tabControl.Tabs.Count; i++)
+            {
+                if (string.Equals(tabControl.Tabs[i].Data as string, selectedTabId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+        }
+
+        return 0;
     }
 }

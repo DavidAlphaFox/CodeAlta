@@ -3,6 +3,7 @@ using CodeAlta.Views;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI.Controls;
 using XenoAtom.Terminal.UI.Geometry;
+using XenoAtom.Terminal.UI.Input;
 
 namespace CodeAlta.Tests;
 
@@ -91,5 +92,21 @@ public sealed class ResponsiveDialogSizeTests
         Assert.AreEqual(TerminalModifiers.Ctrl, sequence[0].Modifiers);
         Assert.AreEqual(TerminalChar.CtrlU, sequence[1].Char);
         Assert.AreEqual(TerminalModifiers.Ctrl, sequence[1].Modifiers);
+    }
+
+    [TestMethod]
+    public void ShellCommandCatalog_UsesAltLeftForTabLeftShortcut()
+    {
+        var gesture = ShellCommandCatalog.Get("CodeAlta.Thread.TabLeft").Gesture;
+
+        Assert.AreEqual(new KeyGesture(TerminalKey.Left, TerminalModifiers.Alt), gesture);
+    }
+
+    [TestMethod]
+    public void ShellCommandCatalog_UsesAltRightForTabRightShortcut()
+    {
+        var gesture = ShellCommandCatalog.Get("CodeAlta.Thread.TabRight").Gesture;
+
+        Assert.AreEqual(new KeyGesture(TerminalKey.Right, TerminalModifiers.Alt), gesture);
     }
 }

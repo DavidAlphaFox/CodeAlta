@@ -30,6 +30,10 @@ internal sealed record CompactThreadIntent : ShellInputIntent;
 
 internal sealed record CloseTabIntent : ShellInputIntent;
 
+internal sealed record TabLeftIntent : ShellInputIntent;
+
+internal sealed record TabRightIntent : ShellInputIntent;
+
 internal sealed record ClearQueueIntent : ShellInputIntent;
 
 internal sealed record QueueStatusIntent : ShellInputIntent;

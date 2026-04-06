@@ -117,4 +117,16 @@ public sealed class CodeAltaAppTabStripTests
             new ThreadTabStripItemProjection("thread-1", IsDraft: false),
             totalTabCount: 1));
     }
+
+    [TestMethod]
+    public void GetAdjacentTabIndex_WrapsLeftFromFirstTab()
+    {
+        Assert.AreEqual(2, ThreadTabStripCoordinator.GetAdjacentTabIndex(selectedIndex: 0, tabCount: 3, delta: -1));
+    }
+
+    [TestMethod]
+    public void GetAdjacentTabIndex_WrapsRightFromLastTab()
+    {
+        Assert.AreEqual(0, ThreadTabStripCoordinator.GetAdjacentTabIndex(selectedIndex: 2, tabCount: 3, delta: 1));
+    }
 }
