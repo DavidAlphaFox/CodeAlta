@@ -66,6 +66,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private readonly ThreadSelectionContext _threadSelectionContext;
     private readonly ThreadTabContext _threadTabContext;
     private readonly WorkspaceRefreshContext _workspaceRefreshContext;
+    private readonly AcpManagementCoordinator? _acpManagementCoordinator;
     private CodeAltaShellView? _shellView;
     private ThreadWorkspaceView? _threadWorkspaceView;
     private SessionUsagePresenter? _sessionUsagePresenter;
@@ -236,6 +237,16 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         _shellWorkspaceContext = composition.ShellWorkspaceContext;
         _threadSelectionContext = composition.ThreadSelectionContext;
         _workspaceRefreshContext = composition.WorkspaceRefreshContext;
+        _acpManagementCoordinator = _ownedServices is null
+            ? null
+            : new AcpManagementCoordinator(
+                new AcpManagementService(
+                    _ownedServices.AcpAgentRegistryService,
+                    new CodeAltaConfigStore(_catalogOptions),
+                    new AcpInstalledBackendStore(_catalogOptions),
+                    _chatBackendStates),
+                () => DialogBoundsResolver.ResolveAppBounds(ThreadInput is Visual threadInput ? threadInput : _sidebarCoordinator.View.Tree),
+                () => ThreadInput is Visual threadInput ? threadInput : _sidebarCoordinator.View.Tree);
         _threadTabContext = new ThreadTabContext(
             () => ThreadTabControl,
             () => _threadWorkspaceView,
@@ -516,6 +527,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             _threadWorkspaceView.Root,
             ThreadCommandBar!,
             _shellCommandSurfaceCoordinator,
+            OpenAcpManagement,
             ToggleTerminalLoopCallback,
             FocusSidebar,
             FocusPromptEditor);
@@ -703,6 +715,17 @@ internal sealed class CodeAltaApp : IAsyncDisposable
 
     internal void FocusPromptEditor()
         => ThreadPaneLayout?.App?.Focus(ThreadInput);
+
+    internal void OpenAcpManagement()
+    {
+        if (_acpManagementCoordinator is null)
+        {
+            SetStatus("ACP management is unavailable in this app instance.", tone: StatusTone.Warning);
+            return;
+        }
+
+        _acpManagementCoordinator.Open();
+    }
 
     internal void FocusSidebar()
     {

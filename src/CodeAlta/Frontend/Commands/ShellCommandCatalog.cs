@@ -60,6 +60,16 @@ internal static class ShellCommandCatalog
             Aliases: ["open"],
             ShowInCommandBar: false),
         new(
+            "CodeAlta.Acp.Manage",
+            "ACP Agents",
+            "Browse the ACP registry and inspect installed ACP backends.",
+            ShellCommandHelpCategory.General,
+            ShellCommandScope.AnyShell,
+            ShellCommandAvailability.Always,
+            CommandName: "acp_agents",
+            Aliases: ["acp"],
+            ShowInCommandBar: false),
+        new(
             "CodeAlta.Shell.FocusSidebar",
             "Go to Sidebar",
             "Focus the navigator sidebar on the current selection.",

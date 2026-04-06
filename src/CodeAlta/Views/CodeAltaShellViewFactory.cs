@@ -13,6 +13,7 @@ internal static class CodeAltaShellViewFactory
         Visual threadWorkspace,
         Visual threadCommandBar,
         ShellCommandSurfaceCoordinator shellCommandSurfaceCoordinator,
+        Action openAcpManager,
         Action toggleTerminalLoopCallback,
         Action focusSidebar,
         Action focusPromptEditor)
@@ -21,6 +22,7 @@ internal static class CodeAltaShellViewFactory
         ArgumentNullException.ThrowIfNull(threadWorkspace);
         ArgumentNullException.ThrowIfNull(threadCommandBar);
         ArgumentNullException.ThrowIfNull(shellCommandSurfaceCoordinator);
+        ArgumentNullException.ThrowIfNull(openAcpManager);
         ArgumentNullException.ThrowIfNull(toggleTerminalLoopCallback);
         ArgumentNullException.ThrowIfNull(focusSidebar);
         ArgumentNullException.ThrowIfNull(focusPromptEditor);
@@ -46,6 +48,10 @@ internal static class CodeAltaShellViewFactory
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.Project.OpenFolder"),
             () => _ = shellCommandSurfaceCoordinator.ShowOpenFolderDialogAsync(),
+            CommandPresentation.CommandPalette));
+        shellView.Root.AddCommand(ShellCommandViewFactory.Create(
+            ShellCommandCatalog.Get("CodeAlta.Acp.Manage"),
+            openAcpManager,
             CommandPresentation.CommandPalette));
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.Shell.FocusSidebar"),
