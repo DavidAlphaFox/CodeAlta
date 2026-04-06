@@ -72,6 +72,7 @@ public sealed class AcpManagementServiceTests
         runtimeState.Models.Add(new AgentModelInfo("model-a", DisplayName: "Model A"));
 
         var service = new AcpManagementService(
+            catalogOptions,
             registryService,
             configStore,
             installedStore,
@@ -113,6 +114,7 @@ public sealed class AcpManagementServiceTests
         });
 
         var service = new AcpManagementService(
+            catalogOptions,
             registryService,
             configStore,
             installedStore,
@@ -127,6 +129,79 @@ public sealed class AcpManagementServiceTests
         Assert.IsTrue(item.IsManual);
         Assert.IsFalse(item.IsEnabled);
         Assert.IsTrue(item.IsBroken);
+    }
+
+    [TestMethod]
+    public void SaveConfigurationAndResetConfiguration_RoundTripManualAgent()
+    {
+        using var temp = TempDirectory.Create();
+        var catalogOptions = new CatalogOptions { GlobalRoot = temp.Path };
+        var installedStore = new AcpInstalledBackendStore(catalogOptions);
+        var configStore = new CodeAltaConfigStore(catalogOptions);
+        using var registryService = new AcpAgentRegistryService(catalogOptions, installedStore);
+        var service = new AcpManagementService(
+            catalogOptions,
+            registryService,
+            configStore,
+            installedStore,
+            new Dictionary<string, ChatBackendState>(StringComparer.OrdinalIgnoreCase));
+
+        service.SaveConfiguration(new AcpBackendDefinition
+        {
+            AgentId = "manual-agent",
+            DisplayName = "Manual Agent",
+            Command = "npx",
+            Arguments = ["--yes", "@manual/agent"],
+        });
+
+        Assert.IsTrue(service.AgentIdExists("manual-agent"));
+        var editable = service.CreateEditableDefinition("manual-agent");
+        Assert.AreEqual("Manual Agent", editable.DisplayName);
+        CollectionAssert.AreEqual(new[] { "--yes", "@manual/agent" }, editable.Arguments);
+
+        Assert.IsTrue(service.ResetConfiguration("manual-agent"));
+        Assert.IsFalse(service.AgentIdExists("manual-agent"));
+    }
+
+    [TestMethod]
+    public void RemoveAgent_RemovesInstalledManifestConfigAndArtifacts()
+    {
+        using var temp = TempDirectory.Create();
+        var catalogOptions = new CatalogOptions { GlobalRoot = temp.Path };
+        var installedStore = new AcpInstalledBackendStore(catalogOptions);
+        var configStore = new CodeAltaConfigStore(catalogOptions);
+        using var registryService = new AcpAgentRegistryService(catalogOptions, installedStore);
+        var service = new AcpManagementService(
+            catalogOptions,
+            registryService,
+            configStore,
+            installedStore,
+            new Dictionary<string, ChatBackendState>(StringComparer.OrdinalIgnoreCase));
+
+        installedStore.Save(new AcpBackendDefinition
+        {
+            AgentId = "sample-agent",
+            DisplayName = "Sample Agent",
+            Command = "npx",
+        });
+        configStore.SaveGlobalAcpBackendDefinition(new AcpBackendDefinition
+        {
+            AgentId = "sample-agent",
+            DisplayName = "Configured Sample Agent",
+            Command = "npx",
+        });
+        Directory.CreateDirectory(Path.Combine(catalogOptions.AcpInstallsRoot, "sample-agent"));
+        Directory.CreateDirectory(Path.Combine(catalogOptions.AcpDownloadsRoot, "sample-agent"));
+        Directory.CreateDirectory(Path.Combine(catalogOptions.AcpStateRoot, "sample-agent"));
+
+        var removed = service.RemoveAgent("sample-agent", removeArtifacts: true);
+
+        Assert.IsTrue(removed);
+        Assert.AreEqual(0, installedStore.Load().Count);
+        Assert.IsNull(configStore.LoadGlobalAcpBackendDefinition("sample-agent"));
+        Assert.IsFalse(Directory.Exists(Path.Combine(catalogOptions.AcpInstallsRoot, "sample-agent")));
+        Assert.IsFalse(Directory.Exists(Path.Combine(catalogOptions.AcpDownloadsRoot, "sample-agent")));
+        Assert.IsFalse(Directory.Exists(Path.Combine(catalogOptions.AcpStateRoot, "sample-agent")));
     }
 
     private sealed class TempDirectory(string path) : IDisposable

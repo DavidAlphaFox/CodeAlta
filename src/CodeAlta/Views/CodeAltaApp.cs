@@ -241,10 +241,13 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             ? null
             : new AcpManagementCoordinator(
                 new AcpManagementService(
+                    _catalogOptions,
                     _ownedServices.AcpAgentRegistryService,
                     new CodeAltaConfigStore(_catalogOptions),
                     new AcpInstalledBackendStore(_catalogOptions),
                     _chatBackendStates),
+                () => RefreshAcpBackendsAsync(),
+                agentId => ProbeAcpBackendAsync(agentId),
                 () => DialogBoundsResolver.ResolveAppBounds(ThreadInput is Visual threadInput ? threadInput : _sidebarCoordinator.View.Tree),
                 () => ThreadInput is Visual threadInput ? threadInput : _sidebarCoordinator.View.Tree);
         _threadTabContext = new ThreadTabContext(
@@ -725,6 +728,62 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         }
 
         _acpManagementCoordinator.Open();
+    }
+
+    private async Task RefreshAcpBackendsAsync()
+    {
+        if (_ownedServices is null)
+        {
+            return;
+        }
+
+        await _ownedServices.RefreshAcpBackendsAsync().ConfigureAwait(false);
+        DispatchToUi(
+            () =>
+            {
+                SyncChatBackendCatalog();
+                RefreshSelectionAndThreadWorkspace();
+            });
+        await _chatBackendInitializationCoordinator.InitializeAsync(CancellationToken.None).ConfigureAwait(false);
+        DispatchToUi(
+            () =>
+            {
+                SyncChatBackendCatalog();
+                RefreshSelectionAndThreadWorkspace();
+                SetStatus("ACP backends refreshed.", tone: StatusTone.Info);
+            });
+    }
+
+    private async Task ProbeAcpBackendAsync(string agentId)
+    {
+        var backendId = CodeAlta.Agent.Acp.AcpAgentBackendFactoryExtensions.CreateBackendId(agentId);
+        await _chatBackendInitializationCoordinator.RefreshBackendAsync(backendId, CancellationToken.None).ConfigureAwait(false);
+        DispatchToUi(RefreshSelectionAndThreadWorkspace);
+    }
+
+    private void SyncChatBackendCatalog()
+    {
+        var backendDescriptors = _ownedServices?.BackendDescriptors
+            ?? CodeAltaOwnedServices.CreateBuiltInBackendDescriptors();
+        var activeBackendIds = new HashSet<string>(
+            backendDescriptors.Select(static descriptor => descriptor.BackendId.Value),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var descriptor in backendDescriptors)
+        {
+            if (_chatBackendStates.TryGetValue(descriptor.BackendId.Value, out var existing))
+            {
+                existing.DisplayName = descriptor.DisplayName;
+                continue;
+            }
+
+            _chatBackendStates[descriptor.BackendId.Value] = new ChatBackendState(descriptor.BackendId, descriptor.DisplayName);
+        }
+
+        foreach (var backendId in _chatBackendStates.Keys.Where(key => !activeBackendIds.Contains(key)).ToArray())
+        {
+            _chatBackendStates.Remove(backendId);
+        }
     }
 
     internal void FocusSidebar()

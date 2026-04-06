@@ -14,6 +14,8 @@ namespace CodeAlta.Views;
 internal sealed class AcpManagementDialog
 {
     private readonly AcpManagementService _service;
+    private readonly Func<Task> _reloadAcpBackendsAsync;
+    private readonly Func<string, Task> _probeAcpBackendAsync;
     private readonly Func<Visual?> _getFocusTarget;
     private readonly Dialog _dialog;
     private readonly EnumSelect<AcpManagementScope> _scopeSelect;
@@ -30,14 +32,20 @@ internal sealed class AcpManagementDialog
 
     public AcpManagementDialog(
         AcpManagementService service,
+        Func<Task> reloadAcpBackendsAsync,
+        Func<string, Task> probeAcpBackendAsync,
         Func<Rectangle?> getBounds,
         Func<Visual?> getFocusTarget)
     {
         ArgumentNullException.ThrowIfNull(service);
+        ArgumentNullException.ThrowIfNull(reloadAcpBackendsAsync);
+        ArgumentNullException.ThrowIfNull(probeAcpBackendAsync);
         ArgumentNullException.ThrowIfNull(getBounds);
         ArgumentNullException.ThrowIfNull(getFocusTarget);
 
         _service = service;
+        _reloadAcpBackendsAsync = reloadAcpBackendsAsync;
+        _probeAcpBackendAsync = probeAcpBackendAsync;
         _getFocusTarget = getFocusTarget;
 
         var closeButton = new Button(new TextBlock($"{NerdFont.MdClose} Close"))
@@ -61,6 +69,19 @@ internal sealed class AcpManagementDialog
         var refreshButton = new Button("Refresh Registry")
             .Tone(ControlTone.Primary)
             .Click(() => _ = ReloadSnapshotAsync(refreshRegistry: true));
+        var installButton = new Button("Install")
+            .Click(() => _ = InstallSelectedAsync());
+        var configureButton = new Button("Configure")
+            .Click(() => EditSelectedItem());
+        var resetButton = new Button("Reset Config")
+            .Click(() => _ = ResetSelectedAsync());
+        var probeButton = new Button("Probe")
+            .Click(() => _ = ProbeSelectedAsync());
+        var removeButton = new Button("Remove")
+            .Tone(ControlTone.Error)
+            .Click(() => _ = RemoveSelectedAsync());
+        var manualButton = new Button("New Manual")
+            .Click(CreateManualAgent);
 
         var toolbar = new Grid
             {
@@ -75,7 +96,14 @@ internal sealed class AcpManagementDialog
         toolbar.Cell(new TextBlock("View") { VerticalAlignment = Align.Center }, 0, 0);
         toolbar.Cell(_scopeSelect, 0, 1);
         toolbar.Cell(_filterSelect, 0, 2);
-        toolbar.Cell(new HStack(refreshButton) { HorizontalAlignment = Align.End }, 0, 3);
+        toolbar.Cell(
+            new HStack(manualButton, installButton, configureButton, resetButton, probeButton, removeButton, refreshButton)
+            {
+                HorizontalAlignment = Align.End,
+                Spacing = 1,
+            },
+            0,
+            3);
 
         _summaryMarkup = new Markup(() => _summaryText)
         {
@@ -237,6 +265,175 @@ internal sealed class AcpManagementDialog
         var item = _visibleItems[newIndex].Item;
         _selectedAgentId = item.AgentId;
         _detailValue = BuildDetailText();
+    }
+
+    private AcpAgentSummaryItem? GetSelectedItem()
+    {
+        return _visibleItems.FirstOrDefault(entry => string.Equals(entry.Item.AgentId, _selectedAgentId, StringComparison.OrdinalIgnoreCase))?.Item;
+    }
+
+    private async Task InstallSelectedAsync()
+    {
+        var item = GetSelectedItem();
+        if (item is null || !item.IsInRegistry)
+        {
+            return;
+        }
+
+        new ConfirmationDialog(
+            "Install ACP Agent",
+            [
+                $"Install '{item.DisplayName}'?",
+                $"Version: {item.RegistryVersion ?? "unknown"}",
+                $"Distribution: {(item.DistributionKinds.Count == 0 ? "unknown" : string.Join(", ", item.DistributionKinds))}",
+                item.InstallabilityMessage,
+            ],
+            "Install",
+            ControlTone.Primary,
+            async () =>
+            {
+                await _service.InstallAgentAsync(item.AgentId).ConfigureAwait(false);
+                await _reloadAcpBackendsAsync().ConfigureAwait(false);
+                await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+            },
+            () => _dialog.GetAbsoluteBounds(),
+            () => _dialog)
+            .Show();
+    }
+
+    private void EditSelectedItem()
+    {
+        var item = GetSelectedItem();
+        if (item is null)
+        {
+            return;
+        }
+
+        var definition = _service.CreateEditableDefinition(item.AgentId);
+        var existingAgentId = definition.AgentId;
+        new AcpAgentSettingsDialog(
+            $"ACP Settings · {item.DisplayName}",
+            definition,
+            canEditAgentId: false,
+            candidateAgentId => ValidateAgentId(candidateAgentId, existingAgentId),
+            async savedDefinition =>
+            {
+                _service.SaveConfiguration(savedDefinition);
+                await _reloadAcpBackendsAsync().ConfigureAwait(false);
+                await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+            },
+            () => _dialog.GetAbsoluteBounds(),
+            () => _dialog)
+            .Show();
+    }
+
+    private void CreateManualAgent()
+    {
+        var definition = _service.CreateNewManualDefinition();
+        new AcpAgentSettingsDialog(
+            "Create Manual ACP Agent",
+            definition,
+            canEditAgentId: true,
+            candidateAgentId => ValidateAgentId(candidateAgentId, exceptAgentId: null),
+            async savedDefinition =>
+            {
+                _service.SaveConfiguration(savedDefinition);
+                await _reloadAcpBackendsAsync().ConfigureAwait(false);
+                await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+            },
+            () => _dialog.GetAbsoluteBounds(),
+            () => _dialog)
+            .Show();
+    }
+
+    private async Task ResetSelectedAsync()
+    {
+        var item = GetSelectedItem();
+        if (item is null || !item.HasConfiguration)
+        {
+            return;
+        }
+
+        new ConfirmationDialog(
+            "Reset ACP Configuration",
+            [$"Reset CodeAlta overrides for '{item.DisplayName}' and return to installed defaults?"],
+            "Reset",
+            ControlTone.Default,
+            async () =>
+            {
+                _service.ResetConfiguration(item.AgentId);
+                await _reloadAcpBackendsAsync().ConfigureAwait(false);
+                await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+            },
+            () => _dialog.GetAbsoluteBounds(),
+            () => _dialog)
+            .Show();
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
+
+    private async Task RemoveSelectedAsync()
+    {
+        var item = GetSelectedItem();
+        if (item is null)
+        {
+            return;
+        }
+
+        new ConfirmationDialog(
+            "Remove ACP Agent",
+            [
+                $"Remove '{item.DisplayName}' from CodeAlta?",
+                item.IsInstalled
+                    ? "This removes the installed manifest, CodeAlta config override, and local ACP artifacts."
+                    : "This removes the CodeAlta ACP configuration.",
+            ],
+            "Remove",
+            ControlTone.Error,
+            async () =>
+            {
+                _service.RemoveAgent(item.AgentId, removeArtifacts: true);
+                await _reloadAcpBackendsAsync().ConfigureAwait(false);
+                await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+            },
+            () => _dialog.GetAbsoluteBounds(),
+            () => _dialog)
+            .Show();
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
+
+    private async Task ProbeSelectedAsync()
+    {
+        var item = GetSelectedItem();
+        if (item is null)
+        {
+            return;
+        }
+
+        await _probeAcpBackendAsync(item.AgentId).ConfigureAwait(false);
+        await ReloadSnapshotAsync(refreshRegistry: false).ConfigureAwait(false);
+    }
+
+    private string? ValidateAgentId(string? candidateAgentId, string? exceptAgentId)
+    {
+        if (string.IsNullOrWhiteSpace(candidateAgentId))
+        {
+            return "Agent id is required.";
+        }
+
+        var normalized = candidateAgentId.Trim().ToLowerInvariant();
+        if (normalized.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+            normalized.Contains(Path.DirectorySeparatorChar) ||
+            normalized.Contains(Path.AltDirectorySeparatorChar))
+        {
+            return "Agent id must be a simple identifier.";
+        }
+
+        if (_service.AgentIdExists(normalized, exceptAgentId))
+        {
+            return $"An ACP agent with id '{normalized}' already exists.";
+        }
+
+        return null;
     }
 
     private string BuildSummaryMarkup()

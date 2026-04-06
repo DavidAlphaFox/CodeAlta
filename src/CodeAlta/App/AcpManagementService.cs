@@ -7,6 +7,7 @@ namespace CodeAlta.App;
 
 internal sealed class AcpManagementService
 {
+    private readonly CatalogOptions _catalogOptions;
     private readonly AcpAgentRegistryService _registryService;
     private readonly CodeAltaConfigStore _configStore;
     private readonly AcpInstalledBackendStore _installedBackendStore;
@@ -14,17 +15,20 @@ internal sealed class AcpManagementService
     private readonly AcpInstallResolver _installResolver;
 
     public AcpManagementService(
+        CatalogOptions catalogOptions,
         AcpAgentRegistryService registryService,
         CodeAltaConfigStore configStore,
         AcpInstalledBackendStore installedBackendStore,
         IReadOnlyDictionary<string, ChatBackendState> chatBackendStates,
         AcpInstallResolver? installResolver = null)
     {
+        ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(registryService);
         ArgumentNullException.ThrowIfNull(configStore);
         ArgumentNullException.ThrowIfNull(installedBackendStore);
         ArgumentNullException.ThrowIfNull(chatBackendStates);
 
+        _catalogOptions = catalogOptions;
         _registryService = registryService;
         _configStore = configStore;
         _installedBackendStore = installedBackendStore;
@@ -125,6 +129,115 @@ internal sealed class AcpManagementService
                 .OrderBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static item => item.AgentId, StringComparer.OrdinalIgnoreCase)
                 .ToArray());
+    }
+
+    public AcpBackendDefinition CreateEditableDefinition(string agentId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(agentId);
+
+        var configured = _configStore.LoadGlobalAcpBackendDefinition(agentId);
+        if (configured is not null)
+        {
+            return CloneDefinition(configured);
+        }
+
+        var installed = _installedBackendStore.Load()
+            .FirstOrDefault(definition => string.Equals(definition.AgentId, agentId, StringComparison.OrdinalIgnoreCase));
+        if (installed is not null)
+        {
+            return CloneDefinition(installed);
+        }
+
+        return new AcpBackendDefinition
+        {
+            AgentId = agentId.Trim().ToLowerInvariant(),
+            DisplayName = agentId.Trim(),
+            Enabled = true,
+            UseUnstable = true,
+            EnableFilesystem = true,
+            EnableTerminal = true,
+        };
+    }
+
+    public AcpBackendDefinition CreateNewManualDefinition()
+    {
+        return new AcpBackendDefinition
+        {
+            Enabled = true,
+            UseUnstable = true,
+            EnableFilesystem = true,
+            EnableTerminal = true,
+        };
+    }
+
+    public bool AgentIdExists(string agentId, string? exceptAgentId = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(agentId);
+
+        var normalized = agentId.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(exceptAgentId) &&
+            string.Equals(normalized, exceptAgentId.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return _configStore.LoadGlobalAcpBackendDefinitions(includeDisabled: true)
+                   .Any(definition => string.Equals(definition.AgentId, normalized, StringComparison.OrdinalIgnoreCase)) ||
+               _installedBackendStore.Load()
+                   .Any(definition => string.Equals(definition.AgentId, normalized, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task<AcpBackendDefinition> InstallAgentAsync(string agentId, CancellationToken cancellationToken = default)
+    {
+        var definition = await _registryService.InstallAgentAsync(agentId, cancellationToken).ConfigureAwait(false);
+        return CloneDefinition(definition);
+    }
+
+    public void SaveConfiguration(AcpBackendDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        var normalized = CloneDefinition(definition);
+        normalized.AgentId = normalized.AgentId.Trim().ToLowerInvariant();
+        normalized.RegistryId = string.IsNullOrWhiteSpace(normalized.RegistryId)
+            ? null
+            : normalized.RegistryId.Trim().ToLowerInvariant();
+        normalized.DisplayName = string.IsNullOrWhiteSpace(normalized.DisplayName) ? null : normalized.DisplayName.Trim();
+        normalized.Command = string.IsNullOrWhiteSpace(normalized.Command) ? null : normalized.Command.Trim();
+        normalized.WorkingDirectory = string.IsNullOrWhiteSpace(normalized.WorkingDirectory) ? null : normalized.WorkingDirectory.Trim();
+        normalized.Arguments = normalized.Arguments?
+            .Where(static argument => !string.IsNullOrWhiteSpace(argument))
+            .Select(static argument => argument.Trim())
+            .ToList();
+        normalized.EnvironmentVariables = normalized.EnvironmentVariables?
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
+            .ToDictionary(
+                static entry => entry.Key.Trim(),
+                static entry => entry.Value ?? string.Empty,
+                StringComparer.OrdinalIgnoreCase);
+
+        _configStore.SaveGlobalAcpBackendDefinition(normalized);
+    }
+
+    public bool ResetConfiguration(string agentId)
+    {
+        return _configStore.DeleteGlobalAcpBackendDefinition(agentId);
+    }
+
+    public bool RemoveAgent(string agentId, bool removeArtifacts)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(agentId);
+
+        var removedConfig = _configStore.DeleteGlobalAcpBackendDefinition(agentId);
+        var removedInstall = _registryService.RemoveInstalledAgent(agentId);
+        if (removeArtifacts)
+        {
+            DeleteAgentDirectory("installs", agentId);
+            DeleteAgentDirectory("downloads", agentId);
+            DeleteAgentDirectory("state", agentId);
+        }
+
+        return removedConfig || removedInstall;
     }
 
     private AcpAgentSummaryItem BuildItem(
@@ -299,6 +412,43 @@ internal sealed class AcpManagementService
             ? [".exe", ".cmd", ".bat"]
             : pathExtensions.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return [command, .. extensions.Select(extension => command + extension)];
+    }
+
+    private void DeleteAgentDirectory(string kind, string agentId)
+    {
+        var root = kind switch
+        {
+            "installs" => _catalogOptions.AcpInstallsRoot,
+            "downloads" => _catalogOptions.AcpDownloadsRoot,
+            "state" => _catalogOptions.AcpStateRoot,
+            _ => throw new InvalidOperationException($"Unsupported ACP directory kind '{kind}'."),
+        };
+        var path = Path.Combine(root, agentId.Trim().ToLowerInvariant());
+        if (Directory.Exists(path))
+        {
+            Directory.Delete(path, recursive: true);
+        }
+    }
+
+    private static AcpBackendDefinition CloneDefinition(AcpBackendDefinition definition)
+    {
+        return new AcpBackendDefinition
+        {
+            AgentId = definition.AgentId,
+            DisplayName = definition.DisplayName,
+            Enabled = definition.Enabled,
+            RegistryId = definition.RegistryId,
+            Command = definition.Command,
+            Arguments = definition.Arguments is null ? null : [.. definition.Arguments],
+            WorkingDirectory = definition.WorkingDirectory,
+            EnvironmentVariables = definition.EnvironmentVariables is null
+                ? null
+                : new Dictionary<string, string>(definition.EnvironmentVariables, StringComparer.OrdinalIgnoreCase),
+            UseUnstable = definition.UseUnstable,
+            EnableTerminal = definition.EnableTerminal,
+            EnableFilesystem = definition.EnableFilesystem,
+            EnableElicitation = definition.EnableElicitation,
+        };
     }
 }
 
