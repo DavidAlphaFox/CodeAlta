@@ -57,6 +57,8 @@ public sealed class ArchitectureGuardrailTests
                 entry.RelativePath.StartsWith("Presentation/", StringComparison.Ordinal) ||
                 entry.RelativePath.StartsWith("App/", StringComparison.Ordinal) &&
                 entry.RelativePath is not
+                    "App/AcpAgentRegistryService.cs" and
+                    not
                     "App/ChatBackendInitializationCoordinator.cs" and
                     not "App/CodeAltaOwnedServices.cs" and
                     not "App/CodeAltaShellController.cs" and

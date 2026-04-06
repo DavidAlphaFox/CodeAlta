@@ -543,7 +543,8 @@ public sealed class CodeAltaAppTests
                     AgentBackendIds.Copilot,
                     "session-1",
                     timestamp,
-                    "Reconnect failed.")));
+                    "Reconnect failed.",
+                    exception: null)));
     }
 
     [TestMethod]
@@ -631,7 +632,7 @@ public sealed class CodeAltaAppTests
             "Waiting for Codex to reconnect...",
             PromptComposerProjectionBuilder.BuildPromptUnavailablePlaceholder(thread, "Codex", ChatBackendAvailability.Connecting, anyBackendReady: false));
         Assert.AreEqual(
-            "Install or connect Codex/Copilot to start a thread...",
+            "Install or connect a backend to start a thread...",
             PromptComposerProjectionBuilder.BuildPromptUnavailablePlaceholder(null, "Codex", ChatBackendAvailability.Unsupported, anyBackendReady: false));
     }
 

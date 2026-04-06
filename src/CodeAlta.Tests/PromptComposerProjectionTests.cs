@@ -101,7 +101,7 @@ public sealed class PromptComposerProjectionTests
             selectedThreadCanCompact: false,
             selectedThreadCanAbort: false);
 
-        Assert.AreEqual("Install or connect Codex/Copilot to start a thread...", projection.Placeholder);
+        Assert.AreEqual("Install or connect a backend to start a thread...", projection.Placeholder);
         Assert.IsTrue(projection.HasUnavailableStatus);
         Assert.AreEqual("No chat backend is connected. Browse threads and projects, but prompt sending is unavailable.", projection.UnavailableStatusMessage);
         Assert.AreEqual(StatusTone.Warning, projection.UnavailableStatusTone);
