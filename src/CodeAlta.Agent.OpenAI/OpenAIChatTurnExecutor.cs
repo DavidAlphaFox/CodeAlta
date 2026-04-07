@@ -29,9 +29,10 @@ internal sealed class OpenAIChatTurnExecutor(OpenAIProviderOptions provider) : I
         var messages = CreateMessages(request);
         var options = CreateOptions(request);
         var streamedToolCalls = new Dictionary<int, StreamingToolCallState>();
-        var streamedContent = new StringBuilder();
-        var streamedRefusal = new StringBuilder();
+        var streamedAssistantContent = new StringBuilder();
         var streamedReasoning = new StringBuilder();
+        var assistantContentId = $"assistant:{Guid.CreateVersion7()}";
+        var reasoningContentId = $"reasoning:{Guid.CreateVersion7()}";
         ChatTokenUsage? usage = null;
         string? completionId = null;
         string? modelId = null;
@@ -46,12 +47,12 @@ internal sealed class OpenAIChatTurnExecutor(OpenAIProviderOptions provider) : I
             {
                 if (contentPart.Kind == ChatMessageContentPartKind.Text && !string.IsNullOrEmpty(contentPart.Text))
                 {
-                    streamedContent.Append(contentPart.Text);
+                    streamedAssistantContent.Append(contentPart.Text);
                     await onUpdate(
                         new LocalAgentTurnDelta
                         {
                             Kind = AgentContentKind.Assistant,
-                            ContentId = completionId ?? $"assistant:{Guid.CreateVersion7()}",
+                            ContentId = assistantContentId,
                             Text = contentPart.Text,
                         },
                         cancellationToken).ConfigureAwait(false);
@@ -60,12 +61,12 @@ internal sealed class OpenAIChatTurnExecutor(OpenAIProviderOptions provider) : I
 
             if (!string.IsNullOrEmpty(update.RefusalUpdate))
             {
-                streamedRefusal.Append(update.RefusalUpdate);
+                streamedAssistantContent.Append(update.RefusalUpdate);
                 await onUpdate(
                     new LocalAgentTurnDelta
                     {
                         Kind = AgentContentKind.Assistant,
-                        ContentId = completionId ?? $"assistant:{Guid.CreateVersion7()}",
+                        ContentId = assistantContentId,
                         Text = update.RefusalUpdate,
                     },
                     cancellationToken).ConfigureAwait(false);
@@ -78,7 +79,7 @@ internal sealed class OpenAIChatTurnExecutor(OpenAIProviderOptions provider) : I
                     new LocalAgentTurnDelta
                     {
                         Kind = AgentContentKind.Reasoning,
-                        ContentId = completionId ?? $"reasoning:{Guid.CreateVersion7()}",
+                        ContentId = reasoningContentId,
                         Text = reasoningDelta,
                     },
                     cancellationToken).ConfigureAwait(false);
@@ -111,19 +112,17 @@ internal sealed class OpenAIChatTurnExecutor(OpenAIProviderOptions provider) : I
         }
 
         var parts = new List<LocalAgentMessagePart>();
-        if (streamedContent.Length > 0)
+        var assistantPartContentIds = new List<string?>();
+        if (streamedAssistantContent.Length > 0)
         {
-            parts.Add(new LocalAgentMessagePart.Text(streamedContent.ToString()));
-        }
-
-        if (streamedRefusal.Length > 0)
-        {
-            parts.Add(new LocalAgentMessagePart.Text(streamedRefusal.ToString()));
+            parts.Add(new LocalAgentMessagePart.Text(streamedAssistantContent.ToString()));
+            assistantPartContentIds.Add(assistantContentId);
         }
 
         if (streamedReasoning.Length > 0)
         {
             parts.Add(new LocalAgentMessagePart.Reasoning(streamedReasoning.ToString(), ProtectedData: null));
+            assistantPartContentIds.Add(reasoningContentId);
         }
 
         foreach (var toolState in streamedToolCalls.OrderBy(static pair => pair.Key).Select(static pair => pair.Value))
@@ -132,12 +131,14 @@ internal sealed class OpenAIChatTurnExecutor(OpenAIProviderOptions provider) : I
                 toolState.CallId ?? $"tool:{Guid.CreateVersion7()}",
                 toolState.Name ?? string.Empty,
                 DeserializeToolArguments(toolState.Arguments.ToString())));
+            assistantPartContentIds.Add(null);
         }
 
         var assistantMessage = new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, parts);
         return new LocalAgentTurnResponse
         {
             AssistantMessage = assistantMessage,
+            AssistantPartContentIds = assistantPartContentIds,
             Usage = CreateUsage(modelId, usage),
             ProviderSessionId = string.IsNullOrWhiteSpace(completionId) ? null : completionId,
             ProviderState = CreateProviderState(completionId),

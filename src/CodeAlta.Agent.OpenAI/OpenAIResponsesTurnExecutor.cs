@@ -71,10 +71,11 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
             throw new InvalidOperationException("The OpenAI Responses stream completed without a final response payload.");
         }
 
-        var assistantMessage = MapAssistantMessage(completedResponse);
+        var (assistantMessage, assistantPartContentIds) = MapAssistantMessage(completedResponse);
         return new LocalAgentTurnResponse
         {
             AssistantMessage = assistantMessage,
+            AssistantPartContentIds = assistantPartContentIds,
             Usage = CreateUsage(completedResponse),
             ProviderSessionId = string.IsNullOrWhiteSpace(completedResponse.Id) ? null : completedResponse.Id,
             ProviderState = CreateProviderState(completedResponse),
@@ -108,6 +109,7 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
         {
             options.ReasoningOptions = new ResponseReasoningOptions
             {
+                ReasoningSummaryVerbosity = ResponseReasoningSummaryVerbosity.Detailed,
                 ReasoningEffortLevel = reasoningEffort switch
                 {
                     AgentReasoningEffort.None => null,
@@ -308,25 +310,33 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
             strictModeEnabled: true,
             functionDescription: tool.Spec.Description);
 
-    private static LocalAgentConversationMessage MapAssistantMessage(OpenAIResponse response)
+    private static (LocalAgentConversationMessage Message, IReadOnlyList<string?> PartContentIds) MapAssistantMessage(OpenAIResponse response)
     {
         var parts = new List<LocalAgentMessagePart>();
+        var partContentIds = new List<string?>();
         foreach (var item in response.OutputItems)
         {
             switch (item)
             {
                 case MessageResponseItem message when message.Role == MessageRole.Assistant:
+                    var textBuilder = new System.Text.StringBuilder();
                     foreach (var content in message.Content)
                     {
                         switch (content.Kind)
                         {
                             case ResponseContentPartKind.OutputText when !string.IsNullOrWhiteSpace(content.Text):
-                                parts.Add(new LocalAgentMessagePart.Text(content.Text));
+                                textBuilder.Append(content.Text);
                                 break;
                             case ResponseContentPartKind.Refusal when !string.IsNullOrWhiteSpace(content.Refusal):
-                                parts.Add(new LocalAgentMessagePart.Text(content.Refusal));
+                                textBuilder.Append(content.Refusal);
                                 break;
                         }
+                    }
+
+                    if (textBuilder.Length > 0)
+                    {
+                        parts.Add(new LocalAgentMessagePart.Text(textBuilder.ToString()));
+                        partContentIds.Add(string.IsNullOrWhiteSpace(message.Id) ? response.Id : message.Id);
                     }
 
                     break;
@@ -336,6 +346,7 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                         parts.Add(new LocalAgentMessagePart.Reasoning(
                             reasoning.GetSummaryText() ?? string.Empty,
                             string.IsNullOrWhiteSpace(reasoning.EncryptedContent) ? null : reasoning.EncryptedContent));
+                        partContentIds.Add(string.IsNullOrWhiteSpace(reasoning.Id) ? response.Id : reasoning.Id);
                     }
 
                     break;
@@ -344,11 +355,12 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                         toolCall.CallId,
                         toolCall.FunctionName,
                         DeserializeJson(toolCall.FunctionArguments)));
+                    partContentIds.Add(null);
                     break;
             }
         }
 
-        return new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, parts);
+        return (new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, parts), partContentIds);
     }
 
     private static AgentSessionUsage? CreateUsage(OpenAIResponse response)

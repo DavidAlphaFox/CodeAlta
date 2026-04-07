@@ -107,6 +107,12 @@ public sealed record LocalAgentTurnResponse
     public required LocalAgentConversationMessage AssistantMessage { get; init; }
 
     /// <summary>
+    /// Gets or initializes optional stable content identifiers aligned with <see cref="AssistantMessage"/> parts.
+    /// Entries may be <see langword="null" /> for parts that do not map to timeline content.
+    /// </summary>
+    public IReadOnlyList<string?>? AssistantPartContentIds { get; init; }
+
+    /// <summary>
     /// Gets or initializes the latest usage snapshot.
     /// </summary>
     public AgentSessionUsage? Usage { get; init; }

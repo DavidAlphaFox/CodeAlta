@@ -457,8 +457,15 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                 runId),
         };
 
-        foreach (var part in response.AssistantMessage.Parts)
+        var assistantPartContentIds = response.AssistantPartContentIds;
+        for (var partIndex = 0; partIndex < response.AssistantMessage.Parts.Count; partIndex++)
         {
+            var part = response.AssistantMessage.Parts[partIndex];
+            var partContentId = assistantPartContentIds is not null &&
+                                partIndex < assistantPartContentIds.Count &&
+                                !string.IsNullOrWhiteSpace(assistantPartContentIds[partIndex])
+                ? assistantPartContentIds[partIndex]
+                : null;
             switch (part)
             {
                 case LocalAgentMessagePart.Text text:
@@ -468,7 +475,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                         DateTimeOffset.UtcNow,
                         runId,
                         AgentContentKind.Assistant,
-                        $"assistant:{Guid.CreateVersion7()}",
+                        partContentId ?? $"assistant:{Guid.CreateVersion7()}",
                         null,
                         text.Value));
                     break;
@@ -479,7 +486,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                         DateTimeOffset.UtcNow,
                         runId,
                         AgentContentKind.Reasoning,
-                        $"reasoning:{Guid.CreateVersion7()}",
+                        partContentId ?? $"reasoning:{Guid.CreateVersion7()}",
                         null,
                         reasoning.Value ?? string.Empty,
                         CreateReasoningDetails(reasoning)));

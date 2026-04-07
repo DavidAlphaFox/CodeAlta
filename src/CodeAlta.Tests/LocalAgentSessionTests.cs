@@ -83,6 +83,7 @@ public sealed class LocalAgentSessionTests
                                 new LocalAgentMessagePart.Text("Need to inspect a file."),
                                 new LocalAgentMessagePart.ToolCall("call-1", "inspect_file", arguments.RootElement.Clone()),
                             ]),
+                        AssistantPartContentIds = ["assistant-1", null],
                         Usage = CreateUsageSnapshot(10, 5),
                         ProviderSessionId = "resp_123",
                     };
@@ -137,6 +138,11 @@ public sealed class LocalAgentSessionTests
         Assert.IsTrue(history.OfType<AgentRawEvent>().Any(static evt => evt.BackendEventType == "local.assistantMessage"));
         Assert.IsTrue(history.OfType<AgentRawEvent>().Any(static evt => evt.BackendEventType == "local.toolMessage"));
         Assert.IsTrue(history.OfType<AgentContentDeltaEvent>().Any(evt => evt.RunId == runId && evt.ContentId == "assistant-1"));
+        Assert.IsTrue(history.OfType<AgentContentCompletedEvent>().Any(evt =>
+            evt.RunId == runId &&
+            evt.Kind == AgentContentKind.Assistant &&
+            evt.ContentId == "assistant-1" &&
+            evt.Content == "Need to inspect a file."));
         Assert.IsTrue(history.OfType<AgentContentCompletedEvent>().Any(static evt => evt.Kind == AgentContentKind.ToolOutput && evt.Content.Contains("inspected sample.txt", StringComparison.Ordinal)));
         Assert.AreEqual(2, history.OfType<AgentActivityEvent>().Count(static evt => evt.ActivityId == "call-1" && (evt.Phase == AgentActivityPhase.Requested || evt.Phase == AgentActivityPhase.Started)));
         Assert.IsTrue(history.OfType<AgentSessionUpdateEvent>().Any(static evt => evt.Kind == AgentSessionUpdateKind.Idle));

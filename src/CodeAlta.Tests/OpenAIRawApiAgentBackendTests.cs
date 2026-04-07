@@ -70,6 +70,7 @@ public sealed class OpenAIRawApiAgentBackendTests
             WorkingDirectory = temp.Path,
             SystemMessage = "System instructions",
             DeveloperInstructions = "Developer instructions",
+            ReasoningEffort = AgentReasoningEffort.High,
             Tools =
             [
                 new AgentToolDefinition(
@@ -92,6 +93,9 @@ public sealed class OpenAIRawApiAgentBackendTests
         StringAssert.Contains(responsesClient.Requests[0].Options.Instructions, "<developer_instructions>");
         Assert.IsNull(responsesClient.Requests[0].Options.PreviousResponseId);
         Assert.IsNull(responsesClient.Requests[1].Options.PreviousResponseId);
+        Assert.IsNotNull(responsesClient.Requests[0].Options.ReasoningOptions);
+        Assert.AreEqual(ResponseReasoningEffortLevel.High, responsesClient.Requests[0].Options.ReasoningOptions!.ReasoningEffortLevel);
+        Assert.AreEqual(ResponseReasoningSummaryVerbosity.Detailed, responsesClient.Requests[0].Options.ReasoningOptions.ReasoningSummaryVerbosity);
         Assert.IsTrue(
             responsesClient.Requests[1].InputItems.OfType<FunctionCallOutputResponseItem>()
                 .Any(static item => item.CallId == "call-1" && item.FunctionOutput == "README contents"));

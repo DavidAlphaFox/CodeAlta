@@ -60,10 +60,11 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
             }
 
             var response = updates.ToChatResponse();
-            var assistantMessage = MapAssistantMessage(response);
+            var (assistantMessage, assistantPartContentIds) = MapAssistantMessage(response);
             return new LocalAgentTurnResponse
             {
                 AssistantMessage = assistantMessage,
+                AssistantPartContentIds = assistantPartContentIds,
                 Usage = CreateUsage(response),
                 ProviderSessionId = response.ConversationId,
                 ProviderState = CreateProviderState(response),
@@ -247,31 +248,79 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
         }
     }
 
-    private static LocalAgentConversationMessage MapAssistantMessage(ChatResponse response)
+    private static (LocalAgentConversationMessage Message, IReadOnlyList<string?> PartContentIds) MapAssistantMessage(ChatResponse response)
     {
         var assistantMessages = response.Messages
             .Where(static message => message.Role == ChatRole.Assistant)
             .ToArray();
         if (assistantMessages.Length == 0)
         {
-            return new LocalAgentConversationMessage(
-                LocalAgentConversationRole.Assistant,
-                []);
+            return (
+                new LocalAgentConversationMessage(
+                    LocalAgentConversationRole.Assistant,
+                    []),
+                Array.Empty<string?>());
         }
 
         var parts = new List<LocalAgentMessagePart>();
+        var partContentIds = new List<string?>();
         foreach (var message in assistantMessages)
         {
-            foreach (var content in message.Contents)
+            var assistantText = new System.Text.StringBuilder();
+            var reasoningText = new System.Text.StringBuilder();
+            string? reasoningProtectedData = null;
+
+            void FlushBufferedContent()
             {
-                if (TryMapAssistantPart(content, out var part))
+                if (reasoningText.Length > 0 || !string.IsNullOrWhiteSpace(reasoningProtectedData))
                 {
-                    parts.Add(part);
+                    parts.Add(new LocalAgentMessagePart.Reasoning(
+                        reasoningText.Length == 0 ? string.Empty : reasoningText.ToString(),
+                        reasoningProtectedData));
+                    partContentIds.Add(message.MessageId ?? response.ResponseId);
+                    reasoningText.Clear();
+                    reasoningProtectedData = null;
+                }
+
+                if (assistantText.Length > 0)
+                {
+                    parts.Add(new LocalAgentMessagePart.Text(assistantText.ToString()));
+                    partContentIds.Add(message.MessageId ?? response.ResponseId);
+                    assistantText.Clear();
                 }
             }
+
+            foreach (var content in message.Contents)
+            {
+                switch (content)
+                {
+                    case TextContent text when !string.IsNullOrWhiteSpace(text.Text):
+                        assistantText.Append(text.Text);
+                        break;
+                    case TextReasoningContent reasoning:
+                        if (reasoning.Text is { Length: > 0 } reasoningSegment)
+                        {
+                            reasoningText.Append(reasoningSegment);
+                        }
+
+                        reasoningProtectedData ??= reasoning.ProtectedData;
+                        break;
+                    default:
+                        FlushBufferedContent();
+                        if (TryMapAssistantPart(content, out var part))
+                        {
+                            parts.Add(part);
+                            partContentIds.Add(null);
+                        }
+
+                        break;
+                }
+            }
+
+            FlushBufferedContent();
         }
 
-        return new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, parts);
+        return (new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, parts), partContentIds);
     }
 
     private static bool TryMapAssistantPart(AIContent content, out LocalAgentMessagePart part)

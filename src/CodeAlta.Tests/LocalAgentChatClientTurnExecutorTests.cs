@@ -80,6 +80,9 @@ public sealed class LocalAgentChatClientTurnExecutorTests
         Assert.AreEqual("plan carefully", deltas[0].Text);
         Assert.AreEqual(AgentContentKind.Assistant, deltas[1].Kind);
         Assert.AreEqual("Done.", deltas[1].Text);
+        CollectionAssert.AreEqual(
+            new string?[] { "message-1", "message-1", null },
+            response.AssistantPartContentIds?.ToArray());
         Assert.IsNotNull(response.Usage);
         Assert.AreEqual(12L, response.Usage.LastOperation?.InputTokens);
         Assert.AreEqual(8L, response.Usage.LastOperation?.OutputTokens);
