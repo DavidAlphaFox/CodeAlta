@@ -10,11 +10,13 @@ namespace CodeAlta.CodexSdk;
 public sealed class CodexProcess : IAsyncDisposable
 {
     private readonly Process _process;
+    private readonly Task _stderrDrainTask;
     private bool _disposed;
 
-    private CodexProcess(Process process)
+    private CodexProcess(Process process, Task stderrDrainTask)
     {
         _process = process;
+        _stderrDrainTask = stderrDrainTask;
     }
 
     /// <summary>
@@ -92,7 +94,8 @@ public sealed class CodexProcess : IAsyncDisposable
         var process = Process.Start(psi)
                       ?? throw new InvalidOperationException($"Failed to start codex process: {exePath}");
 
-        return new CodexProcess(process);
+        var stderrDrainTask = DrainStandardErrorAsync(process, logger);
+        return new CodexProcess(process, stderrDrainTask);
     }
 
     /// <summary>
@@ -137,6 +140,19 @@ public sealed class CodexProcess : IAsyncDisposable
                     _process.Kill(entireProcessTree: true);
                 }
             }
+
+            try
+            {
+                await _stderrDrainTask.ConfigureAwait(false);
+            }
+            catch (InvalidOperationException)
+            {
+                // Process stream access can race with teardown.
+            }
+            catch (IOException)
+            {
+                // Stream teardown during process exit is expected.
+            }
         }
         finally
         {
@@ -144,4 +160,51 @@ public sealed class CodexProcess : IAsyncDisposable
         }
     }
 
+    private static async Task DrainStandardErrorAsync(Process process, Logger? logger)
+    {
+        try
+        {
+            while (true)
+            {
+                var line = await process.StandardError.ReadLineAsync().ConfigureAwait(false);
+                if (line is null)
+                {
+                    break;
+                }
+
+                LogStandardError(logger, line);
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Process shutdown disposed the stream while the drain loop was active.
+        }
+        catch (InvalidOperationException)
+        {
+            // Process shutdown can invalidate redirected stream access.
+        }
+        catch (IOException)
+        {
+            // Stream teardown during process exit is expected.
+        }
+    }
+
+    private static void LogStandardError(Logger? logger, string line)
+    {
+        if (logger is null || string.IsNullOrEmpty(line))
+        {
+            return;
+        }
+
+        if (logger.IsEnabled(LogLevel.Trace))
+        {
+            logger.Trace($"stderr: {line}");
+            return;
+        }
+
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            logger.Debug($"stderr: {line}");
+        }
+    }
 }

@@ -18,6 +18,8 @@ namespace CodeAlta.App;
 
 internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 {
+    private const string CodexPathOverrideEnvironmentVariable = "CODEALTA_CODEX_PATH";
+
     private readonly bool _ownsLogging;
     private readonly CodeAltaDb _db;
     private readonly AgentBackendFactory _backendFactory;
@@ -112,14 +114,17 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         var acpAgentRegistryService = new AcpAgentRegistryService(catalogOptions, installedBackendStore);
 
         var backendFactory = new AgentBackendFactory();
+        var codexPath = ResolveCodexExecutablePath(
+            Environment.GetEnvironmentVariable(CodexPathOverrideEnvironmentVariable));
         backendFactory.RegisterCodex(
             new CodexAgentBackendOptions
             {
                 ProcessOptions = new CodexProcessOptions
                 {
+                    CodexPath = codexPath,
                     LocalRootPath = localRoot,
-                    ReleaseTag = CodexClient.CompiledAgainstReleaseTag,
-                    Progress = codexInstallProgress,
+                    ReleaseTag = codexPath is null ? CodexClient.CompiledAgainstReleaseTag : null,
+                    Progress = codexPath is null ? codexInstallProgress : null,
                 },
             });
         backendFactory.RegisterCopilot(new CopilotAgentBackendOptions());
@@ -167,6 +172,29 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             agentHub,
             runtimeService,
             projectFileSearchService);
+    }
+
+    internal static string? ResolveCodexExecutablePath(string? configuredOverridePath)
+    {
+        foreach (var candidate in EnumerateCodexExecutableCandidates(configuredOverridePath))
+        {
+            var fullPath = Path.GetFullPath(candidate);
+            if (File.Exists(fullPath))
+            {
+                return fullPath;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> EnumerateCodexExecutableCandidates(
+        string? configuredOverridePath)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredOverridePath))
+        {
+            yield return configuredOverridePath;
+        }
     }
 
     private static void MigrateLegacyMachineRoot(string homeRoot, string localRoot)

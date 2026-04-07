@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using CodeAlta.CodexSdk;
+using XenoAtom.Logging;
 
 namespace CodeAlta.Agent.Codex;
 
@@ -8,7 +9,9 @@ namespace CodeAlta.Agent.Codex;
 /// </summary>
 public sealed class CodexAgentBackend : ICodexAgentBackend
 {
+    private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.Agent.Codex");
     private readonly ConcurrentDictionary<string, CodexAgentSession> _sessions = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, PendingServerRequestInfo> _pendingServerRequests = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
     private readonly CodexAgentBackendOptions _options;
     private CancellationTokenSource? _pumpCancellationTokenSource;
@@ -198,6 +201,52 @@ public sealed class CodexAgentBackend : ICodexAgentBackend
         _sessions.TryRemove(sessionId, out _);
     }
 
+    internal void LogServerRequestReceived(ServerRequest request, string threadId)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+
+        var info = CreatePendingServerRequestInfo(request, threadId);
+        _pendingServerRequests[info.Key] = info;
+        LogDebug(
+            $"Codex server request received method={info.Method} requestId={info.RequestId} threadId={info.ThreadId} turnId={info.TurnId ?? "<none>"} itemId={info.ItemId ?? "<none>"} callId={info.CallId ?? "<none>"} tool={info.Tool ?? "<none>"}");
+    }
+
+    internal void LogServerRequestResponseStarted(ServerRequest request, string summary)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(summary);
+
+        var key = GetPendingServerRequestKey(request);
+        if (_pendingServerRequests.TryGetValue(key, out var info))
+        {
+            info.ResponseStartedAt = DateTimeOffset.UtcNow;
+            info.ResponseSummary = summary;
+            LogDebug(
+                $"Codex server request response starting method={info.Method} requestId={info.RequestId} threadId={info.ThreadId} summary={summary}");
+            return;
+        }
+
+        LogWarn(
+            $"Codex server request response starting without pending request requestId={FormatRequestId(TryGetRequestId(request))} summary={summary}");
+    }
+
+    internal void LogServerRequestResponseSent(ServerRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var key = GetPendingServerRequestKey(request);
+        if (_pendingServerRequests.TryGetValue(key, out var info))
+        {
+            info.ResponseSentAt = DateTimeOffset.UtcNow;
+            LogDebug(
+                $"Codex server request response sent method={info.Method} requestId={info.RequestId} threadId={info.ThreadId} summary={info.ResponseSummary ?? "<none>"} elapsedMs={(long)(info.ResponseSentAt.Value - info.ReceivedAt).TotalMilliseconds}");
+            return;
+        }
+
+        LogWarn($"Codex server request response sent without pending request requestId={FormatRequestId(TryGetRequestId(request))}");
+    }
+
     /// <inheritdoc />
     public async Task<bool> DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
     {
@@ -312,6 +361,11 @@ public sealed class CodexAgentBackend : ICodexAgentBackend
 
     private void DispatchNotification(CodexNotification notification)
     {
+        if (notification is CodexNotification.ServerRequestResolved resolved)
+        {
+            HandleServerRequestResolved(resolved.Data);
+        }
+
         if (notification is CodexNotification.AccountRateLimitsUpdated)
         {
             foreach (var activeSession in _sessions.Values)
@@ -355,6 +409,7 @@ public sealed class CodexAgentBackend : ICodexAgentBackend
             return;
         }
 
+        LogServerRequestReceived(request, threadId);
         await session.HandleServerRequestAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
@@ -367,6 +422,8 @@ public sealed class CodexAgentBackend : ICodexAgentBackend
         var threadId = CodexAgentMapper.TryGetThreadId(request, out var extractedThreadId)
             ? extractedThreadId
             : null;
+        LogWarn(
+            $"Unsupported Codex server request method={request.Method} requestId={FormatRequestId(request.RequestId)} threadId={threadId ?? "<none>"}");
         await RejectServerRequestAsync(
                 request.RequestId,
                 threadId,
@@ -394,6 +451,8 @@ public sealed class CodexAgentBackend : ICodexAgentBackend
             }
         }
 
+        LogWarn($"Rejecting Codex server request requestId={FormatRequestId(requestId)} threadId={threadId ?? "<none>"} reason={message}");
+
         await Client.RespondToRequestErrorAsync(
                 requestId,
                 code: -32601,
@@ -417,6 +476,134 @@ public sealed class CodexAgentBackend : ICodexAgentBackend
             ServerRequest.AccountChatgptAuthTokensRefreshRequest value => value.Id,
             _ => throw new ArgumentOutOfRangeException(nameof(request), request, "Unsupported server request type.")
         };
+    }
+
+    private void HandleServerRequestResolved(ServerRequestResolvedNotification resolved)
+    {
+        ArgumentNullException.ThrowIfNull(resolved);
+
+        var key = CreatePendingServerRequestKey(resolved.ThreadId, resolved.RequestId);
+        if (_pendingServerRequests.TryRemove(key, out var info))
+        {
+            var resolvedAt = DateTimeOffset.UtcNow;
+            var responseLatency = info.ResponseSentAt is { } responseSentAt
+                ? (long)(resolvedAt - responseSentAt).TotalMilliseconds
+                : -1L;
+            var totalLatency = (long)(resolvedAt - info.ReceivedAt).TotalMilliseconds;
+            LogDebug(
+                $"Codex server request resolved method={info.Method} requestId={info.RequestId} threadId={info.ThreadId} summary={info.ResponseSummary ?? "<none>"} totalElapsedMs={totalLatency} responseToResolvedMs={(responseLatency >= 0 ? responseLatency.ToString(System.Globalization.CultureInfo.InvariantCulture) : "<unknown>")}");
+            return;
+        }
+
+        LogWarn(
+            $"Codex server request resolved without pending request requestId={FormatRequestId(resolved.RequestId)} threadId={resolved.ThreadId}");
+    }
+
+    private static PendingServerRequestInfo CreatePendingServerRequestInfo(ServerRequest request, string threadId)
+    {
+        var requestId = TryGetRequestId(request);
+        return new PendingServerRequestInfo(
+            key: CreatePendingServerRequestKey(threadId, requestId),
+            method: GetRequestMethod(request),
+            requestId: FormatRequestId(requestId),
+            threadId: threadId,
+            turnId: TryGetTurnId(request),
+            itemId: TryGetItemId(request),
+            callId: TryGetCallId(request),
+            tool: TryGetTool(request),
+            receivedAt: DateTimeOffset.UtcNow);
+    }
+
+    private static string GetPendingServerRequestKey(ServerRequest request)
+    {
+        var requestId = TryGetRequestId(request);
+        if (!CodexAgentMapper.TryGetThreadId(request, out var threadId) || string.IsNullOrWhiteSpace(threadId))
+        {
+            return CreatePendingServerRequestKey("<unknown>", requestId);
+        }
+
+        return CreatePendingServerRequestKey(threadId, requestId);
+    }
+
+    private static string CreatePendingServerRequestKey(string threadId, RequestId requestId)
+        => $"{threadId}:{FormatRequestId(requestId)}";
+
+    private static string GetRequestMethod(ServerRequest request)
+        => request switch
+        {
+            ServerRequest.ItemCommandExecutionRequestApprovalRequest => "item/commandExecution/requestApproval",
+            ServerRequest.ItemFileChangeRequestApprovalRequest => "item/fileChange/requestApproval",
+            ServerRequest.ItemToolRequestUserInputRequest => "item/tool/requestUserInput",
+            ServerRequest.McpServerElicitationRequestRequest => "mcpServer/elicitation/request",
+            ServerRequest.ItemPermissionsRequestApprovalRequest => "item/permissions/requestApproval",
+            ServerRequest.ItemToolCallRequest => "item/tool/call",
+            ServerRequest.AccountChatgptAuthTokensRefreshRequest => "account/chatgptAuthTokens/refresh",
+            _ => request.GetType().Name
+        };
+
+    private static string? TryGetTurnId(ServerRequest request)
+        => request switch
+        {
+            ServerRequest.ItemCommandExecutionRequestApprovalRequest value => value.Params.TurnId,
+            ServerRequest.ItemFileChangeRequestApprovalRequest value => value.Params.TurnId,
+            ServerRequest.ItemToolRequestUserInputRequest value => value.Params.TurnId,
+            ServerRequest.McpServerElicitationRequestRequest value => value.Params switch
+            {
+                McpServerElicitationRequestParams.Form form => form.TurnId,
+                McpServerElicitationRequestParams.Url url => url.TurnId,
+                _ => null
+            },
+            ServerRequest.ItemPermissionsRequestApprovalRequest value => value.Params.TurnId,
+            ServerRequest.ItemToolCallRequest value => value.Params.TurnId,
+            _ => null
+        };
+
+    private static string? TryGetItemId(ServerRequest request)
+        => request switch
+        {
+            ServerRequest.ItemCommandExecutionRequestApprovalRequest value => value.Params.ItemId,
+            ServerRequest.ItemFileChangeRequestApprovalRequest value => value.Params.ItemId,
+            ServerRequest.ItemToolRequestUserInputRequest value => value.Params.ItemId,
+            ServerRequest.ItemPermissionsRequestApprovalRequest value => value.Params.ItemId,
+            _ => null
+        };
+
+    private static string? TryGetCallId(ServerRequest request)
+        => request switch
+        {
+            ServerRequest.ItemToolCallRequest value => value.Params.CallId,
+            _ => null
+        };
+
+    private static string? TryGetTool(ServerRequest request)
+        => request switch
+        {
+            ServerRequest.ItemToolCallRequest value => value.Params.Tool,
+            _ => null
+        };
+
+    private static string FormatRequestId(RequestId requestId)
+        => requestId switch
+        {
+            RequestId.StringValue value => value.Value,
+            RequestId.IntegerValue value => value.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            _ => requestId.GetType().Name
+        };
+
+    private static void LogDebug(string message)
+    {
+        if (LogManager.IsInitialized && Logger.IsEnabled(LogLevel.Debug))
+        {
+            Logger.Debug(message);
+        }
+    }
+
+    private static void LogWarn(string message)
+    {
+        if (LogManager.IsInitialized && Logger.IsEnabled(LogLevel.Warn))
+        {
+            Logger.Warn(message);
+        }
     }
 
     private async Task StopCoreAsync()
@@ -450,5 +637,41 @@ public sealed class CodexAgentBackend : ICodexAgentBackend
         _pumpTask = null;
         _pumpCancellationTokenSource?.Dispose();
         _pumpCancellationTokenSource = null;
+    }
+
+    private sealed class PendingServerRequestInfo(
+        string key,
+        string method,
+        string requestId,
+        string threadId,
+        string? turnId,
+        string? itemId,
+        string? callId,
+        string? tool,
+        DateTimeOffset receivedAt)
+    {
+        public string Key { get; } = key;
+
+        public string Method { get; } = method;
+
+        public string RequestId { get; } = requestId;
+
+        public string ThreadId { get; } = threadId;
+
+        public string? TurnId { get; } = turnId;
+
+        public string? ItemId { get; } = itemId;
+
+        public string? CallId { get; } = callId;
+
+        public string? Tool { get; } = tool;
+
+        public DateTimeOffset ReceivedAt { get; } = receivedAt;
+
+        public DateTimeOffset? ResponseStartedAt { get; set; }
+
+        public DateTimeOffset? ResponseSentAt { get; set; }
+
+        public string? ResponseSummary { get; set; }
     }
 }

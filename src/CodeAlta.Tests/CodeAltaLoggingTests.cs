@@ -38,5 +38,6 @@ public sealed class CodeAltaLoggingTests
         var config = CodeAltaLogging.CreateConfig(homeRoot);
 
         Assert.AreEqual(LogLevel.Error, config.RootLogger.MinimumLevel);
+        Assert.AreEqual(LogLevel.Debug, config.GetLoggerConfig(CodeAltaLogging.CodexAgentLoggerName).MinimumLevel);
     }
 }

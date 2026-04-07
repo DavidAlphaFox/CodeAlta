@@ -345,11 +345,13 @@ public sealed class CodexAgentSession : ICodexAgentSession
                     response = CodexAgentMapper.ToCommandApprovalResponse(decision);
                 }
 
+                _backend.LogServerRequestResponseStarted(commandApproval, $"decision={decision.Kind}");
                 await _backend.Client.RespondToRequestAsync(
                         commandApproval.Id,
                         response,
                         cancellationToken)
                     .ConfigureAwait(false);
+                _backend.LogServerRequestResponseSent(commandApproval);
                 PublishPermissionResolved(permissionRequest, decision);
                 break;
             }
@@ -381,11 +383,13 @@ public sealed class CodexAgentSession : ICodexAgentSession
                     response = CodexAgentMapper.ToFileApprovalResponse(decision);
                 }
 
+                _backend.LogServerRequestResponseStarted(fileApproval, $"decision={decision.Kind}");
                 await _backend.Client.RespondToRequestAsync(
                         fileApproval.Id,
                         response,
                         cancellationToken)
                     .ConfigureAwait(false);
+                _backend.LogServerRequestResponseSent(fileApproval);
                 PublishPermissionResolved(permissionRequest, decision);
                 break;
             }
@@ -419,11 +423,13 @@ public sealed class CodexAgentSession : ICodexAgentSession
                     mappedResponse = CodexAgentMapper.CreateEmptyToolRequestUserInputResponse(requestUserInput.Params);
                 }
 
+                _backend.LogServerRequestResponseStarted(requestUserInput, $"answers={responsePayload.Answers.Count}");
                 await _backend.Client.RespondToRequestAsync(
                         requestUserInput.Id,
                         mappedResponse,
                         cancellationToken)
                     .ConfigureAwait(false);
+                _backend.LogServerRequestResponseSent(requestUserInput);
                 Publish(
                     new AgentInteractionEvent(
                         AgentBackendIds.Codex,
@@ -445,11 +451,15 @@ public sealed class CodexAgentSession : ICodexAgentSession
                             meta: CodexAgentMapper.SupportsSessionPersistence(form)
                                 ? CodexAgentMapper.CreateMcpSessionPersistenceMeta()
                                 : null);
+                        _backend.LogServerRequestResponseStarted(
+                            elicitationRequest,
+                            $"action=accept kind=form autoApprove=true persistSession={CodexAgentMapper.SupportsSessionPersistence(form)}");
                         await _backend.Client.RespondToRequestAsync(
                                 elicitationRequest.Id,
                                 response,
                                 cancellationToken)
                             .ConfigureAwait(false);
+                        _backend.LogServerRequestResponseSent(elicitationRequest);
                         Publish(
                             new AgentInteractionEvent(
                                 AgentBackendIds.Codex,
@@ -463,11 +473,13 @@ public sealed class CodexAgentSession : ICodexAgentSession
                     }
                     case McpServerElicitationRequestParams.Url url:
                     {
+                        _backend.LogServerRequestResponseStarted(elicitationRequest, "action=accept kind=url autoApprove=true");
                         await _backend.Client.RespondToRequestAsync(
                                 elicitationRequest.Id,
                                 CodexAgentMapper.CreateAcceptedMcpElicitationResponse(),
                                 cancellationToken)
                             .ConfigureAwait(false);
+                        _backend.LogServerRequestResponseSent(elicitationRequest);
                         Publish(
                             new AgentInteractionEvent(
                                 AgentBackendIds.Codex,
@@ -484,11 +496,13 @@ public sealed class CodexAgentSession : ICodexAgentSession
                         var schema = CodexAgentMapper.SerializeMcpElicitationSchema(form.RequestedSchema);
                         if (IsEmptyFormSchema(schema))
                         {
+                            _backend.LogServerRequestResponseStarted(elicitationRequest, "action=accept kind=form emptySchema=true");
                             await _backend.Client.RespondToRequestAsync(
                                     elicitationRequest.Id,
                                     CodexAgentMapper.CreateAcceptedMcpElicitationResponse(CodexAgentMapper.CreateEmptyObjectElement()),
                                     cancellationToken)
                                 .ConfigureAwait(false);
+                            _backend.LogServerRequestResponseSent(elicitationRequest);
                             Publish(
                                 new AgentInteractionEvent(
                                     AgentBackendIds.Codex,
@@ -504,11 +518,13 @@ public sealed class CodexAgentSession : ICodexAgentSession
                         var handler = GetUserInputHandler();
                         if (handler is null)
                         {
+                            _backend.LogServerRequestResponseStarted(elicitationRequest, "action=decline kind=form reason=noUserInputHandler");
                             await _backend.Client.RespondToRequestAsync(
                                     elicitationRequest.Id,
                                     CodexAgentMapper.CreateDeclinedMcpElicitationResponse(),
                                     cancellationToken)
                                 .ConfigureAwait(false);
+                            _backend.LogServerRequestResponseSent(elicitationRequest);
                             PublishHandlerError("MCP elicitation", new InvalidOperationException("No AgentUserInputRequestHandler is configured for this session."));
                             break;
                         }
@@ -530,29 +546,35 @@ public sealed class CodexAgentSession : ICodexAgentSession
                         }
                         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                         {
+                            _backend.LogServerRequestResponseStarted(elicitationRequest, "action=cancel kind=form reason=cancellation");
                             await _backend.Client.RespondToRequestAsync(
                                     elicitationRequest.Id,
                                     CodexAgentMapper.CreateCanceledMcpElicitationResponse(),
                                     cancellationToken)
                                 .ConfigureAwait(false);
+                            _backend.LogServerRequestResponseSent(elicitationRequest);
                             throw;
                         }
                         catch (Exception ex)
                         {
                             PublishHandlerError("MCP elicitation", ex);
+                            _backend.LogServerRequestResponseStarted(elicitationRequest, "action=decline kind=form reason=handlerError");
                             await _backend.Client.RespondToRequestAsync(
                                     elicitationRequest.Id,
                                     CodexAgentMapper.CreateDeclinedMcpElicitationResponse(),
                                     cancellationToken)
                                 .ConfigureAwait(false);
+                            _backend.LogServerRequestResponseSent(elicitationRequest);
                             break;
                         }
 
+                        _backend.LogServerRequestResponseStarted(elicitationRequest, $"action=accept kind=form answers={responsePayload.Answers.Count}");
                         await _backend.Client.RespondToRequestAsync(
                                 elicitationRequest.Id,
                                 mappedResponse,
                                 cancellationToken)
                             .ConfigureAwait(false);
+                        _backend.LogServerRequestResponseSent(elicitationRequest);
                         Publish(
                             new AgentInteractionEvent(
                                 AgentBackendIds.Codex,
@@ -596,11 +618,13 @@ public sealed class CodexAgentSession : ICodexAgentSession
                     response = CodexAgentMapper.ToPermissionsApprovalResponse(decision, permissionsApproval.Params);
                 }
 
+                _backend.LogServerRequestResponseStarted(permissionsApproval, $"decision={decision.Kind}");
                 await _backend.Client.RespondToRequestAsync(
                         permissionsApproval.Id,
                         response,
                         cancellationToken)
                     .ConfigureAwait(false);
+                _backend.LogServerRequestResponseSent(permissionsApproval);
                 PublishPermissionResolved(permissionRequest, decision);
                 break;
             }
@@ -643,11 +667,13 @@ public sealed class CodexAgentSession : ICodexAgentSession
                             Error: ex.Message));
                 }
 
+                _backend.LogServerRequestResponseStarted(toolCall, $"success={success}");
                 await _backend.Client.RespondToRequestAsync(
                         toolCall.Id,
                         response,
                         cancellationToken)
                     .ConfigureAwait(false);
+                _backend.LogServerRequestResponseSent(toolCall);
                 Publish(
                     new AgentActivityEvent(
                         AgentBackendIds.Codex,
@@ -666,12 +692,14 @@ public sealed class CodexAgentSession : ICodexAgentSession
             {
                 var message = $"Unhandled Codex server request '{request.GetType().Name}'.";
                 Publish(new AgentErrorEvent(AgentBackendIds.Codex, ThreadId, DateTimeOffset.UtcNow, message));
+                _backend.LogServerRequestResponseStarted(request, "error=unhandledRequest");
                 await _backend.Client.RespondToRequestErrorAsync(
                         GetRequestId(request),
                         code: -32601,
                         message: message,
                         cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
+                _backend.LogServerRequestResponseSent(request);
                 break;
             }
         }

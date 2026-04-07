@@ -6,6 +6,7 @@ namespace CodeAlta;
 
 internal static class CodeAltaLogging
 {
+    internal const string CodexAgentLoggerName = "CodeAlta.Agent.Codex";
     internal const string LogFileName = "codealta.log";
     internal const long LogFileSizeLimitBytes = 10L * 1024L * 1024L;
     internal const int RetainedLogFileCountLimit = 10;
@@ -46,6 +47,7 @@ internal static class CodeAltaLogging
 
         config.RootLogger.MinimumLevel = LogLevel.Error;
         config.RootLogger.Writers.Add(new FileLogWriter(fileWriterOptions));
+        config.Loggers.Add(CodexAgentLoggerName, LogLevel.Debug);
         return config;
     }
 
