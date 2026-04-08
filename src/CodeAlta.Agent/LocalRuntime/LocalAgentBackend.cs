@@ -1,3 +1,5 @@
+using CodeAlta.Agent.ModelCatalog;
+
 namespace CodeAlta.Agent.LocalRuntime;
 
 /// <summary>
@@ -245,6 +247,7 @@ public sealed class LocalAgentBackend : IAgentBackend
                     sessionId,
                     cancellationToken)
                 .ConfigureAwait(false);
+            (summary, state) = await RepairRecoveredUsageAsync(summary, state, provider, options, cancellationToken).ConfigureAwait(false);
 
             return new LocalAgentSession(
                 BackendId,
@@ -311,6 +314,63 @@ public sealed class LocalAgentBackend : IAgentBackend
         }
 
         return true;
+    }
+
+    private async Task<(LocalAgentSessionSummary Summary, LocalAgentSessionState State)> RepairRecoveredUsageAsync(
+        LocalAgentSessionSummary summary,
+        LocalAgentSessionState state,
+        LocalAgentBackendProviderRegistration provider,
+        AgentSessionResumeOptions options,
+        CancellationToken cancellationToken)
+    {
+        var effectiveModelId = options.Model ??
+                               summary.ModelId ??
+                               state.Usage?.LastOperation?.Model ??
+                               summary.Usage?.LastOperation?.Model;
+        if (string.IsNullOrWhiteSpace(effectiveModelId))
+        {
+            return (summary, state);
+        }
+
+        try
+        {
+            var models = await provider.TurnExecutor.ListModelsAsync(provider.Provider, cancellationToken).ConfigureAwait(false);
+            var modelInfo = AgentModelIdentity.FindBestMatch(models, effectiveModelId);
+            if (modelInfo is null)
+            {
+                return (summary, state);
+            }
+
+            var repairedSummaryUsage = LocalAgentUsageFactory.AttachModelInfo(summary.Usage, modelInfo);
+            var repairedStateUsage = LocalAgentUsageFactory.AttachModelInfo(state.Usage, modelInfo);
+            var summaryChanged = !Equals(repairedSummaryUsage, summary.Usage);
+            var stateChanged = !Equals(repairedStateUsage, state.Usage);
+            if (!summaryChanged && !stateChanged)
+            {
+                return (summary, state);
+            }
+
+            if (summaryChanged)
+            {
+                summary = summary with { Usage = repairedSummaryUsage };
+                await _store.UpsertSessionAsync(summary, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (stateChanged)
+            {
+                state = state with { Usage = repairedStateUsage };
+                await _store.UpsertStateAsync(state, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+        }
+
+        return (summary, state);
     }
 
     private static AgentSessionMetadata ToMetadata(

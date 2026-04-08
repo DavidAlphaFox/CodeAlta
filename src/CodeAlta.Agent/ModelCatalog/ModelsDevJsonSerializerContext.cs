@@ -1,0 +1,17 @@
+using System.Text.Json.Serialization;
+
+namespace CodeAlta.Agent.ModelCatalog;
+
+[JsonSourceGenerationOptions(
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    WriteIndented = false)]
+[JsonSerializable(typeof(Dictionary<string, ModelsDevProviderDefinition>), TypeInfoPropertyName = "ModelsDevProviderMap")]
+[JsonSerializable(typeof(ModelsDevProviderDefinition))]
+[JsonSerializable(typeof(ModelsDevModelDefinition))]
+[JsonSerializable(typeof(ModelsDevModalitiesDefinition))]
+[JsonSerializable(typeof(ModelsDevCostDefinition))]
+[JsonSerializable(typeof(ModelsDevLimitDefinition))]
+[JsonSerializable(typeof(ModelsDevInterleavedDefinition))]
+internal partial class ModelsDevJsonSerializerContext : JsonSerializerContext
+{
+}

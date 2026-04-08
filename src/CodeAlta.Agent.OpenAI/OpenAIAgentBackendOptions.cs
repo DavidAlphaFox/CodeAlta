@@ -1,6 +1,7 @@
 #pragma warning disable OPENAI001
 
 using CodeAlta.Agent.LocalRuntime;
+using CodeAlta.Agent.ModelCatalog;
 using OpenAI.Chat;
 using OpenAI.Responses;
 
@@ -76,6 +77,21 @@ public sealed class OpenAIProviderOptions
     /// Gets or sets the compatibility profile for the provider.
     /// </summary>
     public LocalAgentProviderProfile? Profile { get; set; }
+
+    /// <summary>
+    /// Gets or sets the models.dev provider identifier used to enrich model metadata.
+    /// </summary>
+    public string? ModelsDevProviderId { get; set; }
+
+    /// <summary>
+    /// Gets or sets per-model metadata overrides.
+    /// </summary>
+    public IReadOnlyDictionary<string, AgentModelOverride>? ModelOverrides { get; set; }
+
+    /// <summary>
+    /// Gets or sets the shared models.dev catalog service.
+    /// </summary>
+    public ModelsDevCatalogService? ModelCatalog { get; set; }
 
     internal Func<string?, OpenAIResponseClient>? ResponsesClientFactory { get; set; }
 

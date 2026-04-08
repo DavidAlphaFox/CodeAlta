@@ -242,6 +242,41 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public async Task LocalAgentSession_SendAsync_ResolvesEquivalentModelIdsForUsageLimits()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider();
+        var summary = CreateSummary("session-model-alias");
+        var state = CreateState("session-model-alias");
+        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new AliasAwareTurnExecutor(),
+            CreateOptions(provider, temp.Path));
+
+        _ = await session.SendAsync(new AgentSendOptions
+        {
+            Input = AgentInput.Text("Hello"),
+        }).ConfigureAwait(false);
+
+        var usageEvent = (await session.GetHistoryAsync().ConfigureAwait(false))
+            .OfType<AgentSessionUpdateEvent>()
+            .Single(static evt => evt.Kind == AgentSessionUpdateKind.UsageUpdated);
+
+        Assert.AreEqual(1050000L, usageEvent.Usage?.TokenLimit);
+        Assert.AreEqual(AgentUsageScope.CurrentWindow, usageEvent.Usage?.Scope);
+    }
+
+    [TestMethod]
     public async Task LocalAgentSession_CompactAsync_PersistsSnapshotAndReplaysFromSummary()
     {
         using var temp = TestTempDirectory.Create();
@@ -421,6 +456,48 @@ public sealed class LocalAgentSessionTests
             }
 
             return step(request, onUpdate, cancellationToken);
+        }
+    }
+
+    private sealed class AliasAwareTurnExecutor : ILocalAgentTurnExecutor
+    {
+        public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(
+            LocalAgentProviderDescriptor provider,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AgentModelInfo>>(
+            [
+                new AgentModelInfo(
+                    "gpt-5.4-2026-03-05",
+                    DisplayName: "GPT-5.4",
+                    Capabilities: new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        ["contextWindow"] = 1050000L,
+                    }),
+            ]);
+
+        public Task<LocalAgentTurnResponse> ExecuteTurnAsync(
+            LocalAgentTurnRequest request,
+            Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
+            CancellationToken cancellationToken = default)
+        {
+            var usage = LocalAgentUsageFactory.CreateOperationUsage(
+                modelId: "gpt-5.4-2026-03-05",
+                modelInfo: request.ModelInfo,
+                inputTokens: 1200,
+                outputTokens: 50,
+                totalTokens: 1250,
+                cachedInputTokens: null,
+                reasoningTokens: null,
+                updatedAt: DateTimeOffset.UtcNow);
+
+            return Task.FromResult(
+                new LocalAgentTurnResponse
+                {
+                    AssistantMessage = new LocalAgentConversationMessage(
+                        LocalAgentConversationRole.Assistant,
+                        [new LocalAgentMessagePart.Text("Done.")]),
+                    Usage = usage,
+                });
         }
     }
 }

@@ -4,6 +4,7 @@ using CodeAlta.Agent.Anthropic;
 using CodeAlta.Agent.Codex;
 using CodeAlta.Agent.Copilot;
 using CodeAlta.Agent.GoogleGenAI;
+using CodeAlta.Agent.ModelCatalog;
 using CodeAlta.Agent.OpenAI;
 using CodeAlta.Acp;
 using CodeAlta.Catalog;
@@ -27,6 +28,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
     private readonly AcpInstalledBackendStore _installedBackendStore;
     private readonly List<AgentBackendDescriptor> _backendDescriptors;
     private readonly CodexInstallProgressReporter _codexInstallProgress;
+    private readonly ModelsDevCatalogService _modelsDevCatalogService;
 
     private CodeAltaOwnedServices(
         bool ownsLogging,
@@ -35,6 +37,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         CodeAltaConfigStore configStore,
         AcpInstalledBackendStore installedBackendStore,
         CodexInstallProgressReporter codexInstallProgress,
+        ModelsDevCatalogService modelsDevCatalogService,
         CatalogOptions catalogOptions,
         List<AgentBackendDescriptor> backendDescriptors,
         AcpAgentRegistryService acpAgentRegistryService,
@@ -50,6 +53,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         _configStore = configStore;
         _installedBackendStore = installedBackendStore;
         _codexInstallProgress = codexInstallProgress;
+        _modelsDevCatalogService = modelsDevCatalogService;
         _backendDescriptors = backendDescriptors;
         CatalogOptions = catalogOptions;
         AcpAgentRegistryService = acpAgentRegistryService;
@@ -112,6 +116,12 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         var configStore = new CodeAltaConfigStore(catalogOptions);
         var installedBackendStore = new AcpInstalledBackendStore(catalogOptions);
         var acpAgentRegistryService = new AcpAgentRegistryService(catalogOptions, installedBackendStore);
+        var modelsDevCatalogService = new ModelsDevCatalogService(
+            new ModelsDevCatalogServiceOptions
+            {
+                CacheFilePath = Path.Combine(localRoot, "model-catalog", "models_dev_db.json"),
+            });
+        modelsDevCatalogService.StartBackgroundRefresh();
 
         var backendFactory = new AgentBackendFactory();
         var codexPath = ResolveCodexExecutablePath(
@@ -133,7 +143,8 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             RawApiBackendRegistrar.RegisterConfiguredBackends(
                 backendFactory,
                 configStore,
-                Path.Combine(localRoot, "agents")));
+                Path.Combine(localRoot, "agents"),
+                modelsDevCatalogService));
         foreach (var definition in configStore.LoadEffectiveAcpBackendDefinitions(installedBackendStore.Load()))
         {
             if (TryCreateAcpBackendOptions(catalogOptions, definition, out var acpOptions))
@@ -164,6 +175,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             configStore,
             installedBackendStore,
             codexInstallProgress,
+            modelsDevCatalogService,
             catalogOptions,
             backendDescriptors,
             acpAgentRegistryService,
@@ -216,6 +228,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         await RuntimeService.DisposeAsync().ConfigureAwait(false);
         await AgentHub.DisposeAsync().ConfigureAwait(false);
         AcpAgentRegistryService.Dispose();
+        await _modelsDevCatalogService.DisposeAsync().ConfigureAwait(false);
 
         GC.KeepAlive(_db);
 

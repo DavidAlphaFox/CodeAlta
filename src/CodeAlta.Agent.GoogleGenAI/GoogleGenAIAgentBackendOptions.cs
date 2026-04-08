@@ -1,4 +1,5 @@
 using CodeAlta.Agent.LocalRuntime;
+using CodeAlta.Agent.ModelCatalog;
 using Microsoft.Extensions.AI;
 
 namespace CodeAlta.Agent.GoogleGenAI;
@@ -68,6 +69,21 @@ public sealed class GoogleGenAIProviderOptions
     /// Gets or sets the compatibility profile for the provider.
     /// </summary>
     public LocalAgentProviderProfile? Profile { get; set; }
+
+    /// <summary>
+    /// Gets or sets the models.dev provider identifier used to enrich model metadata.
+    /// </summary>
+    public string? ModelsDevProviderId { get; set; }
+
+    /// <summary>
+    /// Gets or sets per-model metadata overrides.
+    /// </summary>
+    public IReadOnlyDictionary<string, AgentModelOverride>? ModelOverrides { get; set; }
+
+    /// <summary>
+    /// Gets or sets the shared models.dev catalog service.
+    /// </summary>
+    public ModelsDevCatalogService? ModelCatalog { get; set; }
 
     internal Func<IChatClient>? ChatClientFactory { get; set; }
 

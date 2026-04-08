@@ -16,6 +16,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
             display_name = " OpenRouter "
             api_key_env = " OPENROUTER_API_KEY "
             base_uri = " https://openrouter.ai/api/v1 "
+            models_dev_provider_id = " OpenRouter "
             enable_responses = false
             default_chat = true
 
@@ -24,6 +25,12 @@ public sealed class CodeAltaConfigStoreRawApiTests
             supports_store = false
             max_tokens_field_name = " max_tokens "
             reasoning_field_names = [" reasoning_content ", "", "reasoning"]
+
+            [raw_api.openai.providers.OpenRouter.model_overrides." gpt-5 "]
+            display_name = " GPT-5 "
+            description = " flagship "
+            context_window = 400000
+            output_token_limit = 128000
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -34,17 +41,26 @@ public sealed class CodeAltaConfigStoreRawApiTests
         Assert.AreEqual("OpenRouter", providers[0].DisplayName);
         Assert.AreEqual("OPENROUTER_API_KEY", providers[0].ApiKeyEnv);
         Assert.AreEqual("https://openrouter.ai/api/v1", providers[0].BaseUri);
+        Assert.AreEqual("openrouter", providers[0].ModelsDevProviderId);
         Assert.IsFalse(providers[0].EnableResponses);
         Assert.IsTrue(providers[0].EnableChat);
         Assert.IsTrue(providers[0].DefaultChat);
         var profile = providers[0].Profile;
         Assert.IsNotNull(profile);
-        Assert.IsFalse(profile.SupportsDeveloperRole);
+        Assert.IsFalse(profile!.SupportsDeveloperRole);
         Assert.IsFalse(profile.SupportsStore);
         Assert.AreEqual("max_tokens", profile.MaxTokensFieldName);
         CollectionAssert.AreEqual(
             new[] { "reasoning_content", "reasoning" },
             profile.ReasoningFieldNames);
+        var modelOverrides = providers[0].ModelOverrides;
+        Assert.IsNotNull(modelOverrides);
+        Assert.IsTrue(modelOverrides!.TryGetValue("gpt-5", out var modelOverride));
+        Assert.IsNotNull(modelOverride);
+        Assert.AreEqual("GPT-5", modelOverride.DisplayName);
+        Assert.AreEqual("flagship", modelOverride.Description);
+        Assert.AreEqual(400000L, modelOverride.ContextWindow);
+        Assert.AreEqual(128000L, modelOverride.OutputTokenLimit);
     }
 
     [TestMethod]

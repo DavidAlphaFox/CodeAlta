@@ -75,6 +75,40 @@ internal static class LocalAgentUsageFactory
         };
     }
 
+    public static AgentSessionUsage? AttachModelInfo(AgentSessionUsage? usage, AgentModelInfo? modelInfo)
+    {
+        if (usage is null)
+        {
+            return null;
+        }
+
+        var tokenLimit = usage.Window?.TokenLimit ?? GetContextWindowTokenLimit(modelInfo);
+        if (tokenLimit is null)
+        {
+            return usage;
+        }
+
+        var currentTokens = usage.Window?.CurrentTokens ?? Sum(usage.LastOperation?.InputTokens, usage.LastOperation?.OutputTokens);
+        var label = usage.Window?.Label ?? "Active context window";
+        var window = new AgentWindowUsageSnapshot(
+            CurrentTokens: currentTokens,
+            TokenLimit: tokenLimit,
+            MessageCount: usage.Window?.MessageCount,
+            Label: label);
+        if (Equals(window, usage.Window))
+        {
+            return usage;
+        }
+
+        return usage with
+        {
+            Window = window,
+            Scope = usage.Scope is AgentUsageScope.Unknown or AgentUsageScope.LastOperation
+                ? AgentUsageScope.CurrentWindow
+                : usage.Scope,
+        };
+    }
+
     private static long? GetContextWindowTokenLimit(AgentModelInfo? modelInfo)
     {
         if (modelInfo?.Capabilities is not { Count: > 0 } capabilities)

@@ -442,7 +442,9 @@ public sealed class CodeAltaConfigStore
                 definition.BaseUri = NormalizeText(definition.BaseUri);
                 definition.OrganizationId = NormalizeText(definition.OrganizationId);
                 definition.ProjectId = NormalizeText(definition.ProjectId);
+                definition.ModelsDevProviderId = NormalizeRawProviderKey(definition.ModelsDevProviderId);
                 definition.Profile = NormalizeProfile(definition.Profile);
+                definition.ModelOverrides = NormalizeModelOverrides(definition.ModelOverrides);
                 return definition;
             })
             .Where(static definition => !string.IsNullOrWhiteSpace(definition.ProviderKey))
@@ -462,7 +464,9 @@ public sealed class CodeAltaConfigStore
                 definition.ApiKey = NormalizeText(definition.ApiKey);
                 definition.ApiKeyEnv = NormalizeText(definition.ApiKeyEnv);
                 definition.BaseUri = NormalizeText(definition.BaseUri);
+                definition.ModelsDevProviderId = NormalizeRawProviderKey(definition.ModelsDevProviderId);
                 definition.Profile = NormalizeProfile(definition.Profile);
+                definition.ModelOverrides = NormalizeModelOverrides(definition.ModelOverrides);
                 return definition;
             })
             .Where(static definition => !string.IsNullOrWhiteSpace(definition.ProviderKey))
@@ -484,7 +488,9 @@ public sealed class CodeAltaConfigStore
                 definition.Project = NormalizeText(definition.Project);
                 definition.Location = NormalizeText(definition.Location);
                 definition.BaseUri = NormalizeText(definition.BaseUri);
+                definition.ModelsDevProviderId = NormalizeRawProviderKey(definition.ModelsDevProviderId);
                 definition.Profile = NormalizeProfile(definition.Profile);
+                definition.ModelOverrides = NormalizeModelOverrides(definition.ModelOverrides);
                 return definition;
             })
             .Where(static definition => !string.IsNullOrWhiteSpace(definition.ProviderKey))
@@ -556,6 +562,30 @@ public sealed class CodeAltaConfigStore
         return profile;
     }
 
+    private static Dictionary<string, CodeAltaRawApiModelOverrideDocument>? NormalizeModelOverrides(
+        Dictionary<string, CodeAltaRawApiModelOverrideDocument>? overrides)
+    {
+        if (overrides is null)
+        {
+            return null;
+        }
+
+        var normalized = overrides
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
+            .Select(static entry =>
+            {
+                var modelOverride = entry.Value ?? new CodeAltaRawApiModelOverrideDocument();
+                modelOverride.DisplayName = NormalizeText(modelOverride.DisplayName);
+                modelOverride.Description = NormalizeText(modelOverride.Description);
+                return KeyValuePair.Create(entry.Key.Trim(), modelOverride);
+            })
+            .ToDictionary(
+                static entry => entry.Key,
+                static entry => entry.Value,
+                StringComparer.OrdinalIgnoreCase);
+        return normalized.Count == 0 ? null : normalized;
+    }
+
     private static AcpBackendDefinition CloneAcpBackendDefinition(AcpBackendDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
@@ -593,11 +623,13 @@ public sealed class CodeAltaConfigStore
             BaseUri = definition.BaseUri,
             OrganizationId = definition.OrganizationId,
             ProjectId = definition.ProjectId,
+            ModelsDevProviderId = definition.ModelsDevProviderId,
             EnableResponses = definition.EnableResponses,
             EnableChat = definition.EnableChat,
             DefaultResponses = definition.DefaultResponses,
             DefaultChat = definition.DefaultChat,
             Profile = CloneProfile(definition.Profile),
+            ModelOverrides = CloneModelOverrides(definition.ModelOverrides),
         };
     }
 
@@ -613,8 +645,10 @@ public sealed class CodeAltaConfigStore
             ApiKey = definition.ApiKey,
             ApiKeyEnv = definition.ApiKeyEnv,
             BaseUri = definition.BaseUri,
+            ModelsDevProviderId = definition.ModelsDevProviderId,
             IsDefault = definition.IsDefault,
             Profile = CloneProfile(definition.Profile),
+            ModelOverrides = CloneModelOverrides(definition.ModelOverrides),
         };
     }
 
@@ -633,8 +667,10 @@ public sealed class CodeAltaConfigStore
             Project = definition.Project,
             Location = definition.Location,
             BaseUri = definition.BaseUri,
+            ModelsDevProviderId = definition.ModelsDevProviderId,
             IsDefault = definition.IsDefault,
             Profile = CloneProfile(definition.Profile),
+            ModelOverrides = CloneModelOverrides(definition.ModelOverrides),
         };
     }
 
@@ -655,5 +691,31 @@ public sealed class CodeAltaConfigStore
             MaxTokensFieldName = profile.MaxTokensFieldName,
             ReasoningFieldNames = profile.ReasoningFieldNames is null ? null : [.. profile.ReasoningFieldNames],
         };
+    }
+
+    private static Dictionary<string, CodeAltaRawApiModelOverrideDocument>? CloneModelOverrides(
+        Dictionary<string, CodeAltaRawApiModelOverrideDocument>? overrides)
+    {
+        if (overrides is null)
+        {
+            return null;
+        }
+
+        return overrides.ToDictionary(
+            static entry => entry.Key,
+            static entry => new CodeAltaRawApiModelOverrideDocument
+            {
+                DisplayName = entry.Value.DisplayName,
+                Description = entry.Value.Description,
+                ContextWindow = entry.Value.ContextWindow,
+                InputTokenLimit = entry.Value.InputTokenLimit,
+                OutputTokenLimit = entry.Value.OutputTokenLimit,
+                MaxTokens = entry.Value.MaxTokens,
+                SupportsReasoning = entry.Value.SupportsReasoning,
+                SupportsToolCall = entry.Value.SupportsToolCall,
+                SupportsAttachments = entry.Value.SupportsAttachments,
+                SupportsStructuredOutput = entry.Value.SupportsStructuredOutput,
+            },
+            StringComparer.OrdinalIgnoreCase);
     }
 }

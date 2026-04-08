@@ -2,6 +2,7 @@ using CodeAlta.Agent;
 using CodeAlta.Agent.Anthropic;
 using CodeAlta.Agent.GoogleGenAI;
 using CodeAlta.Agent.LocalRuntime;
+using CodeAlta.Agent.ModelCatalog;
 using CodeAlta.Agent.OpenAI;
 using CodeAlta.Catalog;
 
@@ -12,16 +13,17 @@ internal static class RawApiBackendRegistrar
     public static IReadOnlyList<AgentBackendDescriptor> RegisterConfiguredBackends(
         AgentBackendFactory backendFactory,
         CodeAltaConfigStore configStore,
-        string stateRootPath)
+        string stateRootPath,
+        ModelsDevCatalogService? modelCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(backendFactory);
         ArgumentNullException.ThrowIfNull(configStore);
         ArgumentException.ThrowIfNullOrWhiteSpace(stateRootPath);
 
         var descriptors = new List<AgentBackendDescriptor>();
-        RegisterOpenAIBackends(backendFactory, configStore, stateRootPath, descriptors);
-        RegisterAnthropicBackend(backendFactory, configStore, stateRootPath, descriptors);
-        RegisterGoogleGenAIBackend(backendFactory, configStore, stateRootPath, descriptors);
+        RegisterOpenAIBackends(backendFactory, configStore, stateRootPath, descriptors, modelCatalog);
+        RegisterAnthropicBackend(backendFactory, configStore, stateRootPath, descriptors, modelCatalog);
+        RegisterGoogleGenAIBackend(backendFactory, configStore, stateRootPath, descriptors, modelCatalog);
         return descriptors;
     }
 
@@ -29,7 +31,8 @@ internal static class RawApiBackendRegistrar
         AgentBackendFactory backendFactory,
         CodeAltaConfigStore configStore,
         string stateRootPath,
-        List<AgentBackendDescriptor> descriptors)
+        List<AgentBackendDescriptor> descriptors,
+        ModelsDevCatalogService? modelCatalog)
     {
         var responseOptions = new OpenAIResponsesAgentBackendOptions
         {
@@ -62,6 +65,9 @@ internal static class RawApiBackendRegistrar
                     ProjectId = definition.ProjectId,
                     IsDefault = definition.DefaultResponses,
                     Profile = CreateOpenAIResponsesProfile(definition.Profile),
+                    ModelsDevProviderId = ResolveModelsDevProviderId(definition.ModelsDevProviderId, "openai"),
+                    ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
+                    ModelCatalog = modelCatalog,
                 });
             }
 
@@ -77,6 +83,9 @@ internal static class RawApiBackendRegistrar
                     ProjectId = definition.ProjectId,
                     IsDefault = definition.DefaultChat,
                     Profile = CreateOpenAIChatProfile(definition.Profile),
+                    ModelsDevProviderId = ResolveModelsDevProviderId(definition.ModelsDevProviderId, "openai"),
+                    ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
+                    ModelCatalog = modelCatalog,
                 });
             }
         }
@@ -98,7 +107,8 @@ internal static class RawApiBackendRegistrar
         AgentBackendFactory backendFactory,
         CodeAltaConfigStore configStore,
         string stateRootPath,
-        List<AgentBackendDescriptor> descriptors)
+        List<AgentBackendDescriptor> descriptors,
+        ModelsDevCatalogService? modelCatalog)
     {
         var options = new AnthropicAgentBackendOptions
         {
@@ -121,6 +131,9 @@ internal static class RawApiBackendRegistrar
                 BaseUri = ParseUri(definition.BaseUri),
                 IsDefault = definition.IsDefault,
                 Profile = CreateAnthropicProfile(definition.Profile),
+                ModelsDevProviderId = ResolveModelsDevProviderId(definition.ModelsDevProviderId, "anthropic"),
+                ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
+                ModelCatalog = modelCatalog,
             });
         }
 
@@ -137,7 +150,8 @@ internal static class RawApiBackendRegistrar
         AgentBackendFactory backendFactory,
         CodeAltaConfigStore configStore,
         string stateRootPath,
-        List<AgentBackendDescriptor> descriptors)
+        List<AgentBackendDescriptor> descriptors,
+        ModelsDevCatalogService? modelCatalog)
     {
         var options = new GoogleGenAIAgentBackendOptions
         {
@@ -169,6 +183,9 @@ internal static class RawApiBackendRegistrar
                 BaseUri = ParseUri(definition.BaseUri),
                 IsDefault = definition.IsDefault,
                 Profile = CreateGoogleGenAIProfile(definition.Profile),
+                ModelsDevProviderId = ResolveModelsDevProviderId(definition.ModelsDevProviderId, "google"),
+                ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
+                ModelCatalog = modelCatalog,
             });
         }
 
@@ -301,4 +318,33 @@ internal static class RawApiBackendRegistrar
 
     private static string? NormalizeText(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string ResolveModelsDevProviderId(string? configuredProviderId, string defaultProviderId)
+        => NormalizeText(configuredProviderId)?.ToLowerInvariant() ?? defaultProviderId;
+
+    private static IReadOnlyDictionary<string, AgentModelOverride>? CreateModelOverrides(
+        Dictionary<string, CodeAltaRawApiModelOverrideDocument>? overrides)
+    {
+        if (overrides is null || overrides.Count == 0)
+        {
+            return null;
+        }
+
+        return overrides.ToDictionary(
+            static entry => entry.Key,
+            static entry => new AgentModelOverride
+            {
+                DisplayName = entry.Value.DisplayName,
+                Description = entry.Value.Description,
+                ContextWindowTokens = entry.Value.ContextWindow,
+                InputTokenLimit = entry.Value.InputTokenLimit,
+                OutputTokenLimit = entry.Value.OutputTokenLimit,
+                MaxTokens = entry.Value.MaxTokens,
+                SupportsReasoning = entry.Value.SupportsReasoning,
+                SupportsToolCall = entry.Value.SupportsToolCall,
+                SupportsAttachments = entry.Value.SupportsAttachments,
+                SupportsStructuredOutput = entry.Value.SupportsStructuredOutput,
+            },
+            StringComparer.OrdinalIgnoreCase);
+    }
 }

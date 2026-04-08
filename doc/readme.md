@@ -118,7 +118,7 @@ Current terminal shell capabilities:
   - Press `Ctrl+G Ctrl+S` to focus the sidebar on the current selection, `Ctrl+G Ctrl+P` to focus the prompt, `Ctrl+G Ctrl+U` or use the footer usage indicator to open the context/usage popup, and press `Ctrl+G Ctrl+T` or use the thread info icon in the footer to open the selected thread report.
   - Closing either popup restores focus to the thread prompt editor so the workflow stays keyboard-first.
   - Per-backend model and reasoning defaults are stored in `~/.codealta/config.toml`, with project-local overrides read from `<project>/.codealta/config.toml`.
-  - Raw OpenAI-compatible, Anthropic, and Google GenAI backends can also be configured in `~/.codealta/config.toml`; only providers with usable credentials or Vertex settings are registered at startup.
+- Raw OpenAI-compatible, Anthropic, and Google GenAI backends can also be configured in `~/.codealta/config.toml`; only providers with usable credentials or Vertex settings are registered at startup. Local raw-API backends enrich model metadata from the bundled `models_dev_db.json` snapshot, apply per-provider `models_dev_provider_id` mappings and optional `model_overrides`, and refresh the models.dev catalog in the background at runtime.
   - Thread-specific model and reasoning selections are preserved for reopened tabs through `~/.codealta/local/ui-state.yaml`, so an existing thread keeps its model by default even after global or project defaults change.
   - The reasoning selector only shows concrete effort values. When a selected model supports `high`, CodeAlta prefers `high` by default.
   - Sending a prompt now follows an enqueue-first workflow for busy threads: `Ctrl+J`/`Ctrl+Enter` adds the prompt to a waiting list above the status line, where queued prompts can be edited, repeated, steered immediately, deleted, or cleared with `F10`. Steer requests that have been sent locally but not yet echoed back by the backend also appear at the top of that strip as transient pending rows.
@@ -156,7 +156,7 @@ CodeAlta can host local agent runtimes backed by raw provider SDKs:
 - `Anthropic Messages`
 - `Google GenAI`
 
-These backends are configured from `~/.codealta/config.toml` under `raw_api.*.providers.*`. OpenAI-compatible providers can enable the Responses backend, the Chat backend, or both.
+These backends are configured from `~/.codealta/config.toml` under `raw_api.*.providers.*`. OpenAI-compatible providers can enable the Responses backend, the Chat backend, or both. Each provider can optionally map to a models.dev provider id and override individual model limits so context usage stays consistent even when the upstream SDK does not expose context-window metadata.
 
 Example:
 
@@ -164,12 +164,18 @@ Example:
 [raw_api.openai.providers.openai]
 display_name = "OpenAI"
 api_key_env = "OPENAI_API_KEY"
+models_dev_provider_id = "openai"
 default_responses = true
 default_chat = true
+
+[raw_api.openai.providers.openai.model_overrides.gpt-5]
+context_window = 400000
+output_token_limit = 128000
 
 [raw_api.anthropic.providers.anthropic]
 display_name = "Anthropic"
 api_key_env = "ANTHROPIC_API_KEY"
+models_dev_provider_id = "anthropic"
 is_default = true
 
 [raw_api.google_genai.providers.vertex]
@@ -177,7 +183,14 @@ display_name = "Vertex"
 use_vertex_ai = true
 project = "my-gcp-project"
 location = "europe-west4"
+models_dev_provider_id = "google"
 is_default = true
+```
+
+The bundled snapshot lives in `src/CodeAlta.Agent/Data/models_dev_db.json`. To refresh it manually, run:
+
+```sh
+dotnet run --project src/CodeAlta.Agent.ModelsDev.Updater/CodeAlta.Agent.ModelsDev.Updater.csproj -c Release
 ```
 
 Session state for these local runtimes is stored under `~/.codealta/local/agents/<protocol-family>/<provider-key>/sessions/...` with `session.json`, `events.jsonl`, and `state.json`.

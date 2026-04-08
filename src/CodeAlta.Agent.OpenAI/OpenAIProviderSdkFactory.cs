@@ -2,6 +2,7 @@
 
 using System.ClientModel;
 using CodeAlta.Agent.LocalRuntime;
+using CodeAlta.Agent.ModelCatalog;
 using OpenAI;
 using OpenAI.Chat;
 using OpenAI.Models;
@@ -32,14 +33,20 @@ internal static class OpenAIProviderSdkFactory
         LocalAgentProviderDescriptor providerDescriptor,
         CancellationToken cancellationToken)
     {
+        IReadOnlyList<AgentModelInfo> models;
         if (provider.ModelListAsync is not null)
         {
-            return await provider.ModelListAsync(cancellationToken).ConfigureAwait(false);
+            models = await provider.ModelListAsync(cancellationToken).ConfigureAwait(false);
+            return AgentModelMetadataEnricher.EnrichModels(
+                models,
+                provider.ModelCatalog,
+                provider.ModelsDevProviderId,
+                provider.ModelOverrides);
         }
 
         var client = CreateModelClient(provider);
         var collection = await client.GetModelsAsync(cancellationToken).ConfigureAwait(false);
-        return collection.Value
+        models = collection.Value
             .Select(model => new AgentModelInfo(
                 model.Id,
                 DisplayName: model.Id,
@@ -50,6 +57,11 @@ internal static class OpenAIProviderSdkFactory
                     ["ownedBy"] = model.OwnedBy,
                 }))
             .ToArray();
+        return AgentModelMetadataEnricher.EnrichModels(
+            models,
+            provider.ModelCatalog,
+            provider.ModelsDevProviderId,
+            provider.ModelOverrides);
     }
 
     private static ApiKeyCredential CreateCredential(OpenAIProviderOptions provider)

@@ -2,6 +2,7 @@ using Anthropic;
 using Anthropic.Core;
 using Anthropic.Models.Models;
 using CodeAlta.Agent.LocalRuntime;
+using CodeAlta.Agent.ModelCatalog;
 using Microsoft.Extensions.AI;
 
 namespace CodeAlta.Agent.Anthropic;
@@ -126,9 +127,15 @@ public sealed class AnthropicAgentBackend : IAgentBackend
         LocalAgentProviderDescriptor providerDescriptor,
         CancellationToken cancellationToken)
     {
+        IReadOnlyList<AgentModelInfo> models;
         if (provider.ModelListAsync is not null)
         {
-            return await provider.ModelListAsync(cancellationToken).ConfigureAwait(false);
+            models = await provider.ModelListAsync(cancellationToken).ConfigureAwait(false);
+            return AgentModelMetadataEnricher.EnrichModels(
+                models,
+                provider.ModelCatalog,
+                provider.ModelsDevProviderId,
+                provider.ModelOverrides);
         }
 
         using var client = CreateSdkClient(provider, providerDescriptor);
@@ -145,7 +152,12 @@ public sealed class AnthropicAgentBackend : IAgentBackend
             page = await page.Next(cancellationToken).ConfigureAwait(false);
         }
 
-        return results;
+        models = results;
+        return AgentModelMetadataEnricher.EnrichModels(
+            models,
+            provider.ModelCatalog,
+            provider.ModelsDevProviderId,
+            provider.ModelOverrides);
     }
 
     private static AnthropicClient CreateSdkClient(

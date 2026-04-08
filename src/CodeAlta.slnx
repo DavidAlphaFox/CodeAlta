@@ -28,6 +28,7 @@
   <Project Path="CodeAlta.CodexSdk.Generator/CodeAlta.CodexSdk.Generator.csproj" Id="5e0c386b-10bd-4af7-a98e-5b18779aa19e" />
   <Project Path="CodeAlta.Acp.Generator/CodeAlta.Acp.Generator.csproj" />
   <Project Path="CodeAlta.Agent/CodeAlta.Agent.csproj" />
+  <Project Path="CodeAlta.Agent.ModelsDev.Updater/CodeAlta.Agent.ModelsDev.Updater.csproj" />
   <Project Path="CodeAlta.Acp/CodeAlta.Acp.csproj" />
   <Project Path="AgentMessageDiagnosticApp/AgentMessageDiagnosticApp.csproj" />
   <Project Path="CodeAlta.Agent.Acp/CodeAlta.Agent.Acp.csproj" />

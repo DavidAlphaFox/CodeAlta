@@ -111,6 +111,72 @@ public sealed class CodeAltaRawApiProviderProfileDocument
 }
 
 /// <summary>
+/// Represents one configurable raw-API model metadata override.
+/// </summary>
+public sealed class CodeAltaRawApiModelOverrideDocument
+{
+    /// <summary>
+    /// Gets or sets an optional replacement display name.
+    /// </summary>
+    [JsonPropertyName("display_name")]
+    public string? DisplayName { get; set; }
+
+    /// <summary>
+    /// Gets or sets an optional replacement description.
+    /// </summary>
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    /// <summary>
+    /// Gets or sets the context-window limit in tokens.
+    /// </summary>
+    [JsonPropertyName("context_window")]
+    public long? ContextWindow { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum input-token limit in tokens.
+    /// </summary>
+    [JsonPropertyName("input_token_limit")]
+    public long? InputTokenLimit { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum output-token limit in tokens.
+    /// </summary>
+    [JsonPropertyName("output_token_limit")]
+    public long? OutputTokenLimit { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum generated-token limit in tokens.
+    /// </summary>
+    [JsonPropertyName("max_tokens")]
+    public long? MaxTokens { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the model supports reasoning.
+    /// </summary>
+    [JsonPropertyName("supports_reasoning")]
+    public bool? SupportsReasoning { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the model supports tool calling.
+    /// </summary>
+    [JsonPropertyName("supports_tool_call")]
+    public bool? SupportsToolCall { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the model supports attachments.
+    /// </summary>
+    [JsonPropertyName("supports_attachments")]
+    public bool? SupportsAttachments { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the model supports structured output.
+    /// </summary>
+    [JsonPropertyName("supports_structured_output")]
+    public bool? SupportsStructuredOutput { get; set; }
+}
+
+/// <summary>
 /// Represents one configured OpenAI-compatible provider.
 /// </summary>
 public sealed class CodeAltaOpenAIProviderDocument
@@ -164,6 +230,12 @@ public sealed class CodeAltaOpenAIProviderDocument
     public string? ProjectId { get; set; }
 
     /// <summary>
+    /// Gets or sets the optional models.dev provider identifier used to enrich model metadata.
+    /// </summary>
+    [JsonPropertyName("models_dev_provider_id")]
+    public string? ModelsDevProviderId { get; set; }
+
+    /// <summary>
     /// Gets or sets whether the Responses backend is enabled for this provider.
     /// </summary>
     [JsonPropertyName("enable_responses")]
@@ -192,6 +264,12 @@ public sealed class CodeAltaOpenAIProviderDocument
     /// </summary>
     [JsonPropertyName("profile")]
     public CodeAltaRawApiProviderProfileDocument? Profile { get; set; }
+
+    /// <summary>
+    /// Gets or sets optional per-model metadata overrides.
+    /// </summary>
+    [JsonPropertyName("model_overrides")]
+    public Dictionary<string, CodeAltaRawApiModelOverrideDocument>? ModelOverrides { get; set; }
 }
 
 /// <summary>
@@ -236,6 +314,12 @@ public sealed class CodeAltaAnthropicProviderDocument
     public string? BaseUri { get; set; }
 
     /// <summary>
+    /// Gets or sets the optional models.dev provider identifier used to enrich model metadata.
+    /// </summary>
+    [JsonPropertyName("models_dev_provider_id")]
+    public string? ModelsDevProviderId { get; set; }
+
+    /// <summary>
     /// Gets or sets whether this provider is the backend default.
     /// </summary>
     [JsonPropertyName("is_default")]
@@ -246,6 +330,12 @@ public sealed class CodeAltaAnthropicProviderDocument
     /// </summary>
     [JsonPropertyName("profile")]
     public CodeAltaRawApiProviderProfileDocument? Profile { get; set; }
+
+    /// <summary>
+    /// Gets or sets optional per-model metadata overrides.
+    /// </summary>
+    [JsonPropertyName("model_overrides")]
+    public Dictionary<string, CodeAltaRawApiModelOverrideDocument>? ModelOverrides { get; set; }
 }
 
 /// <summary>
@@ -308,6 +398,12 @@ public sealed class CodeAltaGoogleGenAIProviderDocument
     public string? BaseUri { get; set; }
 
     /// <summary>
+    /// Gets or sets the optional models.dev provider identifier used to enrich model metadata.
+    /// </summary>
+    [JsonPropertyName("models_dev_provider_id")]
+    public string? ModelsDevProviderId { get; set; }
+
+    /// <summary>
     /// Gets or sets whether this provider is the backend default.
     /// </summary>
     [JsonPropertyName("is_default")]
@@ -318,4 +414,10 @@ public sealed class CodeAltaGoogleGenAIProviderDocument
     /// </summary>
     [JsonPropertyName("profile")]
     public CodeAltaRawApiProviderProfileDocument? Profile { get; set; }
+
+    /// <summary>
+    /// Gets or sets optional per-model metadata overrides.
+    /// </summary>
+    [JsonPropertyName("model_overrides")]
+    public Dictionary<string, CodeAltaRawApiModelOverrideDocument>? ModelOverrides { get; set; }
 }

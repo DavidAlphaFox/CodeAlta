@@ -1,4 +1,5 @@
 using CodeAlta.Agent.LocalRuntime;
+using CodeAlta.Agent.ModelCatalog;
 using Google.GenAI;
 using Google.GenAI.Types;
 using Microsoft.Extensions.AI;
@@ -126,9 +127,15 @@ public sealed class GoogleGenAIAgentBackend : IAgentBackend
         LocalAgentProviderDescriptor providerDescriptor,
         CancellationToken cancellationToken)
     {
+        IReadOnlyList<AgentModelInfo> models;
         if (provider.ModelListAsync is not null)
         {
-            return await provider.ModelListAsync(cancellationToken).ConfigureAwait(false);
+            models = await provider.ModelListAsync(cancellationToken).ConfigureAwait(false);
+            return AgentModelMetadataEnricher.EnrichModels(
+                models,
+                provider.ModelCatalog,
+                provider.ModelsDevProviderId,
+                provider.ModelOverrides);
         }
 
         using var client = CreateSdkClient(provider);
@@ -139,7 +146,12 @@ public sealed class GoogleGenAIAgentBackend : IAgentBackend
             results.Add(ToAgentModelInfo(providerDescriptor, model));
         }
 
-        return results;
+        models = results;
+        return AgentModelMetadataEnricher.EnrichModels(
+            models,
+            provider.ModelCatalog,
+            provider.ModelsDevProviderId,
+            provider.ModelOverrides);
     }
 
     private static Client CreateSdkClient(GoogleGenAIProviderOptions provider)

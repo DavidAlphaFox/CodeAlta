@@ -18,5 +18,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
     <PackageReference Include="XenoAtom.Glob" />
+    <PackageReference Include="XenoAtom.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Data\models_dev_db.json" LogicalName="CodeAlta.Agent.Data.models_dev_db.json" />
   </ItemGroup>
 </Project>

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
+using CodeAlta.Agent.ModelCatalog;
 using CodeAlta.Agent.LocalRuntime.Tools;
 
 namespace CodeAlta.Agent.LocalRuntime;
@@ -929,8 +930,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         try
         {
             var models = await _turnExecutor.ListModelsAsync(Provider, cancellationToken).ConfigureAwait(false);
-            _resolvedModelInfo = models.FirstOrDefault(model =>
-                string.Equals(model.Id, modelId, StringComparison.OrdinalIgnoreCase));
+            _resolvedModelInfo = AgentModelIdentity.FindBestMatch(models, modelId);
         }
         catch (OperationCanceledException)
         {
