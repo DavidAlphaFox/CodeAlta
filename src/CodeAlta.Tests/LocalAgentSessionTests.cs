@@ -1082,6 +1082,100 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public async Task LocalAgentSession_CompactAsync_DefaultSettings_DoNotPretrimWhenSummaryInputFits()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider(LocalAgentCompactionSettings.Default);
+        var summary = CreateSummary("session-default-settings-fit");
+        var state = CreateState("session-default-settings-fit");
+        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        var summaryPayloads = new List<string>();
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                [new AgentModelInfo("gpt-5.4", "GPT-5.4")],
+                (request, _, _) =>
+                {
+                    summaryPayloads.Add(Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(request.Conversation[0].Parts.Single()).Value);
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [new LocalAgentMessagePart.Text(
+                                    """
+                                    ## Objective
+                                    Continue the task.
+                                    ## Active User Request
+                                    Third prompt
+                                    ## Constraints
+                                    - Preserve the selected history.
+                                    ## Progress
+                                    ### Done
+                                    - Earlier work summarized.
+                                    ### In Progress
+                                    - Continue the implementation.
+                                    ### Blocked
+                                    - None recorded.
+                                    ## Decisions
+                                    - Keep the selected history because it fits.
+                                    ## Next Steps
+                                    - Continue from the checkpoint.
+                                    ## Critical Context
+                                    - The selected history fit in one compaction request.
+                                    ## Relevant Files
+                                    - None tracked.
+                                    """)]),
+                        });
+                },
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("First answer " + new string('a', 800))]),
+                    }),
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("Second answer " + new string('b', 800))]),
+                    }),
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("Third answer " + new string('c', 800))]),
+                    })),
+            CreateOptions(provider, temp.Path));
+
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("First prompt " + new string('x', 900)) }).ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Second prompt " + new string('y', 900)) }).ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Third prompt " + new string('z', 900)) }).ConfigureAwait(false);
+
+        var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);
+        Assert.IsNotNull(outcome);
+        Assert.IsTrue(outcome.Success);
+        Assert.AreEqual(1, summaryPayloads.Count);
+        StringAssert.Contains(summaryPayloads[0], "First prompt");
+        StringAssert.Contains(summaryPayloads[0], "First answer");
+        StringAssert.Contains(summaryPayloads[0], "Second prompt");
+        StringAssert.Contains(summaryPayloads[0], "Second answer");
+        StringAssert.Contains(summaryPayloads[0], "Third prompt");
+    }
+
+    [TestMethod]
     public async Task LocalAgentSession_CompactAsync_PassesConfiguredSummaryOutputTokenLimitToSummarizer()
     {
         using var temp = TestTempDirectory.Create();
@@ -1163,6 +1257,87 @@ public sealed class LocalAgentSessionTests
         Assert.IsNotNull(outcome);
         Assert.IsTrue(outcome.Success);
         CollectionAssert.AreEqual(new int?[] { 320 }, observedMaxOutputTokens);
+    }
+
+    [TestMethod]
+    public async Task LocalAgentSession_CompactAsync_ReportsCompressionRatioWhenAboveTargetMax()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
+        {
+            TargetContextRatioMax = 0.01,
+            RecentSuffixTargetTokens = 16_000,
+        });
+        var summary = CreateSummary("session-ratio-reported");
+        var state = CreateState("session-ratio-reported");
+        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                [new AgentModelInfo("gpt-5.4", "GPT-5.4")],
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text(
+                                """
+                                ## Objective
+                                Continue the task.
+                                ## Active User Request
+                                Second prompt
+                                ## Constraints
+                                - Keep recent context verbatim.
+                                ## Progress
+                                ### Done
+                                - Earlier work summarized.
+                                ### In Progress
+                                - Continue the task.
+                                ### Blocked
+                                - None recorded.
+                                ## Decisions
+                                - Keep the recent suffix even if it remains relatively expensive.
+                                ## Next Steps
+                                - Continue from the retained context.
+                                ## Critical Context
+                                - The retained suffix dominates the post-compaction footprint.
+                                ## Relevant Files
+                                - None tracked.
+                                """)]),
+                    }),
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("First answer " + new string('a', 1200))]),
+                    }),
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("Second answer " + new string('b', 1200))]),
+                    })),
+            CreateOptions(provider, temp.Path));
+
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("First prompt " + new string('x', 1200)) }).ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Second prompt " + new string('y', 1200)) }).ConfigureAwait(false);
+
+        var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);
+        Assert.IsNotNull(outcome);
+        Assert.IsTrue(outcome.Success);
+        StringAssert.Contains(outcome.Message, "Post-compaction ratio");
+        StringAssert.Contains(outcome.Message, "exceeded target");
     }
 
     [TestMethod]
