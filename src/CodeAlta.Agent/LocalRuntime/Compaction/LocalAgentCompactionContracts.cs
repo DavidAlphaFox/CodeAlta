@@ -34,9 +34,13 @@ internal sealed record LocalAgentCompactionResult(
     string Summary,
     string? AnchorContentId,
     bool IsSplitTurn,
+    bool OversizedAnchorReduced,
     long TokensBefore,
     long? TokensAfter,
     int MessagesSummarized,
+    int ChunkCount,
+    double? CompressionRatio,
+    LocalAgentCompactionSerializerStatistics SerializerStatistics,
     IReadOnlyList<string> ReadFiles,
     IReadOnlyList<string> ModifiedFiles);
 
@@ -55,6 +59,22 @@ internal sealed record LocalAgentCompactionSummaryRequest(
 internal sealed record LocalAgentCompactionSummaryResponse(
     string Summary,
     AgentSessionUsage? Usage);
+
+internal sealed record LocalAgentCompactionSerializerStatistics(
+    int OmittedToolResultCount,
+    int OmittedReasoningCount,
+    int OmittedAttachmentCount,
+    int DroppedMessageCount,
+    int SerializedToolResultCharacters,
+    int SerializedReasoningCharacters,
+    bool ReducedOversizedAnchor);
+
+internal sealed record LocalAgentCompactionSerializationResult(
+    string UserMessage,
+    long EstimatedInputTokens,
+    int IncludedMessageCount,
+    int TotalMessageCount,
+    LocalAgentCompactionSerializerStatistics Statistics);
 
 internal interface ILocalAgentCompactionSummaryExecutor
 {

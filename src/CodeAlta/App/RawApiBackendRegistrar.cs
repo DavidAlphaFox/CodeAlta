@@ -363,6 +363,31 @@ internal static class RawApiBackendRegistrar
             ReservedOutputTokens: normalized.ReservedOutputTokens ?? LocalAgentCompactionSettings.Default.ReservedOutputTokens,
             ReservedOverheadTokens: normalized.ReservedOverheadTokens ?? LocalAgentCompactionSettings.Default.ReservedOverheadTokens,
             KeepLastUserMessage: normalized.KeepLastUserMessage ?? LocalAgentCompactionSettings.Default.KeepLastUserMessage,
-            AllowSplitTurn: normalized.AllowSplitTurn ?? LocalAgentCompactionSettings.Default.AllowSplitTurn);
+            AllowSplitTurn: normalized.AllowSplitTurn ?? LocalAgentCompactionSettings.Default.AllowSplitTurn)
+        {
+            TargetContextRatioIdeal = normalized.TargetContextRatioIdeal ?? LocalAgentCompactionSettings.Default.TargetContextRatioIdeal,
+            TargetContextRatioMax = normalized.TargetContextRatioMax ?? LocalAgentCompactionSettings.Default.TargetContextRatioMax,
+            RecentSuffixTargetTokens = normalized.RecentSuffixTargetTokens ?? LocalAgentCompactionSettings.Default.RecentSuffixTargetTokens,
+            SummaryOutputTokens = normalized.SummaryOutputTokens ?? LocalAgentCompactionSettings.Default.SummaryOutputTokens,
+            SummaryInputTokens = normalized.SummaryInputTokens ?? LocalAgentCompactionSettings.Default.SummaryInputTokens,
+            ToolResultCharsPerItem = normalized.ToolResultCharsPerItem ?? LocalAgentCompactionSettings.Default.ToolResultCharsPerItem,
+            ToolResultCharsTotal = normalized.ToolResultCharsTotal ?? LocalAgentCompactionSettings.Default.ToolResultCharsTotal,
+            ReasoningCharsPerItem = normalized.ReasoningCharsPerItem ?? LocalAgentCompactionSettings.Default.ReasoningCharsPerItem,
+            ReasoningCharsTotal = normalized.ReasoningCharsTotal ?? LocalAgentCompactionSettings.Default.ReasoningCharsTotal,
+            ReasoningMode = ParseReasoningMode(normalized.ReasoningMode),
+            MaxChunkPasses = normalized.MaxChunkPasses ?? LocalAgentCompactionSettings.Default.MaxChunkPasses,
+            AllowOversizedAnchorReduction = normalized.AllowOversizedAnchorReduction ?? LocalAgentCompactionSettings.Default.AllowOversizedAnchorReduction,
+            PreferRecentMessages = normalized.PreferRecentMessages ?? LocalAgentCompactionSettings.Default.PreferRecentMessages,
+            PreferRecentToolOutputs = normalized.PreferRecentToolOutputs ?? LocalAgentCompactionSettings.Default.PreferRecentToolOutputs,
+            DropMessagesOnlyWhenSummaryInputExceedsBudget = normalized.DropMessagesOnlyWhenSummaryInputExceedsBudget ?? LocalAgentCompactionSettings.Default.DropMessagesOnlyWhenSummaryInputExceedsBudget,
+        };
     }
+
+    private static LocalAgentCompactionReasoningMode ParseReasoningMode(string? value)
+        => value?.Trim().ToLowerInvariant() switch
+        {
+            "none" => LocalAgentCompactionReasoningMode.None,
+            "summary_only" => LocalAgentCompactionReasoningMode.SummaryOnly,
+            _ => LocalAgentCompactionReasoningMode.Adaptive,
+        };
 }

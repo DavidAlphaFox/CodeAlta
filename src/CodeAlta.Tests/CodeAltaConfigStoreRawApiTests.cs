@@ -15,6 +15,8 @@ public sealed class CodeAltaConfigStoreRawApiTests
             [raw_api.compaction]
             trigger_threshold = 0.81
             reserved_overhead_tokens = 1024
+            summary_input_tokens = 32000
+            reasoning_mode = "summary_only"
 
             [raw_api.openai.providers.OpenRouter]
             display_name = " OpenRouter "
@@ -32,6 +34,8 @@ public sealed class CodeAltaConfigStoreRawApiTests
 
             [raw_api.openai.providers.OpenRouter.compaction]
             reserved_output_tokens = 2048
+            summary_output_tokens = 768
+            target_context_ratio_max = 0.08
 
             [raw_api.openai.providers.OpenRouter.model_overrides." gpt-5 "]
             display_name = " GPT-5 "
@@ -69,6 +73,11 @@ public sealed class CodeAltaConfigStoreRawApiTests
         Assert.AreEqual(1024, compaction.ReservedOverheadTokens);
         Assert.IsTrue(compaction.KeepLastUserMessage);
         Assert.IsTrue(compaction.AllowSplitTurn);
+        Assert.AreEqual(32000, compaction.SummaryInputTokens);
+        Assert.AreEqual(768, compaction.SummaryOutputTokens);
+        Assert.AreEqual(0.03d, compaction.TargetContextRatioIdeal!.Value, 0.0001d);
+        Assert.AreEqual(0.08d, compaction.TargetContextRatioMax!.Value, 0.0001d);
+        Assert.AreEqual("summary_only", compaction.ReasoningMode);
         var modelOverrides = providers[0].ModelOverrides;
         Assert.IsNotNull(modelOverrides);
         Assert.IsTrue(modelOverrides!.TryGetValue("gpt-5", out var modelOverride));

@@ -40,7 +40,7 @@ internal static class LocalAgentCompactionPlanner
             ?? (previousSummary is null
                 ? 64L
                 : Math.Max(LocalAgentTokenEstimator.EstimateCheckpointTokens(previousSummary), 64L));
-        var promptBudget = ResolvePromptBudget(tokensBefore.Tokens, budget.UsablePromptBudget, settings.TargetThreshold, promptBudgetOverride);
+        var promptBudget = ResolveRetainedPromptBudget(tokensBefore.Tokens, budget.UsablePromptBudget, settings, promptBudgetOverride);
         var fixedTokenCost = LocalAgentTokenEstimator.EstimatePromptTokens(
             systemMessage,
             developerInstructions,
@@ -86,10 +86,10 @@ internal static class LocalAgentCompactionPlanner
             PreviousSummary: previousSummary);
     }
 
-    private static long ResolvePromptBudget(
+    private static long ResolveRetainedPromptBudget(
         long tokensBefore,
         long? usablePromptBudget,
-        double targetThreshold,
+        LocalAgentCompactionSettings settings,
         long? promptBudgetOverride)
     {
         if (promptBudgetOverride is > 0)
@@ -97,9 +97,13 @@ internal static class LocalAgentCompactionPlanner
             return promptBudgetOverride.Value;
         }
 
-        return usablePromptBudget is > 0
-            ? Math.Max((long)Math.Floor(usablePromptBudget.Value * targetThreshold), 1L)
+        var resolvedPromptBudget = usablePromptBudget is > 0
+            ? usablePromptBudget.Value
             : Math.Max(tokensBefore / 2, 1L);
+        var preferredRetainedBudget = settings.RecentSuffixTargetTokens > 0
+            ? settings.RecentSuffixTargetTokens
+            : Math.Max((long)Math.Floor(resolvedPromptBudget * settings.TargetThreshold), 1L);
+        return Math.Max(Math.Min(resolvedPromptBudget, preferredRetainedBudget), 1L);
     }
 
     private static (IReadOnlyList<int> TurnPrefixIndexes, IReadOnlyList<int> SuffixIndexes, bool IsSplitTurn) BuildPlan(

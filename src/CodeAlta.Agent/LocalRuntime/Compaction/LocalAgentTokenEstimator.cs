@@ -61,6 +61,9 @@ internal static class LocalAgentTokenEstimator
     public static long EstimateCheckpointTokens(string summary)
         => EstimateText(summary) + 16;
 
+    public static long EstimateTextTokens(string? text)
+        => EstimateText(text);
+
     private static bool HasLeadingCheckpoint(IReadOnlyList<LocalAgentConversationMessage> conversation)
         => conversation.Count > 0 && LocalAgentCompactionCheckpoint.TryExtractSummary(conversation[0]) is not null;
 

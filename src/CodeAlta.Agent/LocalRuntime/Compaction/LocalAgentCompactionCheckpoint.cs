@@ -48,6 +48,11 @@ public sealed record LocalAgentCompactionCheckpoint
     public long? TokensAfter { get; init; }
 
     /// <summary>
+    /// Gets or initializes the realized post-compaction compression ratio.
+    /// </summary>
+    public double? CompressionRatio { get; init; }
+
+    /// <summary>
     /// Gets or initializes the summarized message count.
     /// </summary>
     public int SummarizedMessageCount { get; init; }
@@ -68,6 +73,26 @@ public sealed record LocalAgentCompactionCheckpoint
     public IReadOnlyList<string> ModifiedFiles { get; init; } = [];
 
     /// <summary>
+    /// Gets or initializes how many tool-result excerpts were omitted during serialization.
+    /// </summary>
+    public int OmittedToolResultCount { get; init; }
+
+    /// <summary>
+    /// Gets or initializes how many reasoning excerpts were omitted during serialization.
+    /// </summary>
+    public int OmittedReasoningCount { get; init; }
+
+    /// <summary>
+    /// Gets or initializes how many recursive chunks were used to create the checkpoint.
+    /// </summary>
+    public int ChunkCount { get; init; } = 1;
+
+    /// <summary>
+    /// Gets or initializes whether the latest oversized anchor was reduced.
+    /// </summary>
+    public bool OversizedAnchorReduced { get; init; }
+
+    /// <summary>
     /// Creates the synthetic replay message for the checkpoint.
     /// </summary>
     /// <returns>The replay message.</returns>
@@ -84,7 +109,7 @@ public sealed record LocalAgentCompactionCheckpoint
     public static string WrapSummary(string summary)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("""<codealta-compaction-checkpoint version="1">""");
+        builder.AppendLine("""<codealta-compaction-checkpoint version="2">""");
         builder.AppendLine(summary.Trim());
         builder.Append("""</codealta-compaction-checkpoint>""");
         return builder.ToString();
@@ -108,9 +133,17 @@ public sealed record LocalAgentCompactionCheckpoint
             return null;
         }
 
-        const string prefix = """<codealta-compaction-checkpoint version="1">""";
+        const string prefixV2 = """<codealta-compaction-checkpoint version="2">""";
+        const string prefixV1 = """<codealta-compaction-checkpoint version="1">""";
         const string suffix = "</codealta-compaction-checkpoint>";
+        var prefix = prefixV2;
         var start = text.IndexOf(prefix, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            prefix = prefixV1;
+            start = text.IndexOf(prefix, StringComparison.Ordinal);
+        }
+
         var end = text.LastIndexOf(suffix, StringComparison.Ordinal);
         if (start < 0 || end < 0 || end <= start)
         {

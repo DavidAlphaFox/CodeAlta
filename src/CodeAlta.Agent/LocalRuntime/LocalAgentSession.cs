@@ -810,7 +810,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             retainedConversation = [.. preparation.TurnPrefixMessages, .. preparation.MessagesToKeep];
             checkpoint = new LocalAgentCompactionCheckpoint
             {
-                Version = 1,
+                Version = 2,
                 ContentId = checkpointContentId,
                 Trigger = trigger.ToString().ToLowerInvariant(),
                 Summary = summaryResult.Summary,
@@ -818,8 +818,13 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                 AnchorContentId = preparation.AnchorContentId,
                 TokensBefore = summaryResult.TokensBefore,
                 SummarizedMessageCount = summaryResult.MessagesSummarized,
+                CompressionRatio = summaryResult.CompressionRatio,
                 ReadFiles = summaryResult.ReadFiles,
                 ModifiedFiles = summaryResult.ModifiedFiles,
+                OmittedToolResultCount = summaryResult.SerializerStatistics.OmittedToolResultCount,
+                OmittedReasoningCount = summaryResult.SerializerStatistics.OmittedReasoningCount,
+                ChunkCount = summaryResult.ChunkCount,
+                OversizedAnchorReduced = summaryResult.OversizedAnchorReduced,
                 KeptMessages = retainedConversation,
             };
             checkpointMessage = checkpoint.CreateMessage();
@@ -835,15 +840,24 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                 developerInstructions,
                 candidateConversation,
                 usage: null).Tokens;
-            if (FitsResolvedPromptBudget(tokensAfter, budget))
+            var compressionRatio = summaryResult.TokensBefore > 0
+                ? (double)tokensAfter / summaryResult.TokensBefore
+                : (double?)null;
+            if (FitsResolvedPromptBudget(tokensAfter, budget) &&
+                (trigger is not LocalAgentCompactionTrigger.Threshold ||
+                 compressionRatio is null ||
+                 compressionRatio <= settings.TargetContextRatioMax ||
+                 attempt >= 2))
             {
                 result = summaryResult with
                 {
                     TokensAfter = tokensAfter,
+                    CompressionRatio = compressionRatio,
                 };
                 checkpoint = checkpoint with
                 {
                     TokensAfter = tokensAfter,
+                    CompressionRatio = compressionRatio,
                 };
                 break;
             }
@@ -918,10 +932,13 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         LocalAgentCompactionSettings settings,
         LocalAgentTokenBudget budget)
     {
+        var desired = settings.SummaryOutputTokens > 0
+            ? settings.SummaryOutputTokens
+            : LocalAgentCompactionSettings.Default.SummaryOutputTokens;
         var limit = budget.OutputTokenLimit is > 0
-            ? Math.Min(budget.OutputTokenLimit.Value, settings.ReservedOutputTokens)
-            : settings.ReservedOutputTokens;
-        return (int)Math.Max(Math.Min(limit, 1024), 128);
+            ? Math.Min(budget.OutputTokenLimit.Value, desired)
+            : desired;
+        return (int)Math.Max(Math.Min(limit, Math.Max(settings.ReservedOutputTokens, 128)), 128);
     }
 
     private static bool FitsResolvedPromptBudget(long promptTokens, LocalAgentTokenBudget budget)

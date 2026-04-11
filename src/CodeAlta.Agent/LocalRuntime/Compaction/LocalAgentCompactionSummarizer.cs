@@ -51,11 +51,12 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         ArgumentNullException.ThrowIfNull(history);
 
         var fileActivity = ExtractFileActivity(history);
-        var requestBody = LocalAgentCompactionSerializer.BuildSummaryRequestBody(
+        var serialization = LocalAgentCompactionSerializer.BuildSummaryRequestBody(
             preparation,
             latestUserRequest,
             fileActivity.ReadFiles,
-            fileActivity.ModifiedFiles);
+            fileActivity.ModifiedFiles,
+            provider.Compaction ?? LocalAgentCompactionSettings.Default);
         var response = await _executor.ExecuteAsync(
                 new LocalAgentCompactionSummaryRequest(
                     BackendId: backendId,
@@ -66,20 +67,46 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                     WorkingDirectory: workingDirectory,
                     State: state,
                     SystemMessage: CreateSystemPrompt(maxOutputTokens),
-                    UserMessage: requestBody,
+                    UserMessage: serialization.UserMessage,
                     MaxOutputTokens: maxOutputTokens),
                 cancellationToken)
             .ConfigureAwait(false);
+        ValidateSummary(response.Summary, maxOutputTokens);
 
         return new LocalAgentCompactionResult(
             Summary: response.Summary,
             AnchorContentId: preparation.AnchorContentId,
             IsSplitTurn: preparation.IsSplitTurn,
+            OversizedAnchorReduced: serialization.Statistics.ReducedOversizedAnchor,
             TokensBefore: preparation.TokensBefore.Tokens,
             TokensAfter: null,
             MessagesSummarized: preparation.MessagesToSummarize.Count,
+            ChunkCount: 1,
+            CompressionRatio: null,
+            SerializerStatistics: serialization.Statistics,
             ReadFiles: fileActivity.ReadFiles,
             ModifiedFiles: fileActivity.ModifiedFiles);
+    }
+
+    private static void ValidateSummary(string summary, int maxOutputTokens)
+    {
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            throw new InvalidOperationException("The compaction summarizer returned an empty summary.");
+        }
+
+        var estimatedTokens = LocalAgentTokenEstimator.EstimateTextTokens(summary);
+        if (estimatedTokens > Math.Max(maxOutputTokens * 2L, 256L))
+        {
+            throw new InvalidOperationException("The compaction summarizer returned a summary that exceeds the configured checkpoint budget.");
+        }
+
+        if (!summary.Contains("## Objective", StringComparison.Ordinal) ||
+            !summary.Contains("## Active User Request", StringComparison.Ordinal) ||
+            !summary.Contains("## Relevant Files", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("The compaction summarizer returned a malformed structured summary.");
+        }
     }
 
     private static FileActivity ExtractFileActivity(IReadOnlyList<AgentEvent> history)

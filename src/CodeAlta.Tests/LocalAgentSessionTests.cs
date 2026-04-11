@@ -466,7 +466,10 @@ public sealed class LocalAgentSessionTests
                 ReservedOutputTokens: 20,
                 ReservedOverheadTokens: 10,
                 KeepLastUserMessage: true,
-                AllowSplitTurn: true),
+                AllowSplitTurn: true)
+            {
+                RecentSuffixTargetTokens = (int)(fixedTokens + 64 + anchorTokens + 20),
+            },
             anchorContentId: "user:2");
 
         Assert.IsNotNull(preparation);
@@ -554,6 +557,113 @@ public sealed class LocalAgentSessionTests
             anchorContentId: "user:latest",
             checkpointTokenEstimate: 64,
             promptBudgetOverride: 120));
+    }
+
+    [TestMethod]
+    public void LocalAgentCompactionSerializer_BuildSummaryRequestBody_PrefersRecentHighSignalToolOutput()
+    {
+        using var oldArgs = JsonDocument.Parse("""{"path":"old.log"}""");
+        using var recentArgs = JsonDocument.Parse("""{"command":"dotnet test"}""");
+        var oldAssistant = new LocalAgentConversationMessage(
+            LocalAgentConversationRole.Assistant,
+            [
+                new LocalAgentMessagePart.Reasoning("Old exploratory reasoning that should be cheaper to omit."),
+                new LocalAgentMessagePart.ToolCall("call-old", "read_file", oldArgs.RootElement.Clone()),
+            ]);
+        var oldTool = new LocalAgentConversationMessage(
+            LocalAgentConversationRole.Tool,
+            [
+                new LocalAgentMessagePart.ToolResult(
+                    "call-old",
+                    new AgentToolResult(true, [new AgentToolResultItem.Text("old output marker " + new string('a', 400))])),
+            ]);
+        var recentAssistant = new LocalAgentConversationMessage(
+            LocalAgentConversationRole.Assistant,
+            [
+                new LocalAgentMessagePart.Text("Recent verification."),
+                new LocalAgentMessagePart.ToolCall("call-new", "shell_command", recentArgs.RootElement.Clone()),
+            ]);
+        var recentTool = new LocalAgentConversationMessage(
+            LocalAgentConversationRole.Tool,
+            [
+                new LocalAgentMessagePart.ToolResult(
+                    "call-new",
+                    new AgentToolResult(
+                        false,
+                        [new AgentToolResultItem.Text("build failed" + Environment.NewLine + "CS1591: Missing XML comment")],
+                        Error: "build failed")),
+            ]);
+
+        var preparation = new LocalAgentCompactionPreparation(
+            Trigger: LocalAgentCompactionTrigger.Threshold,
+            MessagesToSummarize: [oldAssistant, oldTool],
+            TurnPrefixMessages: [],
+            MessagesToKeep: [recentAssistant, recentTool],
+            AnchorContentId: "user:latest",
+            IsSplitTurn: false,
+            TokensBefore: new LocalAgentTokenEstimate(1000, "test", IsEstimated: true),
+            PreviousSummary: null);
+        var settings = LocalAgentCompactionSettings.Default with
+        {
+            ToolResultCharsPerItem = 80,
+            ToolResultCharsTotal = 90,
+            ReasoningCharsPerItem = 40,
+            ReasoningCharsTotal = 40,
+        };
+
+        var result = LocalAgentCompactionSerializer.BuildSummaryRequestBody(
+            preparation,
+            latestUserRequest: "Finish the fix",
+            readFiles: [],
+            modifiedFiles: [],
+            settings);
+
+        StringAssert.Contains(result.UserMessage, "build failed");
+        StringAssert.Contains(result.UserMessage, "callId=call-old");
+        Assert.IsTrue(result.Statistics.OmittedToolResultCount >= 1);
+        StringAssert.Contains(result.UserMessage, "[Assistant reasoning summary]");
+    }
+
+    [TestMethod]
+    public void LocalAgentCompactionPlanner_Preparation_UsesRecentSuffixTargetTokens()
+    {
+        var conversation = new[]
+        {
+            new LocalAgentConversationMessage(LocalAgentConversationRole.User, [new LocalAgentMessagePart.Text("u1 " + new string('a', 320))]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, [new LocalAgentMessagePart.Text("a1 " + new string('b', 320))]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.User, [new LocalAgentMessagePart.Text("u2 " + new string('c', 220))]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, [new LocalAgentMessagePart.Text("a2 " + new string('d', 220))]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.User, [new LocalAgentMessagePart.Text("u3")]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, [new LocalAgentMessagePart.Text("a3")]),
+        };
+
+        var retainedTarget = LocalAgentTokenEstimator.EstimateMessage(conversation[^1]) + LocalAgentTokenEstimator.EstimateMessage(conversation[^2]) + 32;
+        var preparation = LocalAgentCompactionPlanner.Prepare(
+            LocalAgentCompactionTrigger.Threshold,
+            systemMessage: null,
+            developerInstructions: null,
+            conversation,
+            usage: null,
+            new LocalAgentTokenBudget(
+                ContextWindow: 4096,
+                InputTokenLimit: 4096,
+                OutputTokenLimit: 512,
+                UsablePromptBudget: 4096,
+                ReservedOutputTokens: 64,
+                ReservedOverheadTokens: 64),
+            (LocalAgentCompactionSettings.Default with
+            {
+                RecentSuffixTargetTokens = (int)(retainedTarget + 64),
+                KeepLastUserMessage = false,
+            }),
+            checkpointTokenEstimate: 64);
+
+        Assert.IsNotNull(preparation);
+        Assert.AreEqual(2, preparation!.MessagesToKeep.Count);
+        Assert.AreEqual(LocalAgentConversationRole.User, preparation.MessagesToKeep[0].Role);
+        Assert.AreEqual(LocalAgentConversationRole.Assistant, preparation.MessagesToKeep[1].Role);
+        StringAssert.Contains(Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(preparation.MessagesToKeep[0].Parts.Single()).Value, "u3");
+        StringAssert.Contains(Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(preparation.MessagesToKeep[1].Parts.Single()).Value, "a3");
     }
 
     [TestMethod]
@@ -715,7 +825,10 @@ public sealed class LocalAgentSessionTests
             ReservedOutputTokens: 32,
             ReservedOverheadTokens: 32,
             KeepLastUserMessage: true,
-            AllowSplitTurn: true));
+            AllowSplitTurn: true)
+        {
+            RecentSuffixTargetTokens = 160,
+        });
         var summary = CreateSummary("session-summary-too-large");
         var state = CreateState("session-summary-too-large");
         await store.UpsertProviderAsync(provider).ConfigureAwait(false);

@@ -162,6 +162,96 @@ public sealed class CodeAltaRawApiCompactionDocument
     /// </summary>
     [JsonPropertyName("allow_split_turn")]
     public bool? AllowSplitTurn { get; set; }
+
+    /// <summary>
+    /// Gets or sets the ideal post-compaction context ratio.
+    /// </summary>
+    [JsonPropertyName("target_context_ratio_ideal")]
+    public double? TargetContextRatioIdeal { get; set; }
+
+    /// <summary>
+    /// Gets or sets the preferred maximum post-compaction context ratio.
+    /// </summary>
+    [JsonPropertyName("target_context_ratio_max")]
+    public double? TargetContextRatioMax { get; set; }
+
+    /// <summary>
+    /// Gets or sets the preferred token budget for the retained recent suffix.
+    /// </summary>
+    [JsonPropertyName("recent_suffix_target_tokens")]
+    public int? RecentSuffixTargetTokens { get; set; }
+
+    /// <summary>
+    /// Gets or sets the summarizer output-token cap.
+    /// </summary>
+    [JsonPropertyName("summary_output_tokens")]
+    public int? SummaryOutputTokens { get; set; }
+
+    /// <summary>
+    /// Gets or sets the summarizer input-token cap.
+    /// </summary>
+    [JsonPropertyName("summary_input_tokens")]
+    public int? SummaryInputTokens { get; set; }
+
+    /// <summary>
+    /// Gets or sets the tool-result excerpt cap per item.
+    /// </summary>
+    [JsonPropertyName("tool_result_chars_per_item")]
+    public int? ToolResultCharsPerItem { get; set; }
+
+    /// <summary>
+    /// Gets or sets the total tool-result excerpt cap.
+    /// </summary>
+    [JsonPropertyName("tool_result_chars_total")]
+    public int? ToolResultCharsTotal { get; set; }
+
+    /// <summary>
+    /// Gets or sets the reasoning excerpt cap per item.
+    /// </summary>
+    [JsonPropertyName("reasoning_chars_per_item")]
+    public int? ReasoningCharsPerItem { get; set; }
+
+    /// <summary>
+    /// Gets or sets the total reasoning excerpt cap.
+    /// </summary>
+    [JsonPropertyName("reasoning_chars_total")]
+    public int? ReasoningCharsTotal { get; set; }
+
+    /// <summary>
+    /// Gets or sets the reasoning retention mode.
+    /// </summary>
+    [JsonPropertyName("reasoning_mode")]
+    public string? ReasoningMode { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum recursive chunk passes.
+    /// </summary>
+    [JsonPropertyName("max_chunk_passes")]
+    public int? MaxChunkPasses { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether oversized latest anchors may be reduced.
+    /// </summary>
+    [JsonPropertyName("allow_oversized_anchor_reduction")]
+    public bool? AllowOversizedAnchorReduction { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether message trimming should favor recency.
+    /// </summary>
+    [JsonPropertyName("prefer_recent_messages")]
+    public bool? PreferRecentMessages { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether tool-result trimming should favor recency.
+    /// </summary>
+    [JsonPropertyName("prefer_recent_tool_outputs")]
+    public bool? PreferRecentToolOutputs { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether messages should be dropped only after the summary-input budget is exceeded.
+    /// </summary>
+    [JsonPropertyName("drop_messages_only_when_summary_input_exceeds_budget")]
+    public bool? DropMessagesOnlyWhenSummaryInputExceedsBudget { get; set; }
 }
 
 /// <summary>

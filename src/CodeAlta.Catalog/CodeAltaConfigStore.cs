@@ -17,6 +17,21 @@ public sealed class CodeAltaConfigStore
         ReservedOverheadTokens = 2048,
         KeepLastUserMessage = true,
         AllowSplitTurn = true,
+        TargetContextRatioIdeal = 0.03,
+        TargetContextRatioMax = 0.10,
+        RecentSuffixTargetTokens = 20_000,
+        SummaryOutputTokens = 1_024,
+        SummaryInputTokens = 24_000,
+        ToolResultCharsPerItem = 1_200,
+        ToolResultCharsTotal = 6_000,
+        ReasoningCharsPerItem = 600,
+        ReasoningCharsTotal = 3_000,
+        ReasoningMode = "adaptive",
+        MaxChunkPasses = 4,
+        AllowOversizedAnchorReduction = true,
+        PreferRecentMessages = true,
+        PreferRecentToolOutputs = true,
+        DropMessagesOnlyWhenSummaryInputExceedsBudget = true,
     };
 
     private readonly CatalogOptions _options;
@@ -726,6 +741,21 @@ public sealed class CodeAltaConfigStore
                 ReservedOverheadTokens = compaction.ReservedOverheadTokens,
                 KeepLastUserMessage = compaction.KeepLastUserMessage,
                 AllowSplitTurn = compaction.AllowSplitTurn,
+                TargetContextRatioIdeal = compaction.TargetContextRatioIdeal,
+                TargetContextRatioMax = compaction.TargetContextRatioMax,
+                RecentSuffixTargetTokens = compaction.RecentSuffixTargetTokens,
+                SummaryOutputTokens = compaction.SummaryOutputTokens,
+                SummaryInputTokens = compaction.SummaryInputTokens,
+                ToolResultCharsPerItem = compaction.ToolResultCharsPerItem,
+                ToolResultCharsTotal = compaction.ToolResultCharsTotal,
+                ReasoningCharsPerItem = compaction.ReasoningCharsPerItem,
+                ReasoningCharsTotal = compaction.ReasoningCharsTotal,
+                ReasoningMode = compaction.ReasoningMode,
+                MaxChunkPasses = compaction.MaxChunkPasses,
+                AllowOversizedAnchorReduction = compaction.AllowOversizedAnchorReduction,
+                PreferRecentMessages = compaction.PreferRecentMessages,
+                PreferRecentToolOutputs = compaction.PreferRecentToolOutputs,
+                DropMessagesOnlyWhenSummaryInputExceedsBudget = compaction.DropMessagesOnlyWhenSummaryInputExceedsBudget,
             };
     }
 
@@ -771,6 +801,21 @@ public sealed class CodeAltaConfigStore
             merged.ReservedOverheadTokens = normalized.ReservedOverheadTokens ?? merged.ReservedOverheadTokens;
             merged.KeepLastUserMessage = normalized.KeepLastUserMessage ?? merged.KeepLastUserMessage;
             merged.AllowSplitTurn = normalized.AllowSplitTurn ?? merged.AllowSplitTurn;
+            merged.TargetContextRatioIdeal = normalized.TargetContextRatioIdeal ?? merged.TargetContextRatioIdeal;
+            merged.TargetContextRatioMax = normalized.TargetContextRatioMax ?? merged.TargetContextRatioMax;
+            merged.RecentSuffixTargetTokens = normalized.RecentSuffixTargetTokens ?? merged.RecentSuffixTargetTokens;
+            merged.SummaryOutputTokens = normalized.SummaryOutputTokens ?? merged.SummaryOutputTokens;
+            merged.SummaryInputTokens = normalized.SummaryInputTokens ?? merged.SummaryInputTokens;
+            merged.ToolResultCharsPerItem = normalized.ToolResultCharsPerItem ?? merged.ToolResultCharsPerItem;
+            merged.ToolResultCharsTotal = normalized.ToolResultCharsTotal ?? merged.ToolResultCharsTotal;
+            merged.ReasoningCharsPerItem = normalized.ReasoningCharsPerItem ?? merged.ReasoningCharsPerItem;
+            merged.ReasoningCharsTotal = normalized.ReasoningCharsTotal ?? merged.ReasoningCharsTotal;
+            merged.ReasoningMode = NormalizeCompactionReasoningMode(normalized.ReasoningMode) ?? merged.ReasoningMode;
+            merged.MaxChunkPasses = normalized.MaxChunkPasses ?? merged.MaxChunkPasses;
+            merged.AllowOversizedAnchorReduction = normalized.AllowOversizedAnchorReduction ?? merged.AllowOversizedAnchorReduction;
+            merged.PreferRecentMessages = normalized.PreferRecentMessages ?? merged.PreferRecentMessages;
+            merged.PreferRecentToolOutputs = normalized.PreferRecentToolOutputs ?? merged.PreferRecentToolOutputs;
+            merged.DropMessagesOnlyWhenSummaryInputExceedsBudget = normalized.DropMessagesOnlyWhenSummaryInputExceedsBudget ?? merged.DropMessagesOnlyWhenSummaryInputExceedsBudget;
         }
 
         merged.Enabled ??= true;
@@ -780,6 +825,21 @@ public sealed class CodeAltaConfigStore
         merged.ReservedOverheadTokens ??= 2048;
         merged.KeepLastUserMessage ??= true;
         merged.AllowSplitTurn ??= true;
+        merged.TargetContextRatioIdeal ??= 0.03;
+        merged.TargetContextRatioMax ??= 0.10;
+        merged.RecentSuffixTargetTokens ??= 20_000;
+        merged.SummaryOutputTokens ??= 1_024;
+        merged.SummaryInputTokens ??= 24_000;
+        merged.ToolResultCharsPerItem ??= 1_200;
+        merged.ToolResultCharsTotal ??= 6_000;
+        merged.ReasoningCharsPerItem ??= 600;
+        merged.ReasoningCharsTotal ??= 3_000;
+        merged.ReasoningMode = NormalizeCompactionReasoningMode(merged.ReasoningMode) ?? "adaptive";
+        merged.MaxChunkPasses ??= 4;
+        merged.AllowOversizedAnchorReduction ??= true;
+        merged.PreferRecentMessages ??= true;
+        merged.PreferRecentToolOutputs ??= true;
+        merged.DropMessagesOnlyWhenSummaryInputExceedsBudget ??= true;
 
         ValidateCompaction(merged);
         return merged;
@@ -813,5 +873,74 @@ public sealed class CodeAltaConfigStore
         {
             throw new InvalidOperationException("raw_api compaction reserved_overhead_tokens must be >= 0.");
         }
+
+        if (compaction.TargetContextRatioIdeal is not > 0 or > 1)
+        {
+            throw new InvalidOperationException("raw_api compaction target_context_ratio_ideal must be > 0 and <= 1.");
+        }
+
+        if (compaction.TargetContextRatioMax is not > 0 or > 1)
+        {
+            throw new InvalidOperationException("raw_api compaction target_context_ratio_max must be > 0 and <= 1.");
+        }
+
+        if (compaction.TargetContextRatioIdeal > compaction.TargetContextRatioMax)
+        {
+            throw new InvalidOperationException("raw_api compaction target_context_ratio_ideal must be <= target_context_ratio_max.");
+        }
+
+        if (compaction.RecentSuffixTargetTokens is not > 0)
+        {
+            throw new InvalidOperationException("raw_api compaction recent_suffix_target_tokens must be > 0.");
+        }
+
+        if (compaction.SummaryOutputTokens is not > 0)
+        {
+            throw new InvalidOperationException("raw_api compaction summary_output_tokens must be > 0.");
+        }
+
+        if (compaction.SummaryInputTokens is not > 0)
+        {
+            throw new InvalidOperationException("raw_api compaction summary_input_tokens must be > 0.");
+        }
+
+        if (compaction.ToolResultCharsPerItem is < 0)
+        {
+            throw new InvalidOperationException("raw_api compaction tool_result_chars_per_item must be >= 0.");
+        }
+
+        if (compaction.ToolResultCharsTotal is < 0)
+        {
+            throw new InvalidOperationException("raw_api compaction tool_result_chars_total must be >= 0.");
+        }
+
+        if (compaction.ReasoningCharsPerItem is < 0)
+        {
+            throw new InvalidOperationException("raw_api compaction reasoning_chars_per_item must be >= 0.");
+        }
+
+        if (compaction.ReasoningCharsTotal is < 0)
+        {
+            throw new InvalidOperationException("raw_api compaction reasoning_chars_total must be >= 0.");
+        }
+
+        if (compaction.MaxChunkPasses is not > 0)
+        {
+            throw new InvalidOperationException("raw_api compaction max_chunk_passes must be > 0.");
+        }
+
+        if (NormalizeCompactionReasoningMode(compaction.ReasoningMode) is null)
+        {
+            throw new InvalidOperationException("raw_api compaction reasoning_mode must be one of: none, adaptive, summary_only.");
+        }
     }
+
+    private static string? NormalizeCompactionReasoningMode(string? value)
+        => value?.Trim().ToLowerInvariant() switch
+        {
+            "none" => "none",
+            "adaptive" => "adaptive",
+            "summary_only" => "summary_only",
+            _ => null,
+        };
 }
