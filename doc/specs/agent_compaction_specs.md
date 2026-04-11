@@ -1,7 +1,7 @@
 # Agent Compaction Specification
 
 Status: **Draft**  
-Last updated: **2026-04-09**
+Last updated: **2026-04-11**
 
 Primary references:
 - `src/CodeAlta.Agent/LocalRuntime/`
@@ -11,86 +11,129 @@ Primary references:
 - `src/CodeAlta.Catalog/`
 - `doc/specs/agent_local_specs.md`
 
+Inspirational references:
+- `C:\code\pi-mono\packages\coding-agent\docs\compaction.md`
+- `C:\code\pi-mono\packages\coding-agent\src\core\compaction\compaction.ts`
+- `C:\code\pi-mono\packages\coding-agent\src\core\compaction\utils.ts`
+- `C:\code\codex\codex-rs\core\src\compact.rs`
+- `C:\code\codex\codex-rs\core\templates\compact\prompt.md`
+
 ## 1. Goal
 
-Define a provider-agnostic compaction system for local raw-API agents used by:
+Define a **local, provider-agnostic, high-compression** compaction system for raw-API agents used by:
 
-- OpenAI-compatible backends
+- OpenAI-compatible chat/responses backends
 - Anthropic Messages backends
 - Google GenAI backends
 
-The system must be:
+The system must:
 
-- simple enough to implement and maintain
-- strong enough to keep long coding sessions usable
-- configurable globally with per-provider overrides
-- internally factored so future plugins can customize or replace compaction behavior
+- preserve continuity for long coding sessions
+- aggressively discard low-value verbose history
+- avoid depending on provider-native compaction APIs
+- use a normal chat/generation API for summary generation
+- remain configurable globally with per-provider overrides
 
-## 2. Problem
+## 2. Problem statement
 
-The local runtime owns conversation replay and prompt construction. That means context growth is also a local-runtime responsibility.
+The local runtime owns prompt construction, so it also owns context growth.
 
-Today the local runtime only has a minimal manual snapshot mechanism:
+The first implementation solved important structural problems, but it is still not compact enough for large coding sessions. In practice, long sessions are often dominated by:
 
-- it is not provider-budget aware
-- it is not automatically triggered
-- it collapses the whole conversation into one synthetic message
-- it does not preserve a recent working set intelligently
-- it does not treat the latest user request as a protected anchor
-- it does not maintain a structured iterative checkpoint
+- repeated tool calls
+- large tool outputs
+- verbose reasoning
+- long file reads
+- oversized single-turn histories
 
-That is useful as a placeholder, but not sufficient for long-running coding sessions.
+If those are serialized too literally, the checkpoint can remain **far too large**. A compaction result that still leaves the session near **50%** of its previous footprint is often a failure for this use case. For coding agents, the desired result is usually much smaller: often in the **1%–6%** range, and only approaching **10%** when a very large retained recent suffix must remain verbatim.
 
 ## 3. Non-goals
 
-This spec does **not** require:
+This specification does **not** require:
 
-- provider-native server-side truncation or thread compaction APIs
+- provider-native server-side truncation or thread-compaction APIs
 - a perfect tokenizer for every provider in v1
-- multi-summary graph structures
-- full semantic reconstruction of every tool output
-- compaction during an active tool execution
+- exact semantic preservation of every tool output line
+- compaction while tools are actively executing
+- a public plugin API in the first implementation
 
-CodeAlta should keep local state authoritative and use application-managed compaction.
+CodeAlta should keep local state authoritative and treat compaction as an application-managed history reduction problem.
 
 ## 4. Core principles
 
-1. **Local and provider-agnostic first**  
-   Compaction must work even when the provider has no native memory/thread compaction feature.
+1. **Compact for continuation, not for archival**  
+   The checkpoint is not a transcript. It is a continuation handoff.
 
-2. **Protect the current objective**  
-   The latest user-authored prompt must stay verbatim in active context whenever possible.
+2. **Discard aggressively, preserve deliberately**  
+   Low-value bulk data must be omitted by default. Retention should be earned by relevance.
 
-3. **Preserve recent working state**  
-   Keep a recent suffix unsummarized, but allow split-turn compaction when a single turn becomes too large.
+3. **Protect the current objective**  
+   The latest user-authored request should remain verbatim whenever it is physically possible.
 
-4. **Use structured summaries, not loose prose**  
-   Checkpoints should preserve goals, decisions, progress, next steps, important files, and blockers.
+4. **Prefer structured state over conversational prose**  
+   Goals, decisions, blockers, next steps, changed files, and critical errors matter more than storytelling.
 
-5. **Do not elevate history into policy**  
-   A compaction checkpoint is context, not a system instruction. It must not be merged into the system/developer prompt.
+5. **Do not treat history as policy**  
+   Compacted history is context, not a new system or developer instruction.
 
-6. **Prefer reported usage over guesswork**  
-   Provider-reported usage is the best source when available. Local estimation is a fallback.
+6. **Canonical content only**  
+   Streaming deltas are never compaction input.
 
-7. **Leave room for the next response**  
-   Capacity decisions must consider prompt tokens, reserved output tokens, and request overhead together.
+7. **Budget the summary itself**  
+   A compaction pass that produces a verbose summary has failed even if it is “accurate”.
 
-8. **Be pluggable, but not framework-heavy**  
-   The runtime should be internally staged so future plugins can hook or replace compaction, without requiring a large plugin surface in v1.
+8. **Prefer recency when tradeoffs are required**  
+   When history must be reduced, newer messages and newer high-signal tool results should be favored over older ones.
+
+9. **Do not drop messages unnecessarily**  
+   If canonical non-delta history fits within the summarizer input budget, it should be summarized as a whole rather than pre-trimmed.
+
+10. **Use ordinary model calls, not remote compaction endpoints**  
+   CodeAlta should use the normal provider chat/generation surface for summarization, with explicit output limits.
 
 ## 5. Terminology
 
-- **Active context**: the exact message list sent to the provider for the next turn.
-- **Checkpoint**: the synthetic message that represents compacted history.
-- **Anchor message**: the latest user-authored message that should be kept verbatim.
-- **Recent suffix**: the newest kept verbatim messages after the compacted region.
-- **Split-turn compaction**: compacting part of a turn while keeping its later suffix verbatim.
-- **Usable prompt budget**: the maximum safe prompt size after reserving output and framing headroom.
+- **Active context**: the exact message list sent for the next turn.
+- **Checkpoint**: the synthetic message representing compacted history.
+- **Anchor message**: the latest user-authored message that should stay verbatim when possible.
+- **Recent suffix**: the contiguous newest messages kept verbatim after the compacted region.
+- **Split-turn compaction**: summarizing the earlier part of a single large turn while keeping its later suffix verbatim.
+- **Oversized item reduction**: summarizing part of a single message or attachment because the item itself is too large to fit.
+- **Usable prompt budget**: safe prompt capacity after reserving output and framing overhead.
+- **Compression ratio**: `postCompactionPromptTokens / preCompactionPromptTokens`.
 
-## 6. Required behavior
+## 6. Required outcomes
 
-### 6.1 Trigger modes
+### 6.1 Compression target
+
+Compaction should target a **post-compaction total active-context ratio** in this range:
+
+- **ideal**: `1% - 3%`
+- **normal acceptable**: `3% - 6%`
+- **upper bound target**: `10%`
+
+Interpretation:
+
+- The total active context after compaction should usually be tiny compared with the pre-compaction context.
+- The upper end of the range is reserved for sessions where the retained suffix itself is expensive.
+- Exceeding `10%` should be treated as an exceptional fallback, not a normal success case.
+
+This ratio is a **planning and validation target**, not a guarantee. If the protected suffix alone prevents it, the runtime may exceed it, but only after exhausting stricter fallback options.
+
+All target numbers in this section must be configurable. The defaults should be opinionated, but deployments must be able to tune them globally and per provider.
+
+### 6.2 Compaction success criteria
+
+A compaction pass is successful only if all of the following are true:
+
+1. the rebuilt prompt fits all known provider limits
+2. the checkpoint is materially smaller than the summarized region
+3. the latest task remains understandable
+4. critical unresolved context is preserved
+5. the summary does not contain large low-value copied output
+
+## 7. Trigger modes
 
 The runtime must support:
 
@@ -99,25 +142,37 @@ The runtime must support:
 - **post-response threshold compaction**
 - **overflow recovery compaction**
 
-### 6.2 High-level flow
+### 7.1 Threshold compaction preservation rule
+
+When compaction is triggered by threshold, the runtime should assume that it will **usually** be able to fit the entire canonical conversation history, excluding transient deltas, into the summarizer input request.
+
+Implications:
+
+- threshold compaction should first attempt to summarize the full canonical non-delta history region selected by the planner
+- it should not eagerly discard older messages merely because compaction was triggered
+- message dropping should begin only if the summarizer input itself does not fit the configured summary-input budget
+- once reduction is necessary, recency bias should apply
+
+## 8. High-level flow
 
 1. Resolve model capacity.
-2. Determine current token usage from reported usage or local estimation.
-3. If compaction is needed, prepare a compaction plan.
-4. Summarize the compacted region with the current provider/model by default.
-5. Persist a compaction checkpoint event.
-6. Rebuild active context as:
-   - system/developer instructions
-   - compaction checkpoint message, if any
-   - kept verbatim messages
-7. Re-estimate post-compaction size.
-8. If compaction was triggered by overflow, retry at most once.
+2. Determine current prompt usage from provider usage or local estimation.
+3. Decide whether compaction is needed.
+4. Canonicalize history and discard non-canonical deltas.
+5. Build a compaction plan.
+6. Serialize a **budgeted** summarization input.
+7. If the summarization input is too large, recursively chunk and summarize it.
+8. Generate a checkpoint using a normal provider chat/generation call.
+9. Rebuild active context from checkpoint + retained suffix.
+10. Validate exact post-compaction fit.
+11. Persist the checkpoint and compaction metadata.
+12. Retry the original turn at most once when recovering from overflow.
 
-## 7. Capacity model
+## 9. Capacity model
 
-### 7.1 Limits to resolve
+### 9.1 Limits to resolve
 
-The runtime should resolve, when available:
+Resolve, when available:
 
 - `contextWindow`
 - `inputTokenLimit`
@@ -127,16 +182,10 @@ Resolution order:
 
 1. explicit config/model override
 2. provider-reported model metadata
-3. enriched catalog metadata
+3. catalog metadata
 4. unknown
 
-If limits are unknown:
-
-- automatic threshold compaction should be disabled by default
-- overflow recovery compaction may still run if the provider clearly signaled context overflow
-- manual compaction must still be available
-
-### 7.2 Safe request formula
+### 9.2 Safe request formula
 
 The next request is safe only if:
 
@@ -151,9 +200,7 @@ promptTokens <= inputTokenLimit
 reservedOutputTokens <= outputTokenLimit
 ```
 
-The runtime must enforce all known constraints, not only `promptTokens < contextWindow`.
-
-### 7.3 Usable prompt budget
+### 9.3 Usable prompt budget
 
 ```text
 usablePromptBudget =
@@ -163,139 +210,337 @@ usablePromptBudget =
   )
 ```
 
-If `usablePromptBudget <= 0`, the session configuration is invalid for that model and compaction cannot fix it.
+If `usablePromptBudget <= 0`, compaction cannot fix the request.
 
-### 7.4 Default thresholds
+### 9.4 Unknown-limit behavior
+
+If limits are unknown:
+
+- pre-send auto-compaction should be disabled by default
+- post-response auto-compaction should be disabled by default
+- overflow recovery may still run if the provider clearly reports context overflow
+- manual compaction remains available
+
+## 10. Budget policy
+
+### 10.1 Separate budgets
+
+The runtime must treat these budgets separately:
+
+1. **request fit budget**: what the next real model request may safely send
+2. **post-compaction target budget**: how small the rebuilt active context should become
+3. **summary request input budget**: how large the summarizer input is allowed to be
+4. **summary response budget**: how many output tokens the summarizer may emit
+
+These must not be conflated.
+
+The post-compaction target numbers and summary-input limits must all be configurable.
+
+### 10.2 Recommended defaults
 
 Recommended defaults:
 
-- `enabled = true`
 - `trigger_threshold = 0.80`
-- `target_threshold = 0.50`
 - `reserved_output_tokens = 4096`
 - `reserved_overhead_tokens = 2048`
+- `target_context_ratio_ideal = 0.03`
+- `target_context_ratio_max = 0.10`
+- `recent_suffix_target_tokens = 16000-24000` with `20000` as the default center point
+- `summary_input_token_limit = 20000-24000` when provider capacity allows it
+- `summary_output_token_limit = 768-1536` depending on model size and split-turn complexity
 - `keep_last_user_message = true`
 - `allow_split_turn = true`
 
-Interpretation:
+These are defaults only. Deployments must be able to override them globally and per provider.
 
-- auto-compaction starts when estimated prompt usage reaches 80% of the usable prompt budget
-- after compaction, the planner should aim to reduce the prompt to about 50% of the usable prompt budget
+Rationale:
 
-Per-provider overrides must be supported.
+- pi-mono's defaults keep roughly `20000` recent tokens and reserve `16384` tokens for the summarizer/response path
+- CodeAlta should not copy pi-mono's looser summary behavior directly, but it should take inspiration from that scale so threshold compaction does not feel artificially starved
+- the original v2 example values (`summary_output_tokens = 512`, `summary_input_tokens = 12000`) are likely too conservative as general defaults for long coding sessions
+- CodeAlta should instead pair a **larger summarizer input budget** with **stronger omission/global-cap logic**, so it can read enough context without reproducing transcript-like checkpoints
 
-## 8. Trigger semantics
+### 10.3 Summary output bound
 
-### 8.1 Manual compaction
+The summarizer call must use an explicit provider-specific output limit:
 
-Manual compaction:
+- OpenAI-compatible: `max_output_tokens`, `max_completion_tokens`, or equivalent abstraction
+- Anthropic: `max_tokens`
+- Google GenAI: `maxOutputTokens`
 
-- is always user-initiated
-- may optionally accept extra focus instructions for the summary
-- should run only from an idle session in the initial implementation
+The compaction system must never rely on an unconstrained summarizer response.
 
-### 8.2 Pre-send threshold compaction
+## 11. Message relevance policy
 
-Before sending a new provider request, the runtime should estimate the prompt size of the pending active context.
+Compaction quality depends more on **what is omitted** than on what is copied.
 
-If:
+However, omission must be **budget-driven**, not arbitrary. If messages fit within the configured compaction-input budget, they should remain eligible for summarization instead of being dropped pre-emptively.
+
+### 11.1 Priority classes
+
+#### Must preserve
+
+- current user objective
+- latest explicit user instructions and constraints
+- unresolved blockers
+- important errors
+- exact file paths and identifiers
+- decisions that affect the next step
+- changed files and high-signal read files
+
+#### Usually summarize
+
+- earlier user prompts
+- assistant explanations
+- assistant plans
+- tool call intent
+- prior partial progress
+
+#### Usually omit
+
+- repeated tool output
+- raw file contents that were only read for inspection
+- large shell logs
+- repeated grep/list_dir/read_file output
+- verbose reasoning text
+- any streaming deltas
+- raw base64 or binary payloads
+
+When omission is required, the drop order should be biased toward **older** low-value material first. Recent high-signal material should be preserved longer than old exploratory context.
+
+### 11.2 Reasoning policy
+
+Reasoning may be useful, but it is frequently too expensive.
+
+Rules:
+
+- never include reasoning deltas
+- never include provider-private/protected reasoning payloads
+- prefer short reasoning summaries over raw reasoning text
+- include reasoning only when it contains unique decisions not present elsewhere
+- apply both a **per-item cap** and a **global reasoning budget**
+- when reasoning pressure is high, drop reasoning entirely before sacrificing higher-signal state
+
+Default policy should be **adaptive**, not “always include reasoning”.
+
+### 11.3 Tool output policy
+
+Tool outputs are the most common source of pathological compaction size.
+
+Rules:
+
+- do **not** include raw tool output by default
+- extract only the small subset that is continuation-critical:
+  - key error lines
+  - diff summaries
+  - explicit test/build result
+  - exact values the assistant/user will need next
+- replace bulky outputs with descriptors such as:
+  - tool name
+  - intent
+  - touched files
+  - approximate size
+  - whether it succeeded or failed
+- repeated tool activity should be collapsed into aggregate statements
+
+When tool-output tradeoffs are required:
+
+- recent tool outputs should be favored over older tool outputs
+- recent modified-file context should be favored over old exploratory file reads
+- recent failures and test/build outcomes should be favored over old successful noise
+
+Example:
 
 ```text
-estimatedPromptTokens >= usablePromptBudget * trigger_threshold
+Prefer:
+- `grep` searched `src/CodeAlta.Agent/LocalRuntime/` for `compaction`
+- `shell_command` produced a large build log; key error: `CS1591` in `Foo.cs`
+
+Do not prefer:
+- thousands of lines of raw grep/build output
 ```
 
-the runtime should compact before sending the request.
+## 12. Canonicalization and preprocessing
 
-This avoids spending a full failed request just to discover that context is too large.
+### 12.1 Canonical input only
 
-### 8.3 Post-response threshold compaction
+Compaction input must be built from canonical finalized content:
 
-After a successful turn, if the reported or estimated current window is above threshold, the runtime may compact immediately so the next user turn starts from a cleaner state.
+- user messages
+- finalized assistant text
+- finalized reasoning or reasoning summary when retained
+- finalized tool call metadata
+- finalized tool results
+- attachment descriptors
+- previous checkpoint state
 
-### 8.4 Overflow recovery compaction
+Never compact from transient UI deltas.
 
-If the provider returns a context-overflow-style error:
+### 12.2 Event normalization
 
-1. remove the overflow error assistant message from active replay context
-2. compact
-3. rebuild context
-4. retry once
+Before planning or summarizing, the runtime should normalize history into compactable units:
 
-If the retry still fails with overflow, surface the failure and stop.
+- user turn boundaries
+- assistant message + attached tool calls
+- tool results bound to their originating tool calls
+- synthetic checkpoint messages
+- attachment descriptors
 
-## 9. Planning the compacted region
+The normalized representation should carry stable recency ordering so later reduction passes can preferentially preserve newer material.
 
-### 9.1 Protected regions
+### 12.3 Low-value collapse
+
+The serializer must support collapsing repeated low-value activity, for example:
+
+- multiple `read_file` calls into the same file
+- repeated `grep` searches in the same directory
+- repeated shell commands whose only important output is a final failure line
+- repeated reasoning updates that converge to the same plan
+
+## 13. Planning the compacted region
+
+### 13.1 Protected regions
 
 The planner must always keep:
 
 1. system/developer instructions
-2. the latest user-authored message, when one exists
-3. the newest suffix that fits the post-compaction target
+2. the latest user-authored message when possible
+3. a contiguous newest suffix
 
-The latest user message is a hard anchor because it is usually the clearest statement of the current task.
+The retained suffix must be contiguous.
 
-The kept suffix must be **contiguous**. The planner must not skip a newer message while keeping an older one, because that produces a replay context with holes that is hard for the next model call to interpret correctly.
+When additional trimming is necessary inside the summarized region, newer summarized units should be favored over older summarized units unless a specific older item is uniquely critical.
 
-### 9.2 Message classes
+### 13.2 Split-turn compaction
 
-The planner should understand at least:
+If a single turn is too large:
 
-- user messages
-- assistant text/reasoning messages
-- tool call metadata
-- tool result messages
-- attachment/image placeholders
-- future checkpoint messages
+- keep the latest user message verbatim when possible
+- summarize the earlier assistant/tool portion of the turn
+- keep the newest suffix verbatim
 
-Tool results should never become dangling context. A cut point must not separate a tool result from the assistant turn it belongs to.
+Split-turn compaction must preserve tool-call/tool-result adjacency.
 
-### 9.3 Split-turn compaction
-
-If the suffix after the latest user prompt is itself too large:
-
-- keep the latest user prompt verbatim
-- summarize the early assistant/tool portion of that turn
-- keep the most recent suffix verbatim
-
-This is required for long coding turns where the assistant produced many tool calls and outputs after a single user request.
-
-Rules:
-
-- split-turn compaction is allowed only when `allow_split_turn = true`
-- if `allow_split_turn = false`, the planner must keep whole-turn boundaries and fall back by reducing the kept suffix or failing clearly
-- when split-turn compaction is used, the retained suffix must still be contiguous
-- the planner must preserve tool-result adjacency inside the split region just as it does for normal turn boundaries
-
-### 9.4 Aggressive fallback
+### 13.3 Aggressive fallback order
 
 If a normal plan still does not fit:
 
-1. reduce the kept contiguous suffix while preserving the latest user anchor when configured
-2. if allowed and needed, switch to split-turn compaction for the latest oversized turn
-3. keep only the latest user anchor plus checkpoint
-4. if it still cannot fit, fail with a clear error
+1. reduce the retained suffix while preserving the latest user anchor
+2. drop adaptive reasoning retention
+3. drop older non-critical summarized material before newer summarized material
+4. drop older non-critical tool-output extracts before newer ones
+5. drop old exploratory file-read context before newer changed-file context
+6. switch to split-turn compaction
+7. keep only checkpoint + latest user anchor
+8. if the latest user anchor itself is too large, use oversized-item reduction
+9. if it still cannot fit, fail clearly
 
-The runtime must not loop compaction indefinitely.
+The runtime must never loop indefinitely.
 
-Recommended bound: a single compaction attempt may tighten and retry planning only a small fixed number of times (for example 2-3 plans total) before failing.
+## 14. Oversized-item reduction
 
-### 9.5 Post-compaction fit validation
+This section is mandatory for v2.
 
-After summary generation, the runtime must rebuild the exact candidate active context and validate it against the resolved limits.
+### 14.1 Oversized latest user message
 
-If the candidate context still exceeds any known safe limit:
+If the latest user message by itself cannot fit in the usable prompt budget:
 
-- the runtime must not silently accept the oversized result
-- it should tighten the plan using the aggressive fallback rules
-- it may regenerate the checkpoint with the stricter plan
-- if the stricter plan still cannot fit, it must fail with a clear error
+- the runtime must not fail immediately
+- it must create an **anchor synopsis** of that one message
+- the synopsis must preserve:
+  - exact task statement when possible
+  - explicit numbered requirements
+  - file paths
+  - code identifiers
+  - exact literals/errors the user supplied
+- the canonical event log must still retain the original message unchanged
 
-Post-compaction validation is mandatory because the generated summary length can differ materially from the planner's estimate.
+### 14.2 Oversized attachments or file selections
 
-## 10. Checkpoint content
+If a user input includes a file, selection, pasted log, or attachment that is itself too large:
 
-The default checkpoint summary should be structured and concise.
+- prefer preserving the reference to the file/attachment
+- summarize the content in chunks
+- record that the input was summarized because it exceeded context capacity
+
+### 14.3 Recursive chunked summarization
+
+If the summarization request input is too large for one model call:
+
+1. split the material into chunks by semantic boundaries when possible
+2. summarize each chunk into a short structured partial summary
+3. merge the partial summaries into the final checkpoint
+
+This is required for:
+
+- very large sessions
+- very large single turns
+- very large initial prompts
+- summarization of a previous checkpoint plus too much new history
+
+## 15. Summarization input preparation
+
+The summarizer must not receive old conversation history as a normal continuation.
+
+It should instead receive explicit tagged content such as:
+
+- `<compaction-request>`
+- `<conversation>`
+- `<previous-checkpoint>`
+- `<retained-suffix>`
+- `<retained-prefix>`
+- `<oversized-anchor-synopsis>`
+
+Messages should be serialized in labeled plain text such as:
+
+- `[User]`
+- `[Assistant]`
+- `[Assistant reasoning summary]`
+- `[Assistant tool calls]`
+- `[Tool result summary]`
+- `[Attachment]`
+
+## 16. Serializer budget rules
+
+The serializer must support both **per-item caps** and **global caps**.
+
+Serializer reduction should be **progressive**:
+
+1. start from the full canonical non-delta material selected for compaction
+2. keep everything if it fits the summary-input budget
+3. only then begin budget-driven omission and truncation
+4. apply recency bias when selecting what to keep
+
+### 16.1 Required caps
+
+At minimum:
+
+- tool-result text cap per item
+- tool-result total cap across the whole summary request
+- reasoning cap per item
+- reasoning total cap across the whole summary request
+- attachment/base64 exclusion
+- total serialized compaction-input cap
+
+Per-item caps alone are insufficient. Hundreds of individually truncated tool outputs can still create an enormous prompt.
+
+### 16.2 Priority-aware truncation
+
+When trimming is necessary, the serializer should discard in this order:
+
+1. deltas and transient content
+2. old raw tool outputs
+3. old verbose reasoning
+4. old repeated assistant prose
+5. older already-resolved conversation details
+6. newer low-value tool outputs
+7. newer low-value reasoning
+
+It should discard before it paraphrases more important state away.
+
+## 17. Checkpoint content
+
+The default checkpoint should be a terse structured handoff, not an essay.
 
 Recommended format:
 
@@ -315,617 +560,258 @@ Recommended format:
 
 Rules:
 
-- preserve exact file paths, identifiers, and important error text
-- record what changed, what remains, and what must not be forgotten
-- keep the summary optimized for continuation by another model call
+- preserve exact paths, identifiers, commands, and critical error text
+- record what changed and what remains
+- omit repeated narrative filler
+- prefer compact bullets
+- include only unresolved or continuation-relevant context
 
-### 10.1 Relevant files
+### 17.1 Relevant files
 
-The default implementation should track files from structured tool activity when available.
+The checkpoint should track at least:
 
-At minimum:
+- modified files
+- read files that are still relevant to the current task
 
-- files read
-- files modified
+Read files that were only exploratory and are no longer relevant should be droppable.
 
-This should be best-effort and metadata-driven. It should not depend on brittle parsing of shell output.
+### 17.2 Iterative update
 
-### 10.2 Iterative updates
+If a previous checkpoint exists:
 
-If a previous checkpoint already exists, the runtime should update it instead of summarizing from scratch.
+- update it rather than rewriting from scratch
+- preserve durable facts
+- remove resolved blockers
+- refresh next steps
+- compress old summary drift when it grows stale
 
-The update flow should:
+Iterative update must not cause monotonic summary bloat.
 
-- preserve prior durable context
-- add new progress and decisions
-- drop resolved blockers when appropriate
-- update next steps
+## 18. Checkpoint role
 
-This keeps checkpoint quality more stable across repeated compactions.
-
-### 10.3 Summary generation mode
-
-The default checkpoint summary must be generated by an **LLM summarizer call**.
-
-Requirements:
-
-- by default, use the current provider and current model so the summary is optimized for the same continuation environment
-- a future configuration option may allow a dedicated summarizer model, but that is not required for the first high-quality implementation
-- the LLM summarizer must be the normal path for manual, threshold, post-response, and overflow compaction
-- a local heuristic summary may exist only as an explicit non-default emergency fallback path; it must not silently replace the LLM summarizer for normal automatic compaction
-
-Failure handling:
-
-- if LLM summary generation fails, the runtime must leave the existing conversation state untouched
-- threshold or post-response compaction may abort cleanly and surface/log the failure
-- overflow recovery compaction should surface a clear failure for the original request if summary generation could not complete and recovery therefore could not proceed
-
-## 11. Checkpoint message role
-
-The active checkpoint must be inserted into the replayed conversation as a **synthetic user-context message**, not as a system message.
-
-Reason:
-
-- it is historical context
-- it must not outrank system/developer instructions
-- it should remain visible as replayable conversation state, not hidden policy
+The active checkpoint must be replayed as a synthetic **user-context message**, not as a system message.
 
 Recommended wrapper:
 
 ```text
-<codealta-compaction-checkpoint version="1">
+<codealta-compaction-checkpoint version="2">
 ...
 </codealta-compaction-checkpoint>
 ```
 
-## 12. Summarization input preparation
+The wrapper version should advance when checkpoint semantics materially change.
 
-The summarizer must not be given the old conversation as a normal chat continuation.
+## 19. Summary generation mode
 
-Instead, the runtime should serialize messages into labeled plain text such as:
+### 19.1 Required mode
 
-- `[User]`
-- `[Assistant]`
-- `[Assistant reasoning]`
-- `[Assistant tool calls]`
-- `[Tool result]`
-- `[Attachment]`
+The normal path must use an **LLM summarizer call through the ordinary provider chat/generation API**.
 
-This reduces the chance of the summarizer trying to continue the conversation.
+Requirements:
 
-### 12.1 Truncation rules
+- do not use provider-native remote compaction APIs
+- disable tools for the summarizer
+- use deterministic or low-variance settings where supported
+- bound output tokens
+- pass serialized/tagged input rather than replay history as chat
 
-Large tool outputs and attachments should be truncated before summarization.
+### 19.2 Model choice
 
-Recommended defaults:
+Default:
 
-- tool result text: 2000 characters per result
-- inline binary/base64: never include raw payload; emit a descriptor only
-- images: summarize as image/attachment references, not raw data
+- use the current provider
+- use the current model unless a configured summarizer model is explicitly selected later
 
-Truncation applies to the **summary request**, not to the stored canonical event log.
+Future flexibility:
 
-### 12.2 Canonical input only
+- a dedicated summarizer model may be allowed by configuration, but the baseline design must not depend on that
 
-Compaction input must be built from canonical finalized content, not from transient streaming deltas.
+### 19.3 Failure handling
 
-Rules:
+If summarization fails:
 
-- assistant/reasoning/tool-output delta events that are later superseded by a finalized content event must be ignored for compaction
-- if the runtime keeps transient deltas in memory for live UI streaming, they must still be excluded from compaction planning and summarization
-- when a backend only streams deltas, the runtime should first synthesize a finalized canonical content event, then compact from that canonical form
+- leave session state unchanged
+- fail cleanly for manual compaction
+- skip threshold/post-response compaction and log diagnostics
+- surface a clear error for overflow recovery if recovery cannot proceed
 
-### 12.3 Summary request construction
+No silent heuristic-only fallback should replace the normal LLM compaction path.
 
-The default LLM summarizer request should be built as a dedicated summarization interaction, not as a continuation of the main coding thread.
+## 20. Token accounting strategy
 
-Recommended shape:
+Priority order:
 
-- a summarization-specific system prompt that says to summarize rather than continue the conversation
-- one serialized conversation payload wrapped in explicit tags such as `<conversation>`
-- when a previous checkpoint exists, include it in separate tags such as `<previous-summary>`
-- when split-turn compaction is used, clearly identify the retained suffix and the summarized prefix in separate tagged sections or separate summarizer calls
+1. provider-reported current window usage
+2. provider-reported last-operation usage plus trailing local estimate
+3. model-specific tokenizer estimate
+4. conservative heuristic estimate
 
-Quality rules:
+The runtime should record the estimate source internally.
 
-- use deterministic or low-variance generation settings when the provider supports them
-- bound summary output length so the summarizer call itself does not consume an excessive fraction of the reserved compaction budget
-- preserve exact identifiers, paths, and critical error text even when the rest of the prose is concise
+### 20.1 What must be counted
 
-## 13. Token accounting strategy
+Count everything that is actually resent:
 
-### 13.1 Priority order
-
-1. **provider-reported window usage**
-2. **provider-reported last-operation usage plus local trailing estimate**
-3. **local tokenizer estimate**
-4. **conservative heuristic estimate**
-
-The runtime should record the confidence/source of the estimate internally.
-
-### 13.2 What must be counted
-
-Estimation should include:
-
-- system/developer instructions that are actually sent
+- system/developer instructions
+- checkpoint message
+- retained suffix
 - user text
 - assistant text
-- reasoning summaries/text when sent back to the model
+- retained reasoning content
 - tool call names and arguments
-- tool results
-- synthetic checkpoint messages
-- attachment/image placeholders
+- tool-result payload actually retained
+- attachment placeholders
 
-### 13.3 TiktokenSharp evaluation
+### 20.2 Do not trust stale usage blindly
 
-`TiktokenSharp` is a potentially useful optional estimator for OpenAI-compatible models, but it should **not** be a required baseline dependency for v1.
+Old usage snapshots must not be mistaken for current full-window truth after compaction or after additional local messages were added.
 
-Reasons:
-
-- it is OpenAI-encoding-centric, not universal across Anthropic and Google models
-- its README states that encoder files may be downloaded on first use
-- offline/local-runtime predictability is more important than marginal estimator precision in the baseline design
-
-Decision:
-
-- v1 should use provider usage first and conservative local estimation second
-- tokenizer support should be abstracted behind an internal estimator interface
-- an OpenAI-specific tokenizer implementation can be added later, potentially using `TiktokenSharp`
-
-## 14. Persistence model
+## 21. Persistence model
 
 The canonical event log remains `events.jsonl`.
 
-Compaction should be persisted as a dedicated raw event payload, for example:
+Compaction should persist a dedicated checkpoint event such as:
 
 - `local.compactionCheckpoint`
 
 The payload should include at least:
 
-- checkpoint schema version
-- trigger reason (`manual`, `threshold`, `overflow`)
+- schema version
+- trigger reason
 - summary text
-- first kept event offset or stable boundary marker
-- anchor user message identifier when present
-- estimated tokens before compaction
-- estimated tokens after compaction
+- first kept boundary marker
+- anchor identifier when present
+- pre-compaction tokens
+- post-compaction tokens
 - summarized message count
-- read-files list
-- modified-files list
+- read files
+- modified files
+- serializer statistics:
+  - omitted tool result count
+  - omitted reasoning count
+  - chunk count when recursive summarization was used
+  - compression ratio
 
-`state.json` should track the latest compaction cursor and the latest checkpoint event identifier.
+## 22. Validation
 
-`events.jsonl` should not durably store duplicate streaming delta events when the same content is later represented by a finalized canonical event.
+### 22.1 Post-compaction fit validation
 
-## 15. Rebuild model
+After generating the checkpoint, the runtime must rebuild the exact next prompt and validate it against resolved limits.
 
-Session replay after compaction should rebuild active context from:
+If it still does not fit:
 
-1. composed system/developer instructions
-2. latest checkpoint message, if any
-3. kept verbatim messages after the checkpoint boundary
+- tighten the plan
+- optionally regenerate a smaller checkpoint
+- or fail clearly
 
-Older compacted messages remain in the canonical event log for history/audit, but they no longer participate directly in active prompt construction.
+### 22.2 Checkpoint quality validation
 
-## 16. Extensibility model
+The runtime should reject or retry clearly bad checkpoints, for example:
 
-The internal implementation should be factored into four stages:
+- empty summary
+- summary dominated by raw copied tool output
+- summary that exceeds configured checkpoint caps
+- summary missing all critical sections
 
-1. **budgeting**
-2. **planning**
-3. **summary generation**
-4. **persistence/rebuild**
-
-That is enough for future plugins.
-
-The future plugin surface should allow:
-
-- cancel compaction
-- inspect the prepared plan
-- provide a replacement summary/checkpoint
-- augment metadata
-- observe the saved result
-
-The first implementation does **not** need a full public plugin API, but the code structure should preserve these seams.
-
-## 17. Configuration
+## 23. Configuration
 
 Use a global default block plus per-provider override blocks.
 
-Recommended TOML shape:
+Recommended normalized shape:
 
 ```toml
 [raw_api.compaction]
 enabled = true
 trigger_threshold = 0.80
-target_threshold = 0.50
 reserved_output_tokens = 4096
 reserved_overhead_tokens = 2048
 keep_last_user_message = true
 allow_split_turn = true
 
-[raw_api.openai.providers.openai.compaction]
-trigger_threshold = 0.82
-reserved_output_tokens = 4096
-
-[raw_api.anthropic.providers.anthropic.compaction]
-trigger_threshold = 0.80
-reserved_output_tokens = 8192
-
-[raw_api.google_genai.providers.google.compaction]
-trigger_threshold = 0.75
-reserved_output_tokens = 4096
+# New v2 controls
+target_context_ratio_ideal = 0.03
+target_context_ratio_max = 0.10
+recent_suffix_target_tokens = 20000
+summary_output_tokens = 1024
+summary_input_tokens = 24000
+tool_result_chars_per_item = 1200
+tool_result_chars_total = 6000
+reasoning_chars_per_item = 600
+reasoning_chars_total = 3000
+reasoning_mode = "adaptive" # none | adaptive | summary_only
+max_chunk_passes = 4
+allow_oversized_anchor_reduction = true
 ```
 
-Rules:
+Per-provider overrides remain supported.
 
-- provider settings override global defaults
-- unspecified provider values inherit global defaults
-- model-specific overrides are deferred unless a concrete need appears
+Notes:
 
-### 17.1 Config document changes
+- `recent_suffix_target_tokens` is the pi-mono-inspired “keep recent raw context” control and should guide how much verbatim recent context the planner tries to preserve
+- `summary_input_tokens` should usually be set high enough that threshold compaction can summarize the full canonical non-delta selected history when it fits
+- the larger defaults above do **not** mean serializer output should become verbose; global omission caps and recency-aware prioritization remain mandatory
 
-The configuration model should be extended in `CodeAlta.Catalog` as follows.
+Additional recommended policy flags:
 
-Add a reusable document type:
-
-```csharp
-public sealed class CodeAltaRawApiCompactionDocument
-{
-    public bool? Enabled { get; set; }
-    public double? TriggerThreshold { get; set; }
-    public double? TargetThreshold { get; set; }
-    public int? ReservedOutputTokens { get; set; }
-    public int? ReservedOverheadTokens { get; set; }
-    public bool? KeepLastUserMessage { get; set; }
-    public bool? AllowSplitTurn { get; set; }
-}
+```toml
+prefer_recent_messages = true
+prefer_recent_tool_outputs = true
+drop_messages_only_when_summary_input_exceeds_budget = true
 ```
 
-Add a global block to `CodeAltaRawApiSettingsDocument`:
+## 24. Edge cases that must be covered
 
-```csharp
-public CodeAltaRawApiCompactionDocument? Compaction { get; set; }
-```
-
-Add an optional provider override block to each provider document:
-
-- `CodeAltaOpenAIProviderDocument`
-- `CodeAltaAnthropicProviderDocument`
-- `CodeAltaGoogleGenAIProviderDocument`
-
-```csharp
-public CodeAltaRawApiCompactionDocument? Compaction { get; set; }
-```
-
-### 17.2 Config normalization rules
-
-`CodeAltaConfigStore` should normalize compaction settings using this precedence:
-
-1. hardcoded runtime defaults
-2. `[raw_api.compaction]`
-3. `[raw_api.<family>.providers.<provider>.compaction]`
-
-Validation rules:
-
-- `trigger_threshold` must be `> 0` and `<= 1`
-- `target_threshold` must be `> 0` and `< trigger_threshold`
-- reserved token values must be `>= 0`
-- `target_threshold` should default lower than `trigger_threshold`
-
-The normalized runtime object should be non-null and complete by the time it reaches the local runtime.
-
-## 18. Proposed C# type and interface changes
-
-### 18.1 Public API
-
-No large public API expansion is required for v1.
-
-Keep:
-
-- `IAgentSession.CompactAsync(...)`
-- `IAgentCompactionOutcomeProvider`
-- `AgentCompactionOutcome`
-
-Recommended small addition:
-
-```csharp
-public enum AgentCompactionTriggerKind
-{
-    Manual,
-    Threshold,
-    Overflow,
-}
-```
-
-`AgentCompactionOutcome` may optionally grow a `Trigger` field later, but this is not required for the first implementation.
-
-### 18.2 Local runtime internal types
-
-Add internal types under `src/CodeAlta.Agent/LocalRuntime/Compaction/`:
-
-```csharp
-internal sealed record LocalAgentCompactionSettings(
-    bool Enabled,
-    double TriggerThreshold,
-    double TargetThreshold,
-    int ReservedOutputTokens,
-    int ReservedOverheadTokens,
-    bool KeepLastUserMessage,
-    bool AllowSplitTurn);
-
-internal enum LocalAgentCompactionTrigger
-{
-    Manual,
-    Threshold,
-    Overflow,
-}
-
-internal sealed record LocalAgentTokenBudget(
-    long? ContextWindow,
-    long? InputTokenLimit,
-    long? OutputTokenLimit,
-    long UsablePromptBudget,
-    int ReservedOutputTokens,
-    int ReservedOverheadTokens);
-
-internal sealed record LocalAgentTokenEstimate(
-    long Tokens,
-    string Source,
-    bool IsEstimated);
-
-internal sealed record LocalAgentCompactionPreparation(
-    LocalAgentCompactionTrigger Trigger,
-    IReadOnlyList<LocalAgentConversationMessage> MessagesToSummarize,
-    IReadOnlyList<LocalAgentConversationMessage> TurnPrefixMessages,
-    IReadOnlyList<LocalAgentConversationMessage> MessagesToKeep,
-    string? AnchorContentId,
-    bool IsSplitTurn,
-    LocalAgentTokenEstimate TokensBefore,
-    string? PreviousSummary);
-
-internal sealed record LocalAgentCompactionResult(
-    string Summary,
-    string? AnchorContentId,
-    bool IsSplitTurn,
-    long TokensBefore,
-    long? TokensAfter,
-    int MessagesSummarized,
-    IReadOnlyList<string> ReadFiles,
-    IReadOnlyList<string> ModifiedFiles);
-```
-
-The exact names may vary, but the implementation should have explicit types for:
-
-- normalized settings
-- resolved budgets
-- token estimates
-- compaction preparation
-- compaction result
-
-### 18.3 Provider descriptor/runtime wiring
-
-Extend `LocalAgentProviderDescriptor` with a normalized compaction block:
-
-```csharp
-public LocalAgentCompactionSettings? Compaction { get; init; }
-```
-
-This keeps provider-specific compaction policy attached to the resolved provider identity.
-
-### 18.4 Session persistence types
-
-Extend `LocalAgentSessionState` with enough compaction metadata to support replay/debugging:
-
-```csharp
-public string? CompactionCheckpointEventId { get; init; }
-public DateTimeOffset? LastCompactedAt { get; init; }
-public string? LastCompactionTrigger { get; init; }
-public long? LastCompactionTokensBefore { get; init; }
-public long? LastCompactionTokensAfter { get; init; }
-```
-
-Keep the existing compaction cursor/offset concept, but make the state explicit enough for diagnostics and future plugin hooks.
-
-### 18.5 Canonical event persistence
-
-The runtime should distinguish:
-
-- **transient streamed events**
-- **durable canonical events**
-
-The simplest internal shape is:
-
-```csharp
-internal enum LocalAgentEventPersistenceMode
-{
-    TransientOnly,
-    DurableCanonical,
-}
-```
-
-or an equivalent filter/policy object.
-
-This does not need to be public.
-
-### 18.6 Turn failure classification
-
-Overflow recovery requires provider-aware failure classification.
-
-Add an internal provider/runtime seam such as:
-
-```csharp
-internal sealed record LocalAgentTurnFailure(
-    string Message,
-    bool IsContextOverflow);
-```
-
-and either:
-
-- a classifier delegate on `LocalAgentBackendProviderRegistration`, or
-- a typed exception/result contract from the turn executors
-
-The session layer must be able to distinguish:
-
-- context overflow
-- generic provider failure
-
-without brittle string matching in `LocalAgentSession`.
-
-## 19. Implementation map by file/class
-
-The implementation should be split as follows.
-
-### 19.1 Catalog/config
-
-- `src/CodeAlta.Catalog/CodeAltaRawApiSettingsDocument.cs`
-  - add global/provider compaction config documents
-- `src/CodeAlta.Catalog/CodeAltaConfigStore.cs`
-  - clone, validate, normalize, and merge compaction settings
-
-### 19.2 Local runtime models
-
-- `src/CodeAlta.Agent/LocalRuntime/LocalAgentProviderDescriptor.cs`
-  - attach normalized provider compaction settings
-- `src/CodeAlta.Agent/LocalRuntime/LocalAgentSessionFiles.cs`
-  - persist richer compaction state
-- `src/CodeAlta.Agent/LocalRuntime/LocalAgentTurnContracts.cs`
-  - add any failure classification/result details needed for overflow recovery
-
-### 19.3 New compaction subsystem
-
-Create:
-
-- `src/CodeAlta.Agent/LocalRuntime/Compaction/LocalAgentCompactionSettings.cs`
-- `src/CodeAlta.Agent/LocalRuntime/Compaction/LocalAgentTokenBudgetResolver.cs`
-- `src/CodeAlta.Agent/LocalRuntime/Compaction/LocalAgentTokenEstimator.cs`
-- `src/CodeAlta.Agent/LocalRuntime/Compaction/LocalAgentCompactionPlanner.cs`
-- `src/CodeAlta.Agent/LocalRuntime/Compaction/LocalAgentCompactionSummarizer.cs`
-- `src/CodeAlta.Agent/LocalRuntime/Compaction/LocalAgentCompactionSerializer.cs`
-- `src/CodeAlta.Agent/LocalRuntime/Compaction/LocalAgentCompactionCheckpoint.cs`
-
-The implementation may merge some of these files if it stays readable, but these responsibilities should remain distinct.
-
-### 19.4 Session orchestration
-
-- `src/CodeAlta.Agent/LocalRuntime/LocalAgentSession.cs`
-  - run pre-send threshold checks
-  - run overflow recovery compaction
-  - protect the latest user prompt
-  - rebuild replay context from checkpoint + kept suffix
-  - stream deltas live but persist only canonical finalized content
-
-### 19.5 Event persistence
-
-- `src/CodeAlta.Agent/LocalRuntime/FileSystemLocalAgentSessionStore.cs`
-  - write only durable canonical events to `events.jsonl`
-- `src/CodeAlta.Agent/LocalRuntime/ILocalAgentSessionStore.cs`
-  - no shape change required unless explicit transient/durable entry points improve clarity
-
-### 19.6 Usage/budget helpers
-
-- `src/CodeAlta.Agent/LocalRuntime/LocalAgentUsageFactory.cs`
-  - expose budget-related helpers from model metadata
-  - keep context-window/input/output limits normalized
-
-### 19.7 Provider executors
-
-- `src/CodeAlta.Agent.OpenAI/OpenAIChatTurnExecutor.cs`
-- `src/CodeAlta.Agent.OpenAI/OpenAIResponsesTurnExecutor.cs`
-- `src/CodeAlta.Agent/LocalRuntime/LocalAgentChatClientTurnExecutor.cs`
-
-Responsibilities:
-
-- preserve finalized assistant/reasoning/tool-call output
-- provide enough failure information for overflow handling
-- continue streaming deltas for the live UI
-
-## 20. Recommended implementation phases
-
-### Phase 1 — Foundations
-
-- provider-aware capacity resolution
-- global + per-provider config
-- canonical event persistence rules
-- checkpoint as synthetic user-context message
-- replay rebuild from checkpoint + kept suffix
-- manual + threshold + overflow orchestration seams
-
-### Phase 2 — LLM-backed summary generation
-
-- dedicated summarization prompt(s)
-- provider/model-backed checkpoint generation
-- iterative summary update using previous checkpoint input
-- summary-request truncation and attachment handling
-- explicit failure handling when the summarizer call cannot complete
-
-### Phase 3 — Planning correctness and bounded fallback
-
-- contiguous suffix planning
-- strict latest-user anchor protection
-- split-turn planning gated by `allow_split_turn`
-- exact post-compaction fit validation
-- bounded aggressive fallback and clear terminal failure states
-
-### Phase 4 — Token accounting hardening
-
-- provider window usage when available
-- last-operation usage plus trailing local estimate
-- tokenizer abstraction seam
-- optional provider-specific tokenizer implementations later
-
-### Phase 5 — Quality, diagnostics, and extensibility
-
-- richer file/activity tracking
-- internal diagnostics for estimate source/confidence
-- focused tests for all planner and summarizer edge cases
-- future plugin hooks
-
-## 21. Test matrix
-
-At minimum, add tests for:
+At minimum:
 
 1. no compaction when under threshold
-2. threshold compaction at 80% of usable budget
-3. correct budget calculation when output and input limits are both known
-4. unknown limit behavior
-5. latest user message always kept
-6. split-turn compaction when the latest turn is too large
-7. tool-result boundaries never split incorrectly
-8. iterative checkpoint update
-9. the default compaction path uses an LLM summarizer call rather than a heuristic-only local summary
-10. the summarizer request uses tagged serialized input rather than normal chat continuation
-11. last-operation usage plus trailing estimate is used when full window usage is unavailable
-12. overflow compact-and-retry once
-13. stale pre-compaction usage not reused as current-window truth
-14. checkpoint replay rebuild correctness
-15. per-provider override precedence
-16. contiguous suffix planning never keeps an older message while dropping a newer one
-17. `allow_split_turn = false` prevents mid-turn cuts
-18. post-compaction validation replans or fails when the generated checkpoint is still too large
-19. automatic compaction does not silently fall back to a heuristic summary when the LLM summarizer fails
+2. threshold compaction when limits are known
+3. unknown-limit behavior
+4. threshold compaction keeps the full canonical non-delta history when it fits the summary-input budget
+5. message dropping does not occur when the selected canonical history fits
+6. recency bias prefers newer messages and newer tool outputs when reduction is necessary
+7. latest user message preserved when it fits
+8. latest user message reduced when it does not fit
+9. split-turn compaction for an oversized turn
+10. `allow_split_turn = false` blocks mid-turn cuts
+11. tool-result adjacency is preserved
+12. huge tool output does not dominate the checkpoint
+13. verbose reasoning is budgeted or omitted
+14. summarization request itself exceeds one call and is chunked
+15. previous checkpoint iterative update does not grow unbounded
+16. post-compaction fit validation replans or fails
+17. overflow compact-and-retry once
+18. provider last-operation usage plus trailing estimate is used when needed
+19. per-provider overrides take precedence
+20. no transient delta events participate
+21. very large initial prompt or attachment is reducible
+22. summary output token limit is applied
+23. automatic compaction does not silently downgrade to heuristic-only summary generation
 
-## 22. Concrete decisions
+## 25. Concrete v2 decisions
 
-1. Compaction remains application-managed and provider-agnostic.
-2. The latest user prompt is a protected anchor and should remain verbatim.
-3. Capacity checks must reserve output and overhead, not only compare prompt size to context window.
-4. Defaults are global, with per-provider overrides.
-5. The checkpoint is context, not policy, and should not be stored as a system instruction.
-6. Provider usage is preferred over local token estimation.
-7. `TiktokenSharp` is not required for the first implementation.
-8. The implementation should be staged internally so plugins can hook it later.
+1. Compaction remains local and provider-agnostic.
+2. Summary generation uses the regular chat/generation API, not remote compaction APIs.
+3. The system optimizes for **very high compression**, not transcript fidelity.
+4. Tool outputs are omitted by default unless continuation-critical.
+5. Reasoning is adaptive and budgeted, never delta-based.
+6. Per-item truncation is insufficient; global serializer budgets are mandatory.
+7. Recursive chunked summarization is required for oversized histories and oversized single inputs.
+8. Post-compaction validation is mandatory.
+9. The latest user message remains a protected anchor whenever possible.
+10. The target post-compaction total context should usually land between `1%` and `6%`, with `10%` as the normal upper planning bound.
+11. Threshold-triggered compaction should keep the full canonical non-delta selected history when it fits the summarizer-input budget.
+12. The default tuning should be inspired by pi-mono's order of magnitude for reserved/recent budgets (`~16k` reserve, `~20k` recent), while keeping CodeAlta's stricter omission-first and global-cap design.
+13. When reduction is required, newer messages and newer high-signal tool context should be favored over older exploratory material.
 
-## 23. Summary
+## 26. Summary
 
-CodeAlta should evolve from a minimal manual snapshot into a real local-runtime compaction system built around:
+CodeAlta should treat compaction as a **lossy state distillation** pipeline:
 
-- safe provider-aware budgeting
-- automatic threshold and overflow recovery triggers
-- a protected latest-user anchor
-- structured iterative checkpoints
-- replay from checkpoint plus recent verbatim history
-- simple future-ready extension seams
+- canonicalize the history
+- keep only the current objective and critical working state
+- aggressively discard verbose low-value tool and reasoning bulk
+- chunk when a single pass cannot fit
+- generate a tightly bounded structured checkpoint
+- validate that the rebuilt prompt is both safe and small
 
-That is a small enough design to implement now, but strong enough to support long-running coding sessions across all local raw-API providers.
-
+That is the standard required for long-lived raw-API coding sessions.
