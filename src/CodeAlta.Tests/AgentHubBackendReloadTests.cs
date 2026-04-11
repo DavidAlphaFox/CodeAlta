@@ -67,6 +67,61 @@ public sealed class AgentHubBackendReloadTests
         StringAssert.Contains(exception.Message, "active sessions");
     }
 
+    [TestMethod]
+    public async Task SteerAsync_DoesNotBlockBehindActiveRunGate()
+    {
+        using var temp = TempDirectory.Create();
+        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
+        var repository = new AgentRepository(db);
+        var backendFactory = new AgentBackendFactory();
+        var backend = new BlockingSteerBackend();
+        backendFactory.Register("blocking-steer", () => backend);
+
+        await using var hub = new AgentHub(backendFactory, repository);
+        var agent = await hub.RegisterAgentAsync(
+                "test",
+                new AgentScope
+                {
+                    Kind = AgentScopeKind.Global,
+                    Id = "global",
+                },
+                new AgentBackendId("blocking-steer"))
+            .ConfigureAwait(false);
+        _ = await hub.StartSessionAsync(
+                agent.AgentId,
+                new AgentSessionCreateOptions
+                {
+                    WorkingDirectory = Environment.CurrentDirectory,
+                    OnPermissionRequest = static (_, _) =>
+                        Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                })
+            .ConfigureAwait(false);
+
+        var runTask = hub.RunAsync(
+            agent.AgentId,
+            new AgentSendOptions
+            {
+                Input = AgentInput.Text("Initial prompt"),
+            });
+        _ = await backend.Session.SendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+
+        var steerRunId = await hub.SteerAsync(
+                agent.AgentId,
+                new AgentSteerOptions
+                {
+                    Input = AgentInput.Text("Steer prompt"),
+                    ExpectedRunId = new AgentRunId("blocking-run"),
+                })
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(new AgentRunId("blocking-run"), steerRunId);
+        Assert.AreEqual(1, backend.Session.SteerCallCount);
+
+        backend.Session.ReleaseSend.TrySetResult();
+        var completedRunId = await runTask.ConfigureAwait(false);
+        Assert.AreEqual(new AgentRunId("blocking-run"), completedRunId);
+    }
+
     private static async Task<CodeAltaDb> CreateDbAsync(string rootPath)
     {
         var dbPath = Path.Combine(rootPath, "state", "db", "codealta.db");
@@ -162,6 +217,90 @@ public sealed class AgentHubBackendReloadTests
             public Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(CancellationToken cancellationToken = default)
                 => Task.FromResult<IReadOnlyList<AgentEvent>>([]);
         }
+    }
+
+    private sealed class BlockingSteerBackend : IAgentBackend
+    {
+        public AgentBackendId BackendId => new("blocking-steer");
+
+        public string DisplayName => "Blocking Steer";
+
+        public BlockingSteerSession Session { get; } = new();
+
+        public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AgentModelInfo>>([new AgentModelInfo("model-a")]);
+
+        public Task<IReadOnlyList<AgentSessionMetadata>> ListSessionsAsync(
+            AgentSessionListFilter? filter = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AgentSessionMetadata>>([]);
+
+        public Task<IAgentSession> CreateSessionAsync(
+            AgentSessionCreateOptions options,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IAgentSession>(Session);
+
+        public Task<IAgentSession> ResumeSessionAsync(
+            string sessionId,
+            AgentSessionResumeOptions options,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IAgentSession>(Session);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class BlockingSteerSession : IAgentSession
+    {
+        public TaskCompletionSource<bool> SendStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseSend { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int SteerCallCount { get; private set; }
+
+        public AgentBackendId BackendId => new("blocking-steer");
+
+        public string SessionId => "blocking-steer-session";
+
+        public string? WorkspacePath => null;
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+        public async IAsyncEnumerable<AgentEvent> StreamEventsAsync(
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask.ConfigureAwait(false);
+            yield break;
+        }
+
+        public IDisposable Subscribe(Action<AgentEvent> handler)
+        {
+            ArgumentNullException.ThrowIfNull(handler);
+            return DisposableAction.Create(static () => { });
+        }
+
+        public async Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default)
+        {
+            SendStarted.TrySetResult(true);
+            await ReleaseSend.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return new AgentRunId("blocking-run");
+        }
+
+        public Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
+        {
+            SteerCallCount++;
+            return Task.FromResult(options.ExpectedRunId ?? new AgentRunId("blocking-run"));
+        }
+
+        public Task AbortAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task CompactAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AgentEvent>>([]);
     }
 
     private sealed class DisposableAction(Action dispose) : IDisposable

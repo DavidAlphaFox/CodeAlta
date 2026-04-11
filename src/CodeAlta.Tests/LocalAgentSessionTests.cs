@@ -169,6 +169,95 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public async Task LocalAgentSession_SteerAsync_QueuesPendingInputIntoSameRun()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider();
+        var summary = CreateSummary("session-steer");
+        var state = CreateState("session-steer");
+        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        var firstTurnStarted = new TaskCompletionSource<AgentRunId>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirstTurn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                async (request, _, cancellationToken) =>
+                {
+                    Assert.AreEqual(1, request.Conversation.Count);
+                    Assert.AreEqual(LocalAgentConversationRole.User, request.Conversation[0].Role);
+                    firstTurnStarted.TrySetResult(request.RunId);
+                    await releaseFirstTurn.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    return new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("First answer.")]),
+                    };
+                },
+                (request, _, _) =>
+                {
+                    Assert.AreEqual(3, request.Conversation.Count);
+                    Assert.AreEqual(LocalAgentConversationRole.User, request.Conversation[0].Role);
+                    Assert.AreEqual(LocalAgentConversationRole.Assistant, request.Conversation[1].Role);
+                    Assert.AreEqual(LocalAgentConversationRole.User, request.Conversation[2].Role);
+                    Assert.AreEqual(
+                        "Please add one more detail.",
+                        Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(request.Conversation[2].Parts.Single()).Value);
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [new LocalAgentMessagePart.Text("Second answer.")]),
+                        });
+                }),
+            CreateOptions(provider, temp.Path));
+
+        var sendTask = session.SendAsync(new AgentSendOptions
+        {
+            Input = AgentInput.Text("Initial prompt"),
+        });
+
+        var activeRunId = await firstTurnStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        var steerRunId = await session.SteerAsync(
+                new AgentSteerOptions
+                {
+                    Input = AgentInput.Text("Please add one more detail."),
+                    ExpectedRunId = activeRunId,
+                })
+            .ConfigureAwait(false);
+
+        releaseFirstTurn.TrySetResult();
+        var completedRunId = await sendTask.ConfigureAwait(false);
+
+        Assert.AreEqual(activeRunId, steerRunId);
+        Assert.AreEqual(activeRunId, completedRunId);
+
+        var history = await session.GetHistoryAsync().ConfigureAwait(false);
+        var userEvents = history
+            .OfType<AgentContentCompletedEvent>()
+            .Where(evt => evt.Kind == AgentContentKind.User)
+            .ToArray();
+        Assert.AreEqual(2, userEvents.Length);
+        var expectedUserPrompts = new[] { "Initial prompt", "Please add one more detail." };
+        CollectionAssert.AreEqual(
+            expectedUserPrompts,
+            userEvents.Select(static evt => evt.Content).ToArray());
+        Assert.IsTrue(userEvents.All(evt => evt.RunId == completedRunId));
+        Assert.AreEqual(1, history.OfType<AgentSessionUpdateEvent>().Count(static evt => evt.Kind == AgentSessionUpdateKind.Idle));
+    }
+
+    [TestMethod]
     public async Task LocalAgentSession_ReplaysPersistedConversationOnResume()
     {
         using var temp = TestTempDirectory.Create();

@@ -30,10 +30,12 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
     private readonly SemaphoreSlim _stateGate = new(initialCount: 1, maxCount: 1);
     private readonly List<AgentEvent> _history;
     private readonly List<LocalAgentConversationMessage> _conversation;
+    private readonly Queue<AgentInput> _pendingSteerInputs = new();
     private AgentModelInfo? _resolvedModelInfo;
     private bool _resolvedModelInfoLoaded;
     private LocalAgentSessionSummary _summary;
     private LocalAgentSessionState _state;
+    private AgentRunId? _activeRunId;
     private CancellationTokenSource? _activeRunCancellation;
     private bool _disposed;
 
@@ -132,7 +134,14 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            if (_activeRunId is not null)
+            {
+                throw new InvalidOperationException($"Local raw-API session '{SessionId}' already has an active run.");
+            }
+
+            _activeRunId = runId;
             _activeRunCancellation = linkedCts;
+            _pendingSteerInputs.Clear();
         }
         finally
         {
@@ -157,6 +166,8 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
 
             while (true)
             {
+                _ = await AppendPendingSteerInputsAsync(runId, linkedCts.Token).ConfigureAwait(false);
+
                 await MaybeCompactForThresholdAsync(
                         runId,
                         instructionBundle.SystemMessage,
@@ -196,6 +207,12 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                 var toolCalls = response.AssistantMessage.Parts.OfType<LocalAgentMessagePart.ToolCall>().ToArray();
                 if (toolCalls.Length == 0)
                 {
+                    if (await AppendPendingSteerInputsAsync(runId, linkedCts.Token).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+
+                    await CompleteActiveRunAsync(runId, CancellationToken.None).ConfigureAwait(false);
                     await MaybeCompactForThresholdAsync(
                             runId,
                             instructionBundle.SystemMessage,
@@ -316,21 +333,40 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         }
         finally
         {
-            await _stateGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-            try
-            {
-                _activeRunCancellation = null;
-            }
-            finally
-            {
-                _stateGate.Release();
-            }
+            await CompleteActiveRunAsync(runId, CancellationToken.None).ConfigureAwait(false);
         }
     }
 
     /// <inheritdoc />
-    public Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException("Local raw-API sessions do not support steering while a turn is executing.");
+    public async Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_activeRunId is not { } activeRunId)
+            {
+                throw new InvalidOperationException("Local raw-API steering requires an active run.");
+            }
+
+            if (options.ExpectedRunId is { } expectedRunId && expectedRunId != activeRunId)
+            {
+                throw new InvalidOperationException(
+                    $"Local raw-API steering expected run '{expectedRunId.Value}', but active run is '{activeRunId.Value}'.");
+            }
+
+            _pendingSteerInputs.Enqueue(options.Input);
+            return activeRunId;
+        }
+        finally
+        {
+            _stateGate.Release();
+        }
+    }
 
     /// <inheritdoc />
     public Task AbortAsync(CancellationToken cancellationToken = default)
@@ -400,6 +436,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         _disposed = true;
         _activeRunCancellation?.Cancel();
         _activeRunCancellation?.Dispose();
+        _pendingSteerInputs.Clear();
         _stateGate.Dispose();
         _eventChannel.Writer.TryComplete();
         return ValueTask.CompletedTask;
@@ -446,6 +483,53 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             RenderUserInput(input.Items),
             SerializeAgentInput(input));
         await AppendEventsAsync([rawEvent, userContent], cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<bool> AppendPendingSteerInputsAsync(AgentRunId runId, CancellationToken cancellationToken)
+    {
+        List<AgentInput>? pendingInputs = null;
+        await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_activeRunId != runId || _pendingSteerInputs.Count == 0)
+            {
+                return false;
+            }
+
+            pendingInputs = [.. _pendingSteerInputs];
+            _pendingSteerInputs.Clear();
+        }
+        finally
+        {
+            _stateGate.Release();
+        }
+
+        foreach (var input in pendingInputs)
+        {
+            await AppendUserMessageAsync(input, runId, cancellationToken).ConfigureAwait(false);
+        }
+
+        return true;
+    }
+
+    private async Task CompleteActiveRunAsync(AgentRunId runId, CancellationToken cancellationToken)
+    {
+        await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_activeRunId != runId)
+            {
+                return;
+            }
+
+            _activeRunId = null;
+            _activeRunCancellation = null;
+            _pendingSteerInputs.Clear();
+        }
+        finally
+        {
+            _stateGate.Release();
+        }
     }
 
     private async Task AppendAssistantMessageAsync(

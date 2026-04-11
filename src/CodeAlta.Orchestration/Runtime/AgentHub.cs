@@ -449,7 +449,6 @@ public sealed class AgentHub : IAsyncDisposable
             _gate.Release();
         }
 
-        await entry.RunGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var runId = await entry.Session.SteerAsync(options, cancellationToken).ConfigureAwait(false);
@@ -461,10 +460,6 @@ public sealed class AgentHub : IAsyncDisposable
         {
             _events.Writer.TryWrite(new RunFailedEvent(DateTimeOffset.UtcNow, agentId, ex.Message));
             throw;
-        }
-        finally
-        {
-            entry.RunGate.Release();
         }
     }
 

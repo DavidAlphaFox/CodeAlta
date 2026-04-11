@@ -336,6 +336,29 @@ public sealed class ThreadCommandCoordinatorTests
     }
 
     [TestMethod]
+    public async Task DispatchQueuedPromptAsync_QueuesPromptWhenSteerIsNotSupported()
+    {
+        using var temp = TempDirectory.Create();
+        var backend = new RecordingBackend
+        {
+            SteerException = new NotSupportedException("live steering is unavailable"),
+        };
+        var harness = await CreateSelectedThreadHarnessAsync(temp.Path, backend).ConfigureAwait(false);
+        await using var _ = harness.Hub;
+        harness.Tab.ActiveRunId = new AgentRunId("active-run-1");
+        harness.ThreadInput.Text = string.Empty;
+
+        await harness.Coordinator.DispatchQueuedPromptAsync(harness.Tab, "Retry later", steer: true).ConfigureAwait(false);
+
+        Assert.AreEqual(1, backend.SteerCount);
+        Assert.AreEqual(1, harness.Tab.QueuedPrompts.Count);
+        Assert.AreEqual("Retry later", harness.Tab.QueuedPrompts[0].Text);
+        Assert.AreEqual(0, harness.Tab.PendingSteers.Count);
+        Assert.AreEqual(string.Empty, harness.ThreadInput.Text);
+        Assert.AreEqual(0, harness.Tab.Timeline.Flow.Items.Count);
+    }
+
+    [TestMethod]
     public async Task DeleteSelectedThreadPendingSteer_RemovesPendingSteer()
     {
         using var temp = TempDirectory.Create();

@@ -172,6 +172,25 @@ internal sealed class ThreadPromptDispatchCoordinator
             tab.HistoryLoaded = true;
             _commandContext.RefreshHeaderAndThreadWorkspace();
         }
+        catch (NotSupportedException ex) when (steer)
+        {
+            if (!string.IsNullOrWhiteSpace(pendingSteerId))
+            {
+                _queueCoordinator.RemovePendingSteer(tab, pendingSteerId);
+            }
+
+            _queueCoordinator.EnqueuePrompt(tab, prompt);
+            _commandContext.SetThreadStatus(
+                tab,
+                $"Live steering is not supported by '{thread.BackendId}'; queued the prompt for the next turn.",
+                false,
+                StatusTone.Warning);
+
+            if (LogManager.IsInitialized && CodeAltaApp.UiLogger.IsEnabled(LogLevel.Debug))
+            {
+                CodeAltaApp.UiLogger.Debug(ex, $"Queued prompt after unsupported steering attempt for thread {thread.ThreadId}");
+            }
+        }
         catch (Exception ex)
         {
             if (steer && !string.IsNullOrWhiteSpace(pendingSteerId))
