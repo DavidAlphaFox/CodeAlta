@@ -11,7 +11,7 @@ public sealed class CodeAltaConfigStore
     private static readonly CodeAltaRawApiCompactionDocument DefaultCompaction = new()
     {
         Enabled = true,
-        TriggerThreshold = 0.80,
+        TriggerThreshold = 0.85,
         TargetThreshold = 0.50,
         ReservedOutputTokens = 4096,
         ReservedOverheadTokens = 2048,
@@ -819,7 +819,7 @@ public sealed class CodeAltaConfigStore
         }
 
         merged.Enabled ??= true;
-        merged.TriggerThreshold ??= 0.80;
+        merged.TriggerThreshold ??= 0.85;
         merged.TargetThreshold ??= 0.50;
         merged.ReservedOutputTokens ??= 4096;
         merged.ReservedOverheadTokens ??= 2048;

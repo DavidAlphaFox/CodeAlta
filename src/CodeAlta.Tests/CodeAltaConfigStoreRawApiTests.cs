@@ -108,6 +108,27 @@ public sealed class CodeAltaConfigStoreRawApiTests
     }
 
     [TestMethod]
+    public void LoadGlobalOpenAIProviderDefinitions_UsesUpdatedCompactionDefaults()
+    {
+        using var temp = TempDirectory.Create();
+        File.WriteAllText(
+            Path.Combine(temp.Path, "config.toml"),
+            """
+            [raw_api.openai.providers.openai]
+            api_key_env = "OPENAI_API_KEY"
+            """);
+
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+
+        var providers = store.LoadGlobalOpenAIProviderDefinitions();
+        Assert.AreEqual(1, providers.Count);
+        var compaction = providers[0].Compaction;
+        Assert.IsNotNull(compaction);
+        Assert.AreEqual(0.85d, compaction!.TriggerThreshold!.Value, 0.0001d);
+        Assert.AreEqual(0.50d, compaction.TargetThreshold!.Value, 0.0001d);
+    }
+
+    [TestMethod]
     public void LoadGlobalAnthropicAndGoogleProviderDefinitions_HonorDisabledFiltering()
     {
         using var temp = TempDirectory.Create();

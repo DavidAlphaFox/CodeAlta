@@ -169,6 +169,84 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public async Task LocalAgentSession_SendAsync_RefreshesEstimatedWindowUsageAfterToolOutputs()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider();
+        var summary = CreateSummary("session-usage-refresh");
+        var state = CreateState("session-usage-refresh");
+        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        using var schema = JsonDocument.Parse("""{"type":"object"}""");
+        using var toolArguments = JsonDocument.Parse("""{"size":1}""");
+        var initialUsage = CreateWindowUsageSnapshot(currentTokens: 780, tokenLimit: 1000, inputTokens: 760, outputTokens: 20);
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [
+                                new LocalAgentMessagePart.Text("Need tool output."),
+                                new LocalAgentMessagePart.ToolCall(
+                                    "call-usage",
+                                    "emit_large_output",
+                                    toolArguments.RootElement.Clone()),
+                            ]),
+                        Usage = initialUsage,
+                    }),
+                (request, _, _) =>
+                {
+                    Assert.IsNotNull(request.State.Usage);
+                    Assert.IsTrue(request.State.Usage!.CurrentTokens > 850, $"Expected estimated tokens above threshold, got {request.State.Usage.CurrentTokens}.");
+                    Assert.AreEqual(3, request.State.Usage.MessageCount);
+                    Assert.AreEqual("Estimated active context", request.State.Usage.Window?.Label);
+                    Assert.AreEqual(1000L, request.State.Usage.TokenLimit);
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [new LocalAgentMessagePart.Text("Done.")]),
+                            Usage = request.State.Usage,
+                        });
+                }),
+            new AgentSessionCreateOptions
+            {
+                ProviderKey = provider.ProviderKey,
+                Model = "gpt-5.4",
+                WorkingDirectory = temp.Path,
+                OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                Tools =
+                [
+                    new AgentToolDefinition(
+                        new AgentToolSpec("emit_large_output", "Emit large output", schema.RootElement.Clone()),
+                        static (_, _) => Task.FromResult(
+                            new AgentToolResult(
+                                true,
+                                [new AgentToolResultItem.Text(new string('x', 420))]))),
+                ],
+            });
+
+        _ = await session.SendAsync(
+                new AgentSendOptions
+                {
+                    Input = AgentInput.Text("Trigger tool output"),
+                })
+            .ConfigureAwait(false);
+    }
+
+    [TestMethod]
     public async Task LocalAgentSession_SteerAsync_QueuesPendingInputIntoSameRun()
     {
         using var temp = TestTempDirectory.Create();
@@ -2336,6 +2414,23 @@ public sealed class LocalAgentSessionTests
                 OutputTokens: outputTokens),
             Scope: AgentUsageScope.LastOperation,
             Source: AgentUsageSource.RecoveredHistory,
+            UpdatedAt: DateTimeOffset.Parse("2026-04-06T10:00:00+00:00"));
+    }
+
+    private static AgentSessionUsage CreateWindowUsageSnapshot(long currentTokens, long tokenLimit, long inputTokens, long outputTokens)
+    {
+        return new AgentSessionUsage(
+            Window: new AgentWindowUsageSnapshot(
+                CurrentTokens: currentTokens,
+                TokenLimit: tokenLimit,
+                MessageCount: null,
+                Label: "Active context window"),
+            LastOperation: new AgentOperationUsageSnapshot(
+                Model: "gpt-5.4-2026-03-05",
+                InputTokens: inputTokens,
+                OutputTokens: outputTokens),
+            Scope: AgentUsageScope.CurrentWindow,
+            Source: AgentUsageSource.LocalProviderUsage,
             UpdatedAt: DateTimeOffset.Parse("2026-04-06T10:00:00+00:00"));
     }
 

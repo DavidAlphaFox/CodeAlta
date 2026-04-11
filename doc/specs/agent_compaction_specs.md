@@ -241,7 +241,7 @@ The post-compaction target numbers and summary-input limits must all be configur
 
 Recommended defaults:
 
-- `trigger_threshold = 0.80`
+- `trigger_threshold = 0.85`
 - `reserved_output_tokens = 4096`
 - `reserved_overhead_tokens = 2048`
 - `target_context_ratio_ideal = 0.03`
@@ -769,7 +769,7 @@ Recommended normalized shape:
 ```toml
 [raw_api.compaction]
 enabled = true
-trigger_threshold = 0.80
+trigger_threshold = 0.85
 reserved_output_tokens = 4096
 reserved_overhead_tokens = 2048
 keep_last_user_message = true

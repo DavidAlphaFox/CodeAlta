@@ -167,6 +167,13 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             while (true)
             {
                 _ = await AppendPendingSteerInputsAsync(runId, linkedCts.Token).ConfigureAwait(false);
+                await RefreshEstimatedUsageAsync(
+                        runId,
+                        instructionBundle.SystemMessage,
+                        instructionBundle.DeveloperInstructions,
+                        modelInfo,
+                        linkedCts.Token)
+                    .ConfigureAwait(false);
 
                 await MaybeCompactForThresholdAsync(
                         runId,
@@ -530,6 +537,62 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         {
             _stateGate.Release();
         }
+    }
+
+    private async Task RefreshEstimatedUsageAsync(
+        AgentRunId runId,
+        string? systemMessage,
+        string? developerInstructions,
+        AgentModelInfo? modelInfo,
+        CancellationToken cancellationToken)
+    {
+        if (_state.Usage is null)
+        {
+            return;
+        }
+
+        var estimate = LocalAgentTokenEstimator.EstimatePromptTokens(
+            systemMessage,
+            developerInstructions,
+            _conversation,
+            _state.Usage);
+        var label = estimate.IsEstimated
+            ? "Estimated active context"
+            : _state.Usage?.Window?.Label ?? "Active context window";
+        var refreshedUsage = LocalAgentUsageFactory.AttachWindowEstimate(
+            _state.Usage,
+            modelInfo,
+            estimate.Tokens,
+            _conversation.Count,
+            DateTimeOffset.UtcNow,
+            label);
+        if (refreshedUsage is null || Equals(refreshedUsage, _state.Usage))
+        {
+            return;
+        }
+
+        _state = _state with
+        {
+            Usage = refreshedUsage,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        _summary = _summary with
+        {
+            Usage = refreshedUsage,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        var usageEvent = new AgentSessionUpdateEvent(
+            BackendId,
+            SessionId,
+            DateTimeOffset.UtcNow,
+            runId,
+            AgentSessionUpdateKind.UsageUpdated,
+            "Usage updated.",
+            Usage: refreshedUsage);
+        await AppendEventsAsync([usageEvent], LocalAgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
+        await _store.UpsertStateAsync(_state, cancellationToken).ConfigureAwait(false);
+        await _store.UpsertSessionAsync(_summary, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task AppendAssistantMessageAsync(

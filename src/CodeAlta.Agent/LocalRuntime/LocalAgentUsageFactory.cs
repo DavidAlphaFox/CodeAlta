@@ -109,6 +109,51 @@ internal static class LocalAgentUsageFactory
         };
     }
 
+    public static AgentSessionUsage? AttachWindowEstimate(
+        AgentSessionUsage? usage,
+        AgentModelInfo? modelInfo,
+        long? currentTokens,
+        int? messageCount,
+        DateTimeOffset updatedAt,
+        string? label = null)
+    {
+        if (messageCount is not >= 0 && currentTokens is null)
+        {
+            return usage;
+        }
+
+        var tokenLimit = usage?.Window?.TokenLimit ?? GetContextWindowTokenLimit(modelInfo);
+        if (currentTokens is null && tokenLimit is null)
+        {
+            return usage;
+        }
+
+        var resolvedLabel = string.IsNullOrWhiteSpace(label)
+            ? "Estimated active context"
+            : label;
+        var window = new AgentWindowUsageSnapshot(
+            CurrentTokens: currentTokens,
+            TokenLimit: tokenLimit,
+            MessageCount: messageCount,
+            Label: resolvedLabel);
+        if (usage is not null &&
+            Equals(window, usage.Window) &&
+            usage.Scope == AgentUsageScope.CurrentWindow)
+        {
+            return usage;
+        }
+
+        return (usage ?? new AgentSessionUsage()) with
+        {
+            Window = window,
+            Scope = AgentUsageScope.CurrentWindow,
+            Source = usage?.Source is AgentUsageSource.Unknown or null
+                ? AgentUsageSource.LocalProviderUsage
+                : usage.Source,
+            UpdatedAt = updatedAt,
+        };
+    }
+
     private static long? GetContextWindowTokenLimit(AgentModelInfo? modelInfo)
     {
         if (modelInfo?.Capabilities is not { Count: > 0 } capabilities)

@@ -92,7 +92,7 @@ public sealed record LocalAgentCompactionSettings(
     /// </summary>
     public static LocalAgentCompactionSettings Default { get; } = new(
         Enabled: true,
-        TriggerThreshold: 0.80,
+        TriggerThreshold: 0.85,
         TargetThreshold: 0.50,
         ReservedOutputTokens: 4096,
         ReservedOverheadTokens: 2048,
