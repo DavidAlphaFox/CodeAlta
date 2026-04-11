@@ -1,17 +1,16 @@
 #pragma warning disable OPENAI001
 
-using System.ClientModel;
-using System.ClientModel.Primitives;
 using System.Text.Json;
 using CodeAlta.Agent.LocalRuntime;
-using CodeAlta.Agent.LocalRuntime.Compaction;
 using CodeAlta.Agent.LocalRuntime.Tools;
 using OpenAI.Responses;
 
 namespace CodeAlta.Agent.OpenAI;
 
-internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider) : ILocalAgentTurnExecutor, ILocalAgentInputTokenCounter
+internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider) : ILocalAgentTurnExecutor
 {
+    private static readonly ResponseReasoningEffortLevel XHighReasoningEffortLevel = new("xhigh");
+
     public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(
         LocalAgentProviderDescriptor providerDescriptor,
         CancellationToken cancellationToken = default)
@@ -144,53 +143,6 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
         }
     }
 
-    public async Task<LocalAgentTokenEstimate?> CountInputTokensAsync(
-        LocalAgentTurnRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        try
-        {
-            var client = OpenAIProviderSdkFactory.CreateResponsesClient(provider, request.ModelId);
-            var options = CreateTokenCountPayload(request);
-            var result = await client.GetInputTokenCountAsync(
-                    "application/json",
-                    (BinaryContent)options,
-                    options: null)
-                .ConfigureAwait(false);
-
-            using var document = JsonDocument.Parse(result.GetRawResponse().Content);
-            if (!document.RootElement.TryGetProperty("input_tokens", out var inputTokensElement))
-            {
-                return null;
-            }
-
-            return inputTokensElement.ValueKind switch
-            {
-                JsonValueKind.Number when inputTokensElement.TryGetInt64(out var tokens) && tokens >= 0
-                    => new LocalAgentTokenEstimate(tokens, "provider-input-token-count", IsEstimated: false),
-                _ => null,
-            };
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (ClientResultException)
-        {
-            return null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-        catch (InvalidOperationException)
-        {
-            return null;
-        }
-    }
-
     private static ResponseResult? TryCreateResponseWithoutTerminalPayload(
         LocalAgentTurnRequest request,
         ResponseResult? latestResponse,
@@ -267,19 +219,12 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                     AgentReasoningEffort.Low => ResponseReasoningEffortLevel.Low,
                     AgentReasoningEffort.Medium => ResponseReasoningEffortLevel.Medium,
                     AgentReasoningEffort.High => ResponseReasoningEffortLevel.High,
-                    AgentReasoningEffort.XHigh => ResponseReasoningEffortLevel.High,
+                    AgentReasoningEffort.XHigh => XHighReasoningEffortLevel,
                     _ => null,
                 },
             };
         }
 
-        return options;
-    }
-
-    private static CreateResponseOptions CreateTokenCountPayload(LocalAgentTurnRequest request)
-    {
-        var options = CreateRequestPayload(request);
-        options.StreamingEnabled = null;
         return options;
     }
 

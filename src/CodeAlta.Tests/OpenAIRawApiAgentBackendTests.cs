@@ -369,30 +369,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIResponsesTurnExecutor_CountInputTokensAsync_UsesInputTokenEndpoint()
-    {
-        var responsesClient = new RecordingOpenAIResponseClient(
-            responseBatches: [],
-            inputTokenCounts: [73]);
-        var executor = new OpenAIResponsesTurnExecutor(new OpenAIProviderOptions
-        {
-            ProviderKey = "openai",
-            ResponsesClientFactory = _ => responsesClient,
-        });
-
-        var estimate = await ((ILocalAgentInputTokenCounter)executor)
-            .CountInputTokensAsync(CreateTurnRequest())
-            .ConfigureAwait(false);
-
-        Assert.IsNotNull(estimate);
-        Assert.AreEqual(73L, estimate.Tokens);
-        Assert.AreEqual("provider-input-token-count", estimate.Source);
-        Assert.IsFalse(estimate.IsEstimated);
-        Assert.AreEqual(1, responsesClient.InputTokenCountRequests.Count);
-    }
-
-    [TestMethod]
-    public async Task OpenAIResponsesTurnExecutor_MapsUsageAsLastOperationInsteadOfWindow()
+    public async Task OpenAIResponsesTurnExecutor_MapsUsageIntoCurrentWindowAndLastOperation()
     {
         var responsesClient = new RecordingOpenAIResponseClient(
         [
@@ -420,9 +397,9 @@ public sealed class OpenAIRawApiAgentBackendTests
         Assert.IsNotNull(response.Usage);
         Assert.AreEqual(33L, response.Usage.LastOperation?.InputTokens);
         Assert.AreEqual(7L, response.Usage.LastOperation?.OutputTokens);
-        Assert.IsNull(response.Usage.CurrentTokens);
+        Assert.AreEqual(40L, response.Usage.CurrentTokens);
         Assert.AreEqual(200000L, response.Usage.TokenLimit);
-        Assert.AreEqual(AgentUsageScope.LastOperation, response.Usage.Scope);
+        Assert.AreEqual(AgentUsageScope.CurrentWindow, response.Usage.Scope);
     }
 
     private static StreamingResponseUpdate CreateAssistantResponseUpdate(
@@ -637,13 +614,10 @@ public sealed class OpenAIRawApiAgentBackendTests
             },
         };
 
-    private sealed class RecordingOpenAIResponseClient(
-        IReadOnlyList<IReadOnlyList<StreamingResponseUpdate>> responseBatches,
-        IReadOnlyList<long>? inputTokenCounts = null)
+    private sealed class RecordingOpenAIResponseClient(IReadOnlyList<IReadOnlyList<StreamingResponseUpdate>> responseBatches)
         : ResponsesClient(new ApiKeyCredential("test-key"), new OpenAIClientOptions())
     {
         public List<ResponseRequestRecord> Requests { get; } = [];
-        public List<(string ContentType, long? InputTokens)> InputTokenCountRequests { get; } = [];
 
         public override AsyncCollectionResult<StreamingResponseUpdate> CreateResponseStreamingAsync(
             CreateResponseOptions options,
@@ -656,24 +630,6 @@ public sealed class OpenAIRawApiAgentBackendTests
                 ? responseBatches[requestIndex]
                 : [];
             return new TestAsyncCollectionResult<StreamingResponseUpdate>(updates);
-        }
-
-        public override Task<ClientResult> GetInputTokenCountAsync(
-            string contentType,
-            BinaryContent content,
-            RequestOptions options = null!)
-        {
-            var requestIndex = InputTokenCountRequests.Count;
-            var inputTokens = inputTokenCounts is not null && requestIndex < inputTokenCounts.Count
-                ? (long?)inputTokenCounts[requestIndex]
-                : null;
-            InputTokenCountRequests.Add((contentType, inputTokens));
-            return Task.FromResult<ClientResult>(
-                ClientResult.FromResponse(
-                    new TestPipelineResponse(
-                        inputTokens is null
-                            ? "{}"
-                            : $$"""{"object":"response.input_tokens","input_tokens":{{inputTokens.Value}}}""")));
         }
 
         private static CreateResponseOptions CloneOptions(CreateResponseOptions? options)

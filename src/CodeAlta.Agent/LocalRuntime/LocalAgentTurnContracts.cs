@@ -1,5 +1,4 @@
 using System.Text.Json;
-using CodeAlta.Agent.LocalRuntime.Compaction;
 
 namespace CodeAlta.Agent.LocalRuntime;
 
@@ -28,13 +27,6 @@ public interface ILocalAgentTurnExecutor
     Task<LocalAgentTurnResponse> ExecuteTurnAsync(
         LocalAgentTurnRequest request,
         Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
-        CancellationToken cancellationToken = default);
-}
-
-internal interface ILocalAgentInputTokenCounter
-{
-    Task<LocalAgentTokenEstimate?> CountInputTokensAsync(
-        LocalAgentTurnRequest request,
         CancellationToken cancellationToken = default);
 }
 

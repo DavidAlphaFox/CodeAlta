@@ -23,13 +23,14 @@ internal static class LocalAgentUsageFactory
         long? reasoningTokens,
         DateTimeOffset updatedAt)
     {
+        var currentTokens = totalTokens ?? Sum(inputTokens, outputTokens);
         var tokenLimit = GetContextWindowTokenLimit(modelInfo);
-        var window = tokenLimit is not null
+        var window = currentTokens is not null || tokenLimit is not null
             ? new AgentWindowUsageSnapshot(
-                CurrentTokens: null,
+                CurrentTokens: currentTokens,
                 TokenLimit: tokenLimit,
                 MessageCount: null,
-                Label: "Context window limit")
+                Label: tokenLimit is not null ? "Active context window" : "Estimated active context")
             : null;
 
         return new AgentSessionUsage(
@@ -43,7 +44,7 @@ internal static class LocalAgentUsageFactory
                 Label: string.IsNullOrWhiteSpace(modelId)
                     ? null
                     : $"{modelId}: {inputTokens ?? 0}/{outputTokens ?? 0} tokens"),
-            Scope: AgentUsageScope.LastOperation,
+            Scope: window is null ? AgentUsageScope.LastOperation : AgentUsageScope.CurrentWindow,
             Source: AgentUsageSource.LocalProviderUsage,
             UpdatedAt: updatedAt);
     }

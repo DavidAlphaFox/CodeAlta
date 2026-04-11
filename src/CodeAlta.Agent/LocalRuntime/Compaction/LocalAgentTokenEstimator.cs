@@ -12,11 +12,9 @@ internal static class LocalAgentTokenEstimator
     {
         ArgumentNullException.ThrowIfNull(conversation);
 
-        var expectedMessageCount = conversation.Count;
-        if (usage?.Window is { CurrentTokens: > 0 } window &&
-            window.MessageCount == expectedMessageCount)
+        if (TryGetWindowSnapshotEstimate(conversation, usage, out var windowEstimate))
         {
-            return new LocalAgentTokenEstimate(window.CurrentTokens.Value, "provider-window", IsEstimated: false);
+            return windowEstimate;
         }
 
         if (!HasLeadingCheckpoint(conversation) &&
@@ -66,6 +64,41 @@ internal static class LocalAgentTokenEstimator
 
     private static bool HasLeadingCheckpoint(IReadOnlyList<LocalAgentConversationMessage> conversation)
         => conversation.Count > 0 && LocalAgentCompactionCheckpoint.TryExtractSummary(conversation[0]) is not null;
+
+    private static bool TryGetWindowSnapshotEstimate(
+        IReadOnlyList<LocalAgentConversationMessage> conversation,
+        AgentSessionUsage? usage,
+        out LocalAgentTokenEstimate estimate)
+    {
+        if (usage?.Window is not { CurrentTokens: > 0, MessageCount: >= 0 } window)
+        {
+            estimate = default!;
+            return false;
+        }
+
+        var messageCount = window.MessageCount!.Value;
+        if (messageCount > conversation.Count)
+        {
+            estimate = default!;
+            return false;
+        }
+
+        var trailingTokens = 0L;
+        for (var index = messageCount; index < conversation.Count; index++)
+        {
+            trailingTokens += EstimateMessage(conversation[index]);
+        }
+
+        var isAuthoritativeWindow = string.Equals(window.Label, "Active context window", StringComparison.Ordinal);
+        var source = trailingTokens == 0
+            ? (isAuthoritativeWindow ? "provider-window" : "window-snapshot")
+            : (isAuthoritativeWindow ? "provider-window+local-tail" : "window-snapshot+local-tail");
+        estimate = new LocalAgentTokenEstimate(
+            window.CurrentTokens!.Value + trailingTokens,
+            source,
+            IsEstimated: trailingTokens > 0 || !isAuthoritativeWindow);
+        return true;
+    }
 
     private static bool TryGetLastOperationWindowEstimate(
         IReadOnlyList<LocalAgentConversationMessage> conversation,
