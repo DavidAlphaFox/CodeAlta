@@ -833,6 +833,7 @@ At minimum:
 21. very large initial prompt or attachment is reducible
 22. summary output token limit is applied to actual provider requests
 23. automatic compaction does not silently downgrade to heuristic-only summary generation
+24. a representative large tool-heavy session compacts to `<= 6%` with default v2 settings, while still remaining under the configured `10%` ceiling
 
 ## 25. Concrete v2 decisions
 
@@ -849,6 +850,7 @@ At minimum:
 11. Threshold-triggered compaction should keep the full canonical non-delta selected history when it fits the summarizer-input budget.
 12. The default tuning should be inspired by pi-mono's order of magnitude for reserved/recent budgets (`~16k` reserve, `~20k` recent), while keeping CodeAlta's stricter omission-first and global-cap design.
 13. When reduction is required, newer messages and newer high-signal tool context should be favored over older exploratory material.
+14. The regression suite should include at least one representative large tool-heavy conversation that validates the default v2 profile against both the `<= 6%` practical target and the configured `10%` hard ceiling.
 
 ## 26. Summary
 
