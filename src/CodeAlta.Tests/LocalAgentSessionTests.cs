@@ -744,6 +744,44 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public void LocalAgentCompactionSerializer_BuildSummaryRequestBody_KeepsAllPlaintextMessagesWhenInputFits()
+    {
+        var summarizedMessages = new[]
+        {
+            new LocalAgentConversationMessage(LocalAgentConversationRole.User, [new LocalAgentMessagePart.Text("First prompt")]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, [new LocalAgentMessagePart.Text("First answer")]),
+        };
+        var keptMessages = new[]
+        {
+            new LocalAgentConversationMessage(LocalAgentConversationRole.User, [new LocalAgentMessagePart.Text("Second prompt")]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, [new LocalAgentMessagePart.Text("Second answer")]),
+        };
+
+        var preparation = new LocalAgentCompactionPreparation(
+            Trigger: LocalAgentCompactionTrigger.Threshold,
+            MessagesToSummarize: summarizedMessages,
+            TurnPrefixMessages: [],
+            MessagesToKeep: keptMessages,
+            AnchorContentId: "user:2",
+            IsSplitTurn: false,
+            TokensBefore: new LocalAgentTokenEstimate(200, "test", IsEstimated: true),
+            PreviousSummary: null);
+
+        var result = LocalAgentCompactionSerializer.BuildSummaryRequestBody(
+            preparation,
+            latestUserRequest: "Second prompt",
+            readFiles: [],
+            modifiedFiles: [],
+            settings: LocalAgentCompactionSettings.Default);
+
+        Assert.AreEqual(result.TotalMessageCount, result.IncludedMessageCount);
+        StringAssert.Contains(result.UserMessage, "First prompt");
+        StringAssert.Contains(result.UserMessage, "First answer");
+        StringAssert.Contains(result.UserMessage, "Second prompt");
+        StringAssert.Contains(result.UserMessage, "Second answer");
+    }
+
+    [TestMethod]
     public void LocalAgentCompactionPlanner_Preparation_UsesRecentSuffixTargetTokens()
     {
         var conversation = new[]
@@ -783,6 +821,61 @@ public sealed class LocalAgentSessionTests
         Assert.AreEqual(LocalAgentConversationRole.Assistant, preparation.MessagesToKeep[1].Role);
         StringAssert.Contains(Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(preparation.MessagesToKeep[0].Parts.Single()).Value, "u3");
         StringAssert.Contains(Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(preparation.MessagesToKeep[1].Parts.Single()).Value, "a3");
+    }
+
+    [TestMethod]
+    public void LocalAgentCompactionPlanner_Preparation_WiderPlanKeepsMoreContextThanAnchorOnlyFallback()
+    {
+        var conversation = new[]
+        {
+            new LocalAgentConversationMessage(LocalAgentConversationRole.User, [new LocalAgentMessagePart.Text("Earlier prompt " + new string('a', 320))]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, [new LocalAgentMessagePart.Text("Earlier answer " + new string('b', 320))]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.User, [new LocalAgentMessagePart.Text("Latest prompt")]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, [new LocalAgentMessagePart.Text("Recent answer " + new string('x', 320))]),
+        };
+
+        var budget = new LocalAgentTokenBudget(
+            ContextWindow: 4096,
+            InputTokenLimit: 4096,
+            OutputTokenLimit: 256,
+            UsablePromptBudget: 4096,
+            ReservedOutputTokens: 64,
+            ReservedOverheadTokens: 64);
+        var settings = LocalAgentCompactionSettings.Default with
+        {
+            RecentSuffixTargetTokens = 96,
+        };
+
+        var widenedPreparation = LocalAgentCompactionPlanner.Prepare(
+            LocalAgentCompactionTrigger.Threshold,
+            systemMessage: null,
+            developerInstructions: null,
+            conversation,
+            usage: null,
+            budget,
+            settings,
+            anchorContentId: "user:latest",
+            checkpointTokenEstimate: 64,
+            promptBudgetOverride: 180,
+            keepAnchorOnly: false);
+        var anchorOnlyPreparation = LocalAgentCompactionPlanner.Prepare(
+            LocalAgentCompactionTrigger.Threshold,
+            systemMessage: null,
+            developerInstructions: null,
+            conversation,
+            usage: null,
+            budget,
+            settings,
+            anchorContentId: "user:latest",
+            checkpointTokenEstimate: 64,
+            promptBudgetOverride: 180,
+            keepAnchorOnly: true);
+
+        Assert.IsNotNull(widenedPreparation);
+        Assert.IsNotNull(anchorOnlyPreparation);
+        Assert.IsTrue(widenedPreparation!.MessagesToKeep.Count > anchorOnlyPreparation!.MessagesToKeep.Count);
+        Assert.AreEqual(1, anchorOnlyPreparation.TurnPrefixMessages.Count);
+        Assert.AreEqual(LocalAgentConversationRole.User, anchorOnlyPreparation.TurnPrefixMessages[0].Role);
     }
 
     [TestMethod]
