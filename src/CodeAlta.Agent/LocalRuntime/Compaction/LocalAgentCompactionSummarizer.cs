@@ -196,10 +196,16 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                 maxOutputTokens,
                 cancellationToken)
             .ConfigureAwait(false);
-        ValidateSummary(response.Summary, maxOutputTokens);
+        var normalizedSummary = NormalizeSummary(
+            response.Summary,
+            latestUserRequest,
+            preparation.PreviousSummary,
+            fileActivity,
+            maxOutputTokens);
+        ValidateSummary(normalizedSummary, maxOutputTokens);
 
         return new LocalAgentCompactionResult(
-            Summary: response.Summary,
+            Summary: normalizedSummary,
             AnchorContentId: preparation.AnchorContentId,
             IsSplitTurn: preparation.IsSplitTurn,
             OversizedAnchorReduced: serialization.Statistics.ReducedOversizedAnchor,
@@ -507,12 +513,100 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
             throw new InvalidOperationException("The compaction summarizer returned a summary that exceeds the configured checkpoint budget.");
         }
 
-        if (!summary.Contains("## Objective", StringComparison.Ordinal) ||
-            !summary.Contains("## Active User Request", StringComparison.Ordinal) ||
-            !summary.Contains("## Relevant Files", StringComparison.Ordinal))
+        if (!HasRequiredSummarySections(summary))
         {
             throw new InvalidOperationException("The compaction summarizer returned a malformed structured summary.");
         }
+    }
+
+    private static string NormalizeSummary(
+        string summary,
+        string? latestUserRequest,
+        string? previousSummary,
+        FileActivity fileActivity,
+        int maxOutputTokens)
+    {
+        var trimmedSummary = summary.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedSummary))
+        {
+            return summary;
+        }
+
+        if (HasRequiredSummarySections(trimmedSummary))
+        {
+            return trimmedSummary;
+        }
+
+        var currentSections = ParseMarkdownSections(trimmedSummary);
+        var previousSections = string.IsNullOrWhiteSpace(previousSummary)
+            ? null
+            : ParseMarkdownSections(previousSummary);
+
+        var objective = FirstNonEmpty(
+            GetSection(currentSections, "## Objective"),
+            GetSection(previousSections, "## Objective"),
+            ExtractLeadParagraph(trimmedSummary, 320),
+            "Continue the conversation safely.");
+        var activeUserRequest = FirstNonEmpty(
+            NormalizeMultiline(latestUserRequest, 640),
+            GetSection(currentSections, "## Active User Request"),
+            GetSection(previousSections, "## Active User Request"),
+            "- Not explicitly captured.");
+        var constraints = FirstNonEmpty(
+            GetSection(currentSections, "## Constraints"),
+            GetSection(previousSections, "## Constraints"),
+            "- None explicitly captured.");
+        var done = FirstNonEmpty(
+            GetSection(currentSections, "### Done"),
+            GetSection(previousSections, "### Done"),
+            "- None recorded.");
+        var inProgress = FirstNonEmpty(
+            GetSection(currentSections, "### In Progress"),
+            GetSection(previousSections, "### In Progress"),
+            "- None recorded.");
+        var blocked = FirstNonEmpty(
+            GetSection(currentSections, "### Blocked"),
+            GetSection(previousSections, "### Blocked"),
+            "- None recorded.");
+        var decisions = FirstNonEmpty(
+            GetSection(currentSections, "## Decisions"),
+            GetSection(previousSections, "## Decisions"),
+            "- None recorded.");
+        var nextSteps = FirstNonEmpty(
+            GetSection(currentSections, "## Next Steps"),
+            GetSection(previousSections, "## Next Steps"),
+            "- Resume from the latest retained context.");
+        var relevantFiles = FirstNonEmpty(
+            GetSection(currentSections, "## Relevant Files"),
+            GetSection(previousSections, "## Relevant Files"),
+            BuildRelevantFilesSection(fileActivity),
+            "- None tracked.");
+
+        var criticalContext = FirstNonEmpty(
+            GetSection(currentSections, "## Critical Context"),
+            GetSection(previousSections, "## Critical Context"),
+            BuildFallbackCriticalContext(trimmedSummary, maxOutputTokens),
+            "- Original draft summary was unavailable.");
+
+        var builder = new System.Text.StringBuilder();
+        AppendSummarySection(builder, "## Objective", objective);
+        AppendSummarySection(builder, "## Active User Request", activeUserRequest);
+        AppendSummarySection(builder, "## Constraints", constraints);
+        builder.AppendLine("## Progress");
+        builder.AppendLine("### Done");
+        builder.AppendLine(done);
+        builder.AppendLine();
+        builder.AppendLine("### In Progress");
+        builder.AppendLine(inProgress);
+        builder.AppendLine();
+        builder.AppendLine("### Blocked");
+        builder.AppendLine(blocked);
+        builder.AppendLine();
+        AppendSummarySection(builder, "## Decisions", decisions);
+        AppendSummarySection(builder, "## Next Steps", nextSteps);
+        AppendSummarySection(builder, "## Critical Context", criticalContext);
+        AppendSummarySection(builder, "## Relevant Files", relevantFiles, includeTrailingBlankLine: false);
+        return builder.ToString().Trim();
     }
 
     private static void ValidateOversizedAnchorSynopsis(string synopsis, int maxOutputTokens)
@@ -608,6 +702,164 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         builder.Append('<').Append(tagName).AppendLine(">");
         builder.AppendLine(System.Security.SecurityElement.Escape(value ?? string.Empty) ?? string.Empty);
         builder.Append("</").Append(tagName).AppendLine(">");
+    }
+
+    private static bool HasRequiredSummarySections(string summary)
+        => summary.Contains("## Objective", StringComparison.Ordinal) &&
+           summary.Contains("## Active User Request", StringComparison.Ordinal) &&
+           summary.Contains("## Constraints", StringComparison.Ordinal) &&
+           summary.Contains("## Progress", StringComparison.Ordinal) &&
+           summary.Contains("### Done", StringComparison.Ordinal) &&
+           summary.Contains("### In Progress", StringComparison.Ordinal) &&
+           summary.Contains("### Blocked", StringComparison.Ordinal) &&
+           summary.Contains("## Decisions", StringComparison.Ordinal) &&
+           summary.Contains("## Next Steps", StringComparison.Ordinal) &&
+           summary.Contains("## Critical Context", StringComparison.Ordinal) &&
+           summary.Contains("## Relevant Files", StringComparison.Ordinal);
+
+    private static Dictionary<string, string> ParseMarkdownSections(string summary)
+    {
+        var sections = new Dictionary<string, string>(StringComparer.Ordinal);
+        string? currentHeading = null;
+        var builder = new System.Text.StringBuilder();
+
+        foreach (var rawLine in summary.Split(["\r\n", "\n"], StringSplitOptions.None))
+        {
+            var line = rawLine.TrimEnd();
+            if (IsSupportedSummaryHeading(line))
+            {
+                FlushSection(sections, currentHeading, builder);
+                currentHeading = line.Trim();
+                builder.Clear();
+                continue;
+            }
+
+            if (currentHeading is not null)
+            {
+                builder.AppendLine(line);
+            }
+        }
+
+        FlushSection(sections, currentHeading, builder);
+        return sections;
+
+        static void FlushSection(IDictionary<string, string> sections, string? heading, System.Text.StringBuilder content)
+        {
+            if (heading is null)
+            {
+                return;
+            }
+
+            var text = content.ToString().Trim();
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                sections[heading] = text;
+            }
+        }
+    }
+
+    private static bool IsSupportedSummaryHeading(string line)
+        => line is "## Objective"
+            or "## Active User Request"
+            or "## Constraints"
+            or "## Progress"
+            or "### Done"
+            or "### In Progress"
+            or "### Blocked"
+            or "## Decisions"
+            or "## Next Steps"
+            or "## Critical Context"
+            or "## Relevant Files";
+
+    private static string? GetSection(IReadOnlyDictionary<string, string>? sections, string heading)
+        => sections is not null && sections.TryGetValue(heading, out var value) && !string.IsNullOrWhiteSpace(value)
+            ? value
+            : null;
+
+    private static string FirstNonEmpty(params string?[] candidates)
+        => candidates.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim()
+           ?? string.Empty;
+
+    private static string ExtractLeadParagraph(string text, int maxCharacters)
+    {
+        var normalized = NormalizeMultiline(text, maxCharacters);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return string.Empty;
+        }
+
+        var breakIndex = normalized.IndexOfAny(['.', '\n']);
+        if (breakIndex > 0 && breakIndex < maxCharacters / 2)
+        {
+            return normalized[..(breakIndex + 1)].Trim();
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeMultiline(string? text, int maxCharacters)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var lines = text
+            .Split(["\r\n", "\n"], StringSplitOptions.None)
+            .Select(static line => line.Trim())
+            .Where(static line => line.Length > 0)
+            .ToArray();
+        if (lines.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var normalized = string.Join(Environment.NewLine, lines);
+        if (normalized.Length <= maxCharacters)
+        {
+            return normalized;
+        }
+
+        return normalized[..Math.Max(maxCharacters - 3, 1)].TrimEnd() + "...";
+    }
+
+    private static string BuildRelevantFilesSection(FileActivity fileActivity)
+    {
+        var lines = new List<string>();
+        foreach (var path in fileActivity.ModifiedFiles)
+        {
+            lines.Add($"- Modified: {path}");
+        }
+
+        foreach (var path in fileActivity.ReadFiles.Where(path => !fileActivity.ModifiedFiles.Contains(path, StringComparer.OrdinalIgnoreCase)))
+        {
+            lines.Add($"- Read: {path}");
+        }
+
+        return lines.Count == 0 ? "- None tracked." : string.Join(Environment.NewLine, lines);
+    }
+
+    private static string BuildFallbackCriticalContext(string summary, int maxOutputTokens)
+    {
+        var maxCharacters = Math.Max(Math.Min(maxOutputTokens * 6, 2400), 480);
+        var normalized = NormalizeMultiline(summary, maxCharacters);
+        return string.IsNullOrWhiteSpace(normalized)
+            ? "- Original draft summary was unavailable."
+            : $"- Original draft summary:{Environment.NewLine}{normalized}";
+    }
+
+    private static void AppendSummarySection(
+        System.Text.StringBuilder builder,
+        string heading,
+        string content,
+        bool includeTrailingBlankLine = true)
+    {
+        builder.AppendLine(heading);
+        builder.AppendLine(string.IsNullOrWhiteSpace(content) ? "- None recorded." : content.Trim());
+        if (includeTrailingBlankLine)
+        {
+            builder.AppendLine();
+        }
     }
 
     private static string BuildOversizedAnchorRequestBody(string serializedAnchor, string? previousSynopsis)

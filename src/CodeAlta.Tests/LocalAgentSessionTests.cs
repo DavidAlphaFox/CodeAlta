@@ -2111,7 +2111,7 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
-    public async Task LocalAgentSession_CompactAsync_RejectsMalformedStructuredSummary()
+    public async Task LocalAgentSession_CompactAsync_NormalizesMalformedStructuredSummary()
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
@@ -2160,12 +2160,24 @@ public sealed class LocalAgentSessionTests
         _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("First prompt " + new string('x', 180)) }).ConfigureAwait(false);
         _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Second prompt " + new string('y', 180)) }).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(
-            () => ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync()).ConfigureAwait(false);
+        var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);
+        Assert.IsNotNull(outcome);
+        Assert.IsTrue(outcome.Success);
 
         var persistedState = await store.GetStateAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
         Assert.IsNotNull(persistedState);
-        Assert.IsNull(persistedState.CompactionCheckpointEventId);
+        Assert.IsNotNull(persistedState.CompactionCheckpointEventId);
+
+        var persistedHistory = await store.ReadEventsAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
+        var checkpointEvent = persistedHistory
+            .OfType<AgentRawEvent>()
+            .Last(static evt => evt.BackendEventType == "local.compactionCheckpoint");
+        var checkpoint = checkpointEvent.Raw.Deserialize(AgentJsonSerializerContext.Default.LocalAgentCompactionCheckpoint);
+        Assert.IsNotNull(checkpoint);
+        StringAssert.Contains(checkpoint!.Summary, "## Objective");
+        StringAssert.Contains(checkpoint.Summary, "## Active User Request");
+        StringAssert.Contains(checkpoint.Summary, "## Relevant Files");
+        StringAssert.Contains(checkpoint.Summary, "required sections are missing.");
     }
 
     [TestMethod]
