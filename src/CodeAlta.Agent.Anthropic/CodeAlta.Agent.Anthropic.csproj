@@ -16,12 +16,12 @@
     <ProjectReference Include="..\CodeAlta.Agent\CodeAlta.Agent.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(UseLocalAnthropicSdk)' == 'true' and Exists('$(CodeAltaAnthropicSdkProjectPath)')">
-    <!-- Used when validating or debugging a local Anthropic SDK change. -->
+  <ItemGroup Condition="Exists('$(CodeAltaAnthropicSdkProjectPath)')">
+    <!-- Temporary local SDK reference while validating the Anthropic streaming fix. -->
     <ProjectReference Include="$(CodeAltaAnthropicSdkProjectPath)" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(UseLocalAnthropicSdk)' != 'true' or !Exists('$(CodeAltaAnthropicSdkProjectPath)')">
+  <ItemGroup Condition="!Exists('$(CodeAltaAnthropicSdkProjectPath)')">
     <PackageReference Include="Anthropic" />
   </ItemGroup>
 </Project>
