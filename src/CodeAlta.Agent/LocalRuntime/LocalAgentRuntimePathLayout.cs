@@ -1,7 +1,7 @@
 namespace CodeAlta.Agent.LocalRuntime;
 
 /// <summary>
-/// Provides the filesystem layout for local raw-API providers and session journals.
+/// Provides the filesystem layout for local raw-API session journals.
 /// </summary>
 public sealed class LocalAgentRuntimePathLayout
 {
@@ -22,41 +22,9 @@ public sealed class LocalAgentRuntimePathLayout
     public string RootPath { get; }
 
     /// <summary>
-    /// Gets the providers root path.
-    /// </summary>
-    public string ProvidersRootPath => Path.Combine(RootPath, "providers");
-
-    /// <summary>
     /// Gets the sessions root path.
     /// </summary>
     public string SessionsRootPath => Path.Combine(RootPath, "sessions");
-
-    /// <summary>
-    /// Gets the provider root path.
-    /// </summary>
-    /// <param name="protocolFamily">Protocol family.</param>
-    /// <param name="providerKey">Provider key.</param>
-    /// <returns>The provider root path.</returns>
-    public string GetProviderRootPath(string protocolFamily, string providerKey)
-        => Path.Combine(ProvidersRootPath, NormalizeSegment(protocolFamily), NormalizeSegment(providerKey));
-
-    /// <summary>
-    /// Gets the provider descriptor path.
-    /// </summary>
-    /// <param name="protocolFamily">Protocol family.</param>
-    /// <param name="providerKey">Provider key.</param>
-    /// <returns>The provider descriptor path.</returns>
-    public string GetProviderDescriptorPath(string protocolFamily, string providerKey)
-        => Path.Combine(GetProviderRootPath(protocolFamily, providerKey), "provider.json");
-
-    /// <summary>
-    /// Gets the shared sessions root path.
-    /// </summary>
-    /// <param name="protocolFamily">Protocol family.</param>
-    /// <param name="providerKey">Provider key.</param>
-    /// <returns>The shared sessions root path.</returns>
-    public string GetProviderSessionsRootPath(string protocolFamily, string providerKey)
-        => SessionsRootPath;
 
     /// <summary>
     /// Gets the session journal path.

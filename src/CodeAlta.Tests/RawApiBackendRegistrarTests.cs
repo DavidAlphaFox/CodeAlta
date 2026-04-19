@@ -156,7 +156,7 @@ public sealed class RawApiBackendRegistrarTests
     }
 
     [TestMethod]
-    public async Task RegisterConfiguredBackends_MiniMaxProfileDisablesDeveloperRoleByDefault()
+    public async Task RegisterConfiguredBackends_StartAsync_DoesNotPersistProviderDescriptors()
     {
         using var temp = TempDirectory.Create();
         var minimaxKeyName = $"MINIMAX_{Guid.NewGuid():N}";
@@ -186,12 +186,7 @@ public sealed class RawApiBackendRegistrarTests
             await using var chatBackend = factory.Create("compat");
             await chatBackend.StartAsync().ConfigureAwait(false);
 
-            var sessionStore = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(stateRoot));
-            var provider = await sessionStore.GetProviderAsync("openai-chat", "compat").ConfigureAwait(false);
-
-            Assert.IsNotNull(provider);
-            Assert.IsNotNull(provider.Profile);
-            Assert.IsFalse(provider.Profile.SupportsDeveloperRole);
+            Assert.IsFalse(Directory.Exists(Path.Combine(stateRoot, "providers")));
         }
         finally
         {
@@ -200,7 +195,7 @@ public sealed class RawApiBackendRegistrarTests
     }
 
     [TestMethod]
-    public async Task RegisterConfiguredBackends_ExplicitProfileOverridesProviderDefault()
+    public async Task RegisterConfiguredBackends_CreateSession_PersistsOnlySessionJournal()
     {
         using var temp = TempDirectory.Create();
         var minimaxKeyName = $"MINIMAX_{Guid.NewGuid():N}";
@@ -216,9 +211,6 @@ public sealed class RawApiBackendRegistrarTests
                 type = "openai-chat"
                 api_key_env = "{{minimaxKeyName}}"
                 api_url = "https://api.minimax.io/v1"
-
-                [providers.compat.profile]
-                supports_developer_role = true
                 """);
 
             var stateRoot = Path.Combine(temp.Path, "machine", "agents");
@@ -231,14 +223,19 @@ public sealed class RawApiBackendRegistrarTests
                 stateRoot);
 
             await using var chatBackend = factory.Create("compat");
-            await chatBackend.StartAsync().ConfigureAwait(false);
+            await using var session = await chatBackend.CreateSessionAsync(
+                    new AgentSessionCreateOptions
+                    {
+                        Model = "MiniMax-M2.7",
+                        WorkingDirectory = temp.Path,
+                        OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                    })
+                .ConfigureAwait(false);
 
-            var sessionStore = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(stateRoot));
-            var provider = await sessionStore.GetProviderAsync("openai-chat", "compat").ConfigureAwait(false);
-
-            Assert.IsNotNull(provider);
-            Assert.IsNotNull(provider.Profile);
-            Assert.IsTrue(provider.Profile.SupportsDeveloperRole);
+            var sessionsRoot = Path.Combine(stateRoot, "sessions");
+            Assert.IsTrue(Directory.Exists(sessionsRoot));
+            Assert.AreEqual(1, Directory.EnumerateFiles(sessionsRoot, "*.jsonl", SearchOption.AllDirectories).Count());
+            Assert.IsFalse(Directory.Exists(Path.Combine(stateRoot, "providers")));
         }
         finally
         {

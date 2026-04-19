@@ -31,41 +31,6 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
     }
 
     /// <inheritdoc />
-    public async Task<LocalAgentProviderDescriptor> UpsertProviderAsync(
-        LocalAgentProviderDescriptor provider,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(provider);
-
-        var providerPath = _layout.GetProviderDescriptorPath(provider.ProtocolFamily, provider.ProviderKey);
-        await WriteFileAtomicallyAsync(
-                providerPath,
-                provider.ToJson(),
-                cancellationToken)
-            .ConfigureAwait(false);
-        return provider;
-    }
-
-    /// <inheritdoc />
-    public async Task<LocalAgentProviderDescriptor?> GetProviderAsync(
-        string protocolFamily,
-        string providerKey,
-        CancellationToken cancellationToken = default)
-    {
-        var providerPath = _layout.GetProviderDescriptorPath(protocolFamily, providerKey);
-        if (!File.Exists(providerPath))
-        {
-            return null;
-        }
-
-        return await ReadJsonFileAsync(
-                providerPath,
-                AgentJsonSerializerContext.Default.LocalAgentProviderDescriptor,
-                cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
     public async Task UpsertSessionAsync(
         LocalAgentSessionSummary session,
         CancellationToken cancellationToken = default)

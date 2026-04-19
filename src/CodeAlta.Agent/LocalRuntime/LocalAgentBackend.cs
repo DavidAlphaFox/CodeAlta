@@ -53,19 +53,16 @@ public sealed class LocalAgentBackend : IAgentBackend
     public string DisplayName { get; }
 
     /// <inheritdoc />
-    public async Task StartAsync(CancellationToken cancellationToken = default)
+    public Task StartAsync(CancellationToken cancellationToken = default)
     {
         if (_started)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        foreach (var provider in _options.Providers)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await _store.UpsertProviderAsync(provider.Provider, cancellationToken).ConfigureAwait(false);
-        }
+        cancellationToken.ThrowIfCancellationRequested();
         _started = true;
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />

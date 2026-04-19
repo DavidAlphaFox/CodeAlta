@@ -117,7 +117,6 @@ public sealed class LocalAgentBackendTests
             Usage = summary.Usage,
         };
 
-        await store.UpsertProviderAsync(CreateProviderDescriptor()).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -173,30 +172,6 @@ public sealed class LocalAgentBackendTests
                 ],
             });
     }
-
-    private static LocalAgentProviderDescriptor CreateProviderDescriptor()
-    {
-        return new LocalAgentProviderDescriptor
-        {
-            ProtocolFamily = "openai-responses",
-            ProviderKey = "openai",
-            DisplayName = "OpenAI",
-            BackendId = AgentBackendIds.OpenAIResponses,
-            TransportKind = LocalAgentTransportKind.OpenAIResponses,
-            BaseUri = new Uri("https://api.openai.com/v1"),
-            IsDefault = true,
-            Profile = new LocalAgentProviderProfile
-            {
-                SupportsDeveloperRole = true,
-                SupportsStore = true,
-                SupportsReasoningEffort = true,
-                StreamsUsage = true,
-                MaxTokensFieldName = "max_output_tokens",
-                ReasoningFieldNames = ["reasoning"],
-            },
-        };
-    }
-
     private sealed class RecordingTurnExecutor : ILocalAgentTurnExecutor
     {
         public List<LocalAgentTurnRequest> Requests { get; } = [];

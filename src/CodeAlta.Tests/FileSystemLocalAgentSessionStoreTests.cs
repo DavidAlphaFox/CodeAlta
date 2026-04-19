@@ -13,9 +13,6 @@ public sealed class FileSystemLocalAgentSessionStoreTests
         using var temp = TestTempDirectory.Create();
         var layout = new LocalAgentRuntimePathLayout(temp.Path);
         var store = new FileSystemLocalAgentSessionStore(layout);
-        var provider = CreateProvider();
-
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
 
         var olderSession = CreateSession("session-1", createdAt: "2026-04-05T10:00:00+00:00", updatedAt: "2026-04-05T11:00:00+00:00");
         var newerSession = CreateSession("session-2", createdAt: "2026-04-06T10:00:00+00:00", updatedAt: "2026-04-06T11:00:00+00:00");
@@ -33,13 +30,10 @@ public sealed class FileSystemLocalAgentSessionStoreTests
         };
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
-        var persistedProvider = await store.GetProviderAsync("openai", "openai").ConfigureAwait(false);
         var persistedSession = await store.GetSessionAsync("openai", "openai", "session-2").ConfigureAwait(false);
         var persistedState = await store.GetStateAsync("openai", "openai", "session-2").ConfigureAwait(false);
         var sessions = await store.ListSessionsAsync("openai", "openai").ConfigureAwait(false);
 
-        Assert.IsNotNull(persistedProvider);
-        Assert.AreEqual("OpenAI", persistedProvider.DisplayName);
         Assert.IsNotNull(persistedSession);
         Assert.AreEqual("gpt-5.4", persistedSession.ModelId);
         Assert.IsNotNull(persistedState);
@@ -122,29 +116,6 @@ public sealed class FileSystemLocalAgentSessionStoreTests
         Assert.AreEqual(1, persistedEvents.Count);
         Assert.IsInstanceOfType<AgentSessionUpdateEvent>(persistedEvents[0]);
     }
-
-    private static LocalAgentProviderDescriptor CreateProvider()
-    {
-        return new LocalAgentProviderDescriptor
-        {
-            ProtocolFamily = "openai",
-            ProviderKey = "openai",
-            DisplayName = "OpenAI",
-            BackendId = AgentBackendIds.OpenAIResponses,
-            TransportKind = LocalAgentTransportKind.OpenAIResponses,
-            BaseUri = new Uri("https://api.openai.com/v1"),
-            Profile = new LocalAgentProviderProfile
-            {
-                SupportsDeveloperRole = true,
-                SupportsStore = true,
-                SupportsReasoningEffort = true,
-                StreamsUsage = true,
-                MaxTokensFieldName = "max_completion_tokens",
-                ReasoningFieldNames = ["reasoning"],
-            },
-        };
-    }
-
     private static LocalAgentSessionSummary CreateSession(string sessionId, string createdAt, string updatedAt)
     {
         using var metadata = JsonDocument.Parse("""{"profile":"default"}""");

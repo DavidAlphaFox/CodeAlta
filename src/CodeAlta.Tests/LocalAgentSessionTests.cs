@@ -62,7 +62,6 @@ public sealed class LocalAgentSessionTests
         var provider = CreateProvider();
         var summary = CreateSummary("session-1");
         var state = CreateState("session-1");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -195,7 +194,6 @@ public sealed class LocalAgentSessionTests
         var provider = CreateProvider();
         var summary = CreateSummary("session-usage-refresh");
         var state = CreateState("session-usage-refresh");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -273,7 +271,6 @@ public sealed class LocalAgentSessionTests
         var provider = CreateProvider();
         var summary = CreateSummary("session-steer");
         var state = CreateState("session-steer");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -362,7 +359,6 @@ public sealed class LocalAgentSessionTests
         var provider = CreateProvider();
         var summary = CreateSummary("session-replay");
         var state = CreateState("session-replay");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -440,7 +436,6 @@ public sealed class LocalAgentSessionTests
         var provider = CreateProvider();
         var summary = CreateSummary("session-model-alias");
         var state = CreateState("session-model-alias");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -475,7 +470,6 @@ public sealed class LocalAgentSessionTests
         var provider = CreateProvider();
         var summary = CreateSummary("session-compact");
         var state = CreateState("session-compact");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -1303,7 +1297,6 @@ public sealed class LocalAgentSessionTests
         var provider = CreateProvider();
         var summary = CreateSummary("session-summary-update");
         var state = CreateState("session-summary-update");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -1397,7 +1390,6 @@ public sealed class LocalAgentSessionTests
         var provider = CreateProvider(LocalAgentCompactionSettings.Default);
         var summary = CreateSummary("session-default-settings-fit");
         var state = CreateState("session-default-settings-fit");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -1494,7 +1486,6 @@ public sealed class LocalAgentSessionTests
         });
         var summary = CreateSummary("session-summary-output-limit");
         var state = CreateState("session-summary-output-limit");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -1579,7 +1570,6 @@ public sealed class LocalAgentSessionTests
         });
         var summary = CreateSummary("session-ratio-reported");
         var state = CreateState("session-ratio-reported");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -1661,7 +1651,6 @@ public sealed class LocalAgentSessionTests
         });
         var summary = CreateSummary("session-summary-output-clamped");
         var state = CreateState("session-summary-output-clamped");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -1757,7 +1746,6 @@ public sealed class LocalAgentSessionTests
         });
         var summary = CreateSummary("session-chunked-compaction");
         var state = CreateState("session-chunked-compaction");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -1866,7 +1854,6 @@ public sealed class LocalAgentSessionTests
         });
         var summary = CreateSummary("session-oversized-anchor");
         var state = CreateState("session-oversized-anchor");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -2003,7 +1990,6 @@ public sealed class LocalAgentSessionTests
         var provider = CreateProvider();
         var summary = CreateSummary("session-summary-failure");
         var state = CreateState("session-summary-failure");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -2066,7 +2052,6 @@ public sealed class LocalAgentSessionTests
         });
         var summary = CreateSummary("session-summary-too-large");
         var state = CreateState("session-summary-too-large");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -2140,7 +2125,6 @@ public sealed class LocalAgentSessionTests
         });
         var summary = CreateSummary("session-summary-malformed");
         var state = CreateState("session-summary-malformed");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
@@ -2336,7 +2320,6 @@ public sealed class LocalAgentSessionTests
             AllowSplitTurn: true));
         var summary = CreateSummary("session-overflow");
         var state = CreateState("session-overflow");
-        await store.UpsertProviderAsync(provider).ConfigureAwait(false);
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 

@@ -6,28 +6,6 @@ namespace CodeAlta.Agent.LocalRuntime;
 public interface ILocalAgentSessionStore
 {
     /// <summary>
-    /// Creates or updates a persisted provider registration.
-    /// </summary>
-    /// <param name="provider">Provider descriptor.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The persisted provider descriptor.</returns>
-    Task<LocalAgentProviderDescriptor> UpsertProviderAsync(
-        LocalAgentProviderDescriptor provider,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets a provider descriptor by protocol family and provider key.
-    /// </summary>
-    /// <param name="protocolFamily">Protocol family.</param>
-    /// <param name="providerKey">Provider key.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The provider descriptor when found; otherwise <see langword="null" />.</returns>
-    Task<LocalAgentProviderDescriptor?> GetProviderAsync(
-        string protocolFamily,
-        string providerKey,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
      /// Creates or updates the persisted session summary.
      /// </summary>
      /// <param name="session">Session summary.</param>

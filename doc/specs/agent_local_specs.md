@@ -128,53 +128,33 @@ Registration is application-owned, currently through `CodeAlta.App.RawApiBackend
 
 Store local runtime state under:
 
-- `~/.codealta/local/agents/`
+- `~/.alta/`
 
-This is machine-scoped operational state, even if the models are remote.
+This is machine-scoped operational state, even if the models are remote. Provider definitions live in `config.toml`; local runtime sessions persist as journals under `~/.alta/sessions/`.
 
 ## 7. Filesystem layout
 
-Use a provider-first layout so all data for one configured provider lives together:
+Use a shared date-sharded session-journal layout:
 
 ```text
-~/.codealta/
-  machine/
-    agents/
-      <protocol-family>/
-        <provider-key>/
-          provider.json
-          sessions/
-            YYYY/
-              MM/
-                DD/
-                  <local-session-id>/
-                    session.json
-                    events.jsonl
-                    state.json
-                    attachments/
+~/.alta/
+  config.toml
+  sessions/
+    YYYY/
+      MM/
+        DD/
+          <local-session-id>.jsonl
 ```
 
-This is preferred over separate global `providers/` and `sessions/` trees.
+Do not persist provider descriptors under a separate `providers/` tree. Provider definitions come from `config.toml`; provider/model switches are recovered from the session journal.
 
 ## 8. Session files
 
-`session.json`
-- lightweight summary for listing
-- backend id, provider key, model, title, timestamps, latest usage
-
-`events.jsonl`
-- the only canonical session log
-- stored as normalized `AgentEvent` items
+`<local-session-id>.jsonl`
+- the only canonical local-runtime session log
+- stores normalized `AgentEvent` items alongside internal snapshot events used to recover the latest summary/state
 - contains replay-significant finalized events, not duplicate streaming-only deltas
-- used for both UI playback and replay/resume
-
-`state.json`
-- local runtime state not modeled as user-facing events
-- latest provider-specific replay hints
-- compaction cursor
-- instruction hash and other resume metadata
-
-Use `state.json`, not `provider-state.json`.
+- captures provider/model switch events so the latest active provider can be reconstructed without auxiliary files
 
 ## 9. One canonical event log
 

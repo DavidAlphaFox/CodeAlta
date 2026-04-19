@@ -13,13 +13,8 @@ public sealed class LocalAgentRuntimeContractsTests
     {
         var layout = new LocalAgentRuntimePathLayout(@"C:\codealta-test-root\.alta");
         var createdAt = DateTimeOffset.Parse("2026-04-06T14:15:00+00:00");
-
-        var providerRoot = layout.GetProviderRootPath("openai", "openrouter");
-        var providerDescriptorPath = layout.GetProviderDescriptorPath("openai", "openrouter");
         var sessionFile = layout.GetSessionFilePath("session-123", createdAt);
 
-        Assert.AreEqual(@"C:\codealta-test-root\.alta\providers\openai\openrouter", providerRoot);
-        Assert.AreEqual(Path.Combine(providerRoot, "provider.json"), providerDescriptorPath);
         Assert.AreEqual(
             @"C:\codealta-test-root\.alta\sessions\2026\04\06\session-123.jsonl",
             sessionFile);
