@@ -4,81 +4,9 @@ using Tomlyn.Model;
 namespace CodeAlta.Catalog;
 
 /// <summary>
-/// Represents raw-API provider configuration groups.
+/// Represents a configurable compatibility profile override for a provider.
 /// </summary>
-public sealed class CodeAltaRawApiSettingsDocument
-{
-    /// <summary>
-    /// Gets or sets global raw-API compaction settings.
-    /// </summary>
-    [JsonPropertyName("compaction")]
-    public CodeAltaRawApiCompactionDocument? Compaction { get; set; }
-
-    /// <summary>
-    /// Gets or sets unified raw-API provider definitions keyed by stable provider key.
-    /// </summary>
-    [JsonPropertyName("providers")]
-    public Dictionary<string, CodeAltaRawApiProviderDocument> Providers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Gets or sets OpenAI-compatible provider settings.
-    /// </summary>
-    [JsonPropertyName("openai")]
-    public CodeAltaOpenAISettingsDocument OpenAI { get; set; } = new();
-
-    /// <summary>
-    /// Gets or sets Anthropic provider settings.
-    /// </summary>
-    [JsonPropertyName("anthropic")]
-    public CodeAltaAnthropicSettingsDocument Anthropic { get; set; } = new();
-
-    /// <summary>
-    /// Gets or sets Google GenAI provider settings.
-    /// </summary>
-    [JsonPropertyName("google_genai")]
-    public CodeAltaGoogleGenAISettingsDocument GoogleGenAI { get; set; } = new();
-}
-
-/// <summary>
-/// Represents configured OpenAI-compatible providers.
-/// </summary>
-public sealed class CodeAltaOpenAISettingsDocument
-{
-    /// <summary>
-    /// Gets or sets provider definitions keyed by stable provider key.
-    /// </summary>
-    [JsonPropertyName("providers")]
-    public Dictionary<string, CodeAltaOpenAIProviderDocument> Providers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-}
-
-/// <summary>
-/// Represents configured Anthropic providers.
-/// </summary>
-public sealed class CodeAltaAnthropicSettingsDocument
-{
-    /// <summary>
-    /// Gets or sets provider definitions keyed by stable provider key.
-    /// </summary>
-    [JsonPropertyName("providers")]
-    public Dictionary<string, CodeAltaAnthropicProviderDocument> Providers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-}
-
-/// <summary>
-/// Represents configured Google GenAI providers.
-/// </summary>
-public sealed class CodeAltaGoogleGenAISettingsDocument
-{
-    /// <summary>
-    /// Gets or sets provider definitions keyed by stable provider key.
-    /// </summary>
-    [JsonPropertyName("providers")]
-    public Dictionary<string, CodeAltaGoogleGenAIProviderDocument> Providers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-}
-
-/// <summary>
-/// Represents a configurable compatibility profile override for a raw-API provider.
-/// </summary>
-public sealed class CodeAltaRawApiProviderProfileDocument
+public sealed class CodeAltaProviderProfileDocument
 {
     /// <summary>
     /// Gets or sets whether the provider supports the developer role.
@@ -124,213 +52,117 @@ public sealed class CodeAltaRawApiProviderProfileDocument
 }
 
 /// <summary>
-/// Represents configurable raw-API compaction settings.
+/// Represents configurable provider compaction settings.
 /// </summary>
-public sealed class CodeAltaRawApiCompactionDocument
+public sealed class CodeAltaProviderCompactionDocument
 {
-    /// <summary>
-    /// Gets or sets whether automatic compaction is enabled.
-    /// </summary>
     [JsonPropertyName("enabled")]
     public bool? Enabled { get; set; }
 
-    /// <summary>
-    /// Gets or sets the usage threshold that triggers compaction.
-    /// </summary>
     [JsonPropertyName("trigger_threshold")]
     public double? TriggerThreshold { get; set; }
 
-    /// <summary>
-    /// Gets or sets the target usage threshold after compaction.
-    /// </summary>
     [JsonPropertyName("target_threshold")]
     public double? TargetThreshold { get; set; }
 
-    /// <summary>
-    /// Gets or sets the reserved output tokens.
-    /// </summary>
     [JsonPropertyName("reserved_output_tokens")]
     public int? ReservedOutputTokens { get; set; }
 
-    /// <summary>
-    /// Gets or sets the reserved overhead tokens.
-    /// </summary>
     [JsonPropertyName("reserved_overhead_tokens")]
     public int? ReservedOverheadTokens { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether the latest user message should be kept verbatim.
-    /// </summary>
     [JsonPropertyName("keep_last_user_message")]
     public bool? KeepLastUserMessage { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether split-turn compaction is allowed.
-    /// </summary>
     [JsonPropertyName("allow_split_turn")]
     public bool? AllowSplitTurn { get; set; }
 
-    /// <summary>
-    /// Gets or sets the ideal post-compaction context ratio.
-    /// </summary>
     [JsonPropertyName("target_context_ratio_ideal")]
     public double? TargetContextRatioIdeal { get; set; }
 
-    /// <summary>
-    /// Gets or sets the preferred maximum post-compaction context ratio.
-    /// </summary>
     [JsonPropertyName("target_context_ratio_max")]
     public double? TargetContextRatioMax { get; set; }
 
-    /// <summary>
-    /// Gets or sets the preferred token budget for the retained recent suffix.
-    /// </summary>
     [JsonPropertyName("recent_suffix_target_tokens")]
     public int? RecentSuffixTargetTokens { get; set; }
 
-    /// <summary>
-    /// Gets or sets the summarizer output-token cap.
-    /// </summary>
     [JsonPropertyName("summary_output_tokens")]
     public int? SummaryOutputTokens { get; set; }
 
-    /// <summary>
-    /// Gets or sets the summarizer input-token cap.
-    /// </summary>
     [JsonPropertyName("summary_input_tokens")]
     public int? SummaryInputTokens { get; set; }
 
-    /// <summary>
-    /// Gets or sets the tool-result excerpt cap per item.
-    /// </summary>
     [JsonPropertyName("tool_result_chars_per_item")]
     public int? ToolResultCharsPerItem { get; set; }
 
-    /// <summary>
-    /// Gets or sets the total tool-result excerpt cap.
-    /// </summary>
     [JsonPropertyName("tool_result_chars_total")]
     public int? ToolResultCharsTotal { get; set; }
 
-    /// <summary>
-    /// Gets or sets the reasoning excerpt cap per item.
-    /// </summary>
     [JsonPropertyName("reasoning_chars_per_item")]
     public int? ReasoningCharsPerItem { get; set; }
 
-    /// <summary>
-    /// Gets or sets the total reasoning excerpt cap.
-    /// </summary>
     [JsonPropertyName("reasoning_chars_total")]
     public int? ReasoningCharsTotal { get; set; }
 
-    /// <summary>
-    /// Gets or sets the reasoning retention mode.
-    /// </summary>
     [JsonPropertyName("reasoning_mode")]
     public string? ReasoningMode { get; set; }
 
-    /// <summary>
-    /// Gets or sets the maximum recursive chunk passes.
-    /// </summary>
     [JsonPropertyName("max_chunk_passes")]
     public int? MaxChunkPasses { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether oversized latest anchors may be reduced.
-    /// </summary>
     [JsonPropertyName("allow_oversized_anchor_reduction")]
     public bool? AllowOversizedAnchorReduction { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether message trimming should favor recency.
-    /// </summary>
     [JsonPropertyName("prefer_recent_messages")]
     public bool? PreferRecentMessages { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether tool-result trimming should favor recency.
-    /// </summary>
     [JsonPropertyName("prefer_recent_tool_outputs")]
     public bool? PreferRecentToolOutputs { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether messages should be dropped only after the summary-input budget is exceeded.
-    /// </summary>
     [JsonPropertyName("drop_messages_only_when_summary_input_exceeds_budget")]
     public bool? DropMessagesOnlyWhenSummaryInputExceedsBudget { get; set; }
 }
 
 /// <summary>
-/// Represents one configurable raw-API model metadata override.
+/// Represents one configurable provider model metadata override.
 /// </summary>
-public sealed class CodeAltaRawApiModelOverrideDocument
+public sealed class CodeAltaProviderModelOverrideDocument
 {
-    /// <summary>
-    /// Gets or sets an optional replacement display name.
-    /// </summary>
     [JsonPropertyName("display_name")]
     public string? DisplayName { get; set; }
 
-    /// <summary>
-    /// Gets or sets an optional replacement description.
-    /// </summary>
     [JsonPropertyName("description")]
     public string? Description { get; set; }
 
-    /// <summary>
-    /// Gets or sets the context-window limit in tokens.
-    /// </summary>
     [JsonPropertyName("context_window")]
     public long? ContextWindow { get; set; }
 
-    /// <summary>
-    /// Gets or sets the maximum input-token limit in tokens.
-    /// </summary>
     [JsonPropertyName("input_token_limit")]
     public long? InputTokenLimit { get; set; }
 
-    /// <summary>
-    /// Gets or sets the maximum output-token limit in tokens.
-    /// </summary>
     [JsonPropertyName("output_token_limit")]
     public long? OutputTokenLimit { get; set; }
 
-    /// <summary>
-    /// Gets or sets the maximum generated-token limit in tokens.
-    /// </summary>
     [JsonPropertyName("max_tokens")]
     public long? MaxTokens { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether the model supports reasoning.
-    /// </summary>
     [JsonPropertyName("supports_reasoning")]
     public bool? SupportsReasoning { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether the model supports tool calling.
-    /// </summary>
     [JsonPropertyName("supports_tool_call")]
     public bool? SupportsToolCall { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether the model supports attachments.
-    /// </summary>
     [JsonPropertyName("supports_attachments")]
     public bool? SupportsAttachments { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether the model supports structured output.
-    /// </summary>
     [JsonPropertyName("supports_structured_output")]
     public bool? SupportsStructuredOutput { get; set; }
 }
 
 /// <summary>
-/// Represents one configured raw-API provider endpoint.
+/// Represents one configured provider.
 /// </summary>
-public sealed class CodeAltaRawApiProviderDocument
+public sealed class CodeAltaProviderDocument
 {
     /// <summary>
     /// Gets or sets the normalized provider key.
@@ -351,16 +183,22 @@ public sealed class CodeAltaRawApiProviderDocument
     public string? DisplayName { get; set; }
 
     /// <summary>
-    /// Gets or sets the raw provider family, such as openai, anthropic, or google_genai.
+    /// Gets or sets the canonical provider type.
     /// </summary>
-    [JsonPropertyName("provider")]
-    public string? Provider { get; set; }
+    [JsonPropertyName("type")]
+    public string? ProviderType { get; set; }
 
     /// <summary>
-    /// Gets or sets the wire API used by the endpoint.
+    /// Gets or sets the default model for the provider.
     /// </summary>
-    [JsonPropertyName("wire_api")]
-    public string? WireApi { get; set; }
+    [JsonPropertyName("model")]
+    public string? Model { get; set; }
+
+    /// <summary>
+    /// Gets or sets the default reasoning effort for the provider.
+    /// </summary>
+    [JsonPropertyName("reasoning_effort")]
+    public string? ReasoningEffort { get; set; }
 
     /// <summary>
     /// Gets or sets the API key literal when configured directly.
@@ -375,16 +213,10 @@ public sealed class CodeAltaRawApiProviderDocument
     public string? ApiKeyEnv { get; set; }
 
     /// <summary>
-    /// Gets or sets the base endpoint override.
+    /// Gets or sets the API endpoint override.
     /// </summary>
-    [JsonPropertyName("base_uri")]
-    public string? BaseUri { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether this provider is the backend default.
-    /// </summary>
-    [JsonPropertyName("is_default")]
-    public bool IsDefault { get; set; }
+    [JsonPropertyName("api_url")]
+    public string? ApiUrl { get; set; }
 
     /// <summary>
     /// Gets or sets the optional OpenAI organization id.
@@ -397,12 +229,6 @@ public sealed class CodeAltaRawApiProviderDocument
     /// </summary>
     [JsonPropertyName("project_id")]
     public string? ProjectId { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether the provider should use Vertex AI.
-    /// </summary>
-    [JsonPropertyName("use_vertex_ai")]
-    public bool UseVertexAI { get; set; }
 
     /// <summary>
     /// Gets or sets the Google Cloud project for Vertex AI.
@@ -438,305 +264,17 @@ public sealed class CodeAltaRawApiProviderDocument
     /// Gets or sets the optional compatibility-profile override.
     /// </summary>
     [JsonPropertyName("profile")]
-    public CodeAltaRawApiProviderProfileDocument? Profile { get; set; }
+    public CodeAltaProviderProfileDocument? Profile { get; set; }
 
     /// <summary>
     /// Gets or sets the optional compaction override.
     /// </summary>
     [JsonPropertyName("compaction")]
-    public CodeAltaRawApiCompactionDocument? Compaction { get; set; }
+    public CodeAltaProviderCompactionDocument? Compaction { get; set; }
 
     /// <summary>
     /// Gets or sets optional per-model metadata overrides.
     /// </summary>
     [JsonPropertyName("model_overrides")]
-    public Dictionary<string, CodeAltaRawApiModelOverrideDocument>? ModelOverrides { get; set; }
-}
-
-/// <summary>
-/// Represents one configured OpenAI-compatible provider.
-/// </summary>
-public sealed class CodeAltaOpenAIProviderDocument
-{
-    /// <summary>
-    /// Gets or sets the normalized provider key.
-    /// </summary>
-    [JsonIgnore]
-    public string ProviderKey { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets whether the provider registration is enabled.
-    /// </summary>
-    [JsonPropertyName("enabled")]
-    public bool Enabled { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the user-facing provider display name.
-    /// </summary>
-    [JsonPropertyName("display_name")]
-    public string? DisplayName { get; set; }
-
-    /// <summary>
-    /// Gets or sets the API key literal when configured directly.
-    /// </summary>
-    [JsonPropertyName("api_key")]
-    public string? ApiKey { get; set; }
-
-    /// <summary>
-    /// Gets or sets the environment variable used to resolve the API key.
-    /// </summary>
-    [JsonPropertyName("api_key_env")]
-    public string? ApiKeyEnv { get; set; }
-
-    /// <summary>
-    /// Gets or sets the base endpoint override.
-    /// </summary>
-    [JsonPropertyName("base_uri")]
-    public string? BaseUri { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional OpenAI organization id.
-    /// </summary>
-    [JsonPropertyName("organization_id")]
-    public string? OrganizationId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional OpenAI project id.
-    /// </summary>
-    [JsonPropertyName("project_id")]
-    public string? ProjectId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional models.dev provider identifier used to enrich model metadata.
-    /// </summary>
-    [JsonPropertyName("models_dev_provider_id")]
-    public string? ModelsDevProviderId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional fixed model identifier for single-model endpoints.
-    /// </summary>
-    [JsonPropertyName("single_model_id")]
-    public string? SingleModelId { get; set; }
-
-    /// <summary>
-    /// Gets or sets provider-specific OpenAI-compatible request-body fields that should be added to outgoing requests.
-    /// </summary>
-    [JsonPropertyName("extra_body")]
-    public TomlTable? ExtraBody { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether the Responses backend is enabled for this provider.
-    /// </summary>
-    [JsonPropertyName("enable_responses")]
-    public bool EnableResponses { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets whether the Chat/Completions backend is enabled for this provider.
-    /// </summary>
-    [JsonPropertyName("enable_chat")]
-    public bool EnableChat { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets whether this provider is the default OpenAI Responses provider.
-    /// </summary>
-    [JsonPropertyName("default_responses")]
-    public bool DefaultResponses { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether this provider is the default OpenAI Chat provider.
-    /// </summary>
-    [JsonPropertyName("default_chat")]
-    public bool DefaultChat { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional compatibility-profile override.
-    /// </summary>
-    [JsonPropertyName("profile")]
-    public CodeAltaRawApiProviderProfileDocument? Profile { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional compaction override.
-    /// </summary>
-    [JsonPropertyName("compaction")]
-    public CodeAltaRawApiCompactionDocument? Compaction { get; set; }
-
-    /// <summary>
-    /// Gets or sets optional per-model metadata overrides.
-    /// </summary>
-    [JsonPropertyName("model_overrides")]
-    public Dictionary<string, CodeAltaRawApiModelOverrideDocument>? ModelOverrides { get; set; }
-}
-
-/// <summary>
-/// Represents one configured Anthropic provider.
-/// </summary>
-public sealed class CodeAltaAnthropicProviderDocument
-{
-    /// <summary>
-    /// Gets or sets the normalized provider key.
-    /// </summary>
-    [JsonIgnore]
-    public string ProviderKey { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets whether the provider registration is enabled.
-    /// </summary>
-    [JsonPropertyName("enabled")]
-    public bool Enabled { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the user-facing provider display name.
-    /// </summary>
-    [JsonPropertyName("display_name")]
-    public string? DisplayName { get; set; }
-
-    /// <summary>
-    /// Gets or sets the API key literal when configured directly.
-    /// </summary>
-    [JsonPropertyName("api_key")]
-    public string? ApiKey { get; set; }
-
-    /// <summary>
-    /// Gets or sets the environment variable used to resolve the API key.
-    /// </summary>
-    [JsonPropertyName("api_key_env")]
-    public string? ApiKeyEnv { get; set; }
-
-    /// <summary>
-    /// Gets or sets the base endpoint override.
-    /// </summary>
-    [JsonPropertyName("base_uri")]
-    public string? BaseUri { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional models.dev provider identifier used to enrich model metadata.
-    /// </summary>
-    [JsonPropertyName("models_dev_provider_id")]
-    public string? ModelsDevProviderId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional fixed model identifier used when the provider does not support model discovery.
-    /// </summary>
-    [JsonPropertyName("single_model_id")]
-    public string? SingleModelId { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether this provider is the backend default.
-    /// </summary>
-    [JsonPropertyName("is_default")]
-    public bool IsDefault { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional compatibility-profile override.
-    /// </summary>
-    [JsonPropertyName("profile")]
-    public CodeAltaRawApiProviderProfileDocument? Profile { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional compaction override.
-    /// </summary>
-    [JsonPropertyName("compaction")]
-    public CodeAltaRawApiCompactionDocument? Compaction { get; set; }
-
-    /// <summary>
-    /// Gets or sets optional per-model metadata overrides.
-    /// </summary>
-    [JsonPropertyName("model_overrides")]
-    public Dictionary<string, CodeAltaRawApiModelOverrideDocument>? ModelOverrides { get; set; }
-}
-
-/// <summary>
-/// Represents one configured Google GenAI provider.
-/// </summary>
-public sealed class CodeAltaGoogleGenAIProviderDocument
-{
-    /// <summary>
-    /// Gets or sets the normalized provider key.
-    /// </summary>
-    [JsonIgnore]
-    public string ProviderKey { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets whether the provider registration is enabled.
-    /// </summary>
-    [JsonPropertyName("enabled")]
-    public bool Enabled { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the user-facing provider display name.
-    /// </summary>
-    [JsonPropertyName("display_name")]
-    public string? DisplayName { get; set; }
-
-    /// <summary>
-    /// Gets or sets the API key literal when configured directly.
-    /// </summary>
-    [JsonPropertyName("api_key")]
-    public string? ApiKey { get; set; }
-
-    /// <summary>
-    /// Gets or sets the environment variable used to resolve the API key.
-    /// </summary>
-    [JsonPropertyName("api_key_env")]
-    public string? ApiKeyEnv { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether the provider should use Vertex AI.
-    /// </summary>
-    [JsonPropertyName("use_vertex_ai")]
-    public bool UseVertexAI { get; set; }
-
-    /// <summary>
-    /// Gets or sets the Google Cloud project for Vertex AI.
-    /// </summary>
-    [JsonPropertyName("project")]
-    public string? Project { get; set; }
-
-    /// <summary>
-    /// Gets or sets the Google Cloud location for Vertex AI.
-    /// </summary>
-    [JsonPropertyName("location")]
-    public string? Location { get; set; }
-
-    /// <summary>
-    /// Gets or sets the base endpoint override.
-    /// </summary>
-    [JsonPropertyName("base_uri")]
-    public string? BaseUri { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional models.dev provider identifier used to enrich model metadata.
-    /// </summary>
-    [JsonPropertyName("models_dev_provider_id")]
-    public string? ModelsDevProviderId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional fixed model identifier used when the provider does not support model discovery.
-    /// </summary>
-    [JsonPropertyName("single_model_id")]
-    public string? SingleModelId { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether this provider is the backend default.
-    /// </summary>
-    [JsonPropertyName("is_default")]
-    public bool IsDefault { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional compatibility-profile override.
-    /// </summary>
-    [JsonPropertyName("profile")]
-    public CodeAltaRawApiProviderProfileDocument? Profile { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optional compaction override.
-    /// </summary>
-    [JsonPropertyName("compaction")]
-    public CodeAltaRawApiCompactionDocument? Compaction { get; set; }
-
-    /// <summary>
-    /// Gets or sets optional per-model metadata overrides.
-    /// </summary>
-    [JsonPropertyName("model_overrides")]
-    public Dictionary<string, CodeAltaRawApiModelOverrideDocument>? ModelOverrides { get; set; }
+    public Dictionary<string, CodeAltaProviderModelOverrideDocument>? ModelOverrides { get; set; }
 }

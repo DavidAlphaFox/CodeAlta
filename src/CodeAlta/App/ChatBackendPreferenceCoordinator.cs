@@ -26,7 +26,7 @@ internal sealed class ChatBackendPreferenceCoordinator
         ArgumentNullException.ThrowIfNull(backendState);
 
         var scopeKey = BuildDraftScopeKey(draftProjectRoot);
-        var defaults = _configStore.GetEffectiveBackendPreference(backendState.BackendId, draftProjectRoot);
+        var defaults = _configStore.GetEffectiveProviderPreference(backendState.BackendId.Value, draftProjectRoot);
         var preserveCurrentSelection = string.Equals(backendState.DraftScopeKey, scopeKey, StringComparison.OrdinalIgnoreCase);
         var preferredModelId = preserveCurrentSelection
             ? backendState.SelectedModelId ?? defaults.Model
@@ -53,7 +53,7 @@ internal sealed class ChatBackendPreferenceCoordinator
         ArgumentNullException.ThrowIfNull(chatBackendStates);
 
         viewState.ThreadPreferences.TryGetValue(tab.Thread.ThreadId, out var persistedPreference);
-        var defaults = _configStore.GetEffectiveBackendPreference(tab.BackendId, threadProjectRoot);
+        var defaults = _configStore.GetEffectiveProviderPreference(tab.BackendId.Value, threadProjectRoot);
         tab.ModelId ??= persistedPreference?.ModelId ?? defaults.Model;
         tab.ReasoningEffort ??= persistedPreference?.ReasoningEffort ?? defaults.ReasoningEffort;
         tab.AutoScroll = persistedPreference?.AutoScroll ?? true;
@@ -80,7 +80,7 @@ internal sealed class ChatBackendPreferenceCoordinator
     {
         try
         {
-            _configStore.SaveGlobalBackendPreference(backendId, modelId, reasoningEffort);
+            _configStore.SaveGlobalProviderPreference(backendId.Value, modelId, reasoningEffort);
         }
         catch (Exception ex)
         {

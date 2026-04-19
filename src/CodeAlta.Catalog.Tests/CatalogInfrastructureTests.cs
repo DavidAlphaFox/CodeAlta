@@ -438,18 +438,19 @@ public sealed class CatalogInfrastructureTests
     }
 
     [TestMethod]
-    public void CodeAltaConfigStore_SaveGlobalBackendPreference_WritesTomlAndReloads()
+    public void CodeAltaConfigStore_SaveGlobalProviderPreference_WritesTomlAndReloads()
     {
         using var root = TempDirectory.Create();
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = root.Path });
 
-        store.SaveGlobalBackendPreference(AgentBackendIds.Codex, "gpt-5.4", AgentReasoningEffort.High);
+        store.SaveGlobalProviderPreference(AgentBackendIds.Codex.Value, "gpt-5.4", AgentReasoningEffort.High);
 
         var configPath = Path.Combine(root.Path, "config.toml");
         var content = File.ReadAllText(configPath);
-        var preference = store.GetEffectiveBackendPreference(AgentBackendIds.Codex);
+        var preference = store.GetEffectiveProviderPreference(AgentBackendIds.Codex.Value);
 
-        StringAssert.Contains(content, "backends");
+        StringAssert.Contains(content, "[providers.codex]");
+        StringAssert.Contains(content, "type = \"codex\"");
         StringAssert.Contains(content, "gpt-5.4");
         StringAssert.Contains(content, "reasoning_effort = \"high\"");
         Assert.AreEqual("gpt-5.4", preference.Model);
@@ -457,23 +458,23 @@ public sealed class CatalogInfrastructureTests
     }
 
     [TestMethod]
-    public void CodeAltaConfigStore_GetEffectiveBackendPreference_ProjectConfigOverridesGlobalPerField()
+    public void CodeAltaConfigStore_GetEffectiveProviderPreference_ProjectConfigOverridesGlobalPerField()
     {
         using var root = TempDirectory.Create();
         var projectRoot = Path.Combine(root.Path, "project-a");
         Directory.CreateDirectory(Path.Combine(projectRoot, ".codealta"));
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = root.Path });
-        store.SaveGlobalBackendPreference(AgentBackendIds.Codex, "gpt-5.4", AgentReasoningEffort.High);
+        store.SaveGlobalProviderPreference(AgentBackendIds.Codex.Value, "gpt-5.4", AgentReasoningEffort.High);
 
         File.WriteAllText(
             Path.Combine(projectRoot, ".codealta", "config.toml"),
             """
-            [backends.codex]
+            [providers.codex]
             reasoning_effort = "medium"
             """);
 
-        var preference = store.GetEffectiveBackendPreference(AgentBackendIds.Codex, projectRoot);
+        var preference = store.GetEffectiveProviderPreference(AgentBackendIds.Codex.Value, projectRoot);
 
         Assert.AreEqual("gpt-5.4", preference.Model);
         Assert.AreEqual(AgentReasoningEffort.Medium, preference.ReasoningEffort);

@@ -30,8 +30,8 @@ public sealed class AnthropicAgentBackend : IAgentBackend
         }
 
         _inner = new LocalAgentBackend(
-            AgentBackendIds.AnthropicMessages,
-            "Anthropic Messages",
+            options.BackendIdOverride ?? AgentBackendIds.AnthropicMessages,
+            string.IsNullOrWhiteSpace(options.DisplayNameOverride) ? "Anthropic Messages" : options.DisplayNameOverride.Trim(),
             new LocalAgentBackendOptions
             {
                 StateRootPath = options.StateRootPath,
@@ -44,7 +44,7 @@ public sealed class AnthropicAgentBackend : IAgentBackend
                             ProtocolFamily = "anthropic-messages",
                             ProviderKey = provider.ProviderKey.Trim(),
                             DisplayName = string.IsNullOrWhiteSpace(provider.DisplayName) ? provider.ProviderKey.Trim() : provider.DisplayName.Trim(),
-                            BackendId = AgentBackendIds.AnthropicMessages,
+                            BackendId = options.BackendIdOverride ?? AgentBackendIds.AnthropicMessages,
                             TransportKind = LocalAgentTransportKind.AnthropicMessages,
                             BaseUri = provider.BaseUri,
                             IsDefault = provider.IsDefault,

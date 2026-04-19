@@ -27,8 +27,8 @@ public sealed class GoogleGenAIAgentBackend : IAgentBackend
         }
 
         _inner = new LocalAgentBackend(
-            AgentBackendIds.GoogleGenAI,
-            "Google GenAI",
+            options.BackendIdOverride ?? AgentBackendIds.GoogleGenAI,
+            string.IsNullOrWhiteSpace(options.DisplayNameOverride) ? "Google GenAI" : options.DisplayNameOverride.Trim(),
             new LocalAgentBackendOptions
             {
                 StateRootPath = options.StateRootPath,
@@ -41,7 +41,7 @@ public sealed class GoogleGenAIAgentBackend : IAgentBackend
                             ProtocolFamily = "google-genai",
                             ProviderKey = provider.ProviderKey.Trim(),
                             DisplayName = string.IsNullOrWhiteSpace(provider.DisplayName) ? provider.ProviderKey.Trim() : provider.DisplayName.Trim(),
-                            BackendId = AgentBackendIds.GoogleGenAI,
+                            BackendId = options.BackendIdOverride ?? AgentBackendIds.GoogleGenAI,
                             TransportKind = provider.UseVertexAI ? LocalAgentTransportKind.GoogleVertexAI : LocalAgentTransportKind.GoogleGeminiApi,
                             BaseUri = provider.BaseUri,
                             IsDefault = provider.IsDefault,

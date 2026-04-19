@@ -9,7 +9,10 @@ namespace CodeAlta.Catalog;
 /// </summary>
 public sealed class CodeAltaConfigStore
 {
-    private static readonly CodeAltaRawApiCompactionDocument DefaultCompaction = new()
+    private const string CodexProviderKey = "codex";
+    private const string CopilotProviderKey = "copilot";
+
+    private static readonly CodeAltaProviderCompactionDocument DefaultCompaction = new()
     {
         Enabled = true,
         TriggerThreshold = 0.85,
@@ -72,47 +75,113 @@ public sealed class CodeAltaConfigStore
             : LoadDocument(GetProjectConfigPath(projectRoot));
 
     /// <summary>
-    /// Resolves the effective backend preference for a scope.
+    /// Resolves the effective provider preference for a scope.
     /// </summary>
-    /// <param name="backendId">The backend identifier.</param>
+    /// <param name="providerKey">The provider key.</param>
     /// <param name="projectRoot">Optional project root for project-local overrides.</param>
-    /// <returns>The merged backend preference.</returns>
-    public CodeAltaBackendPreference GetEffectiveBackendPreference(AgentBackendId backendId, string? projectRoot = null)
+    /// <returns>The merged provider preference.</returns>
+    public CodeAltaProviderPreference GetEffectiveProviderPreference(string providerKey, string? projectRoot = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerKey);
+
         var global = LoadGlobal();
         var project = LoadProject(projectRoot);
-        return ResolveBackendPreference(global, project, backendId);
+        return ResolveProviderPreference(global, project, providerKey);
     }
 
     /// <summary>
-    /// Persists the global backend preference.
+    /// Persists the global provider preference.
     /// </summary>
-    /// <param name="backendId">The backend identifier.</param>
+    /// <param name="providerKey">The provider key.</param>
     /// <param name="model">The preferred model identifier.</param>
     /// <param name="reasoningEffort">The preferred reasoning effort.</param>
-    public void SaveGlobalBackendPreference(
-        AgentBackendId backendId,
+    public void SaveGlobalProviderPreference(
+        string providerKey,
         string? model,
         AgentReasoningEffort? reasoningEffort)
     {
+        var normalizedProviderKey = NormalizeProviderKey(providerKey)
+            ?? throw new ArgumentException("Provider key is required.", nameof(providerKey));
         var document = LoadGlobal();
+        NormalizeDocument(document);
         var normalizedModel = NormalizeModel(model);
         var normalizedReasoning = FormatReasoningEffort(reasoningEffort);
 
         if (normalizedModel is null && normalizedReasoning is null)
         {
-            document.Backends.Remove(backendId.Value);
+            if (document.Providers.TryGetValue(normalizedProviderKey, out var existing))
+            {
+                existing.Model = null;
+                existing.ReasoningEffort = null;
+                if (CanDropProviderEntry(normalizedProviderKey, existing))
+                {
+                    document.Providers.Remove(normalizedProviderKey);
+                }
+            }
         }
         else
         {
-            document.Backends[backendId.Value] = new CodeAltaBackendSettingsDocument
-            {
-                Model = normalizedModel,
-                ReasoningEffort = normalizedReasoning,
-            };
+            var definition = GetOrCreateProviderPreferenceEntry(document, normalizedProviderKey);
+            definition.Model = normalizedModel;
+            definition.ReasoningEffort = normalizedReasoning;
         }
 
         SaveDocument(_options.ConfigPath, document);
+    }
+
+    /// <summary>
+    /// Resolves the effective default provider key.
+    /// </summary>
+    /// <param name="projectRoot">Optional project root for project-local overrides.</param>
+    /// <returns>The configured default provider key, or <see langword="null"/> when none is configured.</returns>
+    public string? GetEffectiveDefaultProvider(string? projectRoot = null)
+    {
+        var global = LoadGlobal();
+        var project = LoadProject(projectRoot);
+        return NormalizeProviderKey(project.Chat.DefaultProvider)
+            ?? NormalizeProviderKey(global.Chat.DefaultProvider);
+    }
+
+    /// <summary>
+    /// Persists the global default provider key.
+    /// </summary>
+    /// <param name="providerKey">The provider key, or <see langword="null"/> to clear the setting.</param>
+    public void SaveGlobalDefaultProvider(string? providerKey)
+    {
+        var document = LoadGlobal();
+        NormalizeDocument(document);
+        document.Chat.DefaultProvider = NormalizeProviderKey(providerKey);
+        SaveDocument(_options.ConfigPath, document);
+    }
+
+    /// <summary>
+    /// Loads globally configured provider definitions.
+    /// </summary>
+    /// <param name="includeDisabled"><see langword="true"/> to include disabled definitions.</param>
+    /// <returns>The configured provider definitions.</returns>
+    public IReadOnlyList<CodeAltaProviderDocument> LoadGlobalProviderDefinitions(bool includeDisabled = false)
+    {
+        var document = LoadGlobal();
+        NormalizeDocument(document);
+        var definitions = document.Providers.Values
+            .Select(CloneProviderDefinition)
+            .ToDictionary(
+                static definition => definition.ProviderKey,
+                static definition => definition,
+                StringComparer.OrdinalIgnoreCase);
+
+        AddImplicitReservedProvider(definitions, CodexProviderKey);
+        AddImplicitReservedProvider(definitions, CopilotProviderKey);
+
+        foreach (var definition in definitions.Values)
+        {
+            CompleteAndValidateProviderDefinition(definition);
+        }
+
+        return definitions.Values
+            .Where(definition => includeDisabled || definition.Enabled)
+            .OrderBy(static definition => definition.DisplayName ?? definition.ProviderKey, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     /// <summary>
@@ -262,155 +331,6 @@ public sealed class CodeAltaConfigStore
             .ToArray();
     }
 
-    /// <summary>
-    /// Loads globally configured raw-API provider endpoint definitions.
-    /// </summary>
-    /// <param name="includeDisabled">
-    /// <see langword="true"/> to include disabled definitions; otherwise only enabled definitions are returned.
-    /// </param>
-    /// <returns>The configured provider endpoint definitions.</returns>
-    public IReadOnlyList<CodeAltaRawApiProviderDocument> LoadGlobalRawApiProviderDefinitions(bool includeDisabled = false)
-    {
-        var document = LoadGlobal();
-        NormalizeDocument(document);
-        var definitions = document.RawApi.Providers.Values
-            .Select(CloneRawApiProviderDefinition)
-            .ToDictionary(
-                static definition => definition.ProviderKey,
-                static definition => definition,
-                StringComparer.OrdinalIgnoreCase);
-
-        foreach (var definition in document.Providers.Values)
-        {
-            definitions[definition.ProviderKey] = CloneRawApiProviderDefinition(definition);
-        }
-
-        return definitions.Values
-            .Where(definition => includeDisabled || definition.Enabled)
-            .OrderBy(static definition => definition.DisplayName ?? definition.ProviderKey, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    /// <summary>
-    /// Loads globally configured OpenAI-compatible provider definitions.
-    /// </summary>
-    /// <param name="includeDisabled">
-    /// <see langword="true"/> to include disabled definitions; otherwise only enabled definitions are returned.
-    /// </param>
-    /// <returns>The configured provider definitions.</returns>
-    public IReadOnlyList<CodeAltaOpenAIProviderDocument> LoadGlobalOpenAIProviderDefinitions(bool includeDisabled = false)
-    {
-        var document = LoadGlobal();
-        NormalizeDocument(document);
-        var definitions = document.RawApi.OpenAI.Providers.Values
-            .Select(CloneOpenAIProviderDefinition)
-            .ToDictionary(
-                static definition => definition.ProviderKey,
-                static definition => definition,
-                StringComparer.OrdinalIgnoreCase);
-
-        foreach (var definition in document.RawApi.Providers.Values)
-        {
-            if (TryConvertUnifiedProviderToOpenAI(definition, out var converted) && converted is not null)
-            {
-                definitions[converted.ProviderKey] = converted;
-            }
-        }
-
-        foreach (var definition in document.Providers.Values)
-        {
-            if (TryConvertUnifiedProviderToOpenAI(definition, out var converted) && converted is not null)
-            {
-                definitions[converted.ProviderKey] = converted;
-            }
-        }
-
-        return definitions.Values
-            .Where(definition => includeDisabled || definition.Enabled)
-            .OrderBy(static definition => definition.DisplayName ?? definition.ProviderKey, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    /// <summary>
-    /// Loads globally configured Anthropic provider definitions.
-    /// </summary>
-    /// <param name="includeDisabled">
-    /// <see langword="true"/> to include disabled definitions; otherwise only enabled definitions are returned.
-    /// </param>
-    /// <returns>The configured provider definitions.</returns>
-    public IReadOnlyList<CodeAltaAnthropicProviderDocument> LoadGlobalAnthropicProviderDefinitions(bool includeDisabled = false)
-    {
-        var document = LoadGlobal();
-        NormalizeDocument(document);
-        var definitions = document.RawApi.Anthropic.Providers.Values
-            .Select(CloneAnthropicProviderDefinition)
-            .ToDictionary(
-                static definition => definition.ProviderKey,
-                static definition => definition,
-                StringComparer.OrdinalIgnoreCase);
-
-        foreach (var definition in document.RawApi.Providers.Values)
-        {
-            if (TryConvertUnifiedProviderToAnthropic(definition, out var converted) && converted is not null)
-            {
-                definitions[converted.ProviderKey] = converted;
-            }
-        }
-
-        foreach (var definition in document.Providers.Values)
-        {
-            if (TryConvertUnifiedProviderToAnthropic(definition, out var converted) && converted is not null)
-            {
-                definitions[converted.ProviderKey] = converted;
-            }
-        }
-
-        return definitions.Values
-            .Where(definition => includeDisabled || definition.Enabled)
-            .OrderBy(static definition => definition.DisplayName ?? definition.ProviderKey, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    /// <summary>
-    /// Loads globally configured Google GenAI provider definitions.
-    /// </summary>
-    /// <param name="includeDisabled">
-    /// <see langword="true"/> to include disabled definitions; otherwise only enabled definitions are returned.
-    /// </param>
-    /// <returns>The configured provider definitions.</returns>
-    public IReadOnlyList<CodeAltaGoogleGenAIProviderDocument> LoadGlobalGoogleGenAIProviderDefinitions(bool includeDisabled = false)
-    {
-        var document = LoadGlobal();
-        NormalizeDocument(document);
-        var definitions = document.RawApi.GoogleGenAI.Providers.Values
-            .Select(CloneGoogleGenAIProviderDefinition)
-            .ToDictionary(
-                static definition => definition.ProviderKey,
-                static definition => definition,
-                StringComparer.OrdinalIgnoreCase);
-
-        foreach (var definition in document.RawApi.Providers.Values)
-        {
-            if (TryConvertUnifiedProviderToGoogleGenAI(definition, out var converted) && converted is not null)
-            {
-                definitions[converted.ProviderKey] = converted;
-            }
-        }
-
-        foreach (var definition in document.Providers.Values)
-        {
-            if (TryConvertUnifiedProviderToGoogleGenAI(definition, out var converted) && converted is not null)
-            {
-                definitions[converted.ProviderKey] = converted;
-            }
-        }
-
-        return definitions.Values
-            .Where(definition => includeDisabled || definition.Enabled)
-            .OrderBy(static definition => definition.DisplayName ?? definition.ProviderKey, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
     internal static AgentReasoningEffort? ParseReasoningEffort(string? value)
     {
         return value?.Trim().ToLowerInvariant() switch
@@ -440,34 +360,47 @@ public sealed class CodeAltaConfigStore
         };
     }
 
-    internal static CodeAltaBackendPreference ResolveBackendPreference(
+    internal static CodeAltaProviderPreference ResolveProviderPreference(
         CodeAltaConfigDocument global,
         CodeAltaConfigDocument? project,
-        AgentBackendId backendId)
+        string providerKey)
     {
         ArgumentNullException.ThrowIfNull(global);
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerKey);
 
-        return MergeBackendPreference(
-            GetBackendSettings(global, backendId),
-            project is null ? null : GetBackendSettings(project, backendId));
+        return MergeProviderPreference(
+            GetProviderSettings(global, providerKey),
+            project is null ? null : GetProviderSettings(project, providerKey));
     }
 
-    internal static CodeAltaBackendSettingsDocument? GetBackendSettings(
-        CodeAltaConfigDocument document,
-        AgentBackendId backendId)
+    internal static CodeAltaProviderDocument? GetProviderSettings(CodeAltaConfigDocument document, string providerKey)
     {
-        return document.Backends.TryGetValue(backendId.Value, out var settings)
-            ? settings
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerKey);
+
+        var normalizedProviderKey = NormalizeProviderKey(providerKey);
+        if (normalizedProviderKey is null)
+        {
+            return null;
+        }
+
+        if (document.Providers.TryGetValue(normalizedProviderKey, out var settings))
+        {
+            return settings;
+        }
+
+        return IsReservedProviderKey(normalizedProviderKey)
+            ? CreateImplicitReservedProviderDefinition(normalizedProviderKey)
             : null;
     }
 
-    private static CodeAltaBackendPreference MergeBackendPreference(
-        CodeAltaBackendSettingsDocument? global,
-        CodeAltaBackendSettingsDocument? project)
+    private static CodeAltaProviderPreference MergeProviderPreference(
+        CodeAltaProviderDocument? global,
+        CodeAltaProviderDocument? project)
     {
         var model = NormalizeModel(project?.Model) ?? NormalizeModel(global?.Model);
         var reasoning = ParseReasoningEffort(project?.ReasoningEffort) ?? ParseReasoningEffort(global?.ReasoningEffort);
-        return new CodeAltaBackendPreference(model, reasoning);
+        return new CodeAltaProviderPreference(model, reasoning);
     }
 
     private static string? NormalizeModel(string? model)
@@ -494,7 +427,8 @@ public sealed class CodeAltaConfigStore
 
         try
         {
-            var document = TomlSerializer.Deserialize(content, CodeAltaTomlSerializerContext.Default.CodeAltaConfigDocument)
+            ThrowIfLegacyConfigShapeDetected(content);
+            var document = TomlSerializer.Deserialize<CodeAltaConfigDocument>(content)
                 ?? new CodeAltaConfigDocument();
             NormalizeDocument(document);
             return document;
@@ -509,7 +443,7 @@ public sealed class CodeAltaConfigStore
     {
         NormalizeDocument(document);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var content = TomlSerializer.Serialize(document, CodeAltaTomlSerializerContext.Default.CodeAltaConfigDocument);
+        var content = TomlSerializer.Serialize(document);
         File.WriteAllText(path, content);
     }
 
@@ -517,16 +451,8 @@ public sealed class CodeAltaConfigStore
     {
         ArgumentNullException.ThrowIfNull(document);
 
-        document.Backends = document.Backends
-            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
-            .ToDictionary(
-                static entry => entry.Key.Trim(),
-                static entry => new CodeAltaBackendSettingsDocument
-                {
-                    Model = NormalizeModel(entry.Value?.Model),
-                    ReasoningEffort = NormalizeReasoningEffortText(entry.Value?.ReasoningEffort),
-                },
-                StringComparer.OrdinalIgnoreCase);
+        document.Chat ??= new CodeAltaChatSettingsDocument();
+        document.Chat.DefaultProvider = NormalizeProviderKey(document.Chat.DefaultProvider);
 
         document.Acp ??= new CodeAltaAcpSettingsDocument();
         document.Acp.Agents = document.Acp.Agents
@@ -550,94 +476,41 @@ public sealed class CodeAltaConfigStore
                 static entry => entry.Value,
                 StringComparer.OrdinalIgnoreCase);
 
-        document.RawApi ??= new CodeAltaRawApiSettingsDocument();
-        document.RawApi.Compaction = NormalizeAndCompleteCompactionSettings(
-            document.RawApi.Compaction,
-            DefaultCompaction);
-        document.Providers = NormalizeUnifiedProviderDefinitions(
-            document.Providers,
-            document.RawApi.Compaction,
-            document.RawApi.Compaction);
-        document.RawApi.Providers = NormalizeUnifiedProviderDefinitions(
-            document.RawApi.Providers,
-            document.RawApi.Compaction,
-            document.RawApi.Compaction);
-        document.RawApi.OpenAI ??= new CodeAltaOpenAISettingsDocument();
-        document.RawApi.OpenAI.Providers = document.RawApi.OpenAI.Providers
+        document.Providers = (document.Providers ?? new Dictionary<string, CodeAltaProviderDocument>(StringComparer.OrdinalIgnoreCase))
             .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
-            .Select(entry =>
-            {
-                var definition = entry.Value ?? new CodeAltaOpenAIProviderDocument();
-                definition.ProviderKey = NormalizeRawProviderKey(entry.Key) ?? string.Empty;
-                definition.DisplayName = NormalizeText(definition.DisplayName);
-                definition.ApiKey = NormalizeText(definition.ApiKey);
-                definition.ApiKeyEnv = NormalizeText(definition.ApiKeyEnv);
-                definition.BaseUri = NormalizeText(definition.BaseUri);
-                definition.OrganizationId = NormalizeText(definition.OrganizationId);
-                definition.ProjectId = NormalizeText(definition.ProjectId);
-                definition.ModelsDevProviderId = NormalizeRawProviderKey(definition.ModelsDevProviderId);
-                definition.SingleModelId = NormalizeModel(definition.SingleModelId);
-                definition.ExtraBody = NormalizeExtraBody(definition.ExtraBody);
-                definition.Profile = NormalizeProfile(definition.Profile);
-                definition.ModelOverrides = NormalizeModelOverrides(definition.ModelOverrides);
-                definition.Compaction = NormalizeAndCompleteCompactionSettings(definition.Compaction, document.RawApi.Compaction);
-                return definition;
-            })
+            .Select(static entry => NormalizeProviderEntry(entry.Key, entry.Value))
             .Where(static definition => !string.IsNullOrWhiteSpace(definition.ProviderKey))
             .ToDictionary(
                 static definition => definition.ProviderKey,
                 static definition => definition,
                 StringComparer.OrdinalIgnoreCase);
+    }
 
-        document.RawApi.Anthropic ??= new CodeAltaAnthropicSettingsDocument();
-        document.RawApi.Anthropic.Providers = document.RawApi.Anthropic.Providers
-            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
-            .Select(entry =>
-            {
-                var definition = entry.Value ?? new CodeAltaAnthropicProviderDocument();
-                definition.ProviderKey = NormalizeRawProviderKey(entry.Key) ?? string.Empty;
-                definition.DisplayName = NormalizeText(definition.DisplayName);
-                definition.ApiKey = NormalizeText(definition.ApiKey);
-                definition.ApiKeyEnv = NormalizeText(definition.ApiKeyEnv);
-                definition.BaseUri = NormalizeText(definition.BaseUri);
-                definition.ModelsDevProviderId = NormalizeRawProviderKey(definition.ModelsDevProviderId);
-                definition.SingleModelId = NormalizeModel(definition.SingleModelId);
-                definition.Profile = NormalizeProfile(definition.Profile);
-                definition.ModelOverrides = NormalizeModelOverrides(definition.ModelOverrides);
-                definition.Compaction = NormalizeAndCompleteCompactionSettings(definition.Compaction, document.RawApi.Compaction);
-                return definition;
-            })
-            .Where(static definition => !string.IsNullOrWhiteSpace(definition.ProviderKey))
-            .ToDictionary(
-                static definition => definition.ProviderKey,
-                static definition => definition,
-                StringComparer.OrdinalIgnoreCase);
+    private static CodeAltaProviderDocument NormalizeProviderEntry(string key, CodeAltaProviderDocument? value)
+    {
+        var definition = value ?? new CodeAltaProviderDocument();
+        definition.ProviderKey = NormalizeProviderKey(key) ?? string.Empty;
+        definition.DisplayName = NormalizeText(definition.DisplayName);
+        definition.ProviderType = NormalizeProviderType(definition.ProviderKey, definition.ProviderType);
+        definition.Model = NormalizeModel(definition.Model);
+        definition.ReasoningEffort = NormalizeReasoningEffortText(definition.ReasoningEffort);
+        definition.ApiKey = NormalizeText(definition.ApiKey);
+        definition.ApiKeyEnv = NormalizeText(definition.ApiKeyEnv);
+        definition.ApiUrl = NormalizeText(definition.ApiUrl);
+        definition.OrganizationId = NormalizeText(definition.OrganizationId);
+        definition.ProjectId = NormalizeText(definition.ProjectId);
+        definition.Project = NormalizeText(definition.Project);
+        definition.Location = NormalizeText(definition.Location);
+        definition.ModelsDevProviderId = NormalizeProviderKey(definition.ModelsDevProviderId);
+        definition.SingleModelId = NormalizeModel(definition.SingleModelId);
+        definition.ExtraBody = NormalizeExtraBody(definition.ExtraBody);
+        definition.Profile = NormalizeProfile(definition.Profile);
+        definition.ModelOverrides = NormalizeModelOverrides(definition.ModelOverrides);
+        definition.Compaction = NormalizeAndCompleteCompactionSettings(definition.Compaction, DefaultCompaction);
 
-        document.RawApi.GoogleGenAI ??= new CodeAltaGoogleGenAISettingsDocument();
-        document.RawApi.GoogleGenAI.Providers = document.RawApi.GoogleGenAI.Providers
-            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
-            .Select(entry =>
-            {
-                var definition = entry.Value ?? new CodeAltaGoogleGenAIProviderDocument();
-                definition.ProviderKey = NormalizeRawProviderKey(entry.Key) ?? string.Empty;
-                definition.DisplayName = NormalizeText(definition.DisplayName);
-                definition.ApiKey = NormalizeText(definition.ApiKey);
-                definition.ApiKeyEnv = NormalizeText(definition.ApiKeyEnv);
-                definition.Project = NormalizeText(definition.Project);
-                definition.Location = NormalizeText(definition.Location);
-                definition.BaseUri = NormalizeText(definition.BaseUri);
-                definition.ModelsDevProviderId = NormalizeRawProviderKey(definition.ModelsDevProviderId);
-                definition.SingleModelId = NormalizeModel(definition.SingleModelId);
-                definition.Profile = NormalizeProfile(definition.Profile);
-                definition.ModelOverrides = NormalizeModelOverrides(definition.ModelOverrides);
-                definition.Compaction = NormalizeAndCompleteCompactionSettings(definition.Compaction, document.RawApi.Compaction);
-                return definition;
-            })
-            .Where(static definition => !string.IsNullOrWhiteSpace(definition.ProviderKey))
-            .ToDictionary(
-                static definition => definition.ProviderKey,
-                static definition => definition,
-                StringComparer.OrdinalIgnoreCase);
+        ApplyReservedProviderDefaults(definition);
+        ValidateReservedProviderKey(definition);
+        return definition;
     }
 
     private static string? NormalizeReasoningEffortText(string? value)
@@ -682,93 +555,221 @@ public sealed class CodeAltaConfigStore
         return normalized?.ToLowerInvariant();
     }
 
-    private static string? NormalizeRawProviderKey(string? value)
+    private static string? NormalizeProviderKey(string? value)
     {
         var normalized = NormalizeText(value);
         return normalized?.ToLowerInvariant();
     }
 
-    private static string? NormalizeRawProviderKind(string? value)
+    private static string? NormalizeProviderType(string providerKey, string? value)
     {
         var normalized = NormalizeText(value)?.ToLowerInvariant();
-        return normalized switch
+        normalized = normalized switch
         {
-            "openai" or "openai_compatible" or "openai-compatible" => "openai",
-            "anthropic" => "anthropic",
-            "google" or "google_genai" or "google-genai" or "genai" or "gemini" => "google_genai",
+            null => null,
+            "openai" or "openai-chat" or "openai-chat-completions" or "chat" or "chat-completions" or "chat_completions" => "openai-chat",
+            "openai-responses" or "responses" or "response" => "openai-responses",
+            "anthropic" or "anthropic-messages" or "messages" or "message" => "anthropic",
+            "google" or "google-genai" or "google_genai" or "gemini" or "genai" => "google-genai",
+            "vertex" or "vertex-ai" or "google-vertex" or "google_vertex" => "vertex-ai",
+            "copilot" => "copilot",
+            "codex" => "codex",
             _ => null,
+        };
+
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return IsReservedProviderKey(providerKey) ? providerKey : null;
+        }
+
+        return normalized;
+    }
+
+    private static void ValidateReservedProviderKey(CodeAltaProviderDocument definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if (string.Equals(definition.ProviderKey, CodexProviderKey, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(definition.ProviderType, CodexProviderKey, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("providers.codex type must be 'codex'.");
+        }
+
+        if (string.Equals(definition.ProviderKey, CopilotProviderKey, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(definition.ProviderType, CopilotProviderKey, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("providers.copilot type must be 'copilot'.");
+        }
+    }
+
+    private static void CompleteAndValidateProviderDefinition(CodeAltaProviderDocument definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        definition.ProviderType = NormalizeProviderType(definition.ProviderKey, definition.ProviderType)
+            ?? throw new InvalidOperationException(
+                $"providers.{definition.ProviderKey} type must be one of: codex, copilot, openai-chat, openai-responses, anthropic, google-genai, vertex-ai.");
+        ApplyReservedProviderDefaults(definition);
+        ValidateReservedProviderKey(definition);
+        ValidateProviderFields(definition);
+    }
+
+    private static void ValidateProviderFields(CodeAltaProviderDocument definition)
+    {
+        switch (definition.ProviderType)
+        {
+            case "codex":
+            case "copilot":
+                RejectUnsupportedField(definition, "api_key", definition.ApiKey);
+                RejectUnsupportedField(definition, "api_key_env", definition.ApiKeyEnv);
+                RejectUnsupportedField(definition, "api_url", definition.ApiUrl);
+                RejectUnsupportedField(definition, "organization_id", definition.OrganizationId);
+                RejectUnsupportedField(definition, "project_id", definition.ProjectId);
+                RejectUnsupportedField(definition, "project", definition.Project);
+                RejectUnsupportedField(definition, "location", definition.Location);
+                RejectUnsupportedField(definition, "extra_body", definition.ExtraBody);
+                break;
+
+            case "openai-chat":
+            case "openai-responses":
+                RejectUnsupportedField(definition, "project", definition.Project);
+                RejectUnsupportedField(definition, "location", definition.Location);
+                break;
+
+            case "anthropic":
+                RejectUnsupportedField(definition, "organization_id", definition.OrganizationId);
+                RejectUnsupportedField(definition, "project_id", definition.ProjectId);
+                RejectUnsupportedField(definition, "project", definition.Project);
+                RejectUnsupportedField(definition, "location", definition.Location);
+                RejectUnsupportedField(definition, "extra_body", definition.ExtraBody);
+                break;
+
+            case "google-genai":
+                RejectUnsupportedField(definition, "organization_id", definition.OrganizationId);
+                RejectUnsupportedField(definition, "project_id", definition.ProjectId);
+                RejectUnsupportedField(definition, "project", definition.Project);
+                RejectUnsupportedField(definition, "location", definition.Location);
+                RejectUnsupportedField(definition, "extra_body", definition.ExtraBody);
+                break;
+
+            case "vertex-ai":
+                RejectUnsupportedField(definition, "api_key", definition.ApiKey);
+                RejectUnsupportedField(definition, "api_key_env", definition.ApiKeyEnv);
+                RejectUnsupportedField(definition, "organization_id", definition.OrganizationId);
+                RejectUnsupportedField(definition, "project_id", definition.ProjectId);
+                RejectUnsupportedField(definition, "extra_body", definition.ExtraBody);
+                if (definition.Enabled && string.IsNullOrWhiteSpace(definition.Project))
+                {
+                    throw new InvalidOperationException($"providers.{definition.ProviderKey} project is required for type 'vertex-ai'.");
+                }
+
+                if (definition.Enabled && string.IsNullOrWhiteSpace(definition.Location))
+                {
+                    throw new InvalidOperationException($"providers.{definition.ProviderKey} location is required for type 'vertex-ai'.");
+                }
+
+                break;
+        }
+    }
+
+    private static void RejectUnsupportedField(CodeAltaProviderDocument definition, string fieldName, object? value)
+    {
+        var hasValue = value switch
+        {
+            null => false,
+            string text => !string.IsNullOrWhiteSpace(text),
+            TomlTable table => table.Count > 0,
+            _ => true,
+        };
+
+        if (hasValue)
+        {
+            throw new InvalidOperationException($"providers.{definition.ProviderKey} field '{fieldName}' is not supported for type '{definition.ProviderType}'.");
+        }
+    }
+
+    private static bool CanDropProviderEntry(string providerKey, CodeAltaProviderDocument definition)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerKey);
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if (IsReservedProviderKey(providerKey))
+        {
+            return !definition.Enabled &&
+                string.IsNullOrWhiteSpace(definition.DisplayName) &&
+                string.IsNullOrWhiteSpace(definition.Model) &&
+                string.IsNullOrWhiteSpace(definition.ReasoningEffort);
+        }
+
+        return false;
+    }
+
+    private static CodeAltaProviderDocument GetOrCreateProviderPreferenceEntry(CodeAltaConfigDocument document, string providerKey)
+    {
+        if (document.Providers.TryGetValue(providerKey, out var existing))
+        {
+            return existing;
+        }
+
+        var created = CreateImplicitReservedProviderDefinition(providerKey);
+        if (created is null)
+        {
+            throw new InvalidOperationException($"Provider '{providerKey}' is not configurable through the provider config store.");
+        }
+
+        document.Providers[providerKey] = created;
+        return created;
+    }
+
+    private static bool IsReservedProviderKey(string providerKey)
+        => string.Equals(providerKey, CodexProviderKey, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(providerKey, CopilotProviderKey, StringComparison.OrdinalIgnoreCase);
+
+    private static void ApplyReservedProviderDefaults(CodeAltaProviderDocument definition)
+    {
+        if (string.Equals(definition.ProviderKey, CodexProviderKey, StringComparison.OrdinalIgnoreCase))
+        {
+            definition.ProviderType ??= CodexProviderKey;
+            definition.DisplayName ??= "Codex";
+            return;
+        }
+
+        if (string.Equals(definition.ProviderKey, CopilotProviderKey, StringComparison.OrdinalIgnoreCase))
+        {
+            definition.ProviderType ??= CopilotProviderKey;
+            definition.DisplayName ??= "GitHub Copilot";
+        }
+    }
+
+    private static void AddImplicitReservedProvider(Dictionary<string, CodeAltaProviderDocument> definitions, string providerKey)
+    {
+        if (!definitions.ContainsKey(providerKey))
+        {
+            definitions[providerKey] = CreateImplicitReservedProviderDefinition(providerKey)!;
+        }
+    }
+
+    private static CodeAltaProviderDocument? CreateImplicitReservedProviderDefinition(string providerKey)
+    {
+        var normalizedProviderKey = NormalizeProviderKey(providerKey);
+        if (string.IsNullOrWhiteSpace(normalizedProviderKey) || !IsReservedProviderKey(normalizedProviderKey))
+        {
+            return null;
+        }
+
+        return new CodeAltaProviderDocument
+        {
+            ProviderKey = normalizedProviderKey,
+            Enabled = true,
+            ProviderType = normalizedProviderKey,
+            DisplayName = string.Equals(normalizedProviderKey, CodexProviderKey, StringComparison.OrdinalIgnoreCase)
+                ? "Codex"
+                : "GitHub Copilot",
+            Compaction = NormalizeAndCompleteCompactionSettings(null, DefaultCompaction),
         };
     }
 
-    private static string? NormalizeWireApi(string providerKind, string? value)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(providerKind);
-
-        var normalized = NormalizeText(value)?.ToLowerInvariant();
-        return providerKind switch
-        {
-            "openai" => normalized switch
-            {
-                null or "" or "chat" or "chat_completions" or "chat-completions" or "chatcompletions" or "completions" => "chat",
-                "responses" or "response" => "responses",
-                _ => null,
-            },
-            "anthropic" => normalized switch
-            {
-                null or "" or "messages" or "message" => "messages",
-                _ => null,
-            },
-            "google_genai" => normalized switch
-            {
-                null or "" or "google_genai" or "google-genai" or "genai" or "gemini" or "generate_content" or "generate-content" => "google_genai",
-                _ => null,
-            },
-            _ => null,
-        };
-    }
-
-    private static Dictionary<string, CodeAltaRawApiProviderDocument> NormalizeUnifiedProviderDefinitions(
-        Dictionary<string, CodeAltaRawApiProviderDocument>? definitions,
-        CodeAltaRawApiCompactionDocument? inheritedCompaction,
-        CodeAltaRawApiCompactionDocument? fallbackCompaction)
-    {
-        var inherited = NormalizeAndCompleteCompactionSettings(inheritedCompaction, fallbackCompaction);
-        return (definitions ?? new Dictionary<string, CodeAltaRawApiProviderDocument>(StringComparer.OrdinalIgnoreCase))
-            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
-            .Select(entry =>
-            {
-                var definition = entry.Value ?? new CodeAltaRawApiProviderDocument();
-                definition.ProviderKey = NormalizeRawProviderKey(entry.Key) ?? string.Empty;
-                definition.DisplayName = NormalizeText(definition.DisplayName);
-                definition.Provider = NormalizeRawProviderKind(definition.Provider)
-                    ?? throw new InvalidOperationException(
-                        $"providers.{entry.Key.Trim()} provider must be one of: openai, anthropic, google_genai.");
-                definition.WireApi = NormalizeWireApi(definition.Provider, definition.WireApi)
-                    ?? throw new InvalidOperationException(
-                        $"providers.{entry.Key.Trim()} wire_api is invalid for provider '{definition.Provider}'.");
-                definition.ApiKey = NormalizeText(definition.ApiKey);
-                definition.ApiKeyEnv = NormalizeText(definition.ApiKeyEnv);
-                definition.BaseUri = NormalizeText(definition.BaseUri);
-                definition.OrganizationId = NormalizeText(definition.OrganizationId);
-                definition.ProjectId = NormalizeText(definition.ProjectId);
-                definition.Project = NormalizeText(definition.Project);
-                definition.Location = NormalizeText(definition.Location);
-                definition.ModelsDevProviderId = NormalizeRawProviderKey(definition.ModelsDevProviderId);
-                definition.SingleModelId = NormalizeModel(definition.SingleModelId);
-                definition.ExtraBody = NormalizeExtraBody(definition.ExtraBody);
-                definition.Profile = NormalizeProfile(definition.Profile);
-                definition.ModelOverrides = NormalizeModelOverrides(definition.ModelOverrides);
-                definition.Compaction = NormalizeAndCompleteCompactionSettings(definition.Compaction, inherited);
-                return definition;
-            })
-            .Where(static definition => !string.IsNullOrWhiteSpace(definition.ProviderKey))
-            .ToDictionary(
-                static definition => definition.ProviderKey,
-                static definition => definition,
-                StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static CodeAltaRawApiProviderProfileDocument? NormalizeProfile(CodeAltaRawApiProviderProfileDocument? profile)
+    private static CodeAltaProviderProfileDocument? NormalizeProfile(CodeAltaProviderProfileDocument? profile)
     {
         if (profile is null)
         {
@@ -782,8 +783,8 @@ public sealed class CodeAltaConfigStore
         return profile;
     }
 
-    private static Dictionary<string, CodeAltaRawApiModelOverrideDocument>? NormalizeModelOverrides(
-        Dictionary<string, CodeAltaRawApiModelOverrideDocument>? overrides)
+    private static Dictionary<string, CodeAltaProviderModelOverrideDocument>? NormalizeModelOverrides(
+        Dictionary<string, CodeAltaProviderModelOverrideDocument>? overrides)
     {
         if (overrides is null)
         {
@@ -794,7 +795,7 @@ public sealed class CodeAltaConfigStore
             .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
             .Select(static entry =>
             {
-                var modelOverride = entry.Value ?? new CodeAltaRawApiModelOverrideDocument();
+                var modelOverride = entry.Value ?? new CodeAltaProviderModelOverrideDocument();
                 modelOverride.DisplayName = NormalizeText(modelOverride.DisplayName);
                 modelOverride.Description = NormalizeText(modelOverride.Description);
                 return KeyValuePair.Create(entry.Key.Trim(), modelOverride);
@@ -804,105 +805,6 @@ public sealed class CodeAltaConfigStore
                 static entry => entry.Value,
                 StringComparer.OrdinalIgnoreCase);
         return normalized.Count == 0 ? null : normalized;
-    }
-
-    private static bool TryConvertUnifiedProviderToOpenAI(
-        CodeAltaRawApiProviderDocument definition,
-        out CodeAltaOpenAIProviderDocument? converted)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        if (!string.Equals(definition.Provider, "openai", StringComparison.Ordinal))
-        {
-            converted = null;
-            return false;
-        }
-
-        converted = new CodeAltaOpenAIProviderDocument
-        {
-            ProviderKey = definition.ProviderKey,
-            Enabled = definition.Enabled,
-            DisplayName = definition.DisplayName,
-            ApiKey = definition.ApiKey,
-            ApiKeyEnv = definition.ApiKeyEnv,
-            BaseUri = definition.BaseUri,
-            OrganizationId = definition.OrganizationId,
-            ProjectId = definition.ProjectId,
-            ModelsDevProviderId = definition.ModelsDevProviderId,
-            SingleModelId = definition.SingleModelId,
-            ExtraBody = CloneExtraBody(definition.ExtraBody),
-            EnableResponses = string.Equals(definition.WireApi, "responses", StringComparison.Ordinal),
-            EnableChat = string.Equals(definition.WireApi, "chat", StringComparison.Ordinal),
-            DefaultResponses = definition.IsDefault && string.Equals(definition.WireApi, "responses", StringComparison.Ordinal),
-            DefaultChat = definition.IsDefault && string.Equals(definition.WireApi, "chat", StringComparison.Ordinal),
-            Profile = CloneProfile(definition.Profile),
-            Compaction = CloneCompaction(definition.Compaction),
-            ModelOverrides = CloneModelOverrides(definition.ModelOverrides),
-        };
-        return true;
-    }
-
-    private static bool TryConvertUnifiedProviderToAnthropic(
-        CodeAltaRawApiProviderDocument definition,
-        out CodeAltaAnthropicProviderDocument? converted)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        if (!string.Equals(definition.Provider, "anthropic", StringComparison.Ordinal))
-        {
-            converted = null;
-            return false;
-        }
-
-        converted = new CodeAltaAnthropicProviderDocument
-        {
-            ProviderKey = definition.ProviderKey,
-            Enabled = definition.Enabled,
-            DisplayName = definition.DisplayName,
-            ApiKey = definition.ApiKey,
-            ApiKeyEnv = definition.ApiKeyEnv,
-            BaseUri = definition.BaseUri,
-            ModelsDevProviderId = definition.ModelsDevProviderId,
-            SingleModelId = definition.SingleModelId,
-            IsDefault = definition.IsDefault,
-            Profile = CloneProfile(definition.Profile),
-            Compaction = CloneCompaction(definition.Compaction),
-            ModelOverrides = CloneModelOverrides(definition.ModelOverrides),
-        };
-        return true;
-    }
-
-    private static bool TryConvertUnifiedProviderToGoogleGenAI(
-        CodeAltaRawApiProviderDocument definition,
-        out CodeAltaGoogleGenAIProviderDocument? converted)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        if (!string.Equals(definition.Provider, "google_genai", StringComparison.Ordinal))
-        {
-            converted = null;
-            return false;
-        }
-
-        converted = new CodeAltaGoogleGenAIProviderDocument
-        {
-            ProviderKey = definition.ProviderKey,
-            Enabled = definition.Enabled,
-            DisplayName = definition.DisplayName,
-            ApiKey = definition.ApiKey,
-            ApiKeyEnv = definition.ApiKeyEnv,
-            UseVertexAI = definition.UseVertexAI,
-            Project = definition.Project,
-            Location = definition.Location,
-            BaseUri = definition.BaseUri,
-            ModelsDevProviderId = definition.ModelsDevProviderId,
-            SingleModelId = definition.SingleModelId,
-            IsDefault = definition.IsDefault,
-            Profile = CloneProfile(definition.Profile),
-            Compaction = CloneCompaction(definition.Compaction),
-            ModelOverrides = CloneModelOverrides(definition.ModelOverrides),
-        };
-        return true;
     }
 
     private static AcpBackendDefinition CloneAcpBackendDefinition(AcpBackendDefinition definition)
@@ -928,24 +830,23 @@ public sealed class CodeAltaConfigStore
         };
     }
 
-    private static CodeAltaRawApiProviderDocument CloneRawApiProviderDefinition(CodeAltaRawApiProviderDocument definition)
+    private static CodeAltaProviderDocument CloneProviderDefinition(CodeAltaProviderDocument definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        return new CodeAltaRawApiProviderDocument
+        return new CodeAltaProviderDocument
         {
             ProviderKey = definition.ProviderKey,
             Enabled = definition.Enabled,
             DisplayName = definition.DisplayName,
-            Provider = definition.Provider,
-            WireApi = definition.WireApi,
+            ProviderType = definition.ProviderType,
+            Model = definition.Model,
+            ReasoningEffort = definition.ReasoningEffort,
             ApiKey = definition.ApiKey,
             ApiKeyEnv = definition.ApiKeyEnv,
-            BaseUri = definition.BaseUri,
-            IsDefault = definition.IsDefault,
+            ApiUrl = definition.ApiUrl,
             OrganizationId = definition.OrganizationId,
             ProjectId = definition.ProjectId,
-            UseVertexAI = definition.UseVertexAI,
             Project = definition.Project,
             Location = definition.Location,
             ModelsDevProviderId = definition.ModelsDevProviderId,
@@ -957,86 +858,14 @@ public sealed class CodeAltaConfigStore
         };
     }
 
-    private static CodeAltaOpenAIProviderDocument CloneOpenAIProviderDefinition(CodeAltaOpenAIProviderDocument definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        return new CodeAltaOpenAIProviderDocument
-        {
-            ProviderKey = definition.ProviderKey,
-            Enabled = definition.Enabled,
-            DisplayName = definition.DisplayName,
-            ApiKey = definition.ApiKey,
-            ApiKeyEnv = definition.ApiKeyEnv,
-            BaseUri = definition.BaseUri,
-            OrganizationId = definition.OrganizationId,
-            ProjectId = definition.ProjectId,
-            ModelsDevProviderId = definition.ModelsDevProviderId,
-            SingleModelId = definition.SingleModelId,
-            ExtraBody = CloneExtraBody(definition.ExtraBody),
-            EnableResponses = definition.EnableResponses,
-            EnableChat = definition.EnableChat,
-            DefaultResponses = definition.DefaultResponses,
-            DefaultChat = definition.DefaultChat,
-            Profile = CloneProfile(definition.Profile),
-            Compaction = CloneCompaction(definition.Compaction),
-            ModelOverrides = CloneModelOverrides(definition.ModelOverrides),
-        };
-    }
-
-    private static CodeAltaAnthropicProviderDocument CloneAnthropicProviderDefinition(CodeAltaAnthropicProviderDocument definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        return new CodeAltaAnthropicProviderDocument
-        {
-            ProviderKey = definition.ProviderKey,
-            Enabled = definition.Enabled,
-            DisplayName = definition.DisplayName,
-            ApiKey = definition.ApiKey,
-            ApiKeyEnv = definition.ApiKeyEnv,
-            BaseUri = definition.BaseUri,
-            ModelsDevProviderId = definition.ModelsDevProviderId,
-            SingleModelId = definition.SingleModelId,
-            IsDefault = definition.IsDefault,
-            Profile = CloneProfile(definition.Profile),
-            Compaction = CloneCompaction(definition.Compaction),
-            ModelOverrides = CloneModelOverrides(definition.ModelOverrides),
-        };
-    }
-
-    private static CodeAltaGoogleGenAIProviderDocument CloneGoogleGenAIProviderDefinition(CodeAltaGoogleGenAIProviderDocument definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        return new CodeAltaGoogleGenAIProviderDocument
-        {
-            ProviderKey = definition.ProviderKey,
-            Enabled = definition.Enabled,
-            DisplayName = definition.DisplayName,
-            ApiKey = definition.ApiKey,
-            ApiKeyEnv = definition.ApiKeyEnv,
-            UseVertexAI = definition.UseVertexAI,
-            Project = definition.Project,
-            Location = definition.Location,
-            BaseUri = definition.BaseUri,
-            ModelsDevProviderId = definition.ModelsDevProviderId,
-            SingleModelId = definition.SingleModelId,
-            IsDefault = definition.IsDefault,
-            Profile = CloneProfile(definition.Profile),
-            Compaction = CloneCompaction(definition.Compaction),
-            ModelOverrides = CloneModelOverrides(definition.ModelOverrides),
-        };
-    }
-
-    private static CodeAltaRawApiProviderProfileDocument? CloneProfile(CodeAltaRawApiProviderProfileDocument? profile)
+    private static CodeAltaProviderProfileDocument? CloneProfile(CodeAltaProviderProfileDocument? profile)
     {
         if (profile is null)
         {
             return null;
         }
 
-        return new CodeAltaRawApiProviderProfileDocument
+        return new CodeAltaProviderProfileDocument
         {
             SupportsDeveloperRole = profile.SupportsDeveloperRole,
             SupportsStore = profile.SupportsStore,
@@ -1096,11 +925,11 @@ public sealed class CodeAltaConfigStore
         return clone;
     }
 
-    private static CodeAltaRawApiCompactionDocument CloneCompaction(CodeAltaRawApiCompactionDocument? compaction)
+    private static CodeAltaProviderCompactionDocument CloneCompaction(CodeAltaProviderCompactionDocument? compaction)
     {
         return compaction is null
-            ? new CodeAltaRawApiCompactionDocument()
-            : new CodeAltaRawApiCompactionDocument
+            ? new CodeAltaProviderCompactionDocument()
+            : new CodeAltaProviderCompactionDocument
             {
                 Enabled = compaction.Enabled,
                 TriggerThreshold = compaction.TriggerThreshold,
@@ -1127,8 +956,8 @@ public sealed class CodeAltaConfigStore
             };
     }
 
-    private static Dictionary<string, CodeAltaRawApiModelOverrideDocument>? CloneModelOverrides(
-        Dictionary<string, CodeAltaRawApiModelOverrideDocument>? overrides)
+    private static Dictionary<string, CodeAltaProviderModelOverrideDocument>? CloneModelOverrides(
+        Dictionary<string, CodeAltaProviderModelOverrideDocument>? overrides)
     {
         if (overrides is null)
         {
@@ -1137,7 +966,7 @@ public sealed class CodeAltaConfigStore
 
         return overrides.ToDictionary(
             static entry => entry.Key,
-            static entry => new CodeAltaRawApiModelOverrideDocument
+            static entry => new CodeAltaProviderModelOverrideDocument
             {
                 DisplayName = entry.Value.DisplayName,
                 Description = entry.Value.Description,
@@ -1153,9 +982,9 @@ public sealed class CodeAltaConfigStore
             StringComparer.OrdinalIgnoreCase);
     }
 
-    private static CodeAltaRawApiCompactionDocument NormalizeAndCompleteCompactionSettings(
-        CodeAltaRawApiCompactionDocument? compaction,
-        CodeAltaRawApiCompactionDocument? inherited)
+    private static CodeAltaProviderCompactionDocument NormalizeAndCompleteCompactionSettings(
+        CodeAltaProviderCompactionDocument? compaction,
+        CodeAltaProviderCompactionDocument? inherited)
     {
         var merged = CloneCompaction(inherited);
         var normalized = compaction is null ? null : CloneCompaction(compaction);
@@ -1213,93 +1042,93 @@ public sealed class CodeAltaConfigStore
         return merged;
     }
 
-    private static void ValidateCompaction(CodeAltaRawApiCompactionDocument compaction)
+    private static void ValidateCompaction(CodeAltaProviderCompactionDocument compaction)
     {
         ArgumentNullException.ThrowIfNull(compaction);
 
         if (compaction.TriggerThreshold is not > 0 or > 1)
         {
-            throw new InvalidOperationException("raw_api compaction trigger_threshold must be > 0 and <= 1.");
+            throw new InvalidOperationException("provider compaction trigger_threshold must be > 0 and <= 1.");
         }
 
         if (compaction.TargetThreshold is not > 0)
         {
-            throw new InvalidOperationException("raw_api compaction target_threshold must be > 0.");
+            throw new InvalidOperationException("provider compaction target_threshold must be > 0.");
         }
 
         if (compaction.TargetThreshold >= compaction.TriggerThreshold)
         {
-            throw new InvalidOperationException("raw_api compaction target_threshold must be less than trigger_threshold.");
+            throw new InvalidOperationException("provider compaction target_threshold must be less than trigger_threshold.");
         }
 
         if (compaction.ReservedOutputTokens < 0)
         {
-            throw new InvalidOperationException("raw_api compaction reserved_output_tokens must be >= 0.");
+            throw new InvalidOperationException("provider compaction reserved_output_tokens must be >= 0.");
         }
 
         if (compaction.ReservedOverheadTokens < 0)
         {
-            throw new InvalidOperationException("raw_api compaction reserved_overhead_tokens must be >= 0.");
+            throw new InvalidOperationException("provider compaction reserved_overhead_tokens must be >= 0.");
         }
 
         if (compaction.TargetContextRatioIdeal is not > 0 or > 1)
         {
-            throw new InvalidOperationException("raw_api compaction target_context_ratio_ideal must be > 0 and <= 1.");
+            throw new InvalidOperationException("provider compaction target_context_ratio_ideal must be > 0 and <= 1.");
         }
 
         if (compaction.TargetContextRatioMax is not > 0 or > 1)
         {
-            throw new InvalidOperationException("raw_api compaction target_context_ratio_max must be > 0 and <= 1.");
+            throw new InvalidOperationException("provider compaction target_context_ratio_max must be > 0 and <= 1.");
         }
 
         if (compaction.TargetContextRatioIdeal > compaction.TargetContextRatioMax)
         {
-            throw new InvalidOperationException("raw_api compaction target_context_ratio_ideal must be <= target_context_ratio_max.");
+            throw new InvalidOperationException("provider compaction target_context_ratio_ideal must be <= target_context_ratio_max.");
         }
 
         if (compaction.RecentSuffixTargetTokens is not > 0)
         {
-            throw new InvalidOperationException("raw_api compaction recent_suffix_target_tokens must be > 0.");
+            throw new InvalidOperationException("provider compaction recent_suffix_target_tokens must be > 0.");
         }
 
         if (compaction.SummaryOutputTokens is not > 0)
         {
-            throw new InvalidOperationException("raw_api compaction summary_output_tokens must be > 0.");
+            throw new InvalidOperationException("provider compaction summary_output_tokens must be > 0.");
         }
 
         if (compaction.SummaryInputTokens is not > 0)
         {
-            throw new InvalidOperationException("raw_api compaction summary_input_tokens must be > 0.");
+            throw new InvalidOperationException("provider compaction summary_input_tokens must be > 0.");
         }
 
         if (compaction.ToolResultCharsPerItem is < 0)
         {
-            throw new InvalidOperationException("raw_api compaction tool_result_chars_per_item must be >= 0.");
+            throw new InvalidOperationException("provider compaction tool_result_chars_per_item must be >= 0.");
         }
 
         if (compaction.ToolResultCharsTotal is < 0)
         {
-            throw new InvalidOperationException("raw_api compaction tool_result_chars_total must be >= 0.");
+            throw new InvalidOperationException("provider compaction tool_result_chars_total must be >= 0.");
         }
 
         if (compaction.ReasoningCharsPerItem is < 0)
         {
-            throw new InvalidOperationException("raw_api compaction reasoning_chars_per_item must be >= 0.");
+            throw new InvalidOperationException("provider compaction reasoning_chars_per_item must be >= 0.");
         }
 
         if (compaction.ReasoningCharsTotal is < 0)
         {
-            throw new InvalidOperationException("raw_api compaction reasoning_chars_total must be >= 0.");
+            throw new InvalidOperationException("provider compaction reasoning_chars_total must be >= 0.");
         }
 
         if (compaction.MaxChunkPasses is not > 0)
         {
-            throw new InvalidOperationException("raw_api compaction max_chunk_passes must be > 0.");
+            throw new InvalidOperationException("provider compaction max_chunk_passes must be > 0.");
         }
 
         if (NormalizeCompactionReasoningMode(compaction.ReasoningMode) is null)
         {
-            throw new InvalidOperationException("raw_api compaction reasoning_mode must be one of: none, adaptive, summary_only.");
+            throw new InvalidOperationException("provider compaction reasoning_mode must be one of: none, adaptive, summary_only.");
         }
     }
 
@@ -1311,4 +1140,30 @@ public sealed class CodeAltaConfigStore
             "summary_only" => "summary_only",
             _ => null,
         };
+
+    private static void ThrowIfLegacyConfigShapeDetected(string content)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(content);
+
+        var normalized = content.Replace("\r", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+        string[] legacyMarkers =
+        [
+            "[backends",
+            "[raw_api",
+            "wire_api =",
+            "base_uri =",
+            "use_vertex_ai =",
+            "default_responses =",
+            "default_chat =",
+            "is_default =",
+            "\nprovider =",
+        ];
+
+        if (legacyMarkers.Any(normalized.Contains) ||
+            normalized.StartsWith("provider =", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Legacy CodeAlta config keys are no longer supported. Migrate to [chat].default_provider, providers.<key>.type, and providers.<key>.api_url.");
+        }
+    }
 }

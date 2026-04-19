@@ -7,8 +7,8 @@ internal static class OpenAIBackendFactory
 {
     public static IAgentBackend CreateResponsesBackend(OpenAIResponsesAgentBackendOptions options)
         => CreateBackend(
-            AgentBackendIds.OpenAIResponses,
-            "OpenAI Responses",
+            options.BackendIdOverride ?? AgentBackendIds.OpenAIResponses,
+            string.IsNullOrWhiteSpace(options.DisplayNameOverride) ? "OpenAI Responses" : options.DisplayNameOverride.Trim(),
             "openai-responses",
             LocalAgentTransportKind.OpenAIResponses,
             options,
@@ -16,8 +16,8 @@ internal static class OpenAIBackendFactory
 
     public static IAgentBackend CreateChatBackend(OpenAIChatAgentBackendOptions options)
         => CreateBackend(
-            AgentBackendIds.OpenAIChat,
-            "OpenAI Chat",
+            options.BackendIdOverride ?? AgentBackendIds.OpenAIChat,
+            string.IsNullOrWhiteSpace(options.DisplayNameOverride) ? "OpenAI Chat" : options.DisplayNameOverride.Trim(),
             "openai-chat",
             LocalAgentTransportKind.OpenAIChatCompletions,
             options,

@@ -26,250 +26,296 @@ internal static class RawApiBackendRegistrar
         ArgumentException.ThrowIfNullOrWhiteSpace(stateRootPath);
 
         var descriptors = new List<AgentBackendDescriptor>();
-        RegisterOpenAIBackends(backendFactory, configStore, stateRootPath, descriptors, modelCatalog);
-        RegisterAnthropicBackend(backendFactory, configStore, stateRootPath, descriptors, modelCatalog);
-        RegisterGoogleGenAIBackend(backendFactory, configStore, stateRootPath, descriptors, modelCatalog);
+        foreach (var definition in configStore.LoadGlobalProviderDefinitions())
+        {
+            switch (definition.ProviderType)
+            {
+                case "openai-chat":
+                    RegisterOpenAIChatProvider(backendFactory, stateRootPath, definition, descriptors, modelCatalog);
+                    break;
+                case "openai-responses":
+                    RegisterOpenAIResponsesProvider(backendFactory, stateRootPath, definition, descriptors, modelCatalog);
+                    break;
+                case "anthropic":
+                    RegisterAnthropicProvider(backendFactory, stateRootPath, definition, descriptors, modelCatalog);
+                    break;
+                case "google-genai":
+                    RegisterGoogleGenAIProvider(backendFactory, stateRootPath, definition, descriptors, modelCatalog);
+                    break;
+                case "vertex-ai":
+                    RegisterVertexAIProvider(backendFactory, stateRootPath, definition, descriptors, modelCatalog);
+                    break;
+            }
+        }
+
         return descriptors;
     }
 
-    private static void RegisterOpenAIBackends(
+    private static void RegisterOpenAIChatProvider(
         AgentBackendFactory backendFactory,
-        CodeAltaConfigStore configStore,
         string stateRootPath,
+        CodeAltaProviderDocument definition,
         List<AgentBackendDescriptor> descriptors,
         ModelsDevCatalogService? modelCatalog)
     {
-        var responseOptions = new OpenAIResponsesAgentBackendOptions
+        var apiKey = ResolveSecret(definition.ApiKey, definition.ApiKeyEnv);
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            StateRootPath = stateRootPath,
-        };
-        var chatOptions = new OpenAIChatAgentBackendOptions
-        {
-            StateRootPath = stateRootPath,
-        };
-
-        foreach (var definition in configStore.LoadGlobalOpenAIProviderDefinitions())
-        {
-            var apiKey = ResolveSecret(definition.ApiKey, definition.ApiKeyEnv);
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                LogInfo(
-                    $"Skipping raw-API provider backend=<openai> provider={definition.ProviderKey} displayName={FormatDisplayName(definition.DisplayName)} reason=missing-credentials");
-                continue;
-            }
-
-            var baseUri = ParseUri(definition.BaseUri);
-            var configuredExtraBody = CreateExtraBody(definition.ExtraBody);
-
-            if (definition.EnableResponses)
-            {
-                LogInfo(
-                    $"Configuring raw-API provider backend={AgentBackendIds.OpenAIResponses.Value} provider={definition.ProviderKey} displayName={FormatDisplayName(definition.DisplayName)} baseUri={FormatUri(baseUri)} default={definition.DefaultResponses}");
-                responseOptions.Providers.Add(new OpenAIProviderOptions
-                {
-                    ProviderKey = definition.ProviderKey,
-                    DisplayName = definition.DisplayName,
-                    ApiKey = apiKey,
-                    BaseUri = baseUri,
-                    OrganizationId = definition.OrganizationId,
-                    ProjectId = definition.ProjectId,
-                    IsDefault = definition.DefaultResponses,
-                    Profile = CreateOpenAIResponsesProfile(
-                        definition.ProviderKey,
-                        baseUri,
-                        definition.Profile),
-                    Compaction = CreateCompactionSettings(definition.Compaction),
-                    ModelsDevProviderId = ResolveModelsDevProviderId(
-                        definition.ModelsDevProviderId,
-                        definition.ProviderKey,
-                        "openai",
-                        modelCatalog),
-                    SingleModelId = NormalizeText(definition.SingleModelId),
-                    ExtraBody = RawApiProviderDefaultsCatalog.ApplyOpenAIExtraBodyDefaults(
-                        LocalAgentTransportKind.OpenAIResponses,
-                        definition.ProviderKey,
-                        baseUri,
-                        configuredExtraBody),
-                    ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
-                    ModelCatalog = modelCatalog,
-                });
-            }
-
-            if (definition.EnableChat)
-            {
-                LogInfo(
-                    $"Configuring raw-API provider backend={AgentBackendIds.OpenAIChat.Value} provider={definition.ProviderKey} displayName={FormatDisplayName(definition.DisplayName)} baseUri={FormatUri(baseUri)} default={definition.DefaultChat}");
-                chatOptions.Providers.Add(new OpenAIProviderOptions
-                {
-                    ProviderKey = definition.ProviderKey,
-                    DisplayName = definition.DisplayName,
-                    ApiKey = apiKey,
-                    BaseUri = baseUri,
-                    OrganizationId = definition.OrganizationId,
-                    ProjectId = definition.ProjectId,
-                    IsDefault = definition.DefaultChat,
-                    Profile = CreateOpenAIChatProfile(
-                        definition.ProviderKey,
-                        baseUri,
-                        definition.Profile),
-                    Compaction = CreateCompactionSettings(definition.Compaction),
-                    ModelsDevProviderId = ResolveModelsDevProviderId(
-                        definition.ModelsDevProviderId,
-                        definition.ProviderKey,
-                        "openai",
-                        modelCatalog),
-                    SingleModelId = NormalizeText(definition.SingleModelId),
-                    ExtraBody = RawApiProviderDefaultsCatalog.ApplyOpenAIExtraBodyDefaults(
-                        LocalAgentTransportKind.OpenAIChatCompletions,
-                        definition.ProviderKey,
-                        baseUri,
-                        configuredExtraBody),
-                    ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
-                    ModelCatalog = modelCatalog,
-                });
-            }
-        }
-
-        if (responseOptions.Providers.Count > 0)
-        {
-            backendFactory.RegisterOpenAIResponses(responseOptions);
-            var displayName = ResolveBackendDisplayName("OpenAI Responses", responseOptions.Providers.Select(static provider => provider.DisplayName));
-            descriptors.Add(new AgentBackendDescriptor(AgentBackendIds.OpenAIResponses, displayName));
             LogInfo(
-                $"Registered raw-API backend backend={AgentBackendIds.OpenAIResponses.Value} displayName={displayName} providers={responseOptions.Providers.Count}");
-        }
-
-        if (chatOptions.Providers.Count > 0)
-        {
-            backendFactory.RegisterOpenAIChat(chatOptions);
-            var displayName = ResolveBackendDisplayName("OpenAI Chat", chatOptions.Providers.Select(static provider => provider.DisplayName));
-            descriptors.Add(new AgentBackendDescriptor(AgentBackendIds.OpenAIChat, displayName));
-            LogInfo(
-                $"Registered raw-API backend backend={AgentBackendIds.OpenAIChat.Value} displayName={displayName} providers={chatOptions.Providers.Count}");
-        }
-    }
-
-    private static void RegisterAnthropicBackend(
-        AgentBackendFactory backendFactory,
-        CodeAltaConfigStore configStore,
-        string stateRootPath,
-        List<AgentBackendDescriptor> descriptors,
-        ModelsDevCatalogService? modelCatalog)
-    {
-        var options = new AnthropicAgentBackendOptions
-        {
-            StateRootPath = stateRootPath,
-        };
-
-        foreach (var definition in configStore.LoadGlobalAnthropicProviderDefinitions())
-        {
-            var apiKey = ResolveSecret(definition.ApiKey, definition.ApiKeyEnv);
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                LogInfo(
-                    $"Skipping raw-API provider backend=<anthropic> provider={definition.ProviderKey} displayName={FormatDisplayName(definition.DisplayName)} reason=missing-credentials");
-                continue;
-            }
-
-            LogInfo(
-                $"Configuring raw-API provider backend={AgentBackendIds.AnthropicMessages.Value} provider={definition.ProviderKey} displayName={FormatDisplayName(definition.DisplayName)} baseUri={FormatUri(ParseUri(definition.BaseUri))} default={definition.IsDefault}");
-            options.Providers.Add(new AnthropicProviderOptions
-            {
-                ProviderKey = definition.ProviderKey,
-                DisplayName = definition.DisplayName,
-                ApiKey = apiKey,
-                BaseUri = ParseUri(definition.BaseUri),
-                IsDefault = definition.IsDefault,
-                Profile = CreateAnthropicProfile(definition.Profile),
-                Compaction = CreateCompactionSettings(definition.Compaction),
-                ModelsDevProviderId = ResolveModelsDevProviderId(
-                    definition.ModelsDevProviderId,
-                    definition.ProviderKey,
-                    "anthropic",
-                    modelCatalog),
-                SingleModelId = NormalizeText(definition.SingleModelId),
-                ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
-                ModelCatalog = modelCatalog,
-            });
-        }
-
-        if (options.Providers.Count == 0)
-        {
+                $"Skipping provider provider={definition.ProviderKey} type={definition.ProviderType} displayName={FormatDisplayName(definition.DisplayName)} reason=missing-credentials");
             return;
         }
 
-        backendFactory.RegisterAnthropic(options);
-        var displayName = ResolveBackendDisplayName("Anthropic Messages", options.Providers.Select(static provider => provider.DisplayName));
-        descriptors.Add(new AgentBackendDescriptor(AgentBackendIds.AnthropicMessages, displayName));
+        var backendId = new AgentBackendId(definition.ProviderKey);
+        var displayName = ResolveProviderDisplayName(definition);
+        var baseUri = ParseUri(definition.ApiUrl);
+        backendFactory.RegisterOpenAIChat(
+            new OpenAIChatAgentBackendOptions
+            {
+                BackendIdOverride = backendId,
+                DisplayNameOverride = displayName,
+                StateRootPath = stateRootPath,
+                Providers =
+                {
+                    new OpenAIProviderOptions
+                    {
+                        ProviderKey = definition.ProviderKey,
+                        DisplayName = displayName,
+                        ApiKey = apiKey,
+                        BaseUri = baseUri,
+                        OrganizationId = definition.OrganizationId,
+                        ProjectId = definition.ProjectId,
+                        IsDefault = true,
+                        Profile = CreateOpenAIChatProfile(definition.ProviderKey, baseUri, definition.Profile),
+                        Compaction = CreateCompactionSettings(definition.Compaction),
+                        ModelsDevProviderId = ResolveModelsDevProviderId(
+                            definition.ModelsDevProviderId,
+                            definition.ProviderKey,
+                            "openai",
+                            modelCatalog),
+                        SingleModelId = NormalizeText(definition.SingleModelId),
+                        ExtraBody = RawApiProviderDefaultsCatalog.ApplyOpenAIExtraBodyDefaults(
+                            LocalAgentTransportKind.OpenAIChatCompletions,
+                            definition.ProviderKey,
+                            baseUri,
+                            CreateExtraBody(definition.ExtraBody)),
+                        ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
+                        ModelCatalog = modelCatalog,
+                    },
+                },
+            });
+
+        descriptors.Add(new AgentBackendDescriptor(backendId, displayName));
         LogInfo(
-            $"Registered raw-API backend backend={AgentBackendIds.AnthropicMessages.Value} displayName={displayName} providers={options.Providers.Count}");
+            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
     }
 
-    private static void RegisterGoogleGenAIBackend(
+    private static void RegisterOpenAIResponsesProvider(
         AgentBackendFactory backendFactory,
-        CodeAltaConfigStore configStore,
         string stateRootPath,
+        CodeAltaProviderDocument definition,
         List<AgentBackendDescriptor> descriptors,
         ModelsDevCatalogService? modelCatalog)
     {
-        var options = new GoogleGenAIAgentBackendOptions
+        var apiKey = ResolveSecret(definition.ApiKey, definition.ApiKeyEnv);
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            StateRootPath = stateRootPath,
-        };
-
-        foreach (var definition in configStore.LoadGlobalGoogleGenAIProviderDefinitions())
-        {
-            var apiKey = ResolveSecret(definition.ApiKey, definition.ApiKeyEnv);
-            if (!definition.UseVertexAI && string.IsNullOrWhiteSpace(apiKey))
-            {
-                LogInfo(
-                    $"Skipping raw-API provider backend=<google-genai> provider={definition.ProviderKey} displayName={FormatDisplayName(definition.DisplayName)} reason=missing-credentials");
-                continue;
-            }
-
-            if (definition.UseVertexAI &&
-                (string.IsNullOrWhiteSpace(definition.Project) || string.IsNullOrWhiteSpace(definition.Location)))
-            {
-                LogInfo(
-                    $"Skipping raw-API provider backend=<google-genai> provider={definition.ProviderKey} displayName={FormatDisplayName(definition.DisplayName)} reason=incomplete-vertex-settings");
-                continue;
-            }
-
             LogInfo(
-                $"Configuring raw-API provider backend={AgentBackendIds.GoogleGenAI.Value} provider={definition.ProviderKey} displayName={FormatDisplayName(definition.DisplayName)} baseUri={FormatUri(ParseUri(definition.BaseUri))} default={definition.IsDefault} vertex={definition.UseVertexAI}");
-            options.Providers.Add(new GoogleGenAIProviderOptions
-            {
-                ProviderKey = definition.ProviderKey,
-                DisplayName = definition.DisplayName,
-                ApiKey = apiKey,
-                UseVertexAI = definition.UseVertexAI,
-                Project = definition.Project,
-                Location = definition.Location,
-                BaseUri = ParseUri(definition.BaseUri),
-                IsDefault = definition.IsDefault,
-                Profile = CreateGoogleGenAIProfile(definition.Profile),
-                Compaction = CreateCompactionSettings(definition.Compaction),
-                ModelsDevProviderId = ResolveModelsDevProviderId(
-                    definition.ModelsDevProviderId,
-                    definition.ProviderKey,
-                    "google",
-                    modelCatalog),
-                SingleModelId = NormalizeText(definition.SingleModelId),
-                ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
-                ModelCatalog = modelCatalog,
-            });
-        }
-
-        if (options.Providers.Count == 0)
-        {
+                $"Skipping provider provider={definition.ProviderKey} type={definition.ProviderType} displayName={FormatDisplayName(definition.DisplayName)} reason=missing-credentials");
             return;
         }
 
-        backendFactory.RegisterGoogleGenAI(options);
-        var displayName = ResolveBackendDisplayName("Google GenAI", options.Providers.Select(static provider => provider.DisplayName));
-        descriptors.Add(new AgentBackendDescriptor(AgentBackendIds.GoogleGenAI, displayName));
+        var backendId = new AgentBackendId(definition.ProviderKey);
+        var displayName = ResolveProviderDisplayName(definition);
+        var baseUri = ParseUri(definition.ApiUrl);
+        backendFactory.RegisterOpenAIResponses(
+            new OpenAIResponsesAgentBackendOptions
+            {
+                BackendIdOverride = backendId,
+                DisplayNameOverride = displayName,
+                StateRootPath = stateRootPath,
+                Providers =
+                {
+                    new OpenAIProviderOptions
+                    {
+                        ProviderKey = definition.ProviderKey,
+                        DisplayName = displayName,
+                        ApiKey = apiKey,
+                        BaseUri = baseUri,
+                        OrganizationId = definition.OrganizationId,
+                        ProjectId = definition.ProjectId,
+                        IsDefault = true,
+                        Profile = CreateOpenAIResponsesProfile(definition.ProviderKey, baseUri, definition.Profile),
+                        Compaction = CreateCompactionSettings(definition.Compaction),
+                        ModelsDevProviderId = ResolveModelsDevProviderId(
+                            definition.ModelsDevProviderId,
+                            definition.ProviderKey,
+                            "openai",
+                            modelCatalog),
+                        SingleModelId = NormalizeText(definition.SingleModelId),
+                        ExtraBody = RawApiProviderDefaultsCatalog.ApplyOpenAIExtraBodyDefaults(
+                            LocalAgentTransportKind.OpenAIResponses,
+                            definition.ProviderKey,
+                            baseUri,
+                            CreateExtraBody(definition.ExtraBody)),
+                        ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
+                        ModelCatalog = modelCatalog,
+                    },
+                },
+            });
+
+        descriptors.Add(new AgentBackendDescriptor(backendId, displayName));
         LogInfo(
-            $"Registered raw-API backend backend={AgentBackendIds.GoogleGenAI.Value} displayName={displayName} providers={options.Providers.Count}");
+            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
+    }
+
+    private static void RegisterAnthropicProvider(
+        AgentBackendFactory backendFactory,
+        string stateRootPath,
+        CodeAltaProviderDocument definition,
+        List<AgentBackendDescriptor> descriptors,
+        ModelsDevCatalogService? modelCatalog)
+    {
+        var apiKey = ResolveSecret(definition.ApiKey, definition.ApiKeyEnv);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            LogInfo(
+                $"Skipping provider provider={definition.ProviderKey} type={definition.ProviderType} displayName={FormatDisplayName(definition.DisplayName)} reason=missing-credentials");
+            return;
+        }
+
+        var backendId = new AgentBackendId(definition.ProviderKey);
+        var displayName = ResolveProviderDisplayName(definition);
+        var baseUri = ParseUri(definition.ApiUrl);
+        backendFactory.RegisterAnthropic(
+            new AnthropicAgentBackendOptions
+            {
+                BackendIdOverride = backendId,
+                DisplayNameOverride = displayName,
+                StateRootPath = stateRootPath,
+                Providers =
+                {
+                    new AnthropicProviderOptions
+                    {
+                        ProviderKey = definition.ProviderKey,
+                        DisplayName = displayName,
+                        ApiKey = apiKey,
+                        BaseUri = baseUri,
+                        IsDefault = true,
+                        Profile = CreateAnthropicProfile(definition.Profile),
+                        Compaction = CreateCompactionSettings(definition.Compaction),
+                        ModelsDevProviderId = ResolveModelsDevProviderId(
+                            definition.ModelsDevProviderId,
+                            definition.ProviderKey,
+                            "anthropic",
+                            modelCatalog),
+                        SingleModelId = NormalizeText(definition.SingleModelId),
+                        ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
+                        ModelCatalog = modelCatalog,
+                    },
+                },
+            });
+
+        descriptors.Add(new AgentBackendDescriptor(backendId, displayName));
+        LogInfo(
+            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
+    }
+
+    private static void RegisterGoogleGenAIProvider(
+        AgentBackendFactory backendFactory,
+        string stateRootPath,
+        CodeAltaProviderDocument definition,
+        List<AgentBackendDescriptor> descriptors,
+        ModelsDevCatalogService? modelCatalog)
+    {
+        var apiKey = ResolveSecret(definition.ApiKey, definition.ApiKeyEnv);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            LogInfo(
+                $"Skipping provider provider={definition.ProviderKey} type={definition.ProviderType} displayName={FormatDisplayName(definition.DisplayName)} reason=missing-credentials");
+            return;
+        }
+
+        RegisterGoogleProvider(
+            backendFactory,
+            stateRootPath,
+            definition,
+            descriptors,
+            modelCatalog,
+            useVertexAI: false,
+            apiKey);
+    }
+
+    private static void RegisterVertexAIProvider(
+        AgentBackendFactory backendFactory,
+        string stateRootPath,
+        CodeAltaProviderDocument definition,
+        List<AgentBackendDescriptor> descriptors,
+        ModelsDevCatalogService? modelCatalog)
+    {
+        RegisterGoogleProvider(
+            backendFactory,
+            stateRootPath,
+            definition,
+            descriptors,
+            modelCatalog,
+            useVertexAI: true,
+            apiKey: null);
+    }
+
+    private static void RegisterGoogleProvider(
+        AgentBackendFactory backendFactory,
+        string stateRootPath,
+        CodeAltaProviderDocument definition,
+        List<AgentBackendDescriptor> descriptors,
+        ModelsDevCatalogService? modelCatalog,
+        bool useVertexAI,
+        string? apiKey)
+    {
+        var backendId = new AgentBackendId(definition.ProviderKey);
+        var displayName = ResolveProviderDisplayName(definition);
+        var baseUri = ParseUri(definition.ApiUrl);
+        backendFactory.RegisterGoogleGenAI(
+            new GoogleGenAIAgentBackendOptions
+            {
+                BackendIdOverride = backendId,
+                DisplayNameOverride = displayName,
+                StateRootPath = stateRootPath,
+                Providers =
+                {
+                    new GoogleGenAIProviderOptions
+                    {
+                        ProviderKey = definition.ProviderKey,
+                        DisplayName = displayName,
+                        ApiKey = apiKey,
+                        UseVertexAI = useVertexAI,
+                        Project = definition.Project,
+                        Location = definition.Location,
+                        BaseUri = baseUri,
+                        IsDefault = true,
+                        Profile = CreateGoogleGenAIProfile(definition.Profile),
+                        Compaction = CreateCompactionSettings(definition.Compaction),
+                        ModelsDevProviderId = ResolveModelsDevProviderId(
+                            definition.ModelsDevProviderId,
+                            definition.ProviderKey,
+                            "google",
+                            modelCatalog),
+                        SingleModelId = NormalizeText(definition.SingleModelId),
+                        ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
+                        ModelCatalog = modelCatalog,
+                    },
+                },
+            });
+
+        descriptors.Add(new AgentBackendDescriptor(backendId, displayName));
+        LogInfo(
+            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} vertex={useVertexAI}");
+    }
+
+    private static string ResolveProviderDisplayName(CodeAltaProviderDocument definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        return NormalizeText(definition.DisplayName) ?? definition.ProviderKey;
     }
 
     private static string? ResolveSecret(string? literal, string? environmentVariableName)
@@ -291,26 +337,26 @@ internal static class RawApiBackendRegistrar
 
     private static LocalAgentProviderProfile CreateOpenAIResponsesProfile(
         string providerKey,
-        Uri? baseUri,
-        CodeAltaRawApiProviderProfileDocument? document)
+        Uri? apiUrl,
+        CodeAltaProviderProfileDocument? document)
     {
-        var profile = CreateOpenAIBaseProfile(LocalAgentTransportKind.OpenAIResponses, providerKey, baseUri, responses: true);
+        var profile = CreateOpenAIBaseProfile(LocalAgentTransportKind.OpenAIResponses, providerKey, apiUrl, responses: true);
         return document is null ? profile : ApplyProfileOverrides(profile, document);
     }
 
     private static LocalAgentProviderProfile CreateOpenAIChatProfile(
         string providerKey,
-        Uri? baseUri,
-        CodeAltaRawApiProviderProfileDocument? document)
+        Uri? apiUrl,
+        CodeAltaProviderProfileDocument? document)
     {
-        var profile = CreateOpenAIBaseProfile(LocalAgentTransportKind.OpenAIChatCompletions, providerKey, baseUri, responses: false);
+        var profile = CreateOpenAIBaseProfile(LocalAgentTransportKind.OpenAIChatCompletions, providerKey, apiUrl, responses: false);
         return document is null ? profile : ApplyProfileOverrides(profile, document);
     }
 
     private static LocalAgentProviderProfile CreateOpenAIBaseProfile(
         LocalAgentTransportKind transportKind,
         string providerKey,
-        Uri? baseUri,
+        Uri? apiUrl,
         bool responses)
     {
         var profile = responses
@@ -333,10 +379,10 @@ internal static class RawApiBackendRegistrar
                 ReasoningFieldNames = ["reasoning_content", "reasoning"],
             };
 
-        return RawApiProviderDefaultsCatalog.ApplyProfileDefaults(transportKind, providerKey, baseUri, profile);
+        return RawApiProviderDefaultsCatalog.ApplyProfileDefaults(transportKind, providerKey, apiUrl, profile);
     }
 
-    private static LocalAgentProviderProfile? CreateAnthropicProfile(CodeAltaRawApiProviderProfileDocument? document)
+    private static LocalAgentProviderProfile? CreateAnthropicProfile(CodeAltaProviderProfileDocument? document)
     {
         if (document is null)
         {
@@ -353,7 +399,7 @@ internal static class RawApiBackendRegistrar
             document);
     }
 
-    private static LocalAgentProviderProfile? CreateGoogleGenAIProfile(CodeAltaRawApiProviderProfileDocument? document)
+    private static LocalAgentProviderProfile? CreateGoogleGenAIProfile(CodeAltaProviderProfileDocument? document)
     {
         if (document is null)
         {
@@ -373,7 +419,7 @@ internal static class RawApiBackendRegistrar
 
     private static LocalAgentProviderProfile ApplyProfileOverrides(
         LocalAgentProviderProfile profile,
-        CodeAltaRawApiProviderProfileDocument document)
+        CodeAltaProviderProfileDocument document)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(document);
@@ -422,22 +468,8 @@ internal static class RawApiBackendRegistrar
         return defaultProviderId;
     }
 
-    private static string ResolveBackendDisplayName(string fallbackDisplayName, IEnumerable<string?> providerDisplayNames)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(fallbackDisplayName);
-        ArgumentNullException.ThrowIfNull(providerDisplayNames);
-
-        var distinctDisplayNames = providerDisplayNames
-            .Select(NormalizeText)
-            .Where(static displayName => !string.IsNullOrWhiteSpace(displayName))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        return distinctDisplayNames.Length == 1 ? distinctDisplayNames[0]! : fallbackDisplayName.Trim();
-    }
-
     private static IReadOnlyDictionary<string, AgentModelOverride>? CreateModelOverrides(
-        Dictionary<string, CodeAltaRawApiModelOverrideDocument>? overrides)
+        Dictionary<string, CodeAltaProviderModelOverrideDocument>? overrides)
     {
         if (overrides is null || overrides.Count == 0)
         {
@@ -494,9 +526,9 @@ internal static class RawApiBackendRegistrar
         };
     }
 
-    private static LocalAgentCompactionSettings CreateCompactionSettings(CodeAltaRawApiCompactionDocument? compaction)
+    private static LocalAgentCompactionSettings CreateCompactionSettings(CodeAltaProviderCompactionDocument? compaction)
     {
-        var normalized = compaction ?? new CodeAltaRawApiCompactionDocument();
+        var normalized = compaction ?? new CodeAltaProviderCompactionDocument();
         return new LocalAgentCompactionSettings(
             Enabled: normalized.Enabled ?? LocalAgentCompactionSettings.Default.Enabled,
             TriggerThreshold: normalized.TriggerThreshold ?? LocalAgentCompactionSettings.Default.TriggerThreshold,

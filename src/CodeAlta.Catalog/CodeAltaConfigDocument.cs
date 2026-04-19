@@ -8,10 +8,10 @@ namespace CodeAlta.Catalog;
 public sealed class CodeAltaConfigDocument
 {
     /// <summary>
-    /// Gets or sets per-backend defaults and overrides.
+    /// Gets or sets chat-level defaults and preferences.
     /// </summary>
-    [JsonPropertyName("backends")]
-    public Dictionary<string, CodeAltaBackendSettingsDocument> Backends { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    [JsonPropertyName("chat")]
+    public CodeAltaChatSettingsDocument Chat { get; set; } = new();
 
     /// <summary>
     /// Gets or sets ACP backend definitions keyed by agent id.
@@ -20,34 +20,22 @@ public sealed class CodeAltaConfigDocument
     public CodeAltaAcpSettingsDocument Acp { get; set; } = new();
 
     /// <summary>
-    /// Gets or sets unified raw-API provider endpoint configuration keyed by provider key.
+    /// Gets or sets configured provider definitions keyed by provider key.
     /// </summary>
     [JsonPropertyName("providers")]
-    public Dictionary<string, CodeAltaRawApiProviderDocument> Providers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Gets or sets raw-API provider configuration.
-    /// </summary>
-    [JsonPropertyName("raw_api")]
-    public CodeAltaRawApiSettingsDocument RawApi { get; set; } = new();
+    public Dictionary<string, CodeAltaProviderDocument> Providers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>
-/// Represents the TOML settings for a single backend.
+/// Represents chat-specific configuration settings.
 /// </summary>
-public sealed class CodeAltaBackendSettingsDocument
+public sealed class CodeAltaChatSettingsDocument
 {
     /// <summary>
-    /// Gets or sets the preferred model identifier.
+    /// Gets or sets the default provider key.
     /// </summary>
-    [JsonPropertyName("model")]
-    public string? Model { get; set; }
-
-    /// <summary>
-    /// Gets or sets the preferred reasoning effort.
-    /// </summary>
-    [JsonPropertyName("reasoning_effort")]
-    public string? ReasoningEffort { get; set; }
+    [JsonPropertyName("default_provider")]
+    public string? DefaultProvider { get; set; }
 }
 
 /// <summary>

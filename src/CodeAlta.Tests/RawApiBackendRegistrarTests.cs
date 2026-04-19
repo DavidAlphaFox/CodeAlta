@@ -16,7 +16,7 @@ namespace CodeAlta.Tests;
 public sealed class RawApiBackendRegistrarTests
 {
     [TestMethod]
-    public async Task RegisterConfiguredBackends_RegistersConfiguredRawApiBackends()
+    public async Task RegisterConfiguredBackends_RegistersConfiguredProviders()
     {
         using var temp = TempDirectory.Create();
         var openAiKeyName = $"CODEALTA_OPENAI_{Guid.NewGuid():N}";
@@ -31,31 +31,24 @@ public sealed class RawApiBackendRegistrarTests
                 $$"""
                 [providers.openai_chat]
                 display_name = "OpenAI Chat"
-                provider = "openai"
+                type = "openai-chat"
                 api_key_env = "{{openAiKeyName}}"
-                wire_api = "chat"
-                is_default = true
 
                 [providers.openai_responses]
                 display_name = "OpenAI Responses"
-                provider = "openai"
+                type = "openai-responses"
                 api_key_env = "{{openAiKeyName}}"
-                wire_api = "responses"
-                is_default = true
 
                 [providers.anthropic]
                 display_name = "Anthropic"
-                provider = "anthropic"
+                type = "anthropic"
                 api_key_env = "{{anthropicKeyName}}"
-                is_default = true
 
                 [providers.vertex]
                 display_name = "Vertex"
-                provider = "google_genai"
-                use_vertex_ai = true
+                type = "vertex-ai"
                 project = "sample-project"
                 location = "europe-west4"
-                is_default = true
                 """);
 
             var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -72,29 +65,23 @@ public sealed class RawApiBackendRegistrarTests
                 StringComparer.OrdinalIgnoreCase);
 
             CollectionAssert.AreEquivalent(
-                new[]
-                {
-                    AgentBackendIds.OpenAIResponses.Value,
-                    AgentBackendIds.OpenAIChat.Value,
-                    AgentBackendIds.AnthropicMessages.Value,
-                    AgentBackendIds.GoogleGenAI.Value,
-                },
+                new[] { "openai_chat", "openai_responses", "anthropic", "vertex" },
                 descriptors.Select(static descriptor => descriptor.BackendId.Value).ToArray());
 
-            Assert.AreEqual("OpenAI Responses", descriptorsById[AgentBackendIds.OpenAIResponses.Value]);
-            Assert.AreEqual("OpenAI Chat", descriptorsById[AgentBackendIds.OpenAIChat.Value]);
-            Assert.AreEqual("Anthropic", descriptorsById[AgentBackendIds.AnthropicMessages.Value]);
-            Assert.AreEqual("Vertex", descriptorsById[AgentBackendIds.GoogleGenAI.Value]);
+            Assert.AreEqual("OpenAI Responses", descriptorsById["openai_responses"]);
+            Assert.AreEqual("OpenAI Chat", descriptorsById["openai_chat"]);
+            Assert.AreEqual("Anthropic", descriptorsById["anthropic"]);
+            Assert.AreEqual("Vertex", descriptorsById["vertex"]);
 
-            Assert.IsTrue(factory.IsRegistered(AgentBackendIds.OpenAIResponses));
-            Assert.IsTrue(factory.IsRegistered(AgentBackendIds.OpenAIChat));
-            Assert.IsTrue(factory.IsRegistered(AgentBackendIds.AnthropicMessages));
-            Assert.IsTrue(factory.IsRegistered(AgentBackendIds.GoogleGenAI));
+            Assert.IsTrue(factory.IsRegistered("openai_responses"));
+            Assert.IsTrue(factory.IsRegistered("openai_chat"));
+            Assert.IsTrue(factory.IsRegistered("anthropic"));
+            Assert.IsTrue(factory.IsRegistered("vertex"));
 
-            await using var responsesBackend = factory.Create(AgentBackendIds.OpenAIResponses);
-            await using var chatBackend = factory.Create(AgentBackendIds.OpenAIChat);
-            await using var anthropicBackend = factory.Create(AgentBackendIds.AnthropicMessages);
-            await using var googleBackend = factory.Create(AgentBackendIds.GoogleGenAI);
+            await using var responsesBackend = factory.Create("openai_responses");
+            await using var chatBackend = factory.Create("openai_chat");
+            await using var anthropicBackend = factory.Create("anthropic");
+            await using var googleBackend = factory.Create("vertex");
 
             Assert.IsInstanceOfType<OpenAIResponsesAgentBackend>(responsesBackend);
             Assert.IsInstanceOfType<OpenAIChatAgentBackend>(chatBackend);
@@ -116,13 +103,7 @@ public sealed class RawApiBackendRegistrarTests
             Path.Combine(temp.Path, "config.toml"),
             """
             [providers.openrouter]
-            provider = "openai"
-            wire_api = "responses"
-
-            [providers.vertex]
-            provider = "google_genai"
-            use_vertex_ai = true
-            project = "sample-project"
+            type = "openai-responses"
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -151,11 +132,9 @@ public sealed class RawApiBackendRegistrarTests
                 $$"""
                 [providers.minimax]
                 display_name = "MiniMax 2.7"
-                provider = "openai"
+                type = "openai-chat"
                 api_key_env = "{{minimaxKeyName}}"
-                base_uri = "https://api.minimax.io/v1"
-                wire_api = "chat"
-                is_default = true
+                api_url = "https://api.minimax.io/v1"
                 """);
 
             var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -167,7 +146,7 @@ public sealed class RawApiBackendRegistrarTests
                 Path.Combine(temp.Path, "machine", "agents"));
 
             Assert.AreEqual(1, descriptors.Count);
-            Assert.AreEqual(AgentBackendIds.OpenAIChat.Value, descriptors[0].BackendId.Value);
+            Assert.AreEqual("minimax", descriptors[0].BackendId.Value);
             Assert.AreEqual("MiniMax 2.7", descriptors[0].DisplayName);
         }
         finally
@@ -190,11 +169,9 @@ public sealed class RawApiBackendRegistrarTests
                 $$"""
                 [providers.compat]
                 display_name = "MiniMax 2.7"
-                provider = "openai"
+                type = "openai-chat"
                 api_key_env = "{{minimaxKeyName}}"
-                base_uri = "https://api.minimax.io/v1"
-                wire_api = "chat"
-                is_default = true
+                api_url = "https://api.minimax.io/v1"
                 """);
 
             var stateRoot = Path.Combine(temp.Path, "machine", "agents");
@@ -206,7 +183,7 @@ public sealed class RawApiBackendRegistrarTests
                 store,
                 stateRoot);
 
-            await using var chatBackend = factory.Create(AgentBackendIds.OpenAIChat);
+            await using var chatBackend = factory.Create("compat");
             await chatBackend.StartAsync().ConfigureAwait(false);
 
             var sessionStore = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(stateRoot));
@@ -236,11 +213,9 @@ public sealed class RawApiBackendRegistrarTests
                 $$"""
                 [providers.compat]
                 display_name = "MiniMax 2.7"
-                provider = "openai"
+                type = "openai-chat"
                 api_key_env = "{{minimaxKeyName}}"
-                base_uri = "https://api.minimax.io/v1"
-                wire_api = "chat"
-                is_default = true
+                api_url = "https://api.minimax.io/v1"
 
                 [providers.compat.profile]
                 supports_developer_role = true
@@ -255,7 +230,7 @@ public sealed class RawApiBackendRegistrarTests
                 store,
                 stateRoot);
 
-            await using var chatBackend = factory.Create(AgentBackendIds.OpenAIChat);
+            await using var chatBackend = factory.Create("compat");
             await chatBackend.StartAsync().ConfigureAwait(false);
 
             var sessionStore = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(stateRoot));
@@ -320,11 +295,9 @@ public sealed class RawApiBackendRegistrarTests
                 $$"""
                 [providers.minimax]
                 display_name = "MiniMax 2.7"
-                provider = "openai"
+                type = "openai-chat"
                 api_key_env = "{{minimaxKeyName}}"
-                base_uri = "{{server.BaseUri}}"
-                wire_api = "chat"
-                is_default = true
+                api_url = "{{server.BaseUri}}"
                 """);
 
             var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -339,7 +312,7 @@ public sealed class RawApiBackendRegistrarTests
             Assert.AreEqual(1, descriptors.Count);
             Assert.AreEqual("MiniMax 2.7", descriptors[0].DisplayName);
 
-            await using var chatBackend = factory.Create(AgentBackendIds.OpenAIChat);
+            await using var chatBackend = factory.Create("minimax");
             var models = await chatBackend.ListModelsAsync().ConfigureAwait(false);
 
             CollectionAssert.AreEquivalent(
@@ -368,12 +341,10 @@ public sealed class RawApiBackendRegistrarTests
                 $$"""
                 [providers.minimax]
                 display_name = "MiniMax 2.7"
-                provider = "openai"
+                type = "openai-chat"
                 api_key_env = "{{minimaxKeyName}}"
-                base_uri = "http://127.0.0.1:9/v1"
-                wire_api = "chat"
+                api_url = "http://127.0.0.1:9/v1"
                 single_model_id = " MiniMax-M2.7 "
-                is_default = true
                 """);
 
             var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -385,7 +356,7 @@ public sealed class RawApiBackendRegistrarTests
                 Path.Combine(temp.Path, "machine", "agents"),
                 modelCatalog);
 
-            await using var chatBackend = factory.Create(AgentBackendIds.OpenAIChat);
+            await using var chatBackend = factory.Create("minimax");
             var models = await chatBackend.ListModelsAsync().ConfigureAwait(false);
 
             Assert.AreEqual(1, models.Count);
@@ -414,11 +385,10 @@ public sealed class RawApiBackendRegistrarTests
                 $$"""
                 [providers.minimax]
                 display_name = "MiniMax 2.7"
-                provider = "anthropic"
+                type = "anthropic"
                 api_key_env = "{{minimaxKeyName}}"
-                base_uri = "https://api.minimax.io/anthropic"
+                api_url = "https://api.minimax.io/anthropic"
                 single_model_id = " MiniMax-M2.7 "
-                is_default = true
                 """);
 
             var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -430,7 +400,7 @@ public sealed class RawApiBackendRegistrarTests
                 Path.Combine(temp.Path, "machine", "agents"),
                 modelCatalog);
 
-            await using var anthropicBackend = factory.Create(AgentBackendIds.AnthropicMessages);
+            await using var anthropicBackend = factory.Create("minimax");
             var models = await anthropicBackend.ListModelsAsync().ConfigureAwait(false);
 
             Assert.AreEqual(1, models.Count);

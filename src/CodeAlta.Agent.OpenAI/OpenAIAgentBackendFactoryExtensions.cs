@@ -18,7 +18,7 @@ public static class OpenAIAgentBackendFactoryExtensions
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(options);
 
-        factory.Register(AgentBackendIds.OpenAIResponses, () => new OpenAIResponsesAgentBackend(options));
+        factory.Register(options.BackendIdOverride ?? AgentBackendIds.OpenAIResponses, () => new OpenAIResponsesAgentBackend(options));
         return factory;
     }
 
@@ -35,7 +35,7 @@ public static class OpenAIAgentBackendFactoryExtensions
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(options);
 
-        factory.Register(AgentBackendIds.OpenAIChat, () => new OpenAIChatAgentBackend(options));
+        factory.Register(options.BackendIdOverride ?? AgentBackendIds.OpenAIChat, () => new OpenAIChatAgentBackend(options));
         return factory;
     }
 }

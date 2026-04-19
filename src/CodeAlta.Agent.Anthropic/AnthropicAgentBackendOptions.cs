@@ -11,6 +11,16 @@ namespace CodeAlta.Agent.Anthropic;
 public sealed class AnthropicAgentBackendOptions
 {
     /// <summary>
+    /// Gets or sets the optional backend identifier override.
+    /// </summary>
+    public AgentBackendId? BackendIdOverride { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional backend display name override.
+    /// </summary>
+    public string? DisplayNameOverride { get; set; }
+
+    /// <summary>
     /// Gets or sets the optional root directory used to persist machine-local agent state.
     /// </summary>
     public string? StateRootPath { get; set; }

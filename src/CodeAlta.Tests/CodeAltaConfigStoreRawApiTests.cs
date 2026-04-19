@@ -6,26 +6,24 @@ namespace CodeAlta.Tests;
 public sealed class CodeAltaConfigStoreRawApiTests
 {
     [TestMethod]
-    public void LoadGlobalRawApiProviderDefinitions_NormalizesUnifiedProvidersAndOpenAIProjection()
+    public void LoadGlobalProviderDefinitions_NormalizesProviderFirstProviders()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
             Path.Combine(temp.Path, "config.toml"),
             """
-            [raw_api.compaction]
-            trigger_threshold = 0.81
-            reserved_overhead_tokens = 1024
-            summary_input_tokens = 32000
-            reasoning_mode = "summary_only"
+            [chat]
+            default_provider = " OpenRouter "
 
             [providers.OpenRouter]
             display_name = " OpenRouter "
-            provider = " OpenAI "
+            type = " openai "
+            model = " gpt-5 "
+            reasoning_effort = " high "
             api_key_env = " OPENROUTER_API_KEY "
-            base_uri = " https://openrouter.ai/api/v1 "
+            api_url = " https://openrouter.ai/api/v1 "
             models_dev_provider_id = " OpenRouter "
             single_model_id = " gpt-5 "
-            is_default = true
 
             [providers.OpenRouter.extra_body]
             custom_boolean = true
@@ -47,110 +45,101 @@ public sealed class CodeAltaConfigStoreRawApiTests
             description = " flagship "
             context_window = 400000
             output_token_limit = 128000
+
+            [providers.responses]
+            display_name = "OpenAI (Responses)"
+            type = "responses"
+            api_key_env = "CODEALTA_OPENAI_API_KEY"
+            api_url = "https://api.openai.com/v1"
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        var providers = store.LoadGlobalProviderDefinitions(includeDisabled: true)
+            .ToDictionary(static provider => provider.ProviderKey, StringComparer.OrdinalIgnoreCase);
 
-        var rawProviders = store.LoadGlobalRawApiProviderDefinitions();
-        Assert.AreEqual(1, rawProviders.Count);
-        Assert.AreEqual("openrouter", rawProviders[0].ProviderKey);
-        Assert.AreEqual("OpenRouter", rawProviders[0].DisplayName);
-        Assert.AreEqual("openai", rawProviders[0].Provider);
-        Assert.AreEqual("chat", rawProviders[0].WireApi);
-        Assert.IsTrue(rawProviders[0].IsDefault);
+        Assert.AreEqual("openrouter", store.GetEffectiveDefaultProvider());
+        Assert.IsTrue(providers.ContainsKey("codex"));
+        Assert.IsTrue(providers.ContainsKey("copilot"));
 
-        var providers = store.LoadGlobalOpenAIProviderDefinitions();
-        Assert.AreEqual(1, providers.Count);
-        Assert.AreEqual("openrouter", providers[0].ProviderKey);
-        Assert.AreEqual("OpenRouter", providers[0].DisplayName);
-        Assert.AreEqual("OPENROUTER_API_KEY", providers[0].ApiKeyEnv);
-        Assert.AreEqual("https://openrouter.ai/api/v1", providers[0].BaseUri);
-        Assert.AreEqual("openrouter", providers[0].ModelsDevProviderId);
-        Assert.AreEqual("gpt-5", providers[0].SingleModelId);
-        var extraBody = providers[0].ExtraBody;
-        Assert.IsNotNull(extraBody);
-        Assert.AreEqual(true, extraBody!["custom_boolean"]);
-        Assert.AreEqual(0.75d, Convert.ToDouble(extraBody["custom_threshold"]));
-        Assert.IsFalse(providers[0].EnableResponses);
-        Assert.IsTrue(providers[0].EnableChat);
-        Assert.IsTrue(providers[0].DefaultChat);
-        Assert.IsFalse(providers[0].DefaultResponses);
-        var profile = providers[0].Profile;
-        Assert.IsNotNull(profile);
-        Assert.IsFalse(profile!.SupportsDeveloperRole);
-        Assert.IsFalse(profile.SupportsStore);
-        Assert.AreEqual("max_tokens", profile.MaxTokensFieldName);
+        var openRouter = providers["openrouter"];
+        Assert.AreEqual("OpenRouter", openRouter.DisplayName);
+        Assert.AreEqual("openai-chat", openRouter.ProviderType);
+        Assert.AreEqual("gpt-5", openRouter.Model);
+        Assert.AreEqual("high", openRouter.ReasoningEffort);
+        Assert.AreEqual("OPENROUTER_API_KEY", openRouter.ApiKeyEnv);
+        Assert.AreEqual("https://openrouter.ai/api/v1", openRouter.ApiUrl);
+        Assert.AreEqual("openrouter", openRouter.ModelsDevProviderId);
+        Assert.AreEqual("gpt-5", openRouter.SingleModelId);
+        Assert.IsNotNull(openRouter.ExtraBody);
+        Assert.AreEqual(true, openRouter.ExtraBody!["custom_boolean"]);
+        Assert.AreEqual(0.75d, Convert.ToDouble(openRouter.ExtraBody["custom_threshold"]));
+        Assert.IsNotNull(openRouter.Profile);
+        Assert.IsFalse(openRouter.Profile!.SupportsDeveloperRole);
+        Assert.IsFalse(openRouter.Profile.SupportsStore);
+        Assert.AreEqual("max_tokens", openRouter.Profile.MaxTokensFieldName);
         CollectionAssert.AreEqual(
             new[] { "reasoning_content", "reasoning" },
-            profile.ReasoningFieldNames);
-        var compaction = providers[0].Compaction;
-        Assert.IsNotNull(compaction);
-        Assert.IsTrue(compaction!.Enabled);
-        Assert.AreEqual(0.81d, compaction.TriggerThreshold!.Value, 0.0001d);
-        Assert.AreEqual(0.50d, compaction.TargetThreshold!.Value, 0.0001d);
-        Assert.AreEqual(2048, compaction.ReservedOutputTokens);
-        Assert.AreEqual(1024, compaction.ReservedOverheadTokens);
-        Assert.IsTrue(compaction.KeepLastUserMessage);
-        Assert.IsTrue(compaction.AllowSplitTurn);
-        Assert.AreEqual(32000, compaction.SummaryInputTokens);
-        Assert.AreEqual(768, compaction.SummaryOutputTokens);
-        Assert.AreEqual(0.03d, compaction.TargetContextRatioIdeal!.Value, 0.0001d);
-        Assert.AreEqual(0.08d, compaction.TargetContextRatioMax!.Value, 0.0001d);
-        Assert.AreEqual("summary_only", compaction.ReasoningMode);
-        var modelOverrides = providers[0].ModelOverrides;
-        Assert.IsNotNull(modelOverrides);
-        Assert.IsTrue(modelOverrides!.TryGetValue("gpt-5", out var modelOverride));
+            openRouter.Profile.ReasoningFieldNames);
+        Assert.IsNotNull(openRouter.Compaction);
+        Assert.AreEqual(2048, openRouter.Compaction!.ReservedOutputTokens);
+        Assert.AreEqual(768, openRouter.Compaction.SummaryOutputTokens);
+        Assert.AreEqual(0.08d, openRouter.Compaction.TargetContextRatioMax!.Value, 0.0001d);
+        Assert.IsNotNull(openRouter.ModelOverrides);
+        Assert.IsTrue(openRouter.ModelOverrides!.TryGetValue("gpt-5", out var modelOverride));
         Assert.IsNotNull(modelOverride);
         Assert.AreEqual("GPT-5", modelOverride.DisplayName);
         Assert.AreEqual("flagship", modelOverride.Description);
         Assert.AreEqual(400000L, modelOverride.ContextWindow);
         Assert.AreEqual(128000L, modelOverride.OutputTokenLimit);
+
+        var responses = providers["responses"];
+        Assert.AreEqual("openai-responses", responses.ProviderType);
+        Assert.AreEqual("OpenAI (Responses)", responses.DisplayName);
     }
 
     [TestMethod]
-    public void LoadGlobalOpenAIProviderDefinitions_InvalidCompactionThreshold_Throws()
+    public void LoadGlobalProviderDefinitions_InvalidCompactionThreshold_Throws()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
             Path.Combine(temp.Path, "config.toml"),
             """
-            [raw_api.compaction]
+            [providers.openai]
+            type = "openai-chat"
+            api_key_env = "OPENAI_API_KEY"
+
+            [providers.openai.compaction]
             trigger_threshold = 0.5
             target_threshold = 0.5
-
-            [providers.openai]
-            provider = "openai"
-            api_key_env = "OPENAI_API_KEY"
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
-        Assert.ThrowsExactly<InvalidDataException>(() => store.LoadGlobalOpenAIProviderDefinitions(includeDisabled: true));
+        Assert.ThrowsExactly<InvalidDataException>(() => store.LoadGlobalProviderDefinitions(includeDisabled: true));
     }
 
     [TestMethod]
-    public void LoadGlobalOpenAIProviderDefinitions_UsesUpdatedCompactionDefaults()
+    public void LoadGlobalProviderDefinitions_UsesUpdatedCompactionDefaults()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
             Path.Combine(temp.Path, "config.toml"),
             """
             [providers.openai]
-            provider = "openai"
+            type = "openai-chat"
             api_key_env = "OPENAI_API_KEY"
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
-
-        var providers = store.LoadGlobalOpenAIProviderDefinitions();
-        Assert.AreEqual(1, providers.Count);
-        var compaction = providers[0].Compaction;
+        var providers = store.LoadGlobalProviderDefinitions();
+        var openAi = providers.Single(static provider => string.Equals(provider.ProviderKey, "openai", StringComparison.OrdinalIgnoreCase));
+        var compaction = openAi.Compaction;
         Assert.IsNotNull(compaction);
         Assert.AreEqual(0.85d, compaction!.TriggerThreshold!.Value, 0.0001d);
         Assert.AreEqual(0.50d, compaction.TargetThreshold!.Value, 0.0001d);
     }
 
     [TestMethod]
-    public void LoadGlobalAnthropicAndGoogleProviderDefinitions_HonorDisabledFiltering()
+    public void LoadGlobalProviderDefinitions_AnthropicAndVertexHonorDisabledFiltering()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
@@ -158,15 +147,13 @@ public sealed class CodeAltaConfigStoreRawApiTests
             """
             [providers.Anthropic]
             display_name = " Anthropic "
-            provider = " anthropic "
+            type = " anthropic "
             api_key_env = " ANTHROPIC_API_KEY "
             single_model_id = " MiniMax-M2.7 "
-            is_default = true
 
             [providers.VertexWest]
             enabled = false
-            provider = " google "
-            use_vertex_ai = true
+            type = " vertex-ai "
             project = " sample-project "
             location = " europe-west4 "
             single_model_id = " gemini-2.5-pro "
@@ -174,66 +161,75 @@ public sealed class CodeAltaConfigStoreRawApiTests
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
 
-        var anthropicProviders = store.LoadGlobalAnthropicProviderDefinitions();
-        Assert.AreEqual(1, anthropicProviders.Count);
-        Assert.AreEqual("anthropic", anthropicProviders[0].ProviderKey);
-        Assert.AreEqual("Anthropic", anthropicProviders[0].DisplayName);
-        Assert.AreEqual("ANTHROPIC_API_KEY", anthropicProviders[0].ApiKeyEnv);
-        Assert.AreEqual("MiniMax-M2.7", anthropicProviders[0].SingleModelId);
-        Assert.IsTrue(anthropicProviders[0].IsDefault);
+        var enabledProviders = store.LoadGlobalProviderDefinitions();
+        Assert.IsTrue(enabledProviders.Any(static provider => provider.ProviderKey == "anthropic"));
+        Assert.IsFalse(enabledProviders.Any(static provider => provider.ProviderKey == "vertexwest"));
 
-        var enabledGoogleProviders = store.LoadGlobalGoogleGenAIProviderDefinitions();
-        Assert.AreEqual(0, enabledGoogleProviders.Count);
-
-        var allGoogleProviders = store.LoadGlobalGoogleGenAIProviderDefinitions(includeDisabled: true);
-        Assert.AreEqual(1, allGoogleProviders.Count);
-        Assert.AreEqual("vertexwest", allGoogleProviders[0].ProviderKey);
-        Assert.IsTrue(allGoogleProviders[0].UseVertexAI);
-        Assert.AreEqual("sample-project", allGoogleProviders[0].Project);
-        Assert.AreEqual("europe-west4", allGoogleProviders[0].Location);
-        Assert.AreEqual("gemini-2.5-pro", allGoogleProviders[0].SingleModelId);
+        var allProviders = store.LoadGlobalProviderDefinitions(includeDisabled: true)
+            .ToDictionary(static provider => provider.ProviderKey, StringComparer.OrdinalIgnoreCase);
+        Assert.AreEqual("Anthropic", allProviders["anthropic"].DisplayName);
+        Assert.AreEqual("ANTHROPIC_API_KEY", allProviders["anthropic"].ApiKeyEnv);
+        Assert.AreEqual("MiniMax-M2.7", allProviders["anthropic"].SingleModelId);
+        Assert.AreEqual("vertex-ai", allProviders["vertexwest"].ProviderType);
+        Assert.AreEqual("sample-project", allProviders["vertexwest"].Project);
+        Assert.AreEqual("europe-west4", allProviders["vertexwest"].Location);
     }
 
     [TestMethod]
-    public void LoadGlobalOpenAIProviderDefinitions_LegacyNestedProvidersRemainSupported()
+    public void LoadGlobalProviderDefinitions_ReservedProvidersReceiveDefaults()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
             Path.Combine(temp.Path, "config.toml"),
             """
-            [raw_api.openai.providers.myresponses]
-            display_name = "OpenAI (Responses)"
-            api_key_env = "CODEALTA_OPENAI_API_KEY"
-            enable_responses = true
-            enable_chat = false
-            default_responses = true
+            [providers.codex]
+            model = "gpt-5.4"
+            reasoning_effort = "high"
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        var providers = store.LoadGlobalProviderDefinitions(includeDisabled: true)
+            .ToDictionary(static provider => provider.ProviderKey, StringComparer.OrdinalIgnoreCase);
 
-        var providers = store.LoadGlobalOpenAIProviderDefinitions();
-        Assert.AreEqual(1, providers.Count);
-        Assert.AreEqual("myresponses", providers[0].ProviderKey);
-        Assert.IsTrue(providers[0].EnableResponses);
-        Assert.IsFalse(providers[0].EnableChat);
-        Assert.IsTrue(providers[0].DefaultResponses);
+        Assert.AreEqual("codex", providers["codex"].ProviderType);
+        Assert.AreEqual("Codex", providers["codex"].DisplayName);
+        Assert.AreEqual("copilot", providers["copilot"].ProviderType);
+        Assert.AreEqual("GitHub Copilot", providers["copilot"].DisplayName);
     }
 
     [TestMethod]
-    public void LoadGlobalRawApiProviderDefinitions_InvalidWireApi_Throws()
+    public void LoadGlobalProviderDefinitions_InvalidReservedProviderType_Throws()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
             Path.Combine(temp.Path, "config.toml"),
             """
-            [providers.badprovider]
+            [providers.codex]
+            type = "openai-chat"
+            """);
+
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        Assert.ThrowsExactly<InvalidDataException>(() => store.LoadGlobalProviderDefinitions(includeDisabled: true));
+    }
+
+    [TestMethod]
+    public void LoadGlobalProviderDefinitions_LegacySchemaIsRejected()
+    {
+        using var temp = TempDirectory.Create();
+        File.WriteAllText(
+            Path.Combine(temp.Path, "config.toml"),
+            """
+            [backends.codex]
+            model = "gpt-5.4"
+
+            [providers.openai]
             provider = "openai"
-            wire_api = "messages"
-            api_key_env = "OPENAI_API_KEY"
+            wire_api = "chat"
+            base_uri = "https://api.openai.com/v1"
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
-        Assert.ThrowsExactly<InvalidDataException>(() => store.LoadGlobalRawApiProviderDefinitions(includeDisabled: true));
+        Assert.ThrowsExactly<InvalidDataException>(() => store.LoadGlobalProviderDefinitions(includeDisabled: true));
     }
 
     private sealed class TempDirectory(string path) : IDisposable
@@ -244,7 +240,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
         {
             var path = System.IO.Path.Combine(
                 AppContext.BaseDirectory,
-                "config-store-raw-api-tests",
+                "config-store-provider-tests",
                 Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(path);
             return new TempDirectory(path);

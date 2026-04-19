@@ -123,22 +123,34 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             });
         modelsDevCatalogService.StartBackgroundRefresh();
 
+        var providerDefinitions = configStore.LoadGlobalProviderDefinitions(includeDisabled: true)
+            .ToDictionary(static definition => definition.ProviderKey, StringComparer.OrdinalIgnoreCase);
         var backendFactory = new AgentBackendFactory();
+        var backendDescriptors = new List<AgentBackendDescriptor>();
         var codexPath = ResolveCodexExecutablePath(
             Environment.GetEnvironmentVariable(CodexPathOverrideEnvironmentVariable));
-        backendFactory.RegisterCodex(
-            new CodexAgentBackendOptions
-            {
-                ProcessOptions = new CodexProcessOptions
+        if (providerDefinitions.TryGetValue("codex", out var codexProvider) && codexProvider.Enabled)
+        {
+            backendFactory.RegisterCodex(
+                new CodexAgentBackendOptions
                 {
-                    CodexPath = codexPath,
-                    LocalRootPath = localRoot,
-                    ReleaseTag = codexPath is null ? CodexClient.CompiledAgainstReleaseTag : null,
-                    Progress = codexPath is null ? codexInstallProgress : null,
-                },
-            });
-        backendFactory.RegisterCopilot(new CopilotAgentBackendOptions());
-        var backendDescriptors = new List<AgentBackendDescriptor>(CreateBuiltInBackendDescriptors());
+                    ProcessOptions = new CodexProcessOptions
+                    {
+                        CodexPath = codexPath,
+                        LocalRootPath = localRoot,
+                        ReleaseTag = codexPath is null ? CodexClient.CompiledAgainstReleaseTag : null,
+                        Progress = codexPath is null ? codexInstallProgress : null,
+                    },
+                });
+            backendDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Codex, codexProvider.DisplayName ?? "Codex"));
+        }
+
+        if (providerDefinitions.TryGetValue("copilot", out var copilotProvider) && copilotProvider.Enabled)
+        {
+            backendFactory.RegisterCopilot(new CopilotAgentBackendOptions());
+            backendDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Copilot, copilotProvider.DisplayName ?? "GitHub Copilot"));
+        }
+
         backendDescriptors.AddRange(
             RawApiBackendRegistrar.RegisterConfiguredBackends(
                 backendFactory,
@@ -243,7 +255,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         return
         [
             new AgentBackendDescriptor(AgentBackendIds.Codex, "Codex"),
-            new AgentBackendDescriptor(AgentBackendIds.Copilot, "Copilot"),
+            new AgentBackendDescriptor(AgentBackendIds.Copilot, "GitHub Copilot"),
         ];
     }
 
