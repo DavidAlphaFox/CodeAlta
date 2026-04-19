@@ -36,8 +36,8 @@ CodeAlta should be built around a **host-owned orchestrator** plus a **filesyste
 
 That means:
 
-- durable state lives in plain text under `~/.codealta/`
-- machine-local operational state lives under `~/.codealta/local/`
+- durable state lives in plain text under `~/.alta/`
+- machine-local operational state lives under `~/.alta/cache/`
 - the orchestrator, written in C#, owns routing, dispatch, lifecycle, and recovery
 - Copilot and Codex are execution backends, not the owners of orchestration
 - the MVP works without mandatory workspaces
@@ -152,7 +152,7 @@ flowchart LR
     COORD[Coordinator Session]
 
     subgraph CATALOG[Portable Catalog]
-        ROOT["~/.codealta/"]
+        ROOT["~/.alta/"]
         PROJ[Projects]
         THREADS[Threads]
         AGENTS[Agents]
@@ -161,13 +161,13 @@ flowchart LR
     end
 
     subgraph OVERLAY[Project Overlay]
-        PROOT["{projectPath}/.codealta/"]
+        PROOT["{projectPath}/.alta/"]
         PAGENTS[Project Agents]
         PSKILLS[Project Skills]
     end
 
     subgraph MACHINE[Machine State]
-        MROOT["~/.codealta/local/"]
+        MROOT["~/.alta/cache/"]
         DB[(codealta.db)]
         CACHE[Cache / Logs / Overrides]
     end
@@ -190,9 +190,9 @@ flowchart LR
 
 Key reading:
 
-- `~/.codealta/` is the global durable root
-- `{projectPath}/.codealta/` is the project-local overlay
-- `~/.codealta/local/` is local runtime/index/cache state
+- `~/.alta/` is the global durable root
+- `{projectPath}/.alta/` is the project-local overlay
+- `~/.alta/cache/` is local runtime/index/cache state
 - the host orchestrator is the hub for all thread and session communication
 
 ## 4.2 Projects
@@ -213,7 +213,7 @@ Project discovery should be automatic.
 Primary discovery sources:
 
 - current working directory when CodeAlta starts
-- known durable project files under `~/.codealta/projects/`
+- known durable project files under `~/.alta/projects/`
 - backend session history where a usable `cwd` or repository root can be inferred
 
 ### Important rule
@@ -246,7 +246,7 @@ A global thread:
 - may coordinate across multiple projects
 - may create or steer project threads
 - may summarize the state of other threads
-- should use `~/.codealta/` as its working directory / session cwd so backend session history can recover it consistently
+- should use `~/.alta/` as its working directory / session cwd so backend session history can recover it consistently
 - has a fixed backend after creation; changing backend requires creating a new thread
 - should use the backend session/thread id as its canonical runtime identity
 - should be reopenable as the same backend-owned conversation, including its prior interaction history
@@ -393,7 +393,7 @@ Recommended behavior:
 
 Working-directory rule:
 
-- global thread sessions should use `~/.codealta/` as their backend working directory
+- global thread sessions should use `~/.alta/` as their backend working directory
 - project thread sessions should use the owning project's local `path`
 - this gives global threads a stable cwd that can be rediscovered from Copilot/Codex session history
 
@@ -426,7 +426,7 @@ Instead:
 - CodeAlta should prefer the backend session/thread id as the canonical thread id for project and global threads
 - backend identity can be inferred from which backend emitted the session listing
 - project/global scope can be inferred from cwd:
-  - `~/.codealta/` => global thread
+  - `~/.alta/` => global thread
   - project `path` => project thread
 - a display title can be derived from backend summary when available, or from the first user prompt
 
@@ -465,14 +465,14 @@ Why:
 
 That means the following idea is attractive but not directly viable as the primary mechanism:
 
-- `~/.codealta/threads/{backend-guid}/`
+- `~/.alta/threads/{backend-guid}/`
 
 The backend guid is not available early enough.
 
 A practical rule is:
 
 - project/global threads should use backend-owned identity with no duplicated manifest by default
-- internal delegated threads may use a host-chosen internal cwd marker under `~/.codealta/threads/` or `~/.codealta/internal/` when CodeAlta needs to classify and relate them
+- internal delegated threads may use a host-chosen internal cwd marker under `~/.alta/threads/` or `~/.alta/internal/` when CodeAlta needs to classify and relate them
 - if CodeAlta introduces such an internal marker, it should be justified only by parent/child orchestration recovery, not by a desire to duplicate normal thread metadata
 
 SQLite remains machine-local support state, not the durable owner of the model.
@@ -521,4 +521,5 @@ CodeAlta should evolve around:
 - backend-agnostic execution
 
 That is the clearest path to a practical product that users can adopt without front-loaded setup.
+
 

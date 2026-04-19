@@ -63,7 +63,7 @@ Notes on “each slice should produce tests”:
 | SQLite write contention: serialized writer pipeline | Partial | `src/CodeAlta.Persistence/CodeAltaDb.cs` serializes writes via a `SemaphoreSlim` in `ExecuteWriteAsync` | This is serialized writes, but not a dedicated background writer queue as described in the plan |
 | CPU-heavy work: background tasks and explicit concurrency limits | Partial | Indexing is queued (`src/CodeAlta.Search/IndexingQueue.cs`) | No explicit concurrency limit for embedding/Roslyn beyond “do it in async methods”; no stress/perf tests |
 | Logging bridge for libraries expecting `Microsoft.Extensions.Logging` | Done | `src/CodeAlta.Mcp/Logging/XenoAtomLoggerProvider.cs` | MCP creation tests indirectly exercise DI composition |
-| “Compaction-safe” durability: meaningful knowledge persisted as files | Partial | Artifact store exists (`src/CodeAlta.Persistence/ArtifactStore.cs`); planner/builder persist artifacts (`src/CodeAlta.Orchestration/*Service.cs`) | Task notes and exports are persisted; however, default artifact roots do not yet align with the storage plan’s repo-local `.codealta/{knowledge,plans,tasks}` layout |
+| “Compaction-safe” durability: meaningful knowledge persisted as files | Partial | Artifact store exists (`src/CodeAlta.Persistence/ArtifactStore.cs`); planner/builder persist artifacts (`src/CodeAlta.Orchestration/*Service.cs`) | Task notes and exports are persisted; however, default artifact roots do not yet align with the storage plan’s repo-local `.alta/{knowledge,plans,tasks}` layout |
 
 ## 5. Milestones (suggested) coverage
 
@@ -72,7 +72,7 @@ Notes on “each slice should produce tests”:
 | Milestone Item | Status | Implementation Evidence | Test Evidence / Notes |
 | --- | --- | --- | --- |
 | Create `CodeAlta.Catalog` and `CodeAlta.Persistence` | Done | `src/CodeAlta.Catalog/*`, `src/CodeAlta.Persistence/*` | Catalog + Persistence test projects |
-| Define on-disk locations (`~/.codealta/...` and repo `.codealta/...`) | Partial | `src/CodeAlta/Program.cs` uses `~/.codealta/state/db/codealta.db` and `~/.codealta/repo` | Repo-local `.codealta/...` structure is used by some features (skills discovery, dotnet artifacts), but not consistently as “the” default artifact root |
+| Define on-disk locations (`~/.alta/...` and repo `.alta/...`) | Partial | `src/CodeAlta/Program.cs` uses `~/.alta/cache/codealta.db` and `~/.alta` | Repo-local `.alta/...` structure is used by some features (skills discovery, dotnet artifacts), but not consistently as “the” default artifact root |
 | YAML frontmatter conventions for artifacts | Done | `src/CodeAlta.Persistence/ArtifactFrontmatter.cs`, `src/CodeAlta.Persistence/ArtifactStore.cs` | `ArtifactStore_WriteReadAndExtractPlainText_RoundTrips` |
 | SQLite migrations + repositories + artifact store | Done | `src/CodeAlta.Persistence/CodeAltaDb.cs`, `*Repository.cs`, `ArtifactStore.cs` | `PersistenceInfrastructureTests` |
 | Tests for migrations and artifact read/write | Done | See above | `CodeAltaDb_InitializeAsync_CreatesCoreSchema`, `ArtifactStore_WriteReadAndExtractPlainText_RoundTrips` |
@@ -121,4 +121,5 @@ Tool-surface gaps versus `implementation_plan_mcp_server.md`:
 | --- | --- | --- | --- |
 | Replace `Program.cs` playground with real TUI host | Done | `src/CodeAlta/Program.cs`, `src/CodeAlta/TerminalUi/CodeAltaTerminalUi.cs` | No automated UI tests |
 | Responsive UI loops, background job views, scope selection UX | Partial | `src/CodeAlta/TerminalUi/CodeAltaTerminalUi.cs` | Includes Jobs screen, scope selector, and a Chat screen using `PromptEditor` + `DocumentFlow` + markdown rendering, wired to `AgentHub` sessions; still missing richer UX (task drill-down, background job list beyond indexing, etc.) |
+
 

@@ -84,7 +84,7 @@ The list is intentionally ordered, but it is not rigid in the wrong way:
 - [x] Keep `doc/specs/implementation_plan.md` aligned with the actual MVP scope and sequence.
 - [x] Remove workspace ownership from the active MVP model.
 - [x] Finalize the project descriptor model, identity rules, and loading rules.
-- [x] Implement durable loading of known projects from `~/.codealta/projects/`.
+- [x] Implement durable loading of known projects from `~/.alta/projects/`.
 - [x] Implement automatic project upsert when CodeAlta starts inside an unknown project folder.
 - [x] Implement optional discovery/import of previously used backend sessions into the known-project list.
 - [x] Introduce tags/labels as project metadata, but keep tag management out of the MVP UI.
@@ -94,7 +94,7 @@ The list is intentionally ordered, but it is not rigid in the wrong way:
 - [x] Support internal host-owned child threads for delegated work.
 - [x] Keep internal child threads inspectable without making them the primary visible unit of work.
 - [x] Keep each thread bound to a single backend for its lifetime.
-- [x] Use `~/.codealta/` as the backend working directory for global threads so they can be restored from backend session history.
+- [x] Use `~/.alta/` as the backend working directory for global threads so they can be restored from backend session history.
 - [x] Recover project/global threads directly from backend session listings plus cwd.
 - [x] Persist CodeAlta-owned thread records only for internal delegated linkage or UI state that the backend does not own.
 - [x] Restore open threads/tabs after restart.
@@ -137,8 +137,8 @@ Work:
   - projects
   - global agents
   - project-local agents/skills
-- make `~/.codealta/` the clear global root
-- keep machine-only state under `~/.codealta/local/`
+- make `~/.alta/` the clear global root
+- keep machine-only state under `~/.alta/cache/`
 - define automatic project discovery from:
   - current working directory
   - previously known backend sessions
@@ -161,7 +161,7 @@ Work:
 - support host-owned internal child threads for delegated work
 - keep internal child threads inspectable through summaries, activity, or details views
 - keep backend choice immutable for an existing thread
-- use `~/.codealta/` as the stable cwd for global-thread sessions
+- use `~/.alta/` as the stable cwd for global-thread sessions
 - recover project/global threads from backend ids and cwd instead of inventing new thread ids
 - add only minimal host-owned linkage records for internal delegated work when required
 - map tabs directly to user-facing work threads
@@ -253,8 +253,8 @@ The most sensible target is:
 `CodeAlta.Catalog` should own:
 
 - project descriptors and project discovery
-- catalog file loading/saving under `~/.codealta/`
-- project-local overlay loading from `{projectPath}/.codealta/`
+- catalog file loading/saving under `~/.alta/`
+- project-local overlay loading from `{projectPath}/.alta/`
 - agent and skill catalog loading
 - lightweight host-owned internal-thread linkage manifests
 - path-template and machine-override logic when it is used to resolve project locations
@@ -412,4 +412,5 @@ The project should now optimize for:
 - a minimal but strong coding-agent UX
 
 The architectural extras remain valuable, but they should stay out of the critical path until the core experience is solid.
+
 

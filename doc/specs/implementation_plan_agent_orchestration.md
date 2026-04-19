@@ -75,9 +75,9 @@ Output:
 Role profiles can be discovered from:
 - repo-local:
   - `.github/agents/*.md` (GitHub Copilot custom agents format)
-  - `.codealta/roles/*.md` (CodeAlta extensions)
+  - `.alta/roles/*.md` (CodeAlta extensions)
 - global repo:
-  - `~/.codealta/repo/roles/*.md` (shared roles across machines)
+  - `~/.alta/roles/*.md` (shared roles across machines)
 
 ### 4.2 Parsing strategy
 
@@ -206,4 +206,5 @@ Implementation note:
 - Orchestration flow:
   - planner creates tasks and plan artifact
   - builder marks tasks completed (mock backend or fake session)
+
 

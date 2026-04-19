@@ -107,7 +107,7 @@ Examples:
 - `knowledge/dotnet/symbol/<symbolId>.md`
 
 These artifacts:
-- are persisted under repo `.codealta/knowledge/` (project-local knowledge)
+- are persisted under repo `.alta/knowledge/` (project-local knowledge)
 - are indexed by `CodeAlta.Search` (FTS + embeddings)
 - can be referenced in tasks and plans
 
@@ -139,4 +139,5 @@ Use small fixture projects under `src/CodeAlta.Tests/Fixtures/`:
 - load a tiny solution
 - build symbol index
 - verify symbol lookups return correct file paths and line ranges
+
 

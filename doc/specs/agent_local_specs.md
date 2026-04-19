@@ -101,7 +101,7 @@ Provider identity is separate and first-class:
 
 Do not encode provider aliases into backend ids.
 
-Configured providers are loaded from `~/.codealta/config.toml` through `CodeAlta.Catalog.CodeAltaConfigStore`, under:
+Configured providers are loaded from `~/.alta/config.toml` through `CodeAlta.Catalog.CodeAltaConfigStore`, under:
 
 - `[providers.<provider-key>]`
 
@@ -373,17 +373,17 @@ The current implementation maps this design through:
 
 The application uses this machine-scoped state root:
 
-- `~/.codealta/local/agents/`
+- `~/.alta/cache/agents/`
 
 Within that root, sessions are stored provider-first under:
 
-- `~/.codealta/local/agents/<protocol-family>/<provider-key>/sessions/...`
+- `~/.alta/cache/agents/<protocol-family>/<provider-key>/sessions/...`
 
 ## 22. Concrete decisions
 
 1. Rename the spec to `agent_local_specs.md`.
 2. Keep the common infrastructure in `CodeAlta.Agent`.
-3. Use provider-first storage under `~/.codealta/local/agents/<protocol-family>/<provider-key>/`.
+3. Use provider-first storage under `~/.alta/cache/agents/<protocol-family>/<provider-key>/`.
 4. Use one canonical `events.jsonl` per session, containing finalized replay-significant events rather than duplicate deltas.
 5. Use `state.json`, not `provider-state.json`.
 6. Do not use `previous_response_id` as the session continuation model.
@@ -405,4 +405,5 @@ CodeAlta should own:
 - one replay/resume model
 
 The provider adapters should stay thin and focus on wire-format differences and compatibility profiles.
+
 

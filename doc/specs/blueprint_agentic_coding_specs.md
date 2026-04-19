@@ -290,24 +290,24 @@ Guideline:
 
 Storage locations (both are useful):
 
-- **Repo-local (`.codealta/`)**: for project-scoped, shareable knowledge that should travel with the repository.
-  - `<projectRoot>/.codealta/` (similar to `.github/`)
+- **Repo-local (`.alta/`)**: for project-scoped, shareable knowledge that should travel with the repository.
+  - `<projectRoot>/.alta/` (similar to `.github/`)
   - recommend splitting:
-    - `.codealta/shared/` (optionally committed)
-    - `.codealta/local/` (gitignored; caches, per-machine logs)
-- **Per-user (`$HOME/.codealta/`)**: for workspace/global artifacts and anything sensitive or machine-specific.
+    - `.alta/shared/` (optionally committed)
+    - `.alta/cache/` (gitignored; caches, per-machine logs)
+- **Per-user (`$HOME/.alta/`)**: for workspace/global artifacts and anything sensitive or machine-specific.
   - This directory can be a **git working copy** of a “global knowledge repository” when multi-machine portability is desired.
   - Keep secrets out of git; store only manifests, curated artifacts, and machine config without credentials.
 
 Suggested root directory:
 
-- Linux/macOS: `$HOME/.codealta/`
-- Windows: `%USERPROFILE%\\.codealta\\`
+- Linux/macOS: `$HOME/.alta/`
+- Windows: `%USERPROFILE%\\.alta\\`
 
 Suggested structure (example):
 
 ```
-~/.codealta/
+~/.alta/
   workspaces/<workspaceKey>/
     workspace.md
     projects/<projectKey>/
@@ -324,7 +324,7 @@ Suggested structure (example):
 Repo-local structure (example):
 
 ```
-<projectRoot>/.codealta/
+<projectRoot>/.alta/
   shared/
     project.md
     summaries/
@@ -396,7 +396,7 @@ The global repo should contain:
 
 Bootstrapping flow on a new machine:
 
-1. clone the global knowledge repo into `$HOME/.codealta/` (or Windows equivalent)
+1. clone the global knowledge repo into `$HOME/.alta/` (or Windows equivalent)
 2. select machine profile (e.g. by `machineId`/hostname) to resolve path roots
 3. clone/sync the repositories for selected workspaces using checkout templates
 4. start agents and rebuild indexes
@@ -417,3 +417,4 @@ Bootstrapping flow on a new machine:
 
 1. Global knowledge agent queries semantic search for decision records + conversation anchors.
 2. Returns a compact explanation plus citations (links to tasks/messages/commits).
+

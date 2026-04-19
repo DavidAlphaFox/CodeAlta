@@ -450,7 +450,7 @@ Use a CodeAlta-owned install/cache root outside repos.
 
 Recommended root:
 
-- Windows: `%USERPROFILE%\\.codealta\\acp\\`
+- Windows: `%USERPROFILE%\\.alta\\acp\\`
 
 Suggested subfolders:
 
@@ -503,11 +503,11 @@ The effective runtime definition should be produced by merging:
 Recommended persisted shapes:
 
 - installed definitions:
-  - `%USERPROFILE%\\.codealta\\acp\\manifests\\{agentId}.json`
+  - `%USERPROFILE%\\.alta\\acp\\manifests\\{agentId}.json`
 - runtime state and history:
-  - `%USERPROFILE%\\.codealta\\acp\\state\\{agentId}\\...`
+  - `%USERPROFILE%\\.alta\\acp\\state\\{agentId}\\...`
 - user-managed ACP config:
-  - `%USERPROFILE%\\.codealta\\config.toml`
+  - `%USERPROFILE%\\.alta\\config.toml`
 
 The global config document should contain an ACP section keyed by agent id so users can:
 
@@ -822,3 +822,4 @@ The work is complete when all of the following are true:
 - ACP-over-ACP transport is deferred until the upstream surface stabilizes.
 
 These are acceptable provided they are clearly documented and do not block connection to arbitrary ACP agents.
+

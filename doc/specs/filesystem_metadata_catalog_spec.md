@@ -12,7 +12,7 @@ Related specs:
 
 CodeAlta should not depend on a database as the source of truth for durable user-visible metadata.
 
-The durable source of truth should be plain text files under `~/.codealta/`.
+The durable source of truth should be plain text files under `~/.alta/`.
 
 The MVP should optimize for:
 
@@ -85,11 +85,11 @@ SQLite should be limited to:
 
 Canonical machine root:
 
-- `~/.codealta/`
+- `~/.alta/`
 
 Proposed structure:
 
-- `~/.codealta/`
+- `~/.alta/`
   - `projects/`
   - `threads/`
   - `agents/`
@@ -106,9 +106,9 @@ Proposed structure:
 
 Rules:
 
-- the root `~/.codealta/` is portable, text-first, and intended to live in git
+- the root `~/.alta/` is portable, text-first, and intended to live in git
 - `machine/` is machine-local, rebuildable, and never the source of truth for durable metadata
-- CodeAlta should create a `.gitignore` in `~/.codealta/` that excludes `machine/`
+- CodeAlta should create a `.gitignore` in `~/.alta/` that excludes `machine/`
 
 Recommended initial `.gitignore`:
 
@@ -118,7 +118,7 @@ Recommended initial `.gitignore`:
 
 ## 4. Runtime root behavior
 
-When CodeAlta starts, `~/.codealta/` is the global root from which it discovers:
+When CodeAlta starts, `~/.alta/` is the global root from which it discovers:
 
 - known projects
 - known threads
@@ -128,12 +128,12 @@ When CodeAlta starts, `~/.codealta/` is the global root from which it discovers:
 
 Project repositories may also contain a local overlay under:
 
-- `{projectPath}/.codealta/`
+- `{projectPath}/.alta/`
 
 This project-local root should support at least:
 
-- `{projectPath}/.codealta/agents/`
-- `{projectPath}/.codealta/skills/`
+- `{projectPath}/.alta/agents/`
+- `{projectPath}/.alta/skills/`
 
 ## 5. Entity storage model
 
@@ -155,9 +155,9 @@ Projects are first-class catalog entities.
 Example:
 
 - `~/.alta/projects/tomlyn.md`
-- `~/.codealta/projects/tomlyn/activity/2026-03.jsonl`
-- `~/.codealta/projects/tomlyn/artifacts/...`
-- `~/.codealta/projects/tomlyn/threads/<thread-id>/readme.md`
+- `~/.alta/projects/tomlyn/activity/2026-03.jsonl`
+- `~/.alta/projects/tomlyn/artifacts/...`
+- `~/.alta/projects/tomlyn/threads/<thread-id>/readme.md`
 
 Important rule:
 
@@ -178,13 +178,13 @@ Examples:
 - project thread recovery source:
   - backend session with cwd matching the project `path`
 - global thread recovery source:
-  - backend session with cwd `~/.codealta/`
+  - backend session with cwd `~/.alta/`
 - possible host-owned internal-thread root when needed:
-  - `~/.codealta/threads/internal/...`
+  - `~/.alta/threads/internal/...`
 
 Working-directory rule:
 
-- global thread sessions should use `~/.codealta/` as their backend working directory / cwd
+- global thread sessions should use `~/.alta/` as their backend working directory / cwd
 - project thread sessions should use the owning project's local `path`
 - this allows global threads to be rediscovered from backend session history in the same way project threads can be rediscovered from project paths
 
@@ -219,7 +219,7 @@ Important reopening rule:
 
 - when the user selects a previous project/global thread in the UI, CodeAlta should reopen the existing backend-owned conversation
 - the source of truth for prior interactions remains the backend session/thread store
-- CodeAlta should not duplicate the full interaction transcript in `~/.codealta/` just to support reopening
+- CodeAlta should not duplicate the full interaction transcript in `~/.alta/` just to support reopening
 
 Internal child threads may be:
 
@@ -231,7 +231,7 @@ Important internal-thread constraint:
 - backend-generated session/thread ids are not available until after session creation
 - therefore CodeAlta cannot generally choose an internal-thread cwd that embeds the backend id before the session exists
 
-If CodeAlta needs a dedicated cwd marker for internal delegated work, it should use a host-chosen internal path such as a folder under `~/.codealta/threads/internal/`, then record the resulting backend session id after creation if the relationship must be restored later
+If CodeAlta needs a dedicated cwd marker for internal delegated work, it should use a host-chosen internal path such as a folder under `~/.alta/threads/internal/`, then record the resulting backend session id after creation if the relationship must be restored later
 
 The MVP does not require durable first-class browsing of internal child threads in the UI, but it should preserve enough state that a user can inspect delegated sub-agent work when needed.
 
@@ -246,8 +246,8 @@ Canonical definition shape:
 
 Examples:
 
-- `~/.codealta/agents/<agent-slug>.agent.md`
-- `{projectPath}/.codealta/agents/<agent-slug>.agent.md`
+- `~/.alta/agents/<agent-slug>.agent.md`
+- `{projectPath}/.alta/agents/<agent-slug>.agent.md`
 
 ## 5.5 Skill folders
 
@@ -255,11 +255,11 @@ Skills should also be catalog entities.
 
 Example:
 
-- `~/.codealta/skills/repo-onboarding/SKILL.md`
+- `~/.alta/skills/repo-onboarding/SKILL.md`
 
 Project-local skill overlays:
 
-- `{projectPath}/.codealta/skills/<skill-slug>/SKILL.md`
+- `{projectPath}/.alta/skills/<skill-slug>/SKILL.md`
 
 ## 5.6 User profile
 
@@ -267,8 +267,8 @@ CodeAlta should keep a first-class durable profile entry.
 
 Example:
 
-- `~/.codealta/profiles/self/readme.md`
-- `~/.codealta/profiles/self/activity/2026-03.jsonl`
+- `~/.alta/profiles/self/readme.md`
+- `~/.alta/profiles/self/activity/2026-03.jsonl`
 
 This profile is the durable place for:
 
@@ -324,7 +324,7 @@ It can be recovered from:
 
 - backend session/thread id
 - backend source
-- cwd `~/.codealta/`
+- cwd `~/.alta/`
 - backend summary or first user prompt for a display title
 
 ### Example internal thread manifest
@@ -337,7 +337,7 @@ kind: "internal_thread_link"
 backend_session_id: "019cc85b-01fb-76d1-a785-2ea9f177e184"
 parent_backend_session_id: "019cc85b-01fb-76d1-a785-2ea9f177e111"
 role: "reviewer"
-cwd: "~/.codealta/threads/internal/review-pass-01"
+cwd: "~/.alta/threads/internal/review-pass-01"
 created_at: "2026-03-10T09:00:00Z"
 ---
 
@@ -409,9 +409,9 @@ Activity that should be readable and append-only should be stored as JSONL.
 
 Examples:
 
-- `~/.codealta/projects/tomlyn/activity/2026-03.jsonl`
-- `~/.codealta/projects/tomlyn/threads/<thread-id>/activity/2026-03.jsonl`
-- `~/.codealta/threads/global/<thread-id>/activity/2026-03.jsonl`
+- `~/.alta/projects/tomlyn/activity/2026-03.jsonl`
+- `~/.alta/projects/tomlyn/threads/<thread-id>/activity/2026-03.jsonl`
+- `~/.alta/threads/global/<thread-id>/activity/2026-03.jsonl`
 
 Why JSONL:
 
@@ -476,8 +476,8 @@ That persisted UI state should point back to backend-owned threads rather than r
 Adopt the following model:
 
 - durable metadata is filesystem-first
-- `~/.codealta/` is the portable git-backed root
-- `~/.codealta/local/` is reserved for machine-local state
+- `~/.alta/` is the portable git-backed root
+- `~/.alta/cache/` is reserved for machine-local state
 - projects are first-class catalog entities
 - project/global threads are backend-owned and should be recovered from backend history
 - CodeAlta-owned thread records should be limited to genuinely host-owned linkage metadata
@@ -492,4 +492,5 @@ That model best matches CodeAlta’s MVP goals:
 - portable
 - easy to inspect
 - easy to adopt without setup ceremony
+
 

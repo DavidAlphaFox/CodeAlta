@@ -160,7 +160,7 @@ This is good product thinking because users care that the system "learns the pro
 
 CodeAlta should absolutely keep the direction of:
 
-- portable plain-text durable metadata in `~/.codealta/`
+- portable plain-text durable metadata in `~/.alta/`
 - clear separation between durable catalog data and machine-local state
 - explicit per-agent/per-workspace/per-project knowledge
 
@@ -269,8 +269,8 @@ This aligns directly with CodeAlta's new file-backed catalog direction.
 
 CodeAlta should preserve and strengthen:
 
-- portable durable catalog under `~/.codealta/`
-- machine-local state under `~/.codealta/local/`
+- portable durable catalog under `~/.alta/`
+- machine-local state under `~/.alta/cache/`
 - file-defined agents, skills, workspaces, and projects
 - export/import or sync workflows
 - consult/copy/extract patterns
@@ -544,9 +544,9 @@ CodeAlta should adopt a similar first-class concept.
 
 This fits naturally with:
 
-- `~/.codealta/` as portable catalog root
+- `~/.alta/` as portable catalog root
 - workspace/project-specific overlays
-- machine-local state under `~/.codealta/local/`
+- machine-local state under `~/.alta/cache/`
 
 CodeAlta can likely do better than Squad here because it is already rethinking its durable storage model. Consult/extract should be designed into that model now, not retrofitted later.
 
@@ -584,7 +584,7 @@ CodeAlta should formalize this early:
 - overlays or attachments
 - machine-local operational state
 
-This also matches the user's recent direction on `~/.codealta/`.
+This also matches the user's recent direction on `~/.alta/`.
 
 ---
 
@@ -1430,7 +1430,7 @@ This matters because the user's mental model is part of the product.
 
 ## 1. Treat the durable catalog as the visible system identity
 
-The durable files under `~/.codealta/` should not just be storage. They should become the visible operating model:
+The durable files under `~/.alta/` should not just be storage. They should become the visible operating model:
 
 - agents as defined roles
 - workspaces as scopes of work
@@ -1577,3 +1577,4 @@ Where CodeAlta should improve on Squad is equally clear:
 - better alignment between docs and implementation
 
 If CodeAlta adopts Squad's strongest product ideas but implements them with more discipline, stronger typing, and a better storage/runtime architecture, it can produce a substantially stronger system than Squad rather than a parallel imitation.
+

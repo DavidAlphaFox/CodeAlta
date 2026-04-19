@@ -138,8 +138,8 @@ Compatibility goal:
 Suggested discovery locations (highest precedence first):
 
 - Repo: `.github/agents/*.md` (Copilot-compatible)
-- Repo: `<projectRoot>/.codealta/agents/*.agent.md` (CodeAlta-specific)
-- User: `$HOME/.codealta/agents/*.agent.md`
+- Repo: `<projectRoot>/.alta/agents/*.agent.md` (CodeAlta-specific)
+- User: `$HOME/.alta/agents/*.agent.md`
 - Workspace home/repo (optional): `<workspaceHome>/agents/*.agent.md`
 
 Suggested format (compatible superset):
@@ -189,11 +189,11 @@ For planner/knowledge (and optionally builder) outputs, store durable artifacts 
 These artifacts should be stored in a way that supports **portability** and **review**:
 
 - **Project-scoped, shareable artifacts**: store under a repo-local folder (similar to `.github`):
-  - `<projectRoot>/.codealta/`
+  - `<projectRoot>/.alta/`
   - these can be committed when you want knowledge to travel with the repository
 - **User/workspace-scoped or sensitive artifacts**: store under a central per-user root:
-  - Linux/macOS: `$HOME/.codealta/`
-  - Windows: `%USERPROFILE%\.codealta\`
+  - Linux/macOS: `$HOME/.alta/`
+  - Windows: `%USERPROFILE%\.alta\`
 
 To keep artifacts machine-readable, prefer **Markdown files with YAML frontmatter** (similar to Agent Skills’ `SKILL.md` and optionally project `AGENTS.md`).
 
@@ -300,7 +300,7 @@ The chosen scope affects:
 
 ### 6.2 Global knowledge repository and bootstrap
 
-The per-user directory (`$HOME/.codealta/` on Linux/macOS, `%USERPROFILE%\\.codealta\\` on Windows) should be able to act as a **git working copy** of a “global knowledge repository”.
+The per-user directory (`$HOME/.alta/` on Linux/macOS, `%USERPROFILE%\\.alta\\` on Windows) should be able to act as a **git working copy** of a “global knowledge repository”.
 
 This repository is the durable global memory for CodeAlta. It should contain:
 
@@ -410,7 +410,7 @@ At minimum, store:
 - Symbols (Roslyn, where applicable)
 - Git metadata (status/diff/log/blame; commit history as retrievable knowledge)
 - Agent conversations and task logs
-- Agent-generated artifacts (plans/summaries/decisions) stored under the owning project/workspace `.codealta/` area or the matching portable catalog scope under `$HOME/.codealta/`
+- Agent-generated artifacts (plans/summaries/decisions) stored under the owning project/workspace `.alta/` area or the matching portable catalog scope under `$HOME/.alta/`
 
 ### 10.3 Full-text search (SQLite FTS5)
 
@@ -424,7 +424,7 @@ Rationale:
 
 What should be searchable:
 
-- agent-generated artifacts (plans/summaries/decisions) from project/workspace `.codealta/` areas and the matching portable catalog scope under `$HOME/.codealta/`
+- agent-generated artifacts (plans/summaries/decisions) from project/workspace `.alta/` areas and the matching portable catalog scope under `$HOME/.alta/`
 - file chunks and extracted symbol text (where available)
 - task comments and decision records
 - conversation anchors (when indexed)
@@ -485,3 +485,4 @@ A pragmatic, value-first order:
 - Which SQLite vector strategy is shippable on Windows/macOS/Linux without pain?
 - What is the minimal viable set of MCP tools to unblock multi-agent work?
 - How do we persist “user intent” and “coding standards” per workspace/project?
+

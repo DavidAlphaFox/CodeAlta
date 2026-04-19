@@ -21,47 +21,47 @@ We treat **files** as the source of truth for “knowledge” and human-readable
 
 ### 1.1 Global machine root
 
-Default: `~/.codealta/` (platform-specific HOME).
+Default: `~/.alta/` (platform-specific HOME).
 
 Proposed subfolders:
-- `~/.codealta/`  
+- `~/.alta/`  
   Git-backed portable metadata catalog.
-- `~/.codealta/local/`  
+- `~/.alta/cache/`  
   Machine-local state: SQLite database, caches, download models, logs. Not committed.
-- `~/.codealta/local/codealta.db`  
+- `~/.alta/cache/codealta.db`  
   Main SQLite database.
-- `~/.codealta/local/models/`  
+- `~/.alta/cache/models/`  
   Downloaded embedding models (GGUF).
-- `~/.codealta/local/extensions/`  
+- `~/.alta/cache/extensions/`  
   Native extensions like sqlite-vec (`.dll`/`.so`).
-- `~/.codealta/local/logs/`  
+- `~/.alta/cache/logs/`  
   Rolling diagnostic logs.
-- `~/.codealta/local/cache/`  
+- `~/.alta/cache/cache/`  
   Rebuildable local caches.
 
 ### 1.2 Repo-local root
 
-Per project repo: `<repo>/.codealta/` (committed, like `.github/`).
+Per project repo: `<repo>/.alta/` (committed, like `.github/`).
 
 Proposed subfolders:
-- `.codealta/knowledge/` (markdown knowledge artifacts)
-- `.codealta/plans/` (planner outputs)
-- `.codealta/tasks/` (optional exported task snapshots)
-- `.codealta/agents/` (project-specific agent definitions, markdown + frontmatter)
-- `.codealta/skills/` (project-specific skills / pointers / manifests)
+- `.alta/knowledge/` (markdown knowledge artifacts)
+- `.alta/plans/` (planner outputs)
+- `.alta/tasks/` (optional exported task snapshots)
+- `.alta/agents/` (project-specific agent definitions, markdown + frontmatter)
+- `.alta/skills/` (project-specific skills / pointers / manifests)
 
 Runtime interpretation:
 
-- `~/.codealta/` is the global root CodeAlta uses to discover and navigate projects
-- `{projectPath}/.codealta/agents/` and `{projectPath}/.codealta/skills/` are project-local overlays
-- global agents/skills under `~/.codealta/` are cross-project assets
-- project-local agents/skills under `{projectPath}/.codealta/` are repository-specific specializations
+- `~/.alta/` is the global root CodeAlta uses to discover and navigate projects
+- `{projectPath}/.alta/agents/` and `{projectPath}/.alta/skills/` are project-local overlays
+- global agents/skills under `~/.alta/` are cross-project assets
+- project-local agents/skills under `{projectPath}/.alta/` are repository-specific specializations
 
 ### 1.3 Catalog-level storage
 
-Project metadata lives in the portable `~/.codealta/` catalog and references local checkout paths via machine overrides:
+Project metadata lives in the portable `~/.alta/` catalog and references local checkout paths via machine overrides:
 - `~/.alta/projects/<projectSlug>.md`
-- `~/.codealta/local/config.yaml` (per-machine path overrides)
+- `~/.alta/cache/config.yaml` (per-machine path overrides)
 
 ## 2. Artifact file format (markdown + YAML frontmatter)
 
@@ -103,15 +103,15 @@ SQLite is perfect for:
 - “what exists” indexes (artifacts, knowledge records)
 - fast retrieval (FTS5 and vector search)
 
-But it is **not** the only durable copy of “knowledge”. Any important agent-produced knowledge must be persisted as files (repo-local `.codealta/` or the portable `~/.codealta/` catalog), so we can recover after context compaction and across machines.
+But it is **not** the only durable copy of “knowledge”. Any important agent-produced knowledge must be persisted as files (repo-local `.alta/` or the portable `~/.alta/` catalog), so we can recover after context compaction and across machines.
 
 ### 3.2 DB location
 
 Machine-local (not in git):
-- `~/.codealta/local/codealta.db`
+- `~/.alta/cache/codealta.db`
 
 Rationale:
-- avoids large binary diffs in the portable `~/.codealta/` git repo
+- avoids large binary diffs in the portable `~/.alta/` git repo
 - allows local caching, rebuilds, and migrations without git noise
 - still portable because the “real” knowledge is in markdown artifacts
 
@@ -202,7 +202,7 @@ Testing:
 ### 4.1 Inputs (indexable sources)
 
 First-class indexable sources (v1):
-- markdown artifacts from `.codealta/**` and `~/.codealta/**` excluding `~/.codealta/local/**`
+- markdown artifacts from `.alta/**` and `~/.alta/**` excluding `~/.alta/cache/**`
 - task notes/events (exported into artifact markdown + indexed)
 - selected repo files (opt-in rules; default to `.md`, `.cs`, `.csproj`, `.slnx`, `AGENTS.md`)
 
@@ -324,7 +324,7 @@ The embedder and the vector store should be decoupled:
 ## 7. Native extension loading (sqlite-vec)
 
 We need a controlled way to load sqlite-vec:
-- store the extension binary under `~/.codealta/local/extensions/`
+- store the extension binary under `~/.alta/cache/extensions/`
 - during DB initialization:
   - open connection
   - `EnableExtensions(true)`
@@ -341,4 +341,5 @@ Add MSTest coverage:
 - Hybrid search returns stable source links.
 
 Keep fixtures small and deterministic (no network downloads in unit tests).
+
 

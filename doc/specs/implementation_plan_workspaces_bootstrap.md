@@ -6,7 +6,7 @@ The workspace-first plan is obsolete.
 
 The current model is:
 
-- a global catalog rooted at `~/.codealta/`
+- a global catalog rooted at `~/.alta/`
 - project descriptors under `projects/<projectSlug>.md`
 - a project `slug` used as the normalized reference
 - a separate project `name` used for checkout directory naming
@@ -18,3 +18,4 @@ For active guidance, use:
 - `doc/specs/implementation_plan.md`
 - `doc/specs/filesystem_metadata_catalog_spec.md`
 - `doc/specs/codealta_adaptive_orchestration_architecture.md`
+

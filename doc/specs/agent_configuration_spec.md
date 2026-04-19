@@ -119,8 +119,8 @@ Built-in agents should use the exact same file model.
 
 Examples:
 
-- `~/.codealta/agents/builtin/coordinator.agent.md`
-- `~/.codealta/agents/builtin/reviewer.agent.md`
+- `~/.alta/agents/builtin/coordinator.agent.md`
+- `~/.alta/agents/builtin/reviewer.agent.md`
 
 ## 8. Discovery rules
 
@@ -130,7 +130,7 @@ Canonical discovery pattern for the portable catalog:
 
 Project-local discovery pattern:
 
-- `.codealta/agents/**/*.agent.md`
+- `.alta/agents/**/*.agent.md`
 
 ## 9. References from other entities
 
@@ -151,4 +151,5 @@ Adopt the following:
 - frontmatter is Copilot-shaped first, with CodeAlta extensions under `codealta:`
 - `codealta.scope` is `global`, `project`, or `internal`
 - built-in agents use the same file model
+
 

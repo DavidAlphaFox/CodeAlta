@@ -108,7 +108,7 @@ Current terminal shell capabilities:
 
 - Chat (global agent) operations:
   - Chat screen powered by `PromptEditor` (input) and `DocumentFlow` + `MarkdownControl` (rendered conversation history).
-  - Automatically probes and initializes both Copilot and Codex backends. Codex is pinned to the SDK-generated release tag and is downloaded on demand into `~/.codealta/cache/bin/codex/<tag>/` when missing.
+  - Automatically probes and initializes both Copilot and Codex backends. Codex is pinned to the SDK-generated release tag and is downloaded on demand into `~/.alta/cache/bin/codex/<tag>/` when missing.
   - Codex backend sessions default to `danger-full-access` (no sandbox) in CodeAlta so prompts can inspect sibling projects outside the current working directory without first switching the session root.
   - Provider, model, and reasoning-effort selectors are shown under the prompt.
   - Press `F6` or use the `Full Prompt` button to edit the current draft in a large 80%-screen prompt window; `Esc` closes it and keeps the edited draft.
@@ -270,3 +270,4 @@ Session state for these local runtimes is stored under `~/.alta/sessions/yyyy/mm
 - `dotnet run --project src/AgentMessageDiagnosticApp/AgentMessageDiagnosticApp.csproj -- --copilot <session-id>`
 - Add `--indented` to pretty-print each JSON payload instead of emitting compact JSONL.
 - Run with `--help` to see the generated visual usage and option reference.
+

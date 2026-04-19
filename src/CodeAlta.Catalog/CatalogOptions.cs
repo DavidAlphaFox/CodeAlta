@@ -74,7 +74,7 @@ public sealed class CatalogOptions
     /// <summary>
     /// Gets the machine-local cache root.
     /// </summary>
-    public string CacheRoot => Path.Combine(GetLegacyGlobalRoot(), "cache");
+    public string CacheRoot => Path.Combine(GlobalRoot, "cache");
 
     /// <summary>
     /// Gets the session journals root path under the global catalog.
@@ -101,17 +101,4 @@ public sealed class CatalogOptions
     /// Gets the internal thread linkage root path under the global catalog.
     /// </summary>
     public string InternalThreadsRoot => Path.Combine(GlobalRoot, "threads", "internal");
-
-    private string GetLegacyGlobalRoot()
-    {
-        var fullGlobalRoot = Path.GetFullPath(GlobalRoot);
-        var parent = Path.GetDirectoryName(fullGlobalRoot);
-        return string.Equals(
-                Path.GetFileName(fullGlobalRoot),
-                ".alta",
-                StringComparison.OrdinalIgnoreCase) &&
-               !string.IsNullOrWhiteSpace(parent)
-            ? Path.Combine(parent, ".codealta")
-            : Path.Combine(fullGlobalRoot, ".codealta");
-    }
 }

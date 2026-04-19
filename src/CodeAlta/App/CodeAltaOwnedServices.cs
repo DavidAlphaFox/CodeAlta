@@ -87,12 +87,8 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         var homeRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".alta");
-        var legacyRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".codealta");
-        var cacheRoot = Path.Combine(legacyRoot, "cache");
-        MigrateLegacyStorage(legacyRoot, homeRoot, cacheRoot);
         Directory.CreateDirectory(homeRoot);
+        var cacheRoot = Path.Combine(homeRoot, "cache");
         var ownsLogging = CodeAltaLogging.Initialize(homeRoot);
 
         Directory.CreateDirectory(cacheRoot);
@@ -221,52 +217,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         if (!string.IsNullOrWhiteSpace(configuredOverridePath))
         {
             yield return configuredOverridePath;
-        }
-    }
-
-    private static void MigrateLegacyStorage(string legacyRoot, string homeRoot, string cacheRoot)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(legacyRoot);
-        ArgumentException.ThrowIfNullOrWhiteSpace(homeRoot);
-        ArgumentException.ThrowIfNullOrWhiteSpace(cacheRoot);
-
-        if (!Directory.Exists(legacyRoot))
-        {
-            return;
-        }
-
-        var legacyLocalRoot = Path.Combine(legacyRoot, "local");
-        if (Directory.Exists(legacyLocalRoot) && !Directory.Exists(cacheRoot))
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(cacheRoot)!);
-            Directory.Move(legacyLocalRoot, cacheRoot);
-        }
-
-        Directory.CreateDirectory(homeRoot);
-
-        foreach (var directory in Directory.EnumerateDirectories(legacyRoot))
-        {
-            var name = Path.GetFileName(directory);
-            if (string.Equals(name, "local", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(name, "cache", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var destination = Path.Combine(homeRoot, name);
-            if (!Directory.Exists(destination))
-            {
-                Directory.Move(directory, destination);
-            }
-        }
-
-        foreach (var file in Directory.EnumerateFiles(legacyRoot))
-        {
-            var destination = Path.Combine(homeRoot, Path.GetFileName(file));
-            if (!File.Exists(destination))
-            {
-                File.Move(file, destination);
-            }
         }
     }
 

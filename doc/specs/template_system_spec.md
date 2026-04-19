@@ -73,8 +73,8 @@ The MVP does not need workspace templates because workspaces are not part of the
 
 Recommended roots:
 
-- `~/.codealta/templates/`
-- `{projectPath}/.codealta/templates/`
+- `~/.alta/templates/`
+- `{projectPath}/.alta/templates/`
 - built-in templates shipped with CodeAlta
 
 Suggested layout:
@@ -139,4 +139,5 @@ Adopt this model:
   - optional agent-assisted enrichment
 - user-defined templates are supported in global and project-local roots
 - the template system follows the project-first catalog model
+
 

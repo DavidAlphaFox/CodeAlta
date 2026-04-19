@@ -322,7 +322,7 @@ internal static class CodexReleaseInstaller
 
         return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".codealta",
+            ".alta",
             "cache");
     }
 

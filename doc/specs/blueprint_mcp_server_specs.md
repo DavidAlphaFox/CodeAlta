@@ -109,13 +109,13 @@ Therefore:
 Artifacts can be stored in multiple roots depending on scope and portability goals:
 
 - **Repo-local (project-scoped, shareable)**:
-  - `<projectRoot>/.codealta/` (similar to `.github/`)
+  - `<projectRoot>/.alta/` (similar to `.github/`)
   - recommended split:
-    - `.codealta/shared/` (optionally committed)
-    - `.codealta/local/` (gitignored; caches/logs)
+    - `.alta/shared/` (optionally committed)
+    - `.alta/cache/` (gitignored; caches/logs)
 - **Per-user (global or sensitive)**:
-  - Linux/macOS: `$HOME/.codealta/`
-  - Windows: `%USERPROFILE%\\.codealta\\`
+  - Linux/macOS: `$HOME/.alta/`
+  - Windows: `%USERPROFILE%\\.alta\\`
   - When multi-machine portability is desired, this directory can be a **git working copy** of a “global knowledge repository” (auto pull/push), containing global manifests + curated artifacts (no secrets).
 
 The MCP server should decide the default root based on `(scope, type, policy)`, but callers may provide a storage hint.
@@ -216,9 +216,9 @@ Compatibility goal:
 Suggested discovery locations:
 
 - Repo: `.github/agents/*.md` (Copilot-compatible)
-- Repo: `<projectRoot>/.codealta/agents/*.md` (CodeAlta-specific)
-- User: `$HOME/.codealta/agents/*.md`
-- Global catalog repo (optional): `~/.codealta/agents/*.md`
+- Repo: `<projectRoot>/.alta/agents/*.md` (CodeAlta-specific)
+- User: `$HOME/.alta/agents/*.md`
+- Global catalog repo (optional): `~/.alta/agents/*.md`
 
 Suggested profile format (compatible superset):
 
@@ -302,3 +302,4 @@ We need three versions:
 - index version (embedding model + chunking strategy)
 
 All should be queryable via a `server.info` tool so agents can adapt.
+
