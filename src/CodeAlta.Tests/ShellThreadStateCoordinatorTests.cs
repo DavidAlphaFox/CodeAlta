@@ -211,6 +211,53 @@ public sealed class ShellThreadStateCoordinatorTests
         Assert.IsTrue(persistedViewState.ThreadStates.ContainsKey("thread-2"));
     }
 
+    [TestMethod]
+    public void RekeyThreadIdentity_MovesOpenThreadSelectionAndPreferences()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var coordinator = CreateCoordinator(options);
+        var project = CreateProject("project-1", "CodeAlta");
+        var thread = CreateThread("openai:session-1", project.Id);
+        coordinator.ApplyRecoveredCatalogState([project], [thread]);
+        coordinator.ViewState.OpenThreadIds.Add(thread.ThreadId);
+        coordinator.ViewState.SelectedThreadId = thread.ThreadId;
+        coordinator.ViewState.Selection = WorkThreadSelectionState.Thread(thread.ThreadId, project.Id);
+        coordinator.ViewState.ThreadStates[thread.ThreadId] = new WorkThreadLocalState { MessageCount = 9 };
+        coordinator.ViewState.ThreadPreferences[thread.ThreadId] = new WorkThreadPreference
+        {
+            ModelId = "gpt-4.1",
+            ReasoningEffort = AgentReasoningEffort.High,
+            AutoScroll = false,
+        };
+        coordinator.PendingStartupThreadRestoreId = thread.ThreadId;
+        coordinator.OpenThread(thread.ThreadId);
+
+        var tab = coordinator.FindOpenThread(thread.ThreadId);
+        Assert.IsNotNull(tab);
+        tab.Session.PromptDraftText = "preserve me";
+
+        thread.ThreadId = "anthropic:session-1";
+        thread.BackendId = "anthropic";
+        thread.ProviderKey = "anthropic";
+        coordinator.RekeyThreadIdentity("openai:session-1", thread);
+
+        Assert.AreEqual("anthropic:session-1", coordinator.SelectedThreadId);
+        Assert.AreEqual("anthropic:session-1", coordinator.ViewState.SelectedThreadId);
+        Assert.AreEqual("anthropic:session-1", coordinator.ViewState.Selection.ThreadId);
+        CollectionAssert.AreEqual(new[] { "anthropic:session-1" }, coordinator.ViewState.OpenThreadIds);
+        Assert.IsFalse(coordinator.ViewState.ThreadStates.ContainsKey("openai:session-1"));
+        Assert.IsTrue(coordinator.ViewState.ThreadStates.ContainsKey("anthropic:session-1"));
+        Assert.IsFalse(coordinator.ViewState.ThreadPreferences.ContainsKey("openai:session-1"));
+        Assert.IsTrue(coordinator.ViewState.ThreadPreferences.ContainsKey("anthropic:session-1"));
+        Assert.AreEqual("anthropic:session-1", coordinator.PendingStartupThreadRestoreId);
+
+        var reboundTab = coordinator.FindOpenThread("anthropic:session-1");
+        Assert.IsNotNull(reboundTab);
+        Assert.AreEqual("preserve me", reboundTab.Session.PromptDraftText);
+        Assert.IsNull(coordinator.FindOpenThread("openai:session-1"));
+    }
+
     private static ShellThreadStateCoordinator CreateCoordinator(
         CatalogOptions options,
         WorkThreadCatalog? threadCatalog = null,

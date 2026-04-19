@@ -171,6 +171,64 @@ internal sealed class ShellThreadStateCoordinator
     public async Task PersistThreadLocalStateAsync(WorkThreadDescriptor thread)
         => await _viewStateCoordinator.PersistThreadLocalStateAsync(ViewState, thread);
 
+    public void RekeyThreadIdentity(string oldThreadId, WorkThreadDescriptor thread)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(oldThreadId);
+        ArgumentNullException.ThrowIfNull(thread);
+
+        if (string.Equals(oldThreadId, thread.ThreadId, StringComparison.OrdinalIgnoreCase))
+        {
+            _catalogStateCoordinator.UpsertThread(thread);
+            return;
+        }
+
+        _openThreadRegistry.RekeyThreadTab(oldThreadId, thread);
+        _removeTabPage(oldThreadId);
+
+        for (var index = 0; index < ViewState.OpenThreadIds.Count; index++)
+        {
+            if (string.Equals(ViewState.OpenThreadIds[index], oldThreadId, StringComparison.OrdinalIgnoreCase))
+            {
+                ViewState.OpenThreadIds[index] = thread.ThreadId;
+            }
+        }
+
+        ViewState.OpenThreadIds = ViewState.OpenThreadIds
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (ViewState.ThreadStates.Remove(oldThreadId, out var localState))
+        {
+            ViewState.ThreadStates[thread.ThreadId] = localState;
+        }
+
+        if (ViewState.ThreadPreferences.Remove(oldThreadId, out var preference))
+        {
+            ViewState.ThreadPreferences[thread.ThreadId] = preference;
+        }
+
+        if (string.Equals(PendingStartupThreadRestoreId, oldThreadId, StringComparison.OrdinalIgnoreCase))
+        {
+            PendingStartupThreadRestoreId = thread.ThreadId;
+        }
+
+        if (string.Equals(ViewState.SelectedThreadId, oldThreadId, StringComparison.OrdinalIgnoreCase))
+        {
+            ViewState.SelectedThreadId = thread.ThreadId;
+        }
+
+        if (ViewState.Selection.Surface == WorkThreadSelectionSurface.Thread &&
+            string.Equals(ViewState.Selection.ThreadId, oldThreadId, StringComparison.OrdinalIgnoreCase))
+        {
+            ViewState.Selection = WorkThreadSelectionState.Thread(thread.ThreadId, thread.ProjectRef);
+            ViewState.SelectedThreadId = thread.ThreadId;
+            SelectedThreadId = thread.ThreadId;
+        }
+
+        ViewState.UpdatedAt = DateTimeOffset.UtcNow;
+        _catalogStateCoordinator.UpsertThread(thread);
+    }
+
     public NavigatorSettings GetNavigatorSettingsSnapshot()
         => _viewStateCoordinator.GetNavigatorSettingsSnapshot(ViewState);
 

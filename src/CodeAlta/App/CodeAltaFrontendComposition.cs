@@ -135,6 +135,19 @@ internal sealed class CodeAltaFrontendComposition
             callbacks.RefreshCatalogAndThreadWorkspace,
             callbacks.SetStatus,
             callbacks.SetReadyStatusForCurrentSelection);
+        var threadProviderSwitchCoordinator = new ThreadProviderSwitchCoordinator(
+            catalogOptions,
+            threadCatalog,
+            configStore,
+            chatBackendStates,
+            tab =>
+            {
+                callbacks.ApplyThreadPreference(tab);
+                return Task.CompletedTask;
+            },
+            threadId => runtimeService.DetachThreadSessionAsync(threadId),
+            threadStateCoordinator.RekeyThreadIdentity,
+            callbacks.PersistViewStateAsync);
         var chatSelectorCoordinator = new ChatSelectorCoordinator(
             backendDescriptors,
             threadWorkspaceViewModel,
@@ -145,7 +158,10 @@ internal sealed class CodeAltaFrontendComposition
             chatPreferenceContext,
             workspaceRefreshContext,
             configStore.GetEffectiveDefaultProvider,
-            callbacks.SyncChatSelectorItems);
+            callbacks.SyncChatSelectorItems,
+            threadProviderSwitchCoordinator.CanSelectThreadProvider,
+            (thread, tab, targetBackendId) => threadProviderSwitchCoordinator.SwitchThreadProviderAsync(thread, tab, targetBackendId),
+            callbacks.RefreshSelectionAndThreadWorkspace);
 
         ThreadPromptQueueCoordinator? threadPromptQueueCoordinator = null;
         ThreadCommandCoordinator? threadCommandCoordinator = null;

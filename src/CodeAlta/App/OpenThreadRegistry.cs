@@ -99,6 +99,26 @@ internal sealed class OpenThreadRegistry
         return _threadTabs.GetValueOrDefault(threadId);
     }
 
+    public void RekeyThreadTab(string oldThreadId, WorkThreadDescriptor thread)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(oldThreadId);
+        ArgumentNullException.ThrowIfNull(thread);
+
+        if (!_threadTabs.TryGetValue(oldThreadId, out var state))
+        {
+            return;
+        }
+
+        _threadTabs.Remove(oldThreadId);
+        _threadTabs.Remove(thread.ThreadId);
+
+        state.Thread = thread;
+        state.Timeline.SetLocalFileRootPath(ResolveThreadProjectRoot(thread));
+        state.ViewModel.ThreadId = thread.ThreadId;
+        state.ViewModel.Title = thread.Title;
+        _threadTabs[thread.ThreadId] = state;
+    }
+
     public void RemoveThreadTab(string threadId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(threadId);

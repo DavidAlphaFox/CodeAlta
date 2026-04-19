@@ -459,7 +459,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private void SyncChatSelectorItems()
         => _threadWorkspaceView?.SyncChatSelectorItems(_threadWorkspaceViewModel);
     private void OnChatBackendSelectionChanged(int newIndex)
-        => _chatSelectorCoordinator.OnBackendSelectionChanged(newIndex);
+        => ObserveUiTask(_chatSelectorCoordinator.OnBackendSelectionChangedAsync(newIndex), "change the selected provider");
     private void OnChatModelSelectionChanged(int newIndex)
         => _chatSelectorCoordinator.OnModelSelectionChanged(newIndex);
     private void OnChatReasoningSelectionChanged(int newIndex)

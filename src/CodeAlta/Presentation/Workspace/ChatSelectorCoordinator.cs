@@ -24,6 +24,9 @@ internal sealed class ChatSelectorCoordinator
     private readonly WorkspaceRefreshContext _workspaceRefresh;
     private readonly Func<string?, string?> _getEffectiveDefaultProviderKey;
     private readonly Action _syncChatSelectorItems;
+    private readonly Func<WorkThreadDescriptor, OpenThreadState, bool> _canSelectThreadBackend;
+    private readonly Func<WorkThreadDescriptor, OpenThreadState, AgentBackendId, Task<bool>> _trySwitchThreadBackendAsync;
+    private readonly Action _refreshSelectionAndThreadWorkspace;
     private bool _selectorsRefreshing;
 
     public ChatSelectorCoordinator(
@@ -35,7 +38,10 @@ internal sealed class ChatSelectorCoordinator
         ChatPreferenceContext preferences,
         WorkspaceRefreshContext workspaceRefresh,
         Func<string?, string?> getEffectiveDefaultProviderKey,
-        Action syncChatSelectorItems)
+        Action syncChatSelectorItems,
+        Func<WorkThreadDescriptor, OpenThreadState, bool>? canSelectThreadBackend = null,
+        Func<WorkThreadDescriptor, OpenThreadState, AgentBackendId, Task<bool>>? trySwitchThreadBackendAsync = null,
+        Action? refreshSelectionAndThreadWorkspace = null)
         : this(
             ChatBackendPresentation.CreateBackendStates().Values
                 .Select(static state => new AgentBackendDescriptor(state.BackendId, state.DisplayName))
@@ -48,7 +54,10 @@ internal sealed class ChatSelectorCoordinator
             preferences,
             workspaceRefresh,
             getEffectiveDefaultProviderKey,
-            syncChatSelectorItems)
+            syncChatSelectorItems,
+            canSelectThreadBackend,
+            trySwitchThreadBackendAsync,
+            refreshSelectionAndThreadWorkspace)
     {
     }
 
@@ -62,7 +71,10 @@ internal sealed class ChatSelectorCoordinator
         ChatPreferenceContext preferences,
         WorkspaceRefreshContext workspaceRefresh,
         Func<string?, string?> getEffectiveDefaultProviderKey,
-        Action syncChatSelectorItems)
+        Action syncChatSelectorItems,
+        Func<WorkThreadDescriptor, OpenThreadState, bool>? canSelectThreadBackend = null,
+        Func<WorkThreadDescriptor, OpenThreadState, AgentBackendId, Task<bool>>? trySwitchThreadBackendAsync = null,
+        Action? refreshSelectionAndThreadWorkspace = null)
     {
         ArgumentNullException.ThrowIfNull(backendDescriptors);
         ArgumentNullException.ThrowIfNull(workspaceViewModel);
@@ -85,6 +97,9 @@ internal sealed class ChatSelectorCoordinator
         _workspaceRefresh = workspaceRefresh;
         _getEffectiveDefaultProviderKey = getEffectiveDefaultProviderKey;
         _syncChatSelectorItems = syncChatSelectorItems;
+        _canSelectThreadBackend = canSelectThreadBackend ?? ((_, _) => false);
+        _trySwitchThreadBackendAsync = trySwitchThreadBackendAsync ?? ((_, _, _) => Task.FromResult(false));
+        _refreshSelectionAndThreadWorkspace = refreshSelectionAndThreadWorkspace ?? (() => { });
     }
 
     public void RefreshForDraftScope(AgentBackendId? preferredBackendId = null)
@@ -173,7 +188,7 @@ internal sealed class ChatSelectorCoordinator
             _workspaceViewModel.AutoScroll = tab.AutoScroll;
 
             _workspaceViewModel.BackendStatusMarkup = ChatBackendPresentation.BuildBackendStatusMarkup(_chatBackendStates.Values, tab.BackendId, isInitializing: false);
-            _workspaceViewModel.CanSelectBackend = false;
+            _workspaceViewModel.CanSelectBackend = _canSelectThreadBackend(tab.Thread, tab);
             _workspaceViewModel.CanSelectModel = backendState.Availability == ChatBackendAvailability.Ready;
             _workspaceViewModel.CanSelectReasoning = backendState.Availability == ChatBackendAvailability.Ready;
             _workspaceViewModel.CanToggleAutoScroll = true;
@@ -185,7 +200,7 @@ internal sealed class ChatSelectorCoordinator
         }
     }
 
-    public void OnBackendSelectionChanged(int newIndex)
+    public async Task OnBackendSelectionChangedAsync(int newIndex)
     {
         if (_selectorsRefreshing)
         {
@@ -206,14 +221,26 @@ internal sealed class ChatSelectorCoordinator
             return;
         }
 
-        if (thread.IsBackendLocked)
+        var tab = _threadSelection.EnsureThreadTab(thread);
+        var targetBackendId = options[newIndex].BackendId;
+        if (string.Equals(tab.BackendId.Value, targetBackendId.Value, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        var tab = _threadSelection.EnsureThreadTab(thread);
-        tab.BackendId = options[newIndex].BackendId;
-        _workspaceRefresh.RefreshHeaderAndThreadWorkspace();
+        if (!_canSelectThreadBackend(thread, tab))
+        {
+            RefreshForThread(tab);
+            return;
+        }
+
+        if (await _trySwitchThreadBackendAsync(thread, tab, targetBackendId).ConfigureAwait(false))
+        {
+            _refreshSelectionAndThreadWorkspace();
+            return;
+        }
+
+        RefreshForThread(tab);
     }
 
     public void OnModelSelectionChanged(int newIndex)

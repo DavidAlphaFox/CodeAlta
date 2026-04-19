@@ -476,6 +476,39 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Detaches and disposes the active coordinator session for a thread when present.
+    /// </summary>
+    /// <param name="threadId">The thread identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns><see langword="true"/> when an active coordinator session was detached; otherwise <see langword="false"/>.</returns>
+    public async Task<bool> DetachThreadSessionAsync(string threadId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+
+        ThreadSessionEntry? entry = null;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_entries.TryGetValue(threadId, out entry))
+            {
+                _entries.Remove(threadId);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        if (entry is null)
+        {
+            return false;
+        }
+
+        await entry.DisposeAsync(_agentHub).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
     /// Triggers a manual compaction for a thread coordinator session.
     /// </summary>
     public async Task CompactAsync(

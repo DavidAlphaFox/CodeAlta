@@ -3,6 +3,8 @@ using System.Reflection;
 using CodeAlta.Agent;
 using CodeAlta.App;
 using CodeAlta.App.Context;
+using CodeAlta.App.State;
+using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Chat;
 using CodeAlta.Presentation.Workspace;
@@ -143,6 +145,123 @@ public sealed class ChatSelectorCoordinatorTests
         Assert.AreEqual("openai", preferredBackendId.Value);
     }
 
+    [TestMethod]
+    public void RefreshForThread_UsesThreadBackendSelectionCapability()
+    {
+        using var temp = TempDirectory.Create();
+        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
+        var threadSelection = new ThreadSelectionContext(
+            threadStateCoordinator,
+            static (_, _) => Task.CompletedTask,
+            static _ => true);
+        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+
+        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var promptComposerViewModel = new PromptComposerViewModel();
+        AgentBackendDescriptor[] backendDescriptors =
+        [
+            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new AgentBackendId("anthropic"), "Anthropic"),
+        ];
+        var backendStates = ChatBackendPresentation.CreateBackendStates(backendDescriptors);
+        backendStates["openai"].Availability = ChatBackendAvailability.Ready;
+        backendStates["anthropic"].Availability = ChatBackendAvailability.Ready;
+
+        var selectorState = new ChatSelectorStateContext(
+            workspaceViewModel,
+            static () => new InlineUiDispatcher(),
+            static () => { });
+        var preferences = new ChatPreferenceContext(
+            ApplyDraftBackendPreference,
+            static _ => { },
+            static (_, _, _) => { },
+            static (_, _, _, _, _) => { });
+        var workspaceRefresh = new WorkspaceRefreshContext(
+            static () => { },
+            static () => { });
+        var coordinator = new ChatSelectorCoordinator(
+            backendDescriptors,
+            workspaceViewModel,
+            promptComposerViewModel,
+            backendStates,
+            selectorState,
+            threadSelection,
+            preferences,
+            workspaceRefresh,
+            static _ => null,
+            static () => { },
+            static (_, _) => true);
+
+        coordinator.RefreshForThread(tab);
+
+        Assert.IsTrue(workspaceViewModel.CanSelectBackend);
+    }
+
+    [TestMethod]
+    public async Task OnBackendSelectionChangedAsync_UsesSwitchCallbackForSelectedThread()
+    {
+        using var temp = TempDirectory.Create();
+        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
+        var threadSelection = new ThreadSelectionContext(
+            threadStateCoordinator,
+            static (_, _) => Task.CompletedTask,
+            static _ => true);
+        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+
+        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var promptComposerViewModel = new PromptComposerViewModel();
+        AgentBackendDescriptor[] backendDescriptors =
+        [
+            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new AgentBackendId("anthropic"), "Anthropic"),
+        ];
+        var backendStates = ChatBackendPresentation.CreateBackendStates(backendDescriptors);
+        backendStates["openai"].Availability = ChatBackendAvailability.Ready;
+        backendStates["anthropic"].Availability = ChatBackendAvailability.Ready;
+
+        var selectorState = new ChatSelectorStateContext(
+            workspaceViewModel,
+            static () => new InlineUiDispatcher(),
+            static () => { });
+        var preferences = new ChatPreferenceContext(
+            ApplyDraftBackendPreference,
+            static _ => { },
+            static (_, _, _) => { },
+            static (_, _, _, _, _) => { });
+        var workspaceRefresh = new WorkspaceRefreshContext(
+            static () => { },
+            static () => { });
+        var switchCallCount = 0;
+        var refreshedSelectionCount = 0;
+        var coordinator = new ChatSelectorCoordinator(
+            backendDescriptors,
+            workspaceViewModel,
+            promptComposerViewModel,
+            backendStates,
+            selectorState,
+            threadSelection,
+            preferences,
+            workspaceRefresh,
+            static _ => null,
+            static () => { },
+            static (_, _) => true,
+            (selectedThread, selectedTab, targetBackendId) =>
+            {
+                Assert.AreSame(thread, selectedThread);
+                Assert.AreSame(tab, selectedTab);
+                Assert.AreEqual("anthropic", targetBackendId.Value);
+                switchCallCount++;
+                return Task.FromResult(true);
+            },
+            () => refreshedSelectionCount++);
+
+        coordinator.RefreshForThread(tab);
+        await coordinator.OnBackendSelectionChangedAsync(newIndex: 1);
+
+        Assert.AreEqual(1, switchCallCount);
+        Assert.AreEqual(1, refreshedSelectionCount);
+    }
+
     private static ChatSelectorCoordinator CreateCoordinator(
         IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
         ThreadWorkspaceViewModel workspaceViewModel,
@@ -188,6 +307,57 @@ public sealed class ChatSelectorCoordinatorTests
             static _ => false);
     }
 
+    private static ShellThreadStateCoordinator CreateThreadStateCoordinator(string rootPath, out WorkThreadDescriptor thread)
+    {
+        var options = new CatalogOptions { GlobalRoot = rootPath };
+        var coordinator = new ShellThreadStateCoordinator(
+            new ProjectCatalog(options),
+            new WorkThreadCatalog(options),
+            static () => new InlineUiDispatcher(),
+            static () => null,
+            static _ => true,
+            static _ => null,
+            static _ => { },
+            static _ => { },
+            static (_, _, _, _, _) => { },
+            static (_, _) => Task.CompletedTask,
+            static () => { },
+            static () => { },
+            static () => { },
+            static _ => { },
+            static (_, _, _) => { });
+
+        var project = new ProjectDescriptor
+        {
+            Id = "project-1",
+            Slug = "project-1",
+            Name = "Project 1",
+            DisplayName = "Project 1",
+            ProjectPath = Path.Combine(rootPath, "project-1"),
+            DefaultBranch = "main",
+        };
+        thread = new WorkThreadDescriptor
+        {
+            ThreadId = "openai:session-1",
+            Kind = WorkThreadKind.ProjectThread,
+            BackendId = "openai",
+            ProviderKey = "openai",
+            BackendSessionId = "session-1",
+            ProjectRef = project.Id,
+            WorkingDirectory = project.ProjectPath,
+            Title = "Review startup",
+            Status = WorkThreadStatus.Active,
+            CreatedAt = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"),
+            UpdatedAt = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"),
+            LastActiveAt = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"),
+            StartedAt = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"),
+        };
+
+        coordinator.ApplyRecoveredCatalogState([project], [thread]);
+        coordinator.OpenThread(thread.ThreadId);
+        return coordinator;
+    }
+
     private static void ApplyDraftBackendPreference(ChatBackendState backendState)
     {
         backendState.SelectedModelId = ChatBackendPresentation.ResolvePreferredModelId(
@@ -219,6 +389,39 @@ public sealed class ChatSelectorCoordinatorTests
         {
             ArgumentNullException.ThrowIfNull(callback);
             return Task.FromResult(callback());
+        }
+    }
+
+    private sealed class TempDirectory : IDisposable
+    {
+        private TempDirectory(string path)
+        {
+            Path = path;
+        }
+
+        public string Path { get; }
+
+        public static TempDirectory Create()
+        {
+            var path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"CodeAlta.Tests.{Guid.NewGuid():N}");
+            Directory.CreateDirectory(path);
+            return new TempDirectory(path);
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                if (Directory.Exists(Path))
+                {
+                    Directory.Delete(Path, recursive: true);
+                }
+            }
+            catch
+            {
+            }
         }
     }
 }
