@@ -39,6 +39,32 @@ public sealed class LocalAgentToolsTests
     }
 
     [TestMethod]
+    public async Task ReadFileTool_SupportsNegativeOffsetFromEnd()
+    {
+        using var temp = TestTempDirectory.Create();
+        var filePath = Path.Combine(temp.Path, "sample.txt");
+        await File.WriteAllLinesAsync(filePath, ["alpha", "beta", "gamma", "delta"]).ConfigureAwait(false);
+
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(temp.Path));
+        var tool = tools.Single(static tool => tool.Spec.Name == "read_file");
+        using var args = JsonDocument.Parse("""{"path":"sample.txt","offset":-2,"limit":2}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsTrue(result.Success);
+        var output = Assert.IsInstanceOfType<AgentToolResultItem.Text>(result.Items.Single()).Value;
+        Assert.AreEqual("    3: gamma" + Environment.NewLine + "    4: delta", output);
+    }
+
+    [TestMethod]
     public async Task GrepTool_UsesXenoAtomGlobPatternMatching()
     {
         using var temp = TestTempDirectory.Create();
@@ -475,7 +501,7 @@ public sealed class LocalAgentToolsTests
         Assert.IsFalse(readFileSchema.GetProperty("properties").GetProperty("offset").TryGetProperty("minimum", out _));
         StringAssert.Contains(
             readFileSchema.GetProperty("properties").GetProperty("offset").GetProperty("description").GetString(),
-            "minimum: 1");
+            "negative value to count from the end");
 
         var requestUserInputSchema = LocalAgentToolBridge.CreateOpenAIStrictInputSchema(requestUserInput.Spec.InputSchema);
         var optionSchema = requestUserInputSchema

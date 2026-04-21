@@ -34,7 +34,7 @@ public static class LocalAgentBuiltInToolFactory
           "type": "object",
           "properties": {
             "path": { "type": "string", "description": "Path to the file to read." },
-            "offset": { "type": "integer", "description": "1-based line offset.", "minimum": 1 },
+            "offset": { "type": "integer", "description": "1-based line offset. Use a negative value to count from the end (-1 is the last line)." },
             "limit": { "type": "integer", "description": "Maximum number of lines to return.", "minimum": 1 }
           },
           "required": ["path"],
@@ -218,7 +218,7 @@ public static class LocalAgentBuiltInToolFactory
             new AgentToolDefinition(
                 new AgentToolSpec(
                     "read_file",
-                    "Read a local text file by line number.",
+                    "Read a local text file by line number; negative offsets count from the end.",
                     ReadFileSchema),
                 (invocation, cancellationToken) => ReadFileAsync(options, invocation, cancellationToken)),
             new AgentToolDefinition(
@@ -305,9 +305,10 @@ public static class LocalAgentBuiltInToolFactory
             return Task.FromResult(Failure($"'{resolvedPath}' appears to be a binary file. read_file only supports text files."));
         }
 
-        var offset = Math.Max(1, GetOptionalInt(invocation.Arguments, "offset") ?? 1);
+        var offset = GetOptionalInt(invocation.Arguments, "offset") ?? 1;
         var requestedLimit = GetOptionalInt(invocation.Arguments, "limit") ?? options.DefaultReadFileLineLimit;
         var limit = Math.Clamp(requestedLimit, 1, options.MaxReadFileLineLimit);
+        var startLine = offset >= 1 ? offset : GetStartLineFromEnd(resolvedPath, offset, cancellationToken);
 
         var lines = new List<string>(limit);
         var lineNumber = 0;
@@ -315,7 +316,7 @@ public static class LocalAgentBuiltInToolFactory
         {
             cancellationToken.ThrowIfCancellationRequested();
             lineNumber++;
-            if (lineNumber < offset)
+            if (lineNumber < startLine)
             {
                 continue;
             }
@@ -330,6 +331,19 @@ public static class LocalAgentBuiltInToolFactory
         return Task.FromResult(new AgentToolResult(
             true,
             [new AgentToolResultItem.Text(string.Join(Environment.NewLine, lines))]));
+    }
+
+    private static int GetStartLineFromEnd(string path, int offset, CancellationToken cancellationToken)
+    {
+        var totalLines = 0;
+        foreach (var _ in File.ReadLines(path))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            totalLines++;
+        }
+
+        var startLine = totalLines + offset + 1;
+        return Math.Max(1, startLine);
     }
 
     private static Task<AgentToolResult> ListDirectoryAsync(
