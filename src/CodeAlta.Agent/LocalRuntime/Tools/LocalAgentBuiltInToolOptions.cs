@@ -38,6 +38,11 @@ public sealed class LocalAgentBuiltInToolOptions
     public HttpClient? HttpClient { get; init; }
 
     /// <summary>
+    /// Gets or initializes the provider descriptor used to tailor the built-in tool set.
+    /// </summary>
+    public LocalAgentProviderDescriptor? Provider { get; init; }
+
+    /// <summary>
     /// Gets or initializes the default maximum number of lines returned by <c>read_file</c>.
     /// </summary>
     public int DefaultReadFileLineLimit { get; init; } = 2000;

@@ -148,6 +148,8 @@ internal static class LocalAgentCompactionCanonicalizer
             "read_file" or "view_image" or "list_dir" => GetString(arguments, "path"),
             "grep" => $"{GetString(arguments, "path")}|{GetString(arguments, "pattern") ?? GetString(arguments, "query")}",
             "shell_command" => GetString(arguments, "command"),
+            "write_file" or "replace_in_file" or "delete_file_or_dir" => GetString(arguments, "path"),
+            "rename_file_or_dir" => $"{GetString(arguments, "old_path")}|{GetString(arguments, "new_path")}",
             "webget" => GetString(arguments, "url"),
             _ => null,
         };

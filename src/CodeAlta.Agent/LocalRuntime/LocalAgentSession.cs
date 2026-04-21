@@ -459,6 +459,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                 WorkingDirectory = _summary.WorkingDirectory,
                 OnPermissionRequest = _options.OnPermissionRequest,
                 OnUserInputRequest = _options.OnUserInputRequest,
+                Provider = Provider,
             });
         return _options.Tools is { Count: > 0 }
             ? [.. builtIns, .. _options.Tools]
@@ -1544,14 +1545,41 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                 }
 
                 break;
+            case "write_file":
+            case "replace_in_file":
+            case "delete_file_or_dir":
+                if (GetPath(toolCall.Arguments, "path") is { Length: > 0 } modifiedPath)
+                {
+                    AddModifiedFile(Resolve(modifiedPath));
+                }
+
+                break;
+            case "rename_file_or_dir":
+                if (GetPath(toolCall.Arguments, "old_path") is { Length: > 0 } oldPath)
+                {
+                    AddModifiedFile(Resolve(oldPath));
+                }
+
+                if (GetPath(toolCall.Arguments, "new_path") is { Length: > 0 } newPath)
+                {
+                    AddModifiedFile(Resolve(newPath));
+                }
+
+                break;
             case "apply_patch":
                 if (toolCall.Arguments.TryGetProperty("input", out var patchInput) &&
                     patchInput.ValueKind == JsonValueKind.String &&
                     !string.IsNullOrWhiteSpace(patchInput.GetString()))
                 {
-                    foreach (var path in LocalAgentApplyPatch.GetTouchedPaths(patchInput.GetString()!, workingDirectory ?? Environment.CurrentDirectory))
+                    try
                     {
-                        AddModifiedFile(path);
+                        foreach (var path in LocalAgentApplyPatch.GetTouchedPaths(patchInput.GetString()!, workingDirectory ?? Environment.CurrentDirectory))
+                        {
+                            AddModifiedFile(path);
+                        }
+                    }
+                    catch (InvalidOperationException)
+                    {
                     }
                 }
 

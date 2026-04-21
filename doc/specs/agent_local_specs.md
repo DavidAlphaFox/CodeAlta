@@ -326,9 +326,16 @@ Recommended baseline:
 - `grep`
 - `webget`
 - `shell_command`
-- `apply_patch`
+- `write_file`
+- `replace_in_file`
+- `rename_file_or_dir`
+- `delete_file_or_dir`
 - `view_image`
 - `request_user_input`
+
+Official OpenAI providers (`https://api.openai.com/`, matched on base URL/host rather than full path) should additionally expose:
+
+- `apply_patch`
 
 Optional later additions:
 
@@ -353,12 +360,21 @@ Optional later additions:
 - it is distinct from search because the agent often already has the target URL
 - it should support basic safeguards such as size limits, content-type checks, and timeout controls
 
-`apply_patch`, not `write` plus `edit` as the primary editing primitive
+Deterministic edit tools for all providers
+- `write_file` should replace a file's full contents in one call
+- `replace_in_file` should perform exact-string replacement only, with no regex and no fuzzy matching
+- `rename_file_or_dir` should rename or move files and directories
+- `delete_file_or_dir` should delete files or directories recursively
+- these tools should stay easy to describe, easy to call, and return clear failure messages
+
+`apply_patch` for official OpenAI providers
+- keep `apply_patch` available only when the provider is actually targeting `https://api.openai.com/`
 - add/update/delete/move in one tool
 - better auditability and diff rendering
 - better fit for approvals and coding workflows
 - should be forgiving for normal LLM output, especially around hunk anchors, blank context lines, and light whitespace drift
 - should support intuitive rename-only edits via `Update File` + `Move to` without forcing dummy hunks
+- keep the description concise and close to Codex/OpenAI expectations rather than over-explaining the tool
 
 Recommended `apply_patch` grammar and guidance:
 
@@ -420,7 +436,7 @@ Within that root, sessions are stored provider-first under:
 7. Build the runtime as a local harness in the same spirit as Codex.
 8. Ship meaningful built-in tools by default.
 9. Use `shell_command` as the cross-platform exec primitive.
-10. Prefer `apply_patch` as the primary edit primitive.
+10. Prefer `apply_patch` for official OpenAI providers, and deterministic edit tools for other providers.
 
 ## 23. Summary
 

@@ -152,6 +152,28 @@ public sealed class LocalAgentApplyPatchTests
     }
 
     [TestMethod]
+    public async Task Apply_ToleratesWhitespacePaddedDirectiveLines()
+    {
+        using var temp = TestTempDirectory.Create();
+        var filePath = Path.Combine(temp.Path, "sample.txt");
+        await File.WriteAllTextAsync(filePath, "old" + Environment.NewLine).ConfigureAwait(false);
+
+        var result = LocalAgentApplyPatch.Apply(
+            """
+             *** Begin Patch
+              *** Update File: sample.txt
+            @@
+            -old
+            +new
+             *** End Patch
+            """,
+            temp.Path);
+
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual("new" + Environment.NewLine, await File.ReadAllTextAsync(filePath).ConfigureAwait(false));
+    }
+
+    [TestMethod]
     public async Task Apply_TreatsBlankLinesInsideHunksAsBlankContext()
     {
         using var temp = TestTempDirectory.Create();
@@ -178,6 +200,49 @@ public sealed class LocalAgentApplyPatchTests
         Assert.AreEqual(
             $"alpha{Environment.NewLine}{Environment.NewLine}gamma{Environment.NewLine}",
             await File.ReadAllTextAsync(filePath).ConfigureAwait(false));
+    }
+
+    [TestMethod]
+    public async Task Apply_AllowsMultipleAnchorHeadersBeforeOneHunk()
+    {
+        using var temp = TestTempDirectory.Create();
+        var filePath = Path.Combine(temp.Path, "sample.cs");
+        await File.WriteAllTextAsync(
+                filePath,
+                string.Join(
+                    Environment.NewLine,
+                    [
+                        "class Example",
+                        "{",
+                        "    void First()",
+                        "    {",
+                        "        var value = 1;",
+                        "    }",
+                        string.Empty,
+                        "    void Second()",
+                        "    {",
+                        "        var value = 1;",
+                        "    }",
+                        "}",
+                    ]) + Environment.NewLine)
+            .ConfigureAwait(false);
+
+        var result = LocalAgentApplyPatch.Apply(
+            """
+            *** Begin Patch
+            *** Update File: sample.cs
+            @@ class Example
+            @@ void Second()
+             {
+            -        var value = 1;
+            +        var value = 2;
+             }
+            *** End Patch
+            """,
+            temp.Path);
+
+        Assert.IsTrue(result.Success);
+        StringAssert.Contains(await File.ReadAllTextAsync(filePath).ConfigureAwait(false), "var value = 2;");
     }
 
     [TestMethod]
@@ -239,6 +304,29 @@ public sealed class LocalAgentApplyPatchTests
 
         Assert.IsFalse(result.Success);
         Assert.AreEqual("Patch input must start with '*** Begin Patch'.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task Apply_AppendsTrailingNewlineWhenUpdatingAFileWithoutOne()
+    {
+        using var temp = TestTempDirectory.Create();
+        var filePath = Path.Combine(temp.Path, "sample.txt");
+        await File.WriteAllTextAsync(filePath, "no newline").ConfigureAwait(false);
+
+        var result = LocalAgentApplyPatch.Apply(
+            """
+            *** Begin Patch
+            *** Update File: sample.txt
+            @@
+            -no newline
+            +first
+            +second
+            *** End Patch
+            """,
+            temp.Path);
+
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual("first\nsecond\n", await File.ReadAllTextAsync(filePath).ConfigureAwait(false));
     }
 
     [TestMethod]

@@ -17,36 +17,16 @@ namespace CodeAlta.Agent.LocalRuntime.Tools;
 public static class LocalAgentBuiltInToolFactory
 {
     private static readonly FileTreeWalker FileTreeWalker = new();
+    private const string WriteFileToolDescription =
+        "Write an entire text file in one deterministic operation. Creates parent directories as needed and replaces any existing file.";
+    private const string ReplaceInFileToolDescription =
+        "Replace exact text in a file. Deterministic only: no regex, no fuzzy matching. When replace_all is false the file must contain exactly one match.";
+    private const string DeleteFileOrDirToolDescription =
+        "Delete a file or a directory inside the working directory. Directory deletes are recursive.";
+    private const string RenameFileOrDirToolDescription =
+        "Rename or move a file or directory inside the working directory.";
     private const string ApplyPatchToolDescription =
-        """
-        Apply structured filesystem edits in one audited call. Prefer this tool over ad-hoc file rewrites when you need to add, update, move, or delete files.
-
-        If you have never used this tool before, copy the template below and fill in the paths and hunk lines. Send the entire patch document in the single required 'input' string.
-
-        Patch format:
-        *** Begin Patch
-        *** Add File: relative/path.txt
-        +new file content
-        *** Update File: relative/path.txt
-        *** Move to: new/path.txt
-        @@ optional anchor text
-        unchanged context
-        -old line
-        +new line
-        *** Delete File: old/path.txt
-        *** End Patch
-
-        Guidance:
-        - Paths must be relative to the session working directory.
-        - Use one file header per file change: Add File, Update File, or Delete File.
-        - Start each hunk with @@ or @@ anchor text.
-        - Inside hunks, prefix unchanged lines with a space, additions with +, and deletions with -.
-        - Anchor indentation does not need to be exact; the matcher tolerates light whitespace differences.
-        - Blank lines inside hunks are allowed and mean blank context lines.
-        - Use *** End of File after a hunk when the context should match near EOF.
-        - A pure rename is allowed: Update File + Move to with no hunks.
-        - Updated files preserve their existing newline style; newly added files use the patch document newline style.
-        """;
+        "Use the `apply_patch` tool to edit files.";
 
     private static readonly JsonElement ReadFileSchema = ParseSchema(
         """
@@ -78,7 +58,7 @@ public static class LocalAgentBuiltInToolFactory
         {
           "type": "object",
           "properties": {
-            "pattern": { "type": "string", "description": "Regular expression to search within each line." },
+            "pattern": { "type": "string", "description": "Regular expression to search within each line (.NET regex syntax)." },
             "path": { "type": "string", "description": "File or directory to search. Defaults to the session working directory." },
             "glob": { "type": "string", "description": "Optional file-name glob like *.cs." },
             "caseSensitive": { "type": "boolean", "description": "Whether matching is case-sensitive." },
@@ -117,6 +97,59 @@ public static class LocalAgentBuiltInToolFactory
         }
         """);
 
+    private static readonly JsonElement WriteFileSchema = ParseSchema(
+        """
+        {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "description": "File path relative to the working directory." },
+            "content": { "type": "string", "description": "Exact file contents to write." }
+          },
+          "required": ["path", "content"],
+          "additionalProperties": false
+        }
+        """);
+
+    private static readonly JsonElement ReplaceInFileSchema = ParseSchema(
+        """
+        {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "description": "File path relative to the working directory." },
+            "old_string": { "type": "string", "description": "Exact text to replace. Newlines are matched exactly, with deterministic normalization to the file's newline style when needed." },
+            "new_string": { "type": "string", "description": "Replacement text." },
+            "replace_all": { "type": "boolean", "description": "Replace every exact match. When false, exactly one match must exist." }
+          },
+          "required": ["path", "old_string", "new_string"],
+          "additionalProperties": false
+        }
+        """);
+
+    private static readonly JsonElement DeleteFileOrDirSchema = ParseSchema(
+        """
+        {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "description": "File or directory path relative to the working directory." }
+          },
+          "required": ["path"],
+          "additionalProperties": false
+        }
+        """);
+
+    private static readonly JsonElement RenameFileOrDirSchema = ParseSchema(
+        """
+        {
+          "type": "object",
+          "properties": {
+            "old_path": { "type": "string", "description": "Existing file or directory path relative to the working directory." },
+            "new_path": { "type": "string", "description": "Destination path relative to the working directory." }
+          },
+          "required": ["old_path", "new_path"],
+          "additionalProperties": false
+        }
+        """);
+
     private static readonly JsonElement ApplyPatchSchema = ParseSchema(
         """
         {
@@ -124,7 +157,7 @@ public static class LocalAgentBuiltInToolFactory
           "properties": {
             "input": {
               "type": "string",
-              "description": "Full patch document. Start with '*** Begin Patch' and end with '*** End Patch'. Use Add File / Update File / Delete File headers, optional '*** Move to:' after Update File, and hunk sections beginning with '@@' or '@@ anchor text'. Inside hunks, prefix context with a space, additions with '+', and removals with '-'. Blank lines inside hunks are treated as blank context lines. Anchor indentation is matched with light whitespace tolerance. Template: *** Begin Patch ... *** End Patch."
+              "description": "Patch text in the Codex/OpenAI apply_patch format. Start with '*** Begin Patch' and end with '*** End Patch'. Use '*** Add File:', '*** Delete File:', or '*** Update File:'. An update may include '*** Move to:'. Hunks begin with '@@' or '@@ anchor text'; inside hunks use space for context, '-' for deletions, and '+' for additions."
             }
           },
           "required": ["input"],
@@ -192,12 +225,12 @@ public static class LocalAgentBuiltInToolFactory
         ArgumentNullException.ThrowIfNull(options);
 
         var httpClient = options.HttpClient ?? new HttpClient();
-        return
+        AgentToolDefinition[] tools =
         [
             new AgentToolDefinition(
                 new AgentToolSpec(
                     "read_file",
-                    "Read the contents of a text file or return a local image attachment.",
+                    "Read a local text file by line number, or return an image result for image paths.",
                     ReadFileSchema),
                 (invocation, cancellationToken) => ReadFileAsync(options, invocation, cancellationToken)),
             new AgentToolDefinition(
@@ -209,7 +242,7 @@ public static class LocalAgentBuiltInToolFactory
             new AgentToolDefinition(
                 new AgentToolSpec(
                     "grep",
-                    "Search a file or directory for line-based regular-expression matches.",
+                    "Search files for line-based matches using a .NET regular expression.",
                     GrepSchema),
                 (invocation, cancellationToken) => GrepAsync(options, invocation, cancellationToken)),
             new AgentToolDefinition(
@@ -224,6 +257,30 @@ public static class LocalAgentBuiltInToolFactory
                     "Execute a local shell command using the platform-appropriate shell after permission approval.",
                     ShellCommandSchema),
                 (invocation, cancellationToken) => ShellCommandAsync(options, invocation, cancellationToken)),
+            new AgentToolDefinition(
+                new AgentToolSpec(
+                    "write_file",
+                    WriteFileToolDescription,
+                    WriteFileSchema),
+                (invocation, cancellationToken) => WriteFileAsync(options, invocation, cancellationToken)),
+            new AgentToolDefinition(
+                new AgentToolSpec(
+                    "replace_in_file",
+                    ReplaceInFileToolDescription,
+                    ReplaceInFileSchema),
+                (invocation, cancellationToken) => ReplaceInFileAsync(options, invocation, cancellationToken)),
+            new AgentToolDefinition(
+                new AgentToolSpec(
+                    "delete_file_or_dir",
+                    DeleteFileOrDirToolDescription,
+                    DeleteFileOrDirSchema),
+                (invocation, cancellationToken) => DeleteFileOrDirAsync(options, invocation, cancellationToken)),
+            new AgentToolDefinition(
+                new AgentToolSpec(
+                    "rename_file_or_dir",
+                    RenameFileOrDirToolDescription,
+                    RenameFileOrDirSchema),
+                (invocation, cancellationToken) => RenameFileOrDirAsync(options, invocation, cancellationToken)),
             new AgentToolDefinition(
                 new AgentToolSpec(
                     "apply_patch",
@@ -243,6 +300,10 @@ public static class LocalAgentBuiltInToolFactory
                     RequestUserInputSchema),
                 (invocation, cancellationToken) => RequestUserInputAsync(options, invocation, cancellationToken)),
         ];
+
+        return tools
+            .Where(tool => ShouldIncludeBuiltInTool(options, tool.Spec.Name))
+            .ToArray();
     }
 
     private static Task<AgentToolResult> ReadFileAsync(
@@ -593,6 +654,271 @@ public static class LocalAgentBuiltInToolFactory
         return new AgentToolResult(true, [new AgentToolResultItem.Text(output)]);
     }
 
+    private static async Task<AgentToolResult> WriteFileAsync(
+        LocalAgentBuiltInToolOptions options,
+        AgentToolInvocation invocation,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var rootPath = GetWorkingDirectoryRoot(options);
+        WorkspacePathResolution resolution;
+        try
+        {
+            resolution = ResolveWorkspacePath(rootPath, GetRequiredString(invocation.Arguments, "path"));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Failure(ex.Message);
+        }
+
+        var existed = File.Exists(resolution.FullPath);
+        if (Directory.Exists(resolution.FullPath))
+        {
+            return Failure($"'{resolution.DisplayPath}' is an existing directory.");
+        }
+
+        var content = GetRequiredString(invocation.Arguments, "content");
+        var permission = await RequestFileChangePermissionAsync(
+                options,
+                invocation,
+                "write_file",
+                [resolution.FullPath],
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (permission is not null)
+        {
+            return permission;
+        }
+
+        var parentDirectory = Path.GetDirectoryName(resolution.FullPath);
+        if (!string.IsNullOrWhiteSpace(parentDirectory))
+        {
+            Directory.CreateDirectory(parentDirectory);
+        }
+
+        await File.WriteAllTextAsync(resolution.FullPath, content, cancellationToken).ConfigureAwait(false);
+        var verb = existed ? "Wrote" : "Created";
+        return SuccessResult($"{verb} {resolution.DisplayPath}");
+    }
+
+    private static async Task<AgentToolResult> ReplaceInFileAsync(
+        LocalAgentBuiltInToolOptions options,
+        AgentToolInvocation invocation,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var rootPath = GetWorkingDirectoryRoot(options);
+        WorkspacePathResolution resolution;
+        try
+        {
+            resolution = ResolveWorkspacePath(rootPath, GetRequiredString(invocation.Arguments, "path"));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Failure(ex.Message);
+        }
+
+        if (!File.Exists(resolution.FullPath))
+        {
+            return Failure($"File '{resolution.DisplayPath}' was not found.");
+        }
+
+        var oldString = GetRequiredString(invocation.Arguments, "old_string");
+        if (oldString.Length == 0)
+        {
+            return Failure("The 'old_string' value must not be empty.");
+        }
+
+        var newString = GetRequiredString(invocation.Arguments, "new_string");
+        var replaceAll = GetOptionalBool(invocation.Arguments, "replace_all") ?? false;
+
+        var original = await File.ReadAllTextAsync(resolution.FullPath, cancellationToken).ConfigureAwait(false);
+        var newline = DetectExistingNewline(original);
+        var replacementTarget = oldString;
+        var replacementValue = newString;
+
+        if (!original.Contains(replacementTarget, StringComparison.Ordinal))
+        {
+            var normalizedOldString = NormalizeNewlines(oldString, newline);
+            if (!string.Equals(normalizedOldString, oldString, StringComparison.Ordinal) &&
+                original.Contains(normalizedOldString, StringComparison.Ordinal))
+            {
+                replacementTarget = normalizedOldString;
+                replacementValue = NormalizeNewlines(newString, newline);
+            }
+        }
+
+        var matchCount = CountOccurrences(original, replacementTarget);
+        if (matchCount == 0)
+        {
+            return Failure($"replace_in_file could not find the requested text in '{resolution.DisplayPath}'.");
+        }
+
+        if (!replaceAll && matchCount != 1)
+        {
+            return Failure(
+                $"replace_in_file found {matchCount} matches in '{resolution.DisplayPath}'. Set replace_all=true to replace every match.");
+        }
+
+        var permission = await RequestFileChangePermissionAsync(
+                options,
+                invocation,
+                "replace_in_file",
+                [resolution.FullPath],
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (permission is not null)
+        {
+            return permission;
+        }
+
+        var updated = replaceAll
+            ? original.Replace(replacementTarget, replacementValue, StringComparison.Ordinal)
+            : ReplaceFirstOccurrence(original, replacementTarget, replacementValue);
+        await File.WriteAllTextAsync(resolution.FullPath, updated, cancellationToken).ConfigureAwait(false);
+        var replacedCount = replaceAll ? matchCount : 1;
+        return SuccessResult($"Replaced {replacedCount} occurrence(s) in {resolution.DisplayPath}");
+    }
+
+    private static async Task<AgentToolResult> DeleteFileOrDirAsync(
+        LocalAgentBuiltInToolOptions options,
+        AgentToolInvocation invocation,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var rootPath = GetWorkingDirectoryRoot(options);
+        WorkspacePathResolution resolution;
+        try
+        {
+            resolution = ResolveWorkspacePath(rootPath, GetRequiredString(invocation.Arguments, "path"));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Failure(ex.Message);
+        }
+
+        if (string.Equals(resolution.FullPath, rootPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return Failure("delete_file_or_dir cannot delete the session working directory.");
+        }
+
+        var existsAsFile = File.Exists(resolution.FullPath);
+        var existsAsDirectory = Directory.Exists(resolution.FullPath);
+        if (!existsAsFile && !existsAsDirectory)
+        {
+            return Failure($"Path '{resolution.DisplayPath}' was not found.");
+        }
+
+        var permission = await RequestFileChangePermissionAsync(
+                options,
+                invocation,
+                "delete_file_or_dir",
+                [resolution.FullPath],
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (permission is not null)
+        {
+            return permission;
+        }
+
+        try
+        {
+            if (existsAsDirectory)
+            {
+                Directory.Delete(resolution.FullPath, recursive: true);
+                return SuccessResult($"Deleted directory {resolution.DisplayPath}");
+            }
+
+            File.Delete(resolution.FullPath);
+            return SuccessResult($"Deleted file {resolution.DisplayPath}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Failure($"delete_file_or_dir failed for '{resolution.DisplayPath}': {ex.Message}");
+        }
+    }
+
+    private static async Task<AgentToolResult> RenameFileOrDirAsync(
+        LocalAgentBuiltInToolOptions options,
+        AgentToolInvocation invocation,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var rootPath = GetWorkingDirectoryRoot(options);
+        WorkspacePathResolution sourceResolution;
+        WorkspacePathResolution destinationResolution;
+        try
+        {
+            sourceResolution = ResolveWorkspacePath(rootPath, GetRequiredString(invocation.Arguments, "old_path"));
+            destinationResolution = ResolveWorkspacePath(rootPath, GetRequiredString(invocation.Arguments, "new_path"));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Failure(ex.Message);
+        }
+
+        if (string.Equals(sourceResolution.FullPath, rootPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return Failure("rename_file_or_dir cannot move the session working directory.");
+        }
+
+        if (string.Equals(sourceResolution.FullPath, destinationResolution.FullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return Failure("rename_file_or_dir requires different source and destination paths.");
+        }
+
+        var sourceIsFile = File.Exists(sourceResolution.FullPath);
+        var sourceIsDirectory = Directory.Exists(sourceResolution.FullPath);
+        if (!sourceIsFile && !sourceIsDirectory)
+        {
+            return Failure($"Source path '{sourceResolution.DisplayPath}' was not found.");
+        }
+
+        if (File.Exists(destinationResolution.FullPath) || Directory.Exists(destinationResolution.FullPath))
+        {
+            return Failure($"Destination '{destinationResolution.DisplayPath}' already exists.");
+        }
+
+        var permission = await RequestFileChangePermissionAsync(
+                options,
+                invocation,
+                "rename_file_or_dir",
+                [sourceResolution.FullPath, destinationResolution.FullPath],
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (permission is not null)
+        {
+            return permission;
+        }
+
+        try
+        {
+            var destinationParent = Path.GetDirectoryName(destinationResolution.FullPath);
+            if (!string.IsNullOrWhiteSpace(destinationParent))
+            {
+                Directory.CreateDirectory(destinationParent);
+            }
+
+            if (sourceIsDirectory)
+            {
+                Directory.Move(sourceResolution.FullPath, destinationResolution.FullPath);
+                return SuccessResult($"Renamed directory {sourceResolution.DisplayPath} -> {destinationResolution.DisplayPath}");
+            }
+
+            File.Move(sourceResolution.FullPath, destinationResolution.FullPath);
+            return SuccessResult($"Renamed file {sourceResolution.DisplayPath} -> {destinationResolution.DisplayPath}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Failure(
+                $"rename_file_or_dir failed for '{sourceResolution.DisplayPath}' -> '{destinationResolution.DisplayPath}': {ex.Message}");
+        }
+    }
+
     private static async Task<AgentToolResult> ApplyPatchAsync(
         LocalAgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -600,32 +926,36 @@ public static class LocalAgentBuiltInToolFactory
     {
         var workingDirectory = options.WorkingDirectory ?? Environment.CurrentDirectory;
         var patchInput = GetRequiredString(invocation.Arguments, "input");
-        var touchedPaths = LocalAgentApplyPatch.GetTouchedPaths(patchInput, workingDirectory);
-        var permissionRequest = new AgentFileChangePermissionRequest(
-            options.BackendId,
-            options.SessionId,
-            DateTimeOffset.UtcNow,
-            RunId: null,
-            InteractionId: invocation.ToolCallId,
-            GrantRoot: workingDirectory,
-            Reason: touchedPaths.Count == 0
-                ? "The agent requested filesystem edits via apply_patch."
-                : $"The agent requested filesystem edits via apply_patch affecting {touchedPaths.Count} path(s).");
-        var decision = await options.OnPermissionRequest(permissionRequest, cancellationToken).ConfigureAwait(false);
-        switch (decision.Kind)
+        IReadOnlyList<string> touchedPaths;
+        try
         {
-            case AgentPermissionDecisionKind.AllowOnce:
-            case AgentPermissionDecisionKind.AllowForSession:
-                break;
-            case AgentPermissionDecisionKind.Deny:
-                return Failure("apply_patch was denied by the host.");
-            case AgentPermissionDecisionKind.Cancel:
-                return Failure("apply_patch was canceled by the host.");
-            default:
-                return Failure($"Unsupported permission decision '{decision.Kind}'.");
+            touchedPaths = LocalAgentApplyPatch.GetTouchedPaths(patchInput, workingDirectory);
+        }
+        catch (InvalidOperationException)
+        {
+            touchedPaths = [];
         }
 
-        return LocalAgentApplyPatch.Apply(patchInput, workingDirectory);
+        var permission = await RequestFileChangePermissionAsync(
+                options,
+                invocation,
+                "apply_patch",
+                touchedPaths,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (permission is not null)
+        {
+            return permission;
+        }
+
+        try
+        {
+            return LocalAgentApplyPatch.Apply(patchInput, workingDirectory);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Failure(ex.Message);
+        }
     }
 
     private static Task<AgentToolResult> ViewImageAsync(
@@ -709,6 +1039,130 @@ public static class LocalAgentBuiltInToolFactory
 
     private static AgentToolResult Failure(string message)
         => new(false, [new AgentToolResultItem.Text(message)], message);
+
+    private static AgentToolResult SuccessResult(string message)
+        => new(true, [new AgentToolResultItem.Text(message)]);
+
+    private static bool ShouldIncludeBuiltInTool(LocalAgentBuiltInToolOptions options, string toolName)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(toolName);
+
+        if (options.Provider?.Profile?.BuiltInToolOverrides is { Count: > 0 } overrides &&
+            overrides.TryGetValue(toolName, out var enabled))
+        {
+            return enabled;
+        }
+
+        return !string.Equals(toolName, "apply_patch", StringComparison.Ordinal) ||
+               IsApplyPatchSupported(options.Provider, options.BackendId);
+    }
+
+    private static bool IsApplyPatchSupported(LocalAgentProviderDescriptor? provider, AgentBackendId backendId)
+    {
+        if (provider is null)
+        {
+            return backendId == AgentBackendIds.OpenAIResponses || backendId == AgentBackendIds.OpenAIChat;
+        }
+
+        if (provider.TransportKind is not (LocalAgentTransportKind.OpenAIResponses or LocalAgentTransportKind.OpenAIChatCompletions))
+        {
+            return false;
+        }
+
+        if (provider.BaseUri is null)
+        {
+            return true;
+        }
+
+        return string.Equals(provider.BaseUri.Host, "api.openai.com", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetWorkingDirectoryRoot(LocalAgentBuiltInToolOptions options)
+        => Path.GetFullPath(options.WorkingDirectory ?? Environment.CurrentDirectory);
+
+    private static WorkspacePathResolution ResolveWorkspacePath(string rootPath, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new InvalidOperationException("A non-empty path is required.");
+        }
+
+        var fullPath = ResolvePath(rootPath, path);
+        var relativePath = Path.GetRelativePath(rootPath, fullPath);
+        if (string.Equals(relativePath, "..", StringComparison.Ordinal) ||
+            relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
+            relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal) ||
+            Path.IsPathRooted(relativePath))
+        {
+            throw new InvalidOperationException($"Path '{path}' escapes the working directory.");
+        }
+
+        return new WorkspacePathResolution(fullPath, relativePath.Replace(Path.DirectorySeparatorChar, '/'));
+    }
+
+    private static async Task<AgentToolResult?> RequestFileChangePermissionAsync(
+        LocalAgentBuiltInToolOptions options,
+        AgentToolInvocation invocation,
+        string toolName,
+        IReadOnlyList<string> touchedPaths,
+        CancellationToken cancellationToken)
+    {
+        var workingDirectory = GetWorkingDirectoryRoot(options);
+        var permissionRequest = new AgentFileChangePermissionRequest(
+            options.BackendId,
+            options.SessionId,
+            DateTimeOffset.UtcNow,
+            RunId: null,
+            InteractionId: invocation.ToolCallId,
+            GrantRoot: workingDirectory,
+            Reason: touchedPaths.Count == 0
+                ? $"The agent requested filesystem edits via {toolName}."
+                : $"The agent requested filesystem edits via {toolName} affecting {touchedPaths.Count} path(s).");
+        var decision = await options.OnPermissionRequest(permissionRequest, cancellationToken).ConfigureAwait(false);
+        return decision.Kind switch
+        {
+            AgentPermissionDecisionKind.AllowOnce or AgentPermissionDecisionKind.AllowForSession => null,
+            AgentPermissionDecisionKind.Deny => Failure($"{toolName} was denied by the host."),
+            AgentPermissionDecisionKind.Cancel => Failure($"{toolName} was canceled by the host."),
+            _ => Failure($"Unsupported permission decision '{decision.Kind}'."),
+        };
+    }
+
+    private static string DetectExistingNewline(string text)
+        => text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+
+    private static string NormalizeNewlines(string text, string newline)
+        => text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", newline, StringComparison.Ordinal);
+
+    private static int CountOccurrences(string text, string value)
+    {
+        if (value.Length == 0)
+        {
+            return 0;
+        }
+
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
+    }
+
+    private static string ReplaceFirstOccurrence(string text, string oldValue, string newValue)
+    {
+        var index = text.IndexOf(oldValue, StringComparison.Ordinal);
+        if (index < 0)
+        {
+            return text;
+        }
+
+        return string.Concat(text.AsSpan(0, index), newValue, text.AsSpan(index + oldValue.Length));
+    }
 
     private static string ResolvePath(string? workingDirectory, string? path)
     {
@@ -967,6 +1421,8 @@ public static class LocalAgentBuiltInToolFactory
     }
 
     private sealed record ShellProcessSpec(ProcessStartInfo StartInfo);
+
+    private readonly record struct WorkspacePathResolution(string FullPath, string DisplayPath);
 
     private readonly record struct SearchFileTarget(string FullPath, string DisplayPath, string RelativePath, string Name);
 }

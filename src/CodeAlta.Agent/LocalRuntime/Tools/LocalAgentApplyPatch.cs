@@ -25,7 +25,7 @@ internal static class LocalAgentApplyPatch
                 case AddFileOperation addFile:
                 {
                     var path = ResolvePatchPath(rootPath, addFile.Path);
-                    if (File.Exists(path))
+                    if (File.Exists(path) || Directory.Exists(path))
                     {
                         return Failure($"Cannot add '{addFile.Path}' because it already exists.");
                     }
@@ -42,6 +42,11 @@ internal static class LocalAgentApplyPatch
                 case DeleteFileOperation deleteFile:
                 {
                     var path = ResolvePatchPath(rootPath, deleteFile.Path);
+                    if (Directory.Exists(path))
+                    {
+                        return Failure($"Cannot delete '{deleteFile.Path}' because it is a directory.");
+                    }
+
                     if (!File.Exists(path))
                     {
                         return Failure($"Cannot delete '{deleteFile.Path}' because it does not exist.");
@@ -54,6 +59,11 @@ internal static class LocalAgentApplyPatch
                 case UpdateFileOperation updateFile:
                 {
                     var sourcePath = ResolvePatchPath(rootPath, updateFile.Path);
+                    if (Directory.Exists(sourcePath))
+                    {
+                        return Failure($"Cannot update '{updateFile.Path}' because it is a directory.");
+                    }
+
                     if (!File.Exists(sourcePath))
                     {
                         return Failure($"Cannot update '{updateFile.Path}' because it does not exist.");
@@ -68,14 +78,13 @@ internal static class LocalAgentApplyPatch
                     else
                     {
                         var newline = DetectNewline(originalText);
-                        var hadTrailingNewline = HasTrailingNewline(originalText);
                         var lines = SplitLines(originalText);
                         if (!TryApplyHunks(lines, updateFile.Hunks, out var updatedLines, out error))
                         {
                             return Failure($"Failed to apply patch to '{updateFile.Path}': {error}");
                         }
 
-                        updatedText = JoinLines(updatedLines, newline, hadTrailingNewline);
+                        updatedText = JoinLines(updatedLines, newline, hadTrailingNewline: updatedLines.Count > 0);
                     }
 
                     if (updateFile.MoveTo is null)
@@ -86,7 +95,7 @@ internal static class LocalAgentApplyPatch
                     }
 
                     var destinationPath = ResolvePatchPath(rootPath, updateFile.MoveTo);
-                    if (File.Exists(destinationPath))
+                    if (File.Exists(destinationPath) || Directory.Exists(destinationPath))
                     {
                         return Failure($"Cannot move '{updateFile.Path}' to '{updateFile.MoveTo}' because the destination already exists.");
                     }
@@ -218,9 +227,9 @@ internal static class LocalAgentApplyPatch
     private static string BuildMissingContextError(PatchHunk hunk, IReadOnlyList<string> oldLines)
     {
         var builder = new StringBuilder("The hunk context was not found in the target file.");
-        if (!string.IsNullOrWhiteSpace(hunk.Anchor))
+        if (hunk.Anchors.Count > 0)
         {
-            builder.Append(" Anchor: '").Append(hunk.Anchor).Append("'.");
+            builder.Append(" Anchors: '").Append(string.Join("' -> '", hunk.Anchors)).Append("'.");
         }
 
         if (hunk.PreferEndOfFile)
@@ -255,7 +264,7 @@ internal static class LocalAgentApplyPatch
                 return true;
             }
 
-            if (TryFindAnchor(lines, hunk.Anchor, currentIndex, out var anchorIndex))
+            if (TryAdvanceToAnchors(lines, hunk.Anchors, currentIndex, out var anchorIndex))
             {
                 matchIndex = Math.Clamp(anchorIndex, 0, lines.Count);
                 return true;
@@ -278,7 +287,7 @@ internal static class LocalAgentApplyPatch
         }
 
         var searchStarts = new List<int>(3);
-        if (TryFindAnchor(lines, hunk.Anchor, currentIndex, out var resolvedAnchorIndex))
+        if (TryAdvanceToAnchors(lines, hunk.Anchors, currentIndex, out var resolvedAnchorIndex))
         {
             // Search slightly before the anchor as a convenience for agents: the header usually
             // names a nearby landmark, but the actual hunk context may begin a couple of lines earlier.
@@ -303,18 +312,40 @@ internal static class LocalAgentApplyPatch
         return false;
     }
 
-    private static bool TryFindAnchor(
+    private static bool TryAdvanceToAnchors(
         IReadOnlyList<string> lines,
-        string? anchor,
+        IReadOnlyList<string> anchors,
         int currentIndex,
         out int anchorIndex)
     {
-        if (string.IsNullOrWhiteSpace(anchor))
+        anchorIndex = -1;
+        if (anchors.Count == 0)
         {
-            anchorIndex = -1;
             return false;
         }
 
+        var searchIndex = Math.Max(0, currentIndex);
+        foreach (var anchor in anchors)
+        {
+            if (!TryFindAnchor(lines, anchor, searchIndex, out var resolvedAnchorIndex))
+            {
+                anchorIndex = -1;
+                return false;
+            }
+
+            searchIndex = Math.Clamp(resolvedAnchorIndex + 1, 0, lines.Count);
+        }
+
+        anchorIndex = searchIndex;
+        return true;
+    }
+
+    private static bool TryFindAnchor(
+        IReadOnlyList<string> lines,
+        string anchor,
+        int currentIndex,
+        out int anchorIndex)
+    {
         if (TryFindLine(lines, anchor, Math.Max(0, currentIndex), LineMatchTolerance.Exact, out anchorIndex) ||
             TryFindLine(lines, anchor, Math.Max(0, currentIndex), LineMatchTolerance.TrimBoth, out anchorIndex) ||
             TryFindLine(lines, anchor, 0, LineMatchTolerance.Exact, out anchorIndex) ||
@@ -416,7 +447,7 @@ internal static class LocalAgentApplyPatch
         var operations = new List<PatchOperation>();
         while (!state.IsAtEnd)
         {
-            if (state.CurrentLine is "*** End Patch")
+            if (state.IsCurrentDirective("*** End Patch"))
             {
                 state.Advance();
                 document = new PatchDocument(operations);
@@ -424,9 +455,8 @@ internal static class LocalAgentApplyPatch
                 return true;
             }
 
-            if (state.CurrentLine.StartsWith("*** Add File: ", StringComparison.Ordinal))
+            if (TryReadPathDirective(state.CurrentLine, "*** Add File: ", out var path))
             {
-                var path = state.CurrentLine["*** Add File: ".Length..];
                 if (!TryValidatePatchPath(path, state, out error))
                 {
                     document = PatchDocument.Empty;
@@ -452,9 +482,8 @@ internal static class LocalAgentApplyPatch
                 continue;
             }
 
-            if (state.CurrentLine.StartsWith("*** Delete File: ", StringComparison.Ordinal))
+            if (TryReadPathDirective(state.CurrentLine, "*** Delete File: ", out path))
             {
-                var path = state.CurrentLine["*** Delete File: ".Length..];
                 if (!TryValidatePatchPath(path, state, out error))
                 {
                     document = PatchDocument.Empty;
@@ -466,9 +495,8 @@ internal static class LocalAgentApplyPatch
                 continue;
             }
 
-            if (state.CurrentLine.StartsWith("*** Update File: ", StringComparison.Ordinal))
+            if (TryReadPathDirective(state.CurrentLine, "*** Update File: ", out path))
             {
-                var path = state.CurrentLine["*** Update File: ".Length..];
                 if (!TryValidatePatchPath(path, state, out error))
                 {
                     document = PatchDocument.Empty;
@@ -478,9 +506,9 @@ internal static class LocalAgentApplyPatch
                 state.Advance();
 
                 string? moveTo = null;
-                if (!state.IsAtEnd && state.CurrentLine.StartsWith("*** Move to: ", StringComparison.Ordinal))
+                if (!state.IsAtEnd && TryReadPathDirective(state.CurrentLine, "*** Move to: ", out var moveToPath))
                 {
-                    moveTo = state.CurrentLine["*** Move to: ".Length..];
+                    moveTo = moveToPath;
                     if (!TryValidatePatchPath(moveTo, state, out error))
                     {
                         document = PatchDocument.Empty;
@@ -500,14 +528,23 @@ internal static class LocalAgentApplyPatch
                         return false;
                     }
 
-                    var anchor = ParseHunkAnchor(state.CurrentLine);
-                    state.Advance();
+                    var anchors = new List<string>();
+                    while (!state.IsAtEnd && IsHunkHeader(state.CurrentLine))
+                    {
+                        var anchor = ParseHunkAnchor(state.CurrentLine);
+                        if (!string.IsNullOrWhiteSpace(anchor))
+                        {
+                            anchors.Add(anchor);
+                        }
+
+                        state.Advance();
+                    }
 
                     var hunkLines = new List<PatchLine>();
                     var preferEndOfFile = false;
                     while (!state.IsAtEnd)
                     {
-                        if (state.CurrentLine is "*** End of File")
+                        if (state.IsCurrentDirective("*** End of File"))
                         {
                             preferEndOfFile = true;
                             state.Advance();
@@ -538,7 +575,7 @@ internal static class LocalAgentApplyPatch
                         return false;
                     }
 
-                    hunks.Add(new PatchHunk(anchor, preferEndOfFile, hunkLines));
+                    hunks.Add(new PatchHunk(anchors, preferEndOfFile, hunkLines));
                 }
 
                 if (hunks.Count == 0 && moveTo is null)
@@ -607,20 +644,21 @@ internal static class LocalAgentApplyPatch
 
     private static bool IsHunkHeader(string? line)
         => line is not null &&
-           (string.Equals(line, "@@", StringComparison.Ordinal) ||
-            line.StartsWith("@@ ", StringComparison.Ordinal));
+           (string.Equals(NormalizeDirectiveLine(line), "@@", StringComparison.Ordinal) ||
+            NormalizeDirectiveLine(line).StartsWith("@@ ", StringComparison.Ordinal));
 
     private static string? ParseHunkAnchor(string line)
     {
-        if (string.Equals(line, "@@", StringComparison.Ordinal))
+        var normalized = NormalizeDirectiveLine(line);
+        if (string.Equals(normalized, "@@", StringComparison.Ordinal))
         {
             return null;
         }
 
-        var anchor = line.StartsWith("@@ ", StringComparison.Ordinal)
-            ? line[3..]
-            : line.Length > 2
-                ? line[2..]
+        var anchor = normalized.StartsWith("@@ ", StringComparison.Ordinal)
+            ? normalized[3..]
+            : normalized.Length > 2
+                ? normalized[2..]
                 : string.Empty;
         if (anchor.StartsWith(' '))
         {
@@ -631,19 +669,17 @@ internal static class LocalAgentApplyPatch
     }
 
     private static bool IsFileHeaderOrEnd(string? line)
-        => line is not null && (line.StartsWith("*** Add File: ", StringComparison.Ordinal) ||
-                                line.StartsWith("*** Delete File: ", StringComparison.Ordinal) ||
-                                line.StartsWith("*** Update File: ", StringComparison.Ordinal) ||
-                                string.Equals(line, "*** End Patch", StringComparison.Ordinal));
+        => line is not null &&
+           (TryReadPathDirective(line, "*** Add File: ", out _) ||
+            TryReadPathDirective(line, "*** Delete File: ", out _) ||
+            TryReadPathDirective(line, "*** Update File: ", out _) ||
+            string.Equals(NormalizeDirectiveLine(line), "*** End Patch", StringComparison.Ordinal));
 
     private static string DetectPatchNewline(string text)
         => text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
 
     private static string DetectNewline(string text)
         => text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-
-    private static bool HasTrailingNewline(string text)
-        => text.EndsWith("\r\n", StringComparison.Ordinal) || text.EndsWith('\n');
 
     private static List<string> SplitLines(string text)
     {
@@ -753,7 +789,7 @@ internal static class LocalAgentApplyPatch
 
     private sealed record UpdateFileOperation(string Path, string? MoveTo, IReadOnlyList<PatchHunk> Hunks) : PatchOperation;
 
-    private sealed record PatchHunk(string? Anchor, bool PreferEndOfFile, IReadOnlyList<PatchLine> Lines);
+    private sealed record PatchHunk(IReadOnlyList<string> Anchors, bool PreferEndOfFile, IReadOnlyList<PatchLine> Lines);
 
     private readonly record struct PatchLine(PatchLineKind Kind, string Text);
 
@@ -795,9 +831,12 @@ internal static class LocalAgentApplyPatch
 
         public void Advance() => _index++;
 
+        public bool IsCurrentDirective(string value)
+            => !IsAtEnd && string.Equals(NormalizeDirectiveLine(CurrentLine), value, StringComparison.Ordinal);
+
         public bool TryReadExact(string value)
         {
-            if (IsAtEnd || !string.Equals(CurrentLine, value, StringComparison.Ordinal))
+            if (!IsCurrentDirective(value))
             {
                 return false;
             }
@@ -805,5 +844,21 @@ internal static class LocalAgentApplyPatch
             Advance();
             return true;
         }
+    }
+
+    private static string NormalizeDirectiveLine(string line)
+        => line.Trim();
+
+    private static bool TryReadPathDirective(string line, string prefix, out string path)
+    {
+        var normalized = NormalizeDirectiveLine(line);
+        if (normalized.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            path = normalized[prefix.Length..];
+            return true;
+        }
+
+        path = string.Empty;
+        return false;
     }
 }

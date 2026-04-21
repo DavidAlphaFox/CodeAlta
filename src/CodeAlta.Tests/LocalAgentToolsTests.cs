@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using CodeAlta.Agent;
+using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Agent.LocalRuntime.Tools;
 using Microsoft.Extensions.AI;
 
@@ -403,12 +404,171 @@ public sealed class LocalAgentToolsTests
         Assert.IsFalse(requestUserInputSchema.GetProperty("properties").GetProperty("prompts").GetProperty("items").TryGetProperty("additionalProperties", out var nestedAdditionalProperties) && nestedAdditionalProperties.ValueKind != JsonValueKind.False);
 
         var applyPatchSchema = LocalAgentToolBridge.CreateOpenAIStrictInputSchema(applyPatch.Spec.InputSchema);
-        StringAssert.Contains(applyPatch.Spec.Description, "Blank lines inside hunks are allowed");
-        StringAssert.Contains(applyPatch.Spec.Description, "A pure rename is allowed");
-        StringAssert.Contains(applyPatch.Spec.Description, "@@ anchor text");
+        Assert.AreEqual("Use the `apply_patch` tool to edit files.", applyPatch.Spec.Description);
         StringAssert.Contains(
             applyPatchSchema.GetProperty("properties").GetProperty("input").GetProperty("description").GetString(),
-            "@@ anchor text");
+            "*** Update File:");
+    }
+
+    [TestMethod]
+    public void CreateDefaultTools_ExposesApplyPatchOnlyForOfficialOpenAIProviders()
+    {
+        using var temp = TestTempDirectory.Create();
+
+        var officialOpenAiTools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(
+            temp.Path,
+            provider: CreateProviderDescriptor(
+                LocalAgentTransportKind.OpenAIResponses,
+                new Uri("https://api.openai.com/v1/"))));
+        var compatibleTools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(
+            temp.Path,
+            provider: CreateProviderDescriptor(
+                LocalAgentTransportKind.OpenAIResponses,
+                new Uri("https://openrouter.ai/api/v1"))));
+        var anthropicTools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(
+            temp.Path,
+            provider: CreateProviderDescriptor(
+                LocalAgentTransportKind.AnthropicMessages,
+                new Uri("https://api.anthropic.com/v1/messages"))));
+
+        Assert.IsTrue(officialOpenAiTools.Any(static tool => tool.Spec.Name == "apply_patch"));
+        Assert.IsFalse(compatibleTools.Any(static tool => tool.Spec.Name == "apply_patch"));
+        Assert.IsFalse(anthropicTools.Any(static tool => tool.Spec.Name == "apply_patch"));
+        CollectionAssert.IsSubsetOf(
+            new[] { "write_file", "replace_in_file", "delete_file_or_dir", "rename_file_or_dir" },
+            compatibleTools.Select(static tool => tool.Spec.Name).ToArray());
+    }
+
+    [TestMethod]
+    public void CreateDefaultTools_AllowsProviderOverridesForBuiltInToolAvailability()
+    {
+        using var temp = TestTempDirectory.Create();
+        var provider = CreateProviderDescriptor(
+            LocalAgentTransportKind.OpenAIResponses,
+            new Uri("https://openrouter.ai/api/v1"),
+            new LocalAgentProviderProfile
+            {
+                BuiltInToolOverrides = new Dictionary<string, bool>(StringComparer.Ordinal)
+                {
+                    ["apply_patch"] = true,
+                    ["shell_command"] = false,
+                },
+            });
+
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(temp.Path, provider: provider));
+
+        Assert.IsTrue(tools.Any(static tool => tool.Spec.Name == "apply_patch"));
+        Assert.IsFalse(tools.Any(static tool => tool.Spec.Name == "shell_command"));
+    }
+
+    [TestMethod]
+    public async Task WriteAndReplaceTools_EditFilesDeterministically()
+    {
+        using var temp = TestTempDirectory.Create();
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(
+            temp.Path,
+            provider: CreateProviderDescriptor(LocalAgentTransportKind.AnthropicMessages, new Uri("https://api.anthropic.com/v1/messages"))));
+        var writeFile = tools.Single(static tool => tool.Spec.Name == "write_file");
+        var replaceInFile = tools.Single(static tool => tool.Spec.Name == "replace_in_file");
+
+        using var writeArgs = JsonDocument.Parse("""{"path":"src/sample.txt","content":"alpha\nbeta\n"}""");
+        var writeResult = await writeFile.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    writeFile.Spec.Name,
+                    writeArgs.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsTrue(writeResult.Success);
+        Assert.AreEqual("alpha\nbeta\n", await File.ReadAllTextAsync(Path.Combine(temp.Path, "src", "sample.txt")).ConfigureAwait(false));
+
+        using var replaceArgs = JsonDocument.Parse(
+            """
+            {
+              "path": "src/sample.txt",
+              "old_string": "alpha\r\nbeta\r\n",
+              "new_string": "gamma\r\ndelta\r\n"
+            }
+            """);
+        var replaceResult = await replaceInFile.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-2",
+                    replaceInFile.Spec.Name,
+                    replaceArgs.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsTrue(replaceResult.Success);
+        Assert.AreEqual("gamma\ndelta\n", await File.ReadAllTextAsync(Path.Combine(temp.Path, "src", "sample.txt")).ConfigureAwait(false));
+    }
+
+    [TestMethod]
+    public async Task ReplaceInFileTool_FailsWhenMultipleMatchesExistAndReplaceAllIsFalse()
+    {
+        using var temp = TestTempDirectory.Create();
+        await File.WriteAllTextAsync(Path.Combine(temp.Path, "sample.txt"), "dup\nkeep\ndup\n").ConfigureAwait(false);
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(temp.Path));
+        var tool = tools.Single(static tool => tool.Spec.Name == "replace_in_file");
+        using var args = JsonDocument.Parse("""{"path":"sample.txt","old_string":"dup","new_string":"new"}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(result.Success);
+        StringAssert.Contains(result.Error, "replace_all=true");
+    }
+
+    [TestMethod]
+    public async Task DeleteAndRenameTools_ModifyWorkingDirectoryEntries()
+    {
+        using var temp = TestTempDirectory.Create();
+        Directory.CreateDirectory(Path.Combine(temp.Path, "old-dir"));
+        await File.WriteAllTextAsync(Path.Combine(temp.Path, "old-dir", "data.txt"), "hello").ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(temp.Path, "delete-me.txt"), "bye").ConfigureAwait(false);
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(temp.Path));
+        var rename = tools.Single(static tool => tool.Spec.Name == "rename_file_or_dir");
+        var delete = tools.Single(static tool => tool.Spec.Name == "delete_file_or_dir");
+
+        using var renameArgs = JsonDocument.Parse("""{"old_path":"old-dir","new_path":"new-dir"}""");
+        var renameResult = await rename.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    rename.Spec.Name,
+                    renameArgs.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsTrue(renameResult.Success);
+        Assert.IsFalse(Directory.Exists(Path.Combine(temp.Path, "old-dir")));
+        Assert.IsTrue(File.Exists(Path.Combine(temp.Path, "new-dir", "data.txt")));
+
+        using var deleteArgs = JsonDocument.Parse("""{"path":"delete-me.txt"}""");
+        var deleteResult = await delete.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-2",
+                    delete.Spec.Name,
+                    deleteArgs.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsTrue(deleteResult.Success);
+        Assert.IsFalse(File.Exists(Path.Combine(temp.Path, "delete-me.txt")));
     }
 
     [TestMethod]
@@ -497,7 +657,8 @@ public sealed class LocalAgentToolsTests
         string workingDirectory,
         HttpClient? httpClient = null,
         AgentUserInputRequestHandler? onUserInputRequest = null,
-        AgentPermissionRequestHandler? onPermissionRequest = null)
+        AgentPermissionRequestHandler? onPermissionRequest = null,
+        LocalAgentProviderDescriptor? provider = null)
     {
         return new LocalAgentBuiltInToolOptions
         {
@@ -507,6 +668,24 @@ public sealed class LocalAgentToolsTests
             HttpClient = httpClient,
             OnPermissionRequest = onPermissionRequest ?? ((_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce))),
             OnUserInputRequest = onUserInputRequest,
+            Provider = provider ?? CreateProviderDescriptor(LocalAgentTransportKind.OpenAIResponses, null),
+        };
+    }
+
+    private static LocalAgentProviderDescriptor CreateProviderDescriptor(
+        LocalAgentTransportKind transportKind,
+        Uri? baseUri,
+        LocalAgentProviderProfile? profile = null)
+    {
+        return new LocalAgentProviderDescriptor
+        {
+            ProtocolFamily = transportKind.ToString(),
+            ProviderKey = "provider-1",
+            DisplayName = "Provider 1",
+            BackendId = AgentBackendIds.OpenAIResponses,
+            TransportKind = transportKind,
+            BaseUri = baseUri,
+            Profile = profile,
         };
     }
 

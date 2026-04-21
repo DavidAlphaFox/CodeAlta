@@ -150,4 +150,13 @@ public sealed record LocalAgentProviderProfile
     /// </summary>
     public IReadOnlyDictionary<string, object?> Flags { get; init; }
         = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Gets or initializes per-tool availability overrides for the local built-in tool set.
+    /// </summary>
+    /// <remarks>
+    /// Use this to explicitly enable or disable named built-in tools for a provider when the
+    /// default provider-based policy is not sufficient.
+    /// </remarks>
+    public IReadOnlyDictionary<string, bool>? BuiltInToolOverrides { get; init; }
 }
