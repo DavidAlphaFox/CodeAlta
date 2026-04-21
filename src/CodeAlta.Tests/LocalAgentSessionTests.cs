@@ -187,6 +187,91 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public async Task LocalAgentSession_SendAsync_ConvertsToolExceptionsIntoFailedToolResults()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider();
+        var summary = CreateSummary("session-tool-exception");
+        var state = CreateState("session-tool-exception");
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        using var schema = JsonDocument.Parse("""{"type":"object"}""");
+        var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                (_, _, _) =>
+                {
+                    using var arguments = JsonDocument.Parse("""{"url":"https://example.test/down"}""");
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [
+                                    new LocalAgentMessagePart.Text("Trying the network tool."),
+                                    new LocalAgentMessagePart.ToolCall("call-1", "explode", arguments.RootElement.Clone()),
+                                ]),
+                            Usage = CreateUsageSnapshot(5, 3),
+                            ProviderSessionId = "resp_tool_1",
+                        });
+                },
+                (request, _, _) =>
+                {
+                    var toolMessage = request.Conversation[^1];
+                    Assert.AreEqual(LocalAgentConversationRole.Tool, toolMessage.Role);
+                    var toolResult = Assert.IsInstanceOfType<LocalAgentMessagePart.ToolResult>(toolMessage.Parts.Single());
+                    Assert.IsFalse(toolResult.Result.Success);
+                    StringAssert.Contains(
+                        Assert.IsInstanceOfType<AgentToolResultItem.Text>(toolResult.Result.Items.Single()).Value,
+                        "Tool 'explode' failed: upstream failure");
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [new LocalAgentMessagePart.Text("Recovered after tool failure.")]),
+                            Usage = CreateUsageSnapshot(8, 4),
+                            ProviderSessionId = "resp_tool_2",
+                        });
+                }),
+            new AgentSessionCreateOptions
+            {
+                ProviderKey = provider.ProviderKey,
+                Model = "gpt-5.4",
+                WorkingDirectory = temp.Path,
+                OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                Tools =
+                [
+                    new AgentToolDefinition(
+                        new AgentToolSpec("explode", "Always fails", schema.RootElement.Clone()),
+                        static (_, _) => throw new InvalidOperationException("upstream failure")),
+                ],
+            });
+
+        _ = await session.SendAsync(
+                new AgentSendOptions
+                {
+                    Input = AgentInput.Text("Run the failing tool."),
+                })
+            .ConfigureAwait(false);
+
+        var history = await session.GetHistoryAsync().ConfigureAwait(false);
+        Assert.IsTrue(history.OfType<AgentRawEvent>().Any(static evt => evt.BackendEventType == "local.toolMessage"));
+        Assert.IsTrue(history.OfType<AgentActivityEvent>().Any(static evt =>
+            evt.ActivityId == "call-1" &&
+            evt.Phase == AgentActivityPhase.Failed &&
+            evt.Message is not null &&
+            evt.Message.Contains("Tool 'explode' failed: upstream failure", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
     public async Task LocalAgentSession_SendAsync_RefreshesEstimatedWindowUsageAfterToolOutputs()
     {
         using var temp = TestTempDirectory.Create();

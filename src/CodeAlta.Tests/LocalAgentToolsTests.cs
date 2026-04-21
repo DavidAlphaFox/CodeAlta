@@ -160,6 +160,123 @@ public sealed class LocalAgentToolsTests
     }
 
     [TestMethod]
+    public async Task WebGetTool_ReturnsFailureForHttpStatusErrors()
+    {
+        using var handler = new StubHttpMessageHandler(
+            new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                ReasonPhrase = "Not Found",
+                Content = new StringContent("missing"),
+            });
+        using var httpClient = new HttpClient(handler);
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(Environment.CurrentDirectory, httpClient: httpClient));
+        var tool = tools.Single(static tool => tool.Spec.Name == "webget");
+        using var args = JsonDocument.Parse("""{"url":"https://example.test/missing"}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual(result.Error, Assert.IsInstanceOfType<AgentToolResultItem.Text>(result.Items.Single()).Value);
+        StringAssert.Contains(result.Error, "HTTP 404");
+        StringAssert.Contains(result.Error, "https://example.test/missing");
+    }
+
+    [TestMethod]
+    public async Task WebGetTool_ReturnsFailureWhenRequestTimesOut()
+    {
+        using var handler = new StubHttpMessageHandler(
+            async (_, cancellationToken) =>
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(200), cancellationToken).ConfigureAwait(false);
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("late response"),
+                };
+            });
+        using var httpClient = new HttpClient(handler);
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(
+            Environment.CurrentDirectory,
+            httpClient: httpClient,
+            webGetTimeout: TimeSpan.FromMilliseconds(50)));
+        var tool = tools.Single(static tool => tool.Spec.Name == "webget");
+        using var args = JsonDocument.Parse("""{"url":"https://example.test/slow"}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(result.Success);
+        StringAssert.Contains(result.Error, "timed out");
+    }
+
+    [TestMethod]
+    public async Task ViewImageTool_ReturnsStructuredImageResultForLocalFiles()
+    {
+        using var temp = TestTempDirectory.Create();
+        var imagePath = Path.Combine(temp.Path, "sample.png");
+        await File.WriteAllBytesAsync(imagePath, [0x89, 0x50, 0x4E, 0x47]).ConfigureAwait(false);
+
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(temp.Path));
+        var tool = tools.Single(static tool => tool.Spec.Name == "view_image");
+        using var args = JsonDocument.Parse("""{"path":"sample.png"}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual(2, result.Items.Count);
+        StringAssert.Contains(Assert.IsInstanceOfType<AgentToolResultItem.Text>(result.Items[0]).Value, imagePath);
+        var imageUrl = Assert.IsInstanceOfType<AgentToolResultItem.ImageUrl>(result.Items[1]).Url;
+        StringAssert.StartsWith(imageUrl, "file://");
+    }
+
+    [TestMethod]
+    public async Task ViewImageTool_ReturnsFailureForDirectories()
+    {
+        using var temp = TestTempDirectory.Create();
+        var directoryPath = Path.Combine(temp.Path, "images");
+        Directory.CreateDirectory(directoryPath);
+
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(temp.Path));
+        var tool = tools.Single(static tool => tool.Spec.Name == "view_image");
+        using var args = JsonDocument.Parse("""{"path":"images"}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(result.Success);
+        StringAssert.Contains(result.Error, "is a directory");
+    }
+
+    [TestMethod]
     public async Task RequestUserInputTool_DelegatesToConfiguredHandler()
     {
         AgentUserInputRequest? observed = null;
@@ -658,7 +775,8 @@ public sealed class LocalAgentToolsTests
         HttpClient? httpClient = null,
         AgentUserInputRequestHandler? onUserInputRequest = null,
         AgentPermissionRequestHandler? onPermissionRequest = null,
-        LocalAgentProviderDescriptor? provider = null)
+        LocalAgentProviderDescriptor? provider = null,
+        TimeSpan? webGetTimeout = null)
     {
         return new LocalAgentBuiltInToolOptions
         {
@@ -669,6 +787,7 @@ public sealed class LocalAgentToolsTests
             OnPermissionRequest = onPermissionRequest ?? ((_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce))),
             OnUserInputRequest = onUserInputRequest,
             Provider = provider ?? CreateProviderDescriptor(LocalAgentTransportKind.OpenAIResponses, null),
+            WebGetTimeout = webGetTimeout ?? TimeSpan.FromSeconds(20),
         };
     }
 
@@ -689,9 +808,21 @@ public sealed class LocalAgentToolsTests
         };
     }
 
-    private sealed class StubHttpMessageHandler(HttpResponseMessage response) : HttpMessageHandler
+    private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
+        private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handler;
+
+        public StubHttpMessageHandler(HttpResponseMessage response)
+            : this((_, _) => Task.FromResult(response))
+        {
+        }
+
+        public StubHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler)
+        {
+            _handler = handler;
+        }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-            => Task.FromResult(response);
+            => _handler(request, cancellationToken);
     }
 }

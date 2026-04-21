@@ -320,12 +320,7 @@ public static class LocalAgentBuiltInToolFactory
 
         if (IsImagePath(resolvedPath))
         {
-            return Task.FromResult(new AgentToolResult(
-                true,
-                [
-                    new AgentToolResultItem.Text($"Image: {resolvedPath}"),
-                    new AgentToolResultItem.ImageUrl(new Uri(resolvedPath).AbsoluteUri),
-                ]));
+            return Task.FromResult(CreateLocalImageResult(resolvedPath));
         }
 
         var offset = Math.Max(1, GetOptionalInt(invocation.Arguments, "offset") ?? 1);
@@ -491,54 +486,75 @@ public static class LocalAgentBuiltInToolFactory
 
         var timeoutOverride = GetOptionalInt(invocation.Arguments, "timeoutSeconds");
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        linkedCts.CancelAfter(timeoutOverride is > 0 ? TimeSpan.FromSeconds(timeoutOverride.Value) : options.WebGetTimeout);
+        var effectiveTimeout = timeoutOverride is > 0 ? TimeSpan.FromSeconds(timeoutOverride.Value) : options.WebGetTimeout;
+        linkedCts.CancelAfter(effectiveTimeout);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-        using var response = await httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                linkedCts.Token)
-            .ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-
-        var mediaType = response.Content.Headers.ContentType?.MediaType;
-        if (mediaType is not null &&
-            !mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(mediaType, "application/xml", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(mediaType, "application/xhtml+xml", StringComparison.OrdinalIgnoreCase))
+        try
         {
-            return Failure($"Content type '{mediaType}' is not supported by webget.");
-        }
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-        await using var stream = await response.Content.ReadAsStreamAsync(linkedCts.Token).ConfigureAwait(false);
-        using var buffer = new MemoryStream(capacity: options.MaxWebGetBytes);
-        var rented = new byte[8192];
-        int read;
-        while ((read = await stream.ReadAsync(rented, linkedCts.Token).ConfigureAwait(false)) > 0)
-        {
-            if (buffer.Length + read > options.MaxWebGetBytes)
+            using var response = await httpClient.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    linkedCts.Token)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
             {
-                return Failure($"Response exceeded the {options.MaxWebGetBytes} byte limit.");
+                var reasonPhrase = string.IsNullOrWhiteSpace(response.ReasonPhrase)
+                    ? "Unknown Status"
+                    : response.ReasonPhrase;
+                return Failure(
+                    $"webget request to '{uri}' failed with HTTP {(int)response.StatusCode} ({reasonPhrase}).");
             }
 
-            buffer.Write(rented, 0, read);
-        }
+            var mediaType = response.Content.Headers.ContentType?.MediaType;
+            if (mediaType is not null &&
+                !mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(mediaType, "application/xml", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(mediaType, "application/xhtml+xml", StringComparison.OrdinalIgnoreCase))
+            {
+                return Failure($"Content type '{mediaType}' is not supported by webget.");
+            }
 
-        var text = Encoding.UTF8.GetString(buffer.ToArray());
-        if (string.Equals(mediaType, "text/html", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(mediaType, "application/xhtml+xml", StringComparison.OrdinalIgnoreCase))
+            await using var stream = await response.Content.ReadAsStreamAsync(linkedCts.Token).ConfigureAwait(false);
+            using var buffer = new MemoryStream(capacity: options.MaxWebGetBytes);
+            var rented = new byte[8192];
+            int read;
+            while ((read = await stream.ReadAsync(rented, linkedCts.Token).ConfigureAwait(false)) > 0)
+            {
+                if (buffer.Length + read > options.MaxWebGetBytes)
+                {
+                    return Failure($"Response exceeded the {options.MaxWebGetBytes} byte limit.");
+                }
+
+                buffer.Write(rented, 0, read);
+            }
+
+            var text = Encoding.UTF8.GetString(buffer.ToArray());
+            if (string.Equals(mediaType, "text/html", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(mediaType, "application/xhtml+xml", StringComparison.OrdinalIgnoreCase))
+            {
+                text = SimplifyHtml(text);
+            }
+
+            var trimmedText = text.Trim();
+            return new AgentToolResult(
+                true,
+                [new AgentToolResultItem.Text(trimmedText.Length == 0 ? "(empty response body)" : trimmedText)]);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            text = SimplifyHtml(text);
+            return Failure($"webget timed out after {effectiveTimeout.TotalSeconds:0.###} seconds.");
         }
-
-        return new AgentToolResult(
-            true,
-            [new AgentToolResultItem.Text(text.Trim())]);
+        catch (HttpRequestException ex)
+        {
+            return Failure($"webget failed to fetch '{uri}': {ex.Message}");
+        }
     }
 
     private static async Task<AgentToolResult> ShellCommandAsync(
@@ -967,6 +983,11 @@ public static class LocalAgentBuiltInToolFactory
 
         var path = GetRequiredString(invocation.Arguments, "path");
         var resolvedPath = ResolvePath(options.WorkingDirectory, path);
+        if (Directory.Exists(resolvedPath))
+        {
+            return Task.FromResult(Failure($"Image path '{resolvedPath}' is a directory."));
+        }
+
         if (!File.Exists(resolvedPath))
         {
             return Task.FromResult(Failure($"Image '{resolvedPath}' was not found."));
@@ -977,12 +998,7 @@ public static class LocalAgentBuiltInToolFactory
             return Task.FromResult(Failure($"'{resolvedPath}' is not a supported image path."));
         }
 
-        return Task.FromResult(new AgentToolResult(
-            true,
-            [
-                new AgentToolResultItem.Text($"Image: {resolvedPath}"),
-                new AgentToolResultItem.ImageUrl(new Uri(resolvedPath).AbsoluteUri),
-            ]));
+        return Task.FromResult(CreateLocalImageResult(resolvedPath));
     }
 
     private static async Task<AgentToolResult> RequestUserInputAsync(
@@ -1042,6 +1058,21 @@ public static class LocalAgentBuiltInToolFactory
 
     private static AgentToolResult SuccessResult(string message)
         => new(true, [new AgentToolResultItem.Text(message)]);
+
+    private static AgentToolResult CreateLocalImageResult(string resolvedPath)
+    {
+        if (!Uri.TryCreate(resolvedPath, UriKind.Absolute, out var imageUri))
+        {
+            return Failure($"Could not create a file URI for image '{resolvedPath}'.");
+        }
+
+        return new AgentToolResult(
+            true,
+            [
+                new AgentToolResultItem.Text($"Image: {resolvedPath}"),
+                new AgentToolResultItem.ImageUrl(imageUri.AbsoluteUri),
+            ]);
+    }
 
     private static bool ShouldIncludeBuiltInTool(LocalAgentBuiltInToolOptions options, string toolName)
     {

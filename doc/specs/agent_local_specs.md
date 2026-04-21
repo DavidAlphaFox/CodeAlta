@@ -359,6 +359,7 @@ Optional later additions:
 - should be usable for documentation pages, raw text resources, and simple HTTP retrieval
 - it is distinct from search because the agent often already has the target URL
 - it should support basic safeguards such as size limits, content-type checks, and timeout controls
+- network failures, HTTP errors, and timeouts should come back as normal tool results with clear error text rather than breaking the tool-call round trip
 
 Deterministic edit tools for all providers
 - `write_file` should replace a file's full contents in one call
@@ -405,6 +406,7 @@ Recommended `apply_patch` grammar and guidance:
 - `*** End of File` should bias matching toward EOF when a repeated context block exists.
 
 Every tool call and tool result must round-trip through `events.jsonl`.
+Tool execution failures should be converted into structured failed tool results whenever possible so provider conversations do not end up with orphaned tool calls.
 
 ## 21. Current implementation mapping
 

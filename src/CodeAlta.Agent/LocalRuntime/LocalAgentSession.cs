@@ -264,42 +264,55 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
 
                     using var progressGate = new SemaphoreSlim(1, 1);
                     var toolOutputContentId = $"{toolCall.CallId}:output";
-                    var result = await toolDefinition.Handler(
-                            new AgentToolInvocation(
-                                BackendId,
-                                SessionId,
-                                toolCall.CallId,
-                                toolDefinition.Spec.Name,
-                                toolCall.Arguments,
-                                async (update, cancellationToken) =>
-                                {
-                                    if (string.IsNullOrEmpty(update.Delta))
+                    AgentToolResult result;
+                    try
+                    {
+                        result = await toolDefinition.Handler(
+                                new AgentToolInvocation(
+                                    BackendId,
+                                    SessionId,
+                                    toolCall.CallId,
+                                    toolDefinition.Spec.Name,
+                                    toolCall.Arguments,
+                                    async (update, cancellationToken) =>
                                     {
-                                        return;
-                                    }
+                                        if (string.IsNullOrEmpty(update.Delta))
+                                        {
+                                            return;
+                                        }
 
-                                    await progressGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-                                    try
-                                    {
-                                        var deltaEvent = new AgentContentDeltaEvent(
-                                            BackendId,
-                                            SessionId,
-                                            DateTimeOffset.UtcNow,
-                                            runId,
-                                            AgentContentKind.ToolOutput,
-                                            toolOutputContentId,
-                                            toolCall.CallId,
-                                            update.Delta,
-                                            update.Details);
-                                        await AppendEventsAsync([deltaEvent], LocalAgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
-                                    }
-                                    finally
-                                    {
-                                        progressGate.Release();
-                                    }
-                                }),
-                            linkedCts.Token)
-                        .ConfigureAwait(false);
+                                        await progressGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                                        try
+                                        {
+                                            var deltaEvent = new AgentContentDeltaEvent(
+                                                BackendId,
+                                                SessionId,
+                                                DateTimeOffset.UtcNow,
+                                                runId,
+                                                AgentContentKind.ToolOutput,
+                                                toolOutputContentId,
+                                                toolCall.CallId,
+                                                update.Delta,
+                                                update.Details);
+                                            await AppendEventsAsync([deltaEvent], LocalAgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
+                                        }
+                                        finally
+                                        {
+                                            progressGate.Release();
+                                        }
+                                    }),
+                                linkedCts.Token)
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException ex) when (!linkedCts.IsCancellationRequested)
+                    {
+                        result = CreateToolExecutionFailureResult(toolCall.Name, ex);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        result = CreateToolExecutionFailureResult(toolCall.Name, ex);
+                    }
+
                     var toolMessage = new LocalAgentConversationMessage(
                         LocalAgentConversationRole.Tool,
                         [new LocalAgentMessagePart.ToolResult(toolCall.CallId, result)]);
@@ -1398,6 +1411,18 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         return string.IsNullOrWhiteSpace(rendered)
             ? (result.Error ?? "(no output)")
             : rendered;
+    }
+
+    private static AgentToolResult CreateToolExecutionFailureResult(string toolName, Exception exception)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(toolName);
+        ArgumentNullException.ThrowIfNull(exception);
+
+        var detail = string.IsNullOrWhiteSpace(exception.Message)
+            ? exception.GetType().Name
+            : exception.Message;
+        var message = $"Tool '{toolName}' failed: {detail}";
+        return new AgentToolResult(false, [new AgentToolResultItem.Text(message)], message);
     }
 
     private static string? ExtractAssistantSummary(LocalAgentConversationMessage message)
