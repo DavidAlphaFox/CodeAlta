@@ -360,6 +360,8 @@ Optional later additions:
 - should be usable for documentation pages, raw text resources, and simple HTTP retrieval
 - it is distinct from search because the agent often already has the target URL
 - it should support basic safeguards such as size limits, content-type checks, and timeout controls
+- it should clearly document that it returns response body text rather than raw HTTP metadata
+- it should clearly document supported schemes/content types and the configured size and timeout limits
 - network failures, HTTP errors, and timeouts should come back as normal tool results with clear error text rather than breaking the tool-call round trip
 
 Deterministic edit tools for all providers
@@ -370,6 +372,11 @@ Deterministic edit tools for all providers
 - these tools should stay easy to describe, easy to call, and return clear failure messages
 - path-like tool arguments should resolve relative paths from the session working directory while still accepting absolute paths unchanged
 - `read_file` should support negative line offsets to read from the end of a text file (`-1` = last line)
+- `read_file` offsets are 1-based, so `0` should be rejected explicitly rather than silently acting like an empty range
+- `read_file` descriptions should document the default line limit used when `limit` is omitted
+- `list_dir` should fail clearly when the target path exists but is not a directory
+- `list_dir` should use an explicit empty-directory marker instead of returning a visually blank result
+- `grep` should document that matching is case-insensitive by default and that likely-binary/image files are skipped
 - text-oriented tools such as `read_file`, `replace_in_file`, `grep`, and `apply_patch` should reject or skip likely-binary files instead of dumping binary content into the conversation
 
 `apply_patch` for official OpenAI providers

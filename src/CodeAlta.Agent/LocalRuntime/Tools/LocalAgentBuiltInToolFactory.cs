@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -17,6 +18,7 @@ namespace CodeAlta.Agent.LocalRuntime.Tools;
 public static class LocalAgentBuiltInToolFactory
 {
     private static readonly FileTreeWalker FileTreeWalker = new();
+    private const string SupportedWebContentTypesDescription = "text/*, application/json, application/xml, and application/xhtml+xml";
     private const string WriteFileToolDescription =
         "Write an entire text file in one deterministic operation. Creates parent directories as needed and replaces any existing file.";
     private const string ReplaceInFileToolDescription =
@@ -27,75 +29,6 @@ public static class LocalAgentBuiltInToolFactory
         "Rename or move a file or directory inside the working directory.";
     private const string ApplyPatchToolDescription =
         "Use the `apply_patch` tool to edit files.";
-
-    private static readonly JsonElement ReadFileSchema = ParseSchema(
-        """
-        {
-          "type": "object",
-          "properties": {
-            "path": { "type": "string", "description": "Path to the file to read." },
-            "offset": { "type": "integer", "description": "1-based line offset. Use a negative value to count from the end (-1 is the last line)." },
-            "limit": { "type": "integer", "description": "Maximum number of lines to return.", "minimum": 1 }
-          },
-          "required": ["path"],
-          "additionalProperties": false
-        }
-        """);
-
-    private static readonly JsonElement ListDirSchema = ParseSchema(
-        """
-        {
-          "type": "object",
-          "properties": {
-            "path": { "type": "string", "description": "Directory to list. Defaults to the session working directory." }
-          },
-          "additionalProperties": false
-        }
-        """);
-
-    private static readonly JsonElement GrepSchema = ParseSchema(
-        """
-        {
-          "type": "object",
-          "properties": {
-            "pattern": { "type": "string", "description": "Regular expression to search within each line (.NET regex syntax)." },
-            "path": { "type": "string", "description": "File or directory to search. Defaults to the session working directory." },
-            "glob": { "type": "string", "description": "Optional file-name glob like *.cs." },
-            "caseSensitive": { "type": "boolean", "description": "Whether matching is case-sensitive." },
-            "maxMatches": { "type": "integer", "description": "Maximum matches to return.", "minimum": 1 }
-          },
-          "required": ["pattern"],
-          "additionalProperties": false
-        }
-        """);
-
-    private static readonly JsonElement WebGetSchema = ParseSchema(
-        """
-        {
-          "type": "object",
-          "properties": {
-            "url": { "type": "string", "description": "Absolute URL to fetch." },
-            "timeoutSeconds": { "type": "integer", "description": "Optional timeout override in seconds.", "minimum": 1 }
-          },
-          "required": ["url"],
-          "additionalProperties": false
-        }
-        """);
-
-    private static readonly JsonElement ShellCommandSchema = ParseSchema(
-        """
-        {
-          "type": "object",
-          "properties": {
-            "command": { "type": "string", "description": "Shell command to execute." },
-            "workdir": { "type": "string", "description": "Optional working directory override." },
-            "timeoutMs": { "type": "integer", "description": "Optional timeout in milliseconds.", "minimum": 1 },
-            "login": { "type": "boolean", "description": "Whether to use login-shell semantics on Unix shells that support it. Ignored on Windows, where pwsh always runs with -NoProfile for predictable output." }
-          },
-          "required": ["command"],
-          "additionalProperties": false
-        }
-        """);
 
     private static readonly JsonElement WriteFileSchema = ParseSchema(
         """
@@ -218,32 +151,32 @@ public static class LocalAgentBuiltInToolFactory
             new AgentToolDefinition(
                 new AgentToolSpec(
                     "read_file",
-                    "Read a local text file by line number; negative offsets count from the end.",
-                    ReadFileSchema),
+                    $"Read a local text file by line number. Offsets are 1-based; use a negative offset to count from the end (-1 is the last line). Omitting limit returns up to {options.DefaultReadFileLineLimit} lines by default.",
+                    CreateReadFileSchema(options)),
                 (invocation, cancellationToken) => ReadFileAsync(options, invocation, cancellationToken)),
             new AgentToolDefinition(
                 new AgentToolSpec(
                     "list_dir",
-                    "List the direct children of a directory.",
-                    ListDirSchema),
+                    "List the direct children of a directory as [dir] and [file] entries.",
+                    CreateListDirSchema()),
                 (invocation, cancellationToken) => ListDirectoryAsync(options, invocation, cancellationToken)),
             new AgentToolDefinition(
                 new AgentToolSpec(
                     "grep",
-                    "Search files for line-based matches using a .NET regular expression.",
-                    GrepSchema),
+                    $"Search files for line-based matches using a .NET regular expression. Recurses into directories, defaults to case-insensitive matching, and skips likely-binary files.",
+                    CreateGrepSchema(options)),
                 (invocation, cancellationToken) => GrepAsync(options, invocation, cancellationToken)),
             new AgentToolDefinition(
                 new AgentToolSpec(
                     "webget",
-                    "Fetch web content from a known URL with basic size and content-type safeguards.",
-                    WebGetSchema),
+                    $"Fetch text-like web content from a known absolute URL. Returns the response body text only after content-type checks and a {options.MaxWebGetBytes.ToString(CultureInfo.InvariantCulture)}-byte limit; default timeout is {FormatSeconds(options.WebGetTimeout)} seconds.",
+                    CreateWebGetSchema(options)),
                 (invocation, cancellationToken) => WebGetAsync(options, httpClient, invocation, cancellationToken)),
             new AgentToolDefinition(
                 new AgentToolSpec(
                     "shell_command",
-                    "Execute a local shell command using the platform shell after permission approval. On Windows, pwsh runs with -NoProfile for predictable output.",
-                    ShellCommandSchema),
+                    "Execute a local shell command using the platform shell, subject to host approval. Some hosts may auto-approve. Returns exit_code, working_directory, stdout, and stderr. On Windows, pwsh runs with -NoProfile for predictable output.",
+                    CreateShellCommandSchema()),
                 (invocation, cancellationToken) => ShellCommandAsync(options, invocation, cancellationToken)),
             new AgentToolDefinition(
                 new AgentToolSpec(
@@ -303,6 +236,11 @@ public static class LocalAgentBuiltInToolFactory
         }
 
         var offset = GetOptionalInt(invocation.Arguments, "offset") ?? 1;
+        if (offset == 0)
+        {
+            return Task.FromResult(Failure("The 'offset' value must be >= 1, or negative to count from the end. 0 is not allowed."));
+        }
+
         var requestedLimit = GetOptionalInt(invocation.Arguments, "limit") ?? options.DefaultReadFileLineLimit;
         var limit = Math.Clamp(requestedLimit, 1, options.MaxReadFileLineLimit);
         var startLine = offset >= 1 ? offset : GetStartLineFromEnd(resolvedPath, offset, cancellationToken);
@@ -350,6 +288,11 @@ public static class LocalAgentBuiltInToolFactory
     {
         var path = GetOptionalString(invocation.Arguments, "path");
         var resolvedPath = ResolvePath(options.WorkingDirectory, path);
+        if (File.Exists(resolvedPath))
+        {
+            return Task.FromResult(Failure($"Path '{resolvedPath}' is not a directory."));
+        }
+
         if (!Directory.Exists(resolvedPath))
         {
             return Task.FromResult(Failure($"Directory '{resolvedPath}' was not found."));
@@ -362,11 +305,12 @@ public static class LocalAgentBuiltInToolFactory
                 var name = Path.GetFileName(entry);
                 return Directory.Exists(entry) ? $"[dir]  {name}" : $"[file] {name}";
             })
-            .OrderBy(static entry => entry, StringComparer.OrdinalIgnoreCase);
+            .OrderBy(static entry => entry, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         return Task.FromResult(new AgentToolResult(
             true,
-            [new AgentToolResultItem.Text(string.Join(Environment.NewLine, entries))]));
+            [new AgentToolResultItem.Text(entries.Length == 0 ? "(empty directory)" : string.Join(Environment.NewLine, entries))]));
     }
 
     private static Task<AgentToolResult> GrepAsync(
@@ -482,6 +426,12 @@ public static class LocalAgentBuiltInToolFactory
             return Failure($"'{url}' is not a valid absolute URL.");
         }
 
+        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return Failure($"The '{uri.Scheme}' scheme is not supported by webget. Use http or https.");
+        }
+
         var timeoutOverride = GetOptionalInt(invocation.Arguments, "timeoutSeconds");
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var effectiveTimeout = timeoutOverride is > 0 ? TimeSpan.FromSeconds(timeoutOverride.Value) : options.WebGetTimeout;
@@ -510,13 +460,9 @@ public static class LocalAgentBuiltInToolFactory
             }
 
             var mediaType = response.Content.Headers.ContentType?.MediaType;
-            if (mediaType is not null &&
-                !mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(mediaType, "application/xml", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(mediaType, "application/xhtml+xml", StringComparison.OrdinalIgnoreCase))
+            if (mediaType is not null && !IsSupportedWebContentType(mediaType))
             {
-                return Failure($"Content type '{mediaType}' is not supported by webget.");
+                return Failure($"Content type '{mediaType}' is not supported by webget. Supported types are {SupportedWebContentTypesDescription}.");
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(linkedCts.Token).ConfigureAwait(false);
@@ -527,7 +473,7 @@ public static class LocalAgentBuiltInToolFactory
             {
                 if (buffer.Length + read > options.MaxWebGetBytes)
                 {
-                    return Failure($"Response exceeded the {options.MaxWebGetBytes} byte limit.");
+                    return Failure($"Response exceeded the {options.MaxWebGetBytes.ToString(CultureInfo.InvariantCulture)} byte limit enforced by webget.");
                 }
 
                 buffer.Write(rented, 0, read);
@@ -1292,8 +1238,95 @@ public static class LocalAgentBuiltInToolFactory
             startInfo.ArgumentList.Add(argument);
         }
 
+        startInfo.Environment["NO_COLOR"] = "1";
+        startInfo.Environment["CLICOLOR"] = "0";
+        startInfo.Environment["CLICOLOR_FORCE"] = "0";
+
         return startInfo;
     }
+
+    private static JsonElement CreateReadFileSchema(LocalAgentBuiltInToolOptions options)
+        => ParseSchema(
+            $$"""
+            {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "description": "Path to the file to read." },
+                "offset": { "type": "integer", "description": "1-based line offset. Use a negative value to count from the end (-1 is the last line). 0 is invalid." },
+                "limit": { "type": "integer", "description": "Maximum number of lines to return. Defaults to {{options.DefaultReadFileLineLimit}} and is capped at {{options.MaxReadFileLineLimit}}.", "minimum": 1 }
+              },
+              "required": ["path"],
+              "additionalProperties": false
+            }
+            """);
+
+    private static JsonElement CreateListDirSchema()
+        => ParseSchema(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "description": "Directory to list. Defaults to the session working directory." }
+              },
+              "additionalProperties": false
+            }
+            """);
+
+    private static JsonElement CreateGrepSchema(LocalAgentBuiltInToolOptions options)
+        => ParseSchema(
+            $$"""
+            {
+              "type": "object",
+              "properties": {
+                "pattern": { "type": "string", "description": "Regular expression to search within each line (.NET regex syntax)." },
+                "path": { "type": "string", "description": "File or directory to search. Defaults to the session working directory." },
+                "glob": { "type": "string", "description": "Optional file-name glob like *.cs. If it includes path separators, it is matched against each file's relative path." },
+                "caseSensitive": { "type": "boolean", "description": "Whether matching is case-sensitive. Defaults to false." },
+                "maxMatches": { "type": "integer", "description": "Maximum matches to return. Defaults to {{options.MaxGrepMatches}}.", "minimum": 1 }
+              },
+              "required": ["pattern"],
+              "additionalProperties": false
+            }
+            """);
+
+    private static JsonElement CreateWebGetSchema(LocalAgentBuiltInToolOptions options)
+        => ParseSchema(
+            $$"""
+            {
+              "type": "object",
+              "properties": {
+                "url": { "type": "string", "description": "Absolute http or https URL to fetch. Returns the response body text only after webget's content-type and size checks." },
+                "timeoutSeconds": { "type": "integer", "description": "Optional timeout override in seconds. Defaults to {{FormatSeconds(options.WebGetTimeout)}} seconds.", "minimum": 1 }
+              },
+              "required": ["url"],
+              "additionalProperties": false
+            }
+            """);
+
+    private static JsonElement CreateShellCommandSchema()
+        => ParseSchema(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "command": { "type": "string", "description": "Shell command to execute." },
+                "workdir": { "type": "string", "description": "Optional working directory override. Defaults to the session working directory." },
+                "timeoutMs": { "type": "integer", "description": "Optional timeout in milliseconds.", "minimum": 1 },
+                "login": { "type": "boolean", "description": "Whether to use login-shell semantics on Unix shells that support it. Ignored on Windows, where pwsh always runs with -NoProfile for predictable output." }
+              },
+              "required": ["command"],
+              "additionalProperties": false
+            }
+            """);
+
+    private static bool IsSupportedWebContentType(string mediaType)
+        => mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(mediaType, "application/xml", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(mediaType, "application/xhtml+xml", StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatSeconds(TimeSpan value)
+        => value.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture);
 
     private static string FormatShellCommandOutput(int exitCode, string stdout, string stderr, string workdir)
     {

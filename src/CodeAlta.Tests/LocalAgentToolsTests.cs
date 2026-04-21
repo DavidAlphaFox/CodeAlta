@@ -66,6 +66,31 @@ public sealed class LocalAgentToolsTests
     }
 
     [TestMethod]
+    public async Task ReadFileTool_ReturnsFailureForOffsetZero()
+    {
+        using var temp = TestTempDirectory.Create();
+        var filePath = Path.Combine(temp.Path, "sample.txt");
+        await File.WriteAllLinesAsync(filePath, ["alpha", "beta"]).ConfigureAwait(false);
+
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(temp.Path));
+        var tool = tools.Single(static tool => tool.Spec.Name == "read_file");
+        using var args = JsonDocument.Parse("""{"path":"sample.txt","offset":0}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(result.Success);
+        StringAssert.Contains(result.Error, "0 is not allowed");
+    }
+
+    [TestMethod]
     public async Task ReadFileTool_AcceptsAbsolutePath()
     {
         using var temp = TestTempDirectory.Create();
@@ -144,6 +169,55 @@ public sealed class LocalAgentToolsTests
         Assert.IsTrue(result.Success);
         var output = Assert.IsInstanceOfType<AgentToolResultItem.Text>(result.Items.Single()).Value;
         StringAssert.Contains(output, "[file] sample.txt");
+    }
+
+    [TestMethod]
+    public async Task ListDirTool_ReturnsEmptyDirectoryMarker()
+    {
+        using var temp = TestTempDirectory.Create();
+        var folderPath = Path.Combine(temp.Path, "empty");
+        Directory.CreateDirectory(folderPath);
+
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(temp.Path));
+        var tool = tools.Single(static tool => tool.Spec.Name == "list_dir");
+        using var args = JsonDocument.Parse("""{"path":"empty"}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual("(empty directory)", Assert.IsInstanceOfType<AgentToolResultItem.Text>(result.Items.Single()).Value);
+    }
+
+    [TestMethod]
+    public async Task ListDirTool_ReturnsFailureWhenPathIsFile()
+    {
+        using var temp = TestTempDirectory.Create();
+        await File.WriteAllTextAsync(Path.Combine(temp.Path, "sample.txt"), "hello").ConfigureAwait(false);
+
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(temp.Path));
+        var tool = tools.Single(static tool => tool.Spec.Name == "list_dir");
+        using var args = JsonDocument.Parse("""{"path":"sample.txt"}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(result.Success);
+        StringAssert.Contains(result.Error, "is not a directory");
     }
 
     [TestMethod]
@@ -328,6 +402,29 @@ public sealed class LocalAgentToolsTests
 
         Assert.IsFalse(result.Success);
         StringAssert.Contains(result.Error, "timed out");
+    }
+
+    [TestMethod]
+    public async Task WebGetTool_RejectsUnsupportedSchemes()
+    {
+        using var toolsTemp = TestTempDirectory.Create();
+        var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(toolsTemp.Path));
+        var tool = tools.Single(static tool => tool.Spec.Name == "webget");
+        using var args = JsonDocument.Parse("""{"url":"file:///tmp/example.txt"}""");
+
+        var result = await tool.Handler(
+                new AgentToolInvocation(
+                    AgentBackendIds.OpenAIResponses,
+                    "session-1",
+                    "tool-1",
+                    tool.Spec.Name,
+                    args.RootElement.Clone()),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(result.Success);
+        StringAssert.Contains(result.Error, "scheme is not supported");
+        StringAssert.Contains(result.Error, "http or https");
     }
 
     [TestMethod]
@@ -552,6 +649,9 @@ public sealed class LocalAgentToolsTests
         using var temp = TestTempDirectory.Create();
         var tools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(temp.Path));
         var readFile = tools.Single(static tool => tool.Spec.Name == "read_file");
+        var grep = tools.Single(static tool => tool.Spec.Name == "grep");
+        var webGet = tools.Single(static tool => tool.Spec.Name == "webget");
+        var shellCommand = tools.Single(static tool => tool.Spec.Name == "shell_command");
         var applyPatch = tools.Single(static tool => tool.Spec.Name == "apply_patch");
 
         var readFileSchema = LocalAgentToolBridge.CreateOpenAIStrictInputSchema(readFile.Spec.InputSchema);
@@ -565,6 +665,25 @@ public sealed class LocalAgentToolsTests
         StringAssert.Contains(
             readFileSchema.GetProperty("properties").GetProperty("offset").GetProperty("description").GetString(),
             "negative value to count from the end");
+        StringAssert.Contains(readFile.Spec.Description, "Omitting limit returns up to");
+        StringAssert.Contains(
+            readFileSchema.GetProperty("properties").GetProperty("offset").GetProperty("description").GetString(),
+            "0 is invalid");
+
+        var grepSchema = LocalAgentToolBridge.CreateOpenAIStrictInputSchema(grep.Spec.InputSchema);
+        StringAssert.Contains(grep.Spec.Description, "defaults to case-insensitive");
+        StringAssert.Contains(
+            grepSchema.GetProperty("properties").GetProperty("caseSensitive").GetProperty("description").GetString(),
+            "Defaults to false");
+
+        var webGetSchema = LocalAgentToolBridge.CreateOpenAIStrictInputSchema(webGet.Spec.InputSchema);
+        StringAssert.Contains(webGet.Spec.Description, "response body text only");
+        StringAssert.Contains(
+            webGetSchema.GetProperty("properties").GetProperty("timeoutSeconds").GetProperty("description").GetString(),
+            "Defaults to");
+
+        StringAssert.Contains(shellCommand.Spec.Description, "Some hosts may auto-approve");
+        StringAssert.Contains(shellCommand.Spec.Description, "exit_code");
 
         var applyPatchSchema = LocalAgentToolBridge.CreateOpenAIStrictInputSchema(applyPatch.Spec.InputSchema);
         Assert.AreEqual("Use the `apply_patch` tool to edit files.", applyPatch.Spec.Description);
