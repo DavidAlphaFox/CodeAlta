@@ -49,6 +49,7 @@
     <PackageReference Include="XenoAtom.CommandLine.Terminal" />
     <PackageReference Include="XenoAtom.Logging.Terminal" />
     <PackageReference Include="XenoAtom.Terminal.UI" />
+    <PackageReference Include="XenoAtom.Terminal.UI.Extensions.CodeEditor.TextMateSharp" />
     <PackageReference Include="XenoAtom.Terminal.UI.Extensions.Markdown" />
     <PackageReference Include="XenoAtom.Terminal.UI.Extensions.Screenshot" />
   </ItemGroup>
