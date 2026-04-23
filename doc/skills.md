@@ -40,6 +40,10 @@ Codex and Copilot backends manage their own native skills. CodeAlta therefore do
 
 Activated local-runtime skills are recorded in the session journal so thread info can show loaded skills after resume. If a previously loaded skill is missing on disk, CodeAlta preserves the history and reports the missing path.
 
+## Browsing skills in the UI
+
+Use `/skills` or `/skill`, the command palette entry, or `Ctrl+G Ctrl+K` to open the skills browser. The browser can show combined, current-project, or user/global discovery scopes; it includes source kind, validation state, model visibility, shadowing, provenance paths, diagnostics, and a refresh action. Use **Open SKILL.md** to open the selected skill in the existing editor.
+
 ## Validation and collisions
 
 Discovery validates frontmatter, naming, required descriptions, resource paths, and duplicate names. Higher-precedence skills win; lower-precedence duplicates are kept inspectable as shadowed skills but are not advertised to the model.

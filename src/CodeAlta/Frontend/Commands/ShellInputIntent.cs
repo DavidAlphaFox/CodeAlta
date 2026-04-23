@@ -22,6 +22,8 @@ internal sealed record OpenModelProvidersIntent : ShellInputIntent;
 
 internal sealed record OpenFileEditorIntent : ShellInputIntent;
 
+internal sealed record OpenSkillsIntent : ShellInputIntent;
+
 internal sealed record OpenSessionUsageIntent : ShellInputIntent;
 
 internal sealed record OpenThreadInfoIntent : ShellInputIntent;

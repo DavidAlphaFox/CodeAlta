@@ -16,6 +16,7 @@ internal sealed class ShellInputCoordinator
     private readonly Func<string?, Task> _showOpenFolderAsync;
     private readonly Func<Task> _openModelProvidersAsync;
     private readonly Func<Task> _openFileEditorAsync;
+    private readonly Func<Task> _openSkillsAsync;
     private readonly Func<Task> _focusSidebarAsync;
     private readonly Func<Task> _focusPromptAsync;
     private readonly Func<Task> _showSessionUsageAsync;
@@ -39,6 +40,7 @@ internal sealed class ShellInputCoordinator
         Func<string?, Task> showOpenFolderAsync,
         Func<Task> openModelProvidersAsync,
         Func<Task> openFileEditorAsync,
+        Func<Task> openSkillsAsync,
         Func<Task> focusSidebarAsync,
         Func<Task> focusPromptAsync,
         Func<Task> showSessionUsageAsync,
@@ -61,6 +63,7 @@ internal sealed class ShellInputCoordinator
         ArgumentNullException.ThrowIfNull(showOpenFolderAsync);
         ArgumentNullException.ThrowIfNull(openModelProvidersAsync);
         ArgumentNullException.ThrowIfNull(openFileEditorAsync);
+        ArgumentNullException.ThrowIfNull(openSkillsAsync);
         ArgumentNullException.ThrowIfNull(focusSidebarAsync);
         ArgumentNullException.ThrowIfNull(focusPromptAsync);
         ArgumentNullException.ThrowIfNull(showSessionUsageAsync);
@@ -83,6 +86,7 @@ internal sealed class ShellInputCoordinator
         _showOpenFolderAsync = showOpenFolderAsync;
         _openModelProvidersAsync = openModelProvidersAsync;
         _openFileEditorAsync = openFileEditorAsync;
+        _openSkillsAsync = openSkillsAsync;
         _focusSidebarAsync = focusSidebarAsync;
         _focusPromptAsync = focusPromptAsync;
         _showSessionUsageAsync = showSessionUsageAsync;
@@ -197,6 +201,10 @@ internal sealed class ShellInputCoordinator
 
             case OpenFileEditorIntent:
                 await _openFileEditorAsync();
+                return;
+
+            case OpenSkillsIntent:
+                await _openSkillsAsync();
                 return;
 
             case FocusSidebarIntent:

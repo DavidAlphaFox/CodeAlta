@@ -40,6 +40,8 @@ public sealed class ShellInputRouterTests
         Assert.IsInstanceOfType<OpenCommandPaletteIntent>(_router.Route("/command_palette", steerRequested: false));
         Assert.IsInstanceOfType<OpenFolderIntent>(_router.Route("/open", steerRequested: false));
         Assert.IsInstanceOfType<OpenFileEditorIntent>(_router.Route("/edit", steerRequested: false));
+        Assert.IsInstanceOfType<OpenSkillsIntent>(_router.Route("/skills", steerRequested: false));
+        Assert.IsInstanceOfType<OpenSkillsIntent>(_router.Route("/skill", steerRequested: false));
         Assert.IsInstanceOfType<FocusSidebarIntent>(_router.Route("/go_to_sidebar", steerRequested: false));
         Assert.IsInstanceOfType<FocusPromptIntent>(_router.Route("/go_to_prompt", steerRequested: false));
         Assert.IsInstanceOfType<OpenSessionUsageIntent>(_router.Route("/context_usage", steerRequested: false));

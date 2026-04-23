@@ -17,6 +17,10 @@ internal static class ShellCommandCatalog
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
         new KeyGesture(TerminalChar.CtrlM, TerminalModifiers.Ctrl));
 
+    public static readonly KeySequence SkillsShortcutSequence = new(
+        new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
+        new KeyGesture(TerminalChar.CtrlK, TerminalModifiers.Ctrl));
+
     public static readonly KeySequence SessionUsageShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
         new KeyGesture(TerminalChar.CtrlU, TerminalModifiers.Ctrl));
@@ -82,6 +86,17 @@ internal static class ShellCommandCatalog
             ShellCommandAvailability.Always,
             CommandName: "acp_agents",
             Aliases: ["acp"],
+            ShowInCommandBar: true),
+        new(
+            "CodeAlta.Skills.Manage",
+            "Skills",
+            "Browse discovered skills, validation diagnostics, source precedence, and provenance.",
+            ShellCommandHelpCategory.General,
+            ShellCommandScope.AnyShell,
+            ShellCommandAvailability.Always,
+            Sequence: SkillsShortcutSequence,
+            CommandName: "skills",
+            Aliases: ["skill"],
             ShowInCommandBar: true),
         new(
             "CodeAlta.Shell.FocusSidebar",

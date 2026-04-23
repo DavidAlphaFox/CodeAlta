@@ -66,6 +66,53 @@ internal sealed class FileEditorWorkspaceCoordinator : IAsyncDisposable
     public Task ShowOpenFilePickerAsync()
         => _filePickerController.ShowAsync();
 
+    public Task OpenFilePathAsync(string fullPath, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fullPath);
+
+        var resolvedPath = Path.GetFullPath(fullPath);
+        if (!File.Exists(resolvedPath))
+        {
+            _setStatus($"Cannot open missing file '{resolvedPath}'.", false, StatusTone.Warning);
+            return Task.CompletedTask;
+        }
+
+        var projectRoot = Path.GetDirectoryName(resolvedPath) ?? resolvedPath;
+        var basename = Path.GetFileName(resolvedPath);
+        var relativePath = basename;
+        var extension = Path.GetExtension(resolvedPath);
+        DateTimeOffset? lastWriteTimeUtc = null;
+        try
+        {
+            lastWriteTimeUtc = new DateTimeOffset(File.GetLastWriteTimeUtc(resolvedPath), TimeSpan.Zero);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        var item = new ProjectFileSearchItem
+        {
+            Kind = ProjectFileSearchItemKind.File,
+            ProjectRoot = projectRoot,
+            RelativePath = relativePath,
+            FullPath = resolvedPath,
+            Basename = basename,
+            ParentPath = projectRoot,
+            Extension = extension,
+            LastWriteTimeUtc = lastWriteTimeUtc,
+            SearchFields = new ProjectFileSearchFields(
+                basename.ToLowerInvariant(),
+                relativePath.ToLowerInvariant(),
+                [relativePath.ToLowerInvariant()],
+                extension.ToLowerInvariant()),
+        };
+
+        return OpenFileTabAsync(item, ProjectFileAppearanceRegistry.Default.GetAppearance(item), cancellationToken);
+    }
+
     public FileEditorTab? GetSelectedFileTab()
         => !string.IsNullOrWhiteSpace(_selectedTabId) && _fileTabsById.TryGetValue(_selectedTabId, out var fileTab)
             ? fileTab

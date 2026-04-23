@@ -69,6 +69,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private readonly ThreadTabContext _threadTabContext;
     private readonly WorkspaceRefreshContext _workspaceRefreshContext;
     private readonly AcpManagementCoordinator? _acpManagementCoordinator;
+    private readonly SkillsManagementCoordinator? _skillsManagementCoordinator;
     private readonly AcpFrontendCoordinator _acpUi;
     private readonly ProviderFrontendCoordinator _providerUi;
     private readonly ProviderDialogCoordinator _providerDialogCoordinator;
@@ -280,6 +281,13 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             DispatchToUiDeferred,
             SyncThreadTabControl,
             SetStatus);
+        _skillsManagementCoordinator = _ownedServices is not null
+            ? new SkillsManagementCoordinator(
+                new SkillsManagementService(_ownedServices.SkillCatalog, _catalogOptions, GetSelectedProject),
+                path => _fileEditorWorkspaceCoordinator.OpenFilePathAsync(path),
+                () => DialogBoundsResolver.ResolveAppBounds(ThreadInput is Visual threadInput ? threadInput : _sidebarCoordinator.View.Tree),
+                () => ThreadInput is Visual threadInput ? threadInput : _sidebarCoordinator.View.Tree)
+            : null;
         _threadTabContext = new ThreadTabContext(
             () => ThreadTabControl,
             () => _threadWorkspaceView,
@@ -306,6 +314,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             OpenFolderAsync,
             OpenModelProvidersAsync,
             _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
+            OpenSkillsAsync,
             () => ReadBindableState(() => _promptDraftUiCoordinator.PromptText),
             () => _fileEditorWorkspaceCoordinator.GetSelectedFileTab() is { } fileTab
                 ? _fileEditorWorkspaceCoordinator.CloseFileTabAsync(fileTab.TabId)
@@ -693,6 +702,18 @@ internal sealed class CodeAltaApp : IAsyncDisposable
 
     internal void OpenAcpManagement() { if (_acpManagementCoordinator is null) { SetStatus("ACP management is unavailable in this app instance.", tone: StatusTone.Warning); return; } _acpManagementCoordinator.Open(); }
     internal Task OpenModelProvidersAsync() => _providerDialogCoordinator.OpenAsync();
+    internal Task OpenSkillsAsync()
+    {
+        if (_skillsManagementCoordinator is null)
+        {
+            SetStatus("Skills management is unavailable in this app instance.", tone: StatusTone.Warning);
+            return Task.CompletedTask;
+        }
+
+        _skillsManagementCoordinator.Open();
+        return Task.CompletedTask;
+    }
+
     internal void FocusSidebar() { SyncSidebarSelectionToCurrentState(); ApplyPendingSidebarSelection(); _sidebarCoordinator.View.Tree.App?.Focus(_sidebarCoordinator.View.Tree); }
     private async Task CloseSelectedThreadAsync()
         => await _threadStateCoordinator.CloseSelectedThreadAsync();

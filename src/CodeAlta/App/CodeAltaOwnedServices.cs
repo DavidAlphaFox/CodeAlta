@@ -44,6 +44,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         AcpAgentRegistryService acpAgentRegistryService,
         ProjectCatalog projectCatalog,
         WorkThreadCatalog threadCatalog,
+        SkillCatalog skillCatalog,
         AgentHub agentHub,
         WorkThreadRuntimeService runtimeService,
         IProjectFileSearchService projectFileSearchService)
@@ -60,6 +61,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         AcpAgentRegistryService = acpAgentRegistryService;
         ProjectCatalog = projectCatalog;
         ThreadCatalog = threadCatalog;
+        SkillCatalog = skillCatalog;
         AgentHub = agentHub;
         RuntimeService = runtimeService;
         ProjectFileSearchService = projectFileSearchService;
@@ -78,6 +80,8 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
     public ProjectCatalog ProjectCatalog { get; }
 
     public WorkThreadCatalog ThreadCatalog { get; }
+
+    public SkillCatalog SkillCatalog { get; }
 
     public AgentHub AgentHub { get; }
 
@@ -197,6 +201,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             acpAgentRegistryService,
             projectCatalog,
             threadCatalog,
+            skillCatalog,
             agentHub,
             runtimeService,
             projectFileSearchService);

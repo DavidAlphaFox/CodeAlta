@@ -250,15 +250,16 @@ Path note:
 
 ### 7.1 Add skills browser surface
 
-- [ ] Implement a dedicated skills-management UI surface in `CodeAlta`
+- [x] Implement a dedicated skills-management UI surface in `CodeAlta`
 - [ ] Add scope selection:
-  - [ ] current project
-  - [ ] user/global
-  - [ ] combined
-- [ ] Show source visibility (`.agents/skills/` vs `.alta/skills/`)
-- [ ] Show validation state and provenance
-- [ ] Show path and shadowing information
-- [ ] Add refresh action
+  - [x] current project
+  - [x] user/global
+  - [x] combined
+- [x] Show source visibility (`.agents/skills/` vs `.alta/skills/`)
+- [x] Show validation state and provenance
+- [x] Show path and shadowing information
+- [x] Add searchable/filterable skills list
+- [x] Add refresh action
 
 ### 7.2 Add session/thread visibility
 
@@ -269,9 +270,9 @@ Path note:
 
 ### 7.3 Add prompt/command affordances
 
-- [ ] Add a shell command such as `/skill`
-- [ ] Add a command-palette entry such as `Use Skill`
-- [ ] Choose and implement a non-conflicting shortcut for opening the skills browser (do not reuse `Ctrl+G Ctrl+S`)
+- [x] Add a shell command such as `/skill`
+- [x] Add a command-palette entry such as `Use Skill`
+- [x] Choose and implement a non-conflicting shortcut for opening the skills browser (do not reuse `Ctrl+G Ctrl+S`)
 - [ ] Optionally add prompt-editor autocomplete/picker support for skills
 - [ ] Ensure these actions trigger host-mediated activation rather than pasting raw skill content into the draft
 
@@ -279,13 +280,13 @@ Path note:
 
 ### 8.1 Reuse the existing editor flow
 
-- [ ] Allow opening `SKILL.md` directly in the existing CodeAlta code editor
+- [x] Allow opening `SKILL.md` directly in the existing CodeAlta code editor
 - [ ] Ensure markdown syntax highlighting works well for `SKILL.md`
 - [ ] Allow opening related files under:
   - [ ] `scripts/`
   - [ ] `references/`
   - [ ] `assets/`
-- [ ] Make it easy to navigate from the skills browser/detail pane into editor tabs
+- [x] Make it easy to navigate from the skills browser/detail pane into editor tabs
 
 ### 8.2 Add creation and validation workflow
 
@@ -356,7 +357,7 @@ Path note:
 
 - [ ] Add tests for skills browser projections/view models if there are existing patterns for this
 - [x] Add tests for thread info reporting of loaded skills
-- [ ] Add tests for command routing for `/skill` and the skills browser action
+- [x] Add tests for command routing for `/skill` and the skills browser action
 
 ## Phase 12 - documentation and polish
 
