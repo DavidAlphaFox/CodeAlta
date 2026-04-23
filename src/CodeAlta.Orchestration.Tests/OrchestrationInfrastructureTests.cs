@@ -36,6 +36,8 @@ public sealed class OrchestrationInfrastructureTests
             codealta:
               default_backend: codex
               scope: project
+              skills:
+                - code-review
               tags:
                 - planning
             ---
@@ -67,6 +69,7 @@ public sealed class OrchestrationInfrastructureTests
         Assert.AreEqual("codex", planner.DefaultBackend);
         Assert.AreEqual("gpt-5.4", planner.DefaultModel);
         Assert.AreEqual("project", planner.Scope);
+        CollectionAssert.Contains(planner.Skills.ToArray(), "code-review");
         Assert.IsFalse(planner.UserInvocable);
 
         var reviewer = profiles.Single(x => x.RoleId == "reviewer");

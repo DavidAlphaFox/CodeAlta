@@ -49,7 +49,7 @@ public sealed class AgentInstructionTemplateProvider
         return new AgentInstructionBundle
         {
             SystemMessage = DefaultSystemPrompt.Value,
-            DeveloperInstructions = BuildSkillsDeveloperInstructions(thread, project),
+            DeveloperInstructions = BuildSkillsDeveloperInstructions(thread, project, profile),
         };
     }
 
@@ -74,13 +74,17 @@ public sealed class AgentInstructionTemplateProvider
         return new AgentInstructionBundle
         {
             SystemMessage = DefaultSystemPrompt.Value,
-            DeveloperInstructions = BuildSkillsDeveloperInstructions(thread, project),
+            DeveloperInstructions = BuildSkillsDeveloperInstructions(thread, project, profile),
         };
     }
 
-    private string? BuildSkillsDeveloperInstructions(WorkThreadDescriptor thread, ProjectDescriptor? project)
+    private string? BuildSkillsDeveloperInstructions(
+        WorkThreadDescriptor thread,
+        ProjectDescriptor? project,
+        RoleProfile profile)
     {
         ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(profile);
 
         if (_skillCatalog is null || _catalogOptions is null)
         {
@@ -104,18 +108,32 @@ public sealed class AgentInstructionTemplateProvider
             return null;
         }
 
+        var preferredSkills = new HashSet<string>(
+            profile.Skills
+                .Where(static skill => !string.IsNullOrWhiteSpace(skill))
+                .Select(static skill => skill.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
         var builder = new StringBuilder();
         builder.AppendLine("Filesystem skills are available for this session.");
         builder.AppendLine("Activate a skill only when it clearly matches the current task.");
+        if (preferredSkills.Count > 0)
+        {
+            builder.AppendLine("Role-associated skills are marked as preferred hints, not mandatory prompt preloads.");
+        }
+
         builder.AppendLine("When a skill is activated, relative paths inside that skill resolve against the skill root.");
         builder.AppendLine();
         builder.AppendLine("<available_skills>");
         foreach (var descriptor in descriptors
-                     .OrderBy(static skill => skill.Precedence)
+                     .OrderByDescending(skill => preferredSkills.Contains(skill.Name))
+                     .ThenBy(static skill => skill.Precedence)
                      .ThenBy(static skill => skill.Name, StringComparer.OrdinalIgnoreCase))
         {
             builder.Append("  <skill name=\"")
                 .Append(EscapeXml(descriptor.Name))
+                .Append("\" preferred=\"")
+                .Append(preferredSkills.Contains(descriptor.Name) ? "true" : "false")
                 .Append("\" location=\"")
                 .Append(EscapeXml(ToLocationLabel(descriptor.SourceKind)))
                 .Append("\" path=\"")

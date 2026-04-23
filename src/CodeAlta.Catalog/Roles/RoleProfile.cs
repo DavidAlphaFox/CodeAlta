@@ -82,6 +82,11 @@ public sealed record RoleProfile
     public IReadOnlyList<string> Tags { get; init; } = [];
 
     /// <summary>
+    /// Gets skill names associated with this role profile.
+    /// </summary>
+    public IReadOnlyList<string> Skills { get; init; } = [];
+
+    /// <summary>
     /// Gets a value indicating whether the profile is a built-in seed.
     /// </summary>
     public bool IsBuiltIn { get; init; }

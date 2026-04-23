@@ -132,6 +132,7 @@ public sealed class RoleProfileStore
                 DefaultReasoningEffort = frontmatter.CodeAlta?.DefaultReasoningEffort ?? frontmatter.DefaultReasoningEffort,
                 Scope = frontmatter.CodeAlta?.Scope,
                 Tags = frontmatter.CodeAlta?.Tags ?? [],
+                Skills = NormalizeSkillRefs(Concat(frontmatter.Skills, frontmatter.CodeAlta?.Skills)),
                 DisableModelInvocation = frontmatter.DisableModelInvocation ?? false,
                 UserInvocable = frontmatter.UserInvocable ?? true,
                 IsBuiltIn = frontmatter.CodeAlta?.BuiltIn ?? false,
@@ -238,6 +239,13 @@ public sealed class RoleProfileStore
         return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
     }
 
+    private static IReadOnlyList<string> NormalizeSkillRefs(IEnumerable<string> values)
+        => values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
     private static string GetAgentKeyFromPath(string sourcePath)
     {
         var fileName = Path.GetFileName(sourcePath);
@@ -265,6 +273,9 @@ public sealed class RoleProfileStore
 
         [JsonPropertyName("tools_denied")]
         public List<string>? DeniedTools { get; set; }
+
+        [JsonPropertyName("skills")]
+        public List<string>? Skills { get; set; }
 
         [JsonPropertyName("default_backend")]
         public string? DefaultBackend { get; set; }
@@ -304,6 +315,28 @@ public sealed class RoleProfileStore
 
         [JsonPropertyName("tags")]
         public List<string>? Tags { get; set; }
+
+        [JsonPropertyName("skills")]
+        public List<string>? Skills { get; set; }
+    }
+
+    private static IEnumerable<string> Concat(IReadOnlyList<string>? first, IReadOnlyList<string>? second)
+    {
+        if (first is not null)
+        {
+            foreach (var value in first)
+            {
+                yield return value;
+            }
+        }
+
+        if (second is not null)
+        {
+            foreach (var value in second)
+            {
+                yield return value;
+            }
+        }
     }
 }
 

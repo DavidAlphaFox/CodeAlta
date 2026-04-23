@@ -39,31 +39,51 @@ public sealed class AgentInstructionTemplateProviderTests
         using var temp = TestTempDirectory.Create();
         var projectRoot = Path.Combine(temp.Path, "repo");
         Directory.CreateDirectory(projectRoot);
-        var skillRoot = Path.Combine(projectRoot, ".alta", "skills", "code-review");
-        Directory.CreateDirectory(skillRoot);
-        await File.WriteAllTextAsync(
-            Path.Combine(skillRoot, "SKILL.md"),
-            """
-            ---
-            name: code-review
-            description: Review code for correctness and regressions.
-            ---
-            # Code Review
-
-            Focus on correctness and regressions.
-            """).ConfigureAwait(false);
+        await WriteSkillAsync(
+            projectRoot,
+            "dotnet-test",
+            "Run focused .NET tests for the current task.").ConfigureAwait(false);
+        await WriteSkillAsync(
+            projectRoot,
+            "code-review",
+            "Review code for correctness and regressions.").ConfigureAwait(false);
 
         var provider = new AgentInstructionTemplateProvider(
             new SkillCatalog(),
             new CatalogOptions { GlobalRoot = temp.Path });
         var project = CreateProject(projectRoot);
 
-        var instructions = provider.BuildCoordinatorInstructions(CreateThread(projectRoot, project.Id), project, CreateProfile());
+        var instructions = provider.BuildCoordinatorInstructions(
+            CreateThread(projectRoot, project.Id),
+            project,
+            CreateProfile(skills: ["code-review"]));
 
         Assert.IsNotNull(instructions.DeveloperInstructions);
         StringAssert.Contains(instructions.DeveloperInstructions, "<available_skills>");
         StringAssert.Contains(instructions.DeveloperInstructions, "code-review");
+        StringAssert.Contains(instructions.DeveloperInstructions, "preferred=\"true\"");
         StringAssert.Contains(instructions.DeveloperInstructions, "project .alta/skills");
+
+        var preferredIndex = instructions.DeveloperInstructions.IndexOf("code-review", StringComparison.Ordinal);
+        var otherIndex = instructions.DeveloperInstructions.IndexOf("dotnet-test", StringComparison.Ordinal);
+        Assert.IsTrue(preferredIndex >= 0 && otherIndex >= 0 && preferredIndex < otherIndex);
+    }
+
+    private static async Task WriteSkillAsync(string projectRoot, string name, string description)
+    {
+        var skillRoot = Path.Combine(projectRoot, ".alta", "skills", name);
+        Directory.CreateDirectory(skillRoot);
+        await File.WriteAllTextAsync(
+            Path.Combine(skillRoot, "SKILL.md"),
+            $$"""
+            ---
+            name: {{name}}
+            description: {{description}}
+            ---
+            # {{name}}
+
+            {{description}}
+            """).ConfigureAwait(false);
     }
 
     private static WorkThreadDescriptor CreateThread(string workingDirectory = @"C:\code\CodeAlta", string? projectId = null)
@@ -91,7 +111,7 @@ public sealed class AgentInstructionTemplateProviderTests
             DefaultBranch = "main",
         };
 
-    private static RoleProfile CreateProfile()
+    private static RoleProfile CreateProfile(IReadOnlyList<string>? skills = null)
         => new()
         {
             RoleId = "general",
@@ -99,6 +119,7 @@ public sealed class AgentInstructionTemplateProviderTests
             Description = "General role",
             Instructions = "Follow the task.",
             ToolsPolicy = new RoleToolsPolicy(),
+            Skills = skills ?? [],
             SourcePath = "role.md",
         };
 }
