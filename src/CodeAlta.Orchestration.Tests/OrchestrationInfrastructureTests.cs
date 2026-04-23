@@ -197,6 +197,91 @@ public sealed class OrchestrationInfrastructureTests
     }
 
     [TestMethod]
+    [DataRow("codex")]
+    [DataRow("copilot")]
+    public async Task WorkThreadRuntimeService_CreateThread_DoesNotInjectSkillsForProviderManagedSkills(string backendIdValue)
+    {
+        using var temp = TempDirectory.Create();
+        var catalogOptions = new CatalogOptions { GlobalRoot = temp.Path };
+        var projectCatalog = new ProjectCatalog(catalogOptions);
+        var threadCatalog = new WorkThreadCatalog(catalogOptions);
+        var roleStore = new RoleProfileStore();
+        var skillCatalog = new SkillCatalog();
+        var instructionProvider = new AgentInstructionTemplateProvider(skillCatalog, catalogOptions);
+
+        var project = new ProjectDescriptor
+        {
+            Id = ProjectId.NewVersion7().ToString(),
+            Slug = "repo-main",
+            DisplayName = "Main Repo",
+            ProjectPath = Path.Combine(temp.Path, "repo-main"),
+            DefaultBranch = "main",
+        };
+        Directory.CreateDirectory(project.ProjectPath);
+        Directory.CreateDirectory(Path.Combine(project.ProjectPath, ".alta", "skills", "code-review"));
+        await File.WriteAllTextAsync(
+            Path.Combine(project.ProjectPath, ".alta", "skills", "code-review", "SKILL.md"),
+            """
+            ---
+            name: code-review
+            description: Review code for regressions.
+            ---
+            # Code Review
+
+            Review code for regressions.
+            """).ConfigureAwait(false);
+        await projectCatalog.SaveAsync(project).ConfigureAwait(false);
+
+        var agentsRoot = Path.Combine(temp.Path, "agents");
+        Directory.CreateDirectory(agentsRoot);
+        await File.WriteAllTextAsync(
+            Path.Combine(agentsRoot, "coordinator.agent.md"),
+            """
+            ---
+            name: coordinator
+            description: Coordinates thread work.
+            model: gpt-5.4
+            ---
+            Emit a schedule when coordination is required.
+            """).ConfigureAwait(false);
+
+        var backendId = new AgentBackendId(backendIdValue);
+        var backendFactory = new AgentBackendFactory();
+        var fakeBackend = new FakeBackend(backendId: backendId);
+        backendFactory.Register(backendId.Value, () => fakeBackend);
+        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
+        var repository = new AgentRepository(db);
+        await using var hub = new AgentHub(backendFactory, repository);
+        await using var runtime = new WorkThreadRuntimeService(
+            hub,
+            projectCatalog,
+            threadCatalog,
+            roleStore,
+            instructionProvider,
+            catalogOptions,
+            skillCatalog);
+
+        var options = new WorkThreadExecutionOptions
+        {
+            BackendId = backendId,
+            WorkingDirectory = project.ProjectPath,
+            ProjectRoots = [project.ProjectPath],
+            OnPermissionRequest = static (_, _) =>
+                Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+        };
+
+        _ = await runtime.CreateProjectThreadAsync(
+            project,
+            options,
+            "Codex Skills Thread").ConfigureAwait(false);
+
+        Assert.IsNotNull(fakeBackend.LastCreateOptions);
+        Assert.IsTrue(fakeBackend.LastCreateOptions.Tools is null ||
+            !fakeBackend.LastCreateOptions.Tools.Any(static tool => tool.Spec.Name == "codealta.skills.activate"));
+        Assert.IsNull(fakeBackend.LastCreateOptions.DeveloperInstructions);
+    }
+
+    [TestMethod]
     public async Task ContextPackBuilder_EnforcesBudgetAndPreservesSourceLinks()
     {
         var providerA = new StaticContextProvider(

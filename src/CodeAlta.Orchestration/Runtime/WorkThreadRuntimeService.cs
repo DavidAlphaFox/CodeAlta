@@ -299,9 +299,8 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         var coordinatorProfile = await _roleProfileStore.GetByIdAsync(agentRoots, "coordinator", cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Coordinator profile was not available.");
         var instructions = _instructionTemplateProvider.BuildCoordinatorInstructions(thread, project, coordinatorProfile);
-        var skillQuery = BuildSkillCatalogQuery(project, options.ProjectRoots);
-        var skillActivationTool = SkillSessionToolFactory.CreateActivateTool(_skillCatalog, skillQuery);
-        var tools = SkillSessionToolFactory.MergeWithActivationTool(options.Tools, skillActivationTool);
+        var developerInstructions = UsesProviderManagedSkills(options.BackendId) ? null : instructions.DeveloperInstructions;
+        var tools = CreateSessionTools(options, project);
 
         ThreadSessionEntry? previousEntry = null;
         AgentId agentId;
@@ -348,7 +347,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             WorkingDirectory = options.WorkingDirectory,
             ProjectRoots = options.ProjectRoots,
             SystemMessage = instructions.SystemMessage,
-            DeveloperInstructions = instructions.DeveloperInstructions,
+            DeveloperInstructions = developerInstructions,
             Tools = tools,
             OnPermissionRequest = options.OnPermissionRequest,
             OnUserInputRequest = options.OnUserInputRequest,
@@ -481,6 +480,23 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         var entry = await GetEntryAsync(threadId, cancellationToken).ConfigureAwait(false);
         await _agentHub.AbortAsync(entry.AgentId, cancellationToken).ConfigureAwait(false);
     }
+
+    private IReadOnlyList<AgentToolDefinition>? CreateSessionTools(
+        WorkThreadExecutionOptions options,
+        ProjectDescriptor? project)
+    {
+        if (UsesProviderManagedSkills(options.BackendId))
+        {
+            return options.Tools;
+        }
+
+        var skillQuery = BuildSkillCatalogQuery(project, options.ProjectRoots);
+        var skillActivationTool = SkillSessionToolFactory.CreateActivateTool(_skillCatalog, skillQuery);
+        return SkillSessionToolFactory.MergeWithActivationTool(options.Tools, skillActivationTool);
+    }
+
+    private static bool UsesProviderManagedSkills(AgentBackendId backendId)
+        => backendId == AgentBackendIds.Codex || backendId == AgentBackendIds.Copilot;
 
     /// <summary>
     /// Detaches and disposes the active coordinator session for a thread when present.
