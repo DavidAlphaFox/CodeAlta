@@ -44,7 +44,8 @@ internal sealed class SidebarView
         Action<string> openProjectThreads,
         Action<string> openProjectDetails,
         Action openFolder,
-        Action<SidebarSelectionTarget?> onSelectedTargetChanged)
+        Action<SidebarSelectionTarget?> onSelectedTargetChanged,
+        Action? openLogs = null)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(refreshCatalog);
@@ -113,6 +114,14 @@ internal sealed class SidebarView
             Spacing = 2,
             HorizontalAlignment = Align.Stretch,
         };
+        if (openLogs is not null)
+        {
+            footer.Children.Add(
+                new Button(new TextBlock($"{NerdFont.MdTextBoxSearchOutline} Show Logs"))
+                    .Style(ToolbarButtonStyle)
+                    .Click(openLogs)
+                    .Tooltip(new TextBlock("Show application logs")));
+        }
 
         var contentGrid = new Grid
             {

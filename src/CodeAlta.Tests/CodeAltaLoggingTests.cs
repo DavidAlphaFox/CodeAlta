@@ -71,6 +71,51 @@ public sealed class CodeAltaLoggingTests
             writer.Messages.ToArray());
     }
 
+    [TestMethod]
+    public void CreateConfig_BuffersUiLogsForReplay()
+    {
+        using var temp = TempDirectory.Create();
+        Directory.CreateDirectory(Path.Combine(temp.Path, "logs"));
+
+        var config = CodeAltaLogging.CreateConfig(temp.Path);
+        LogManager.InitializeForAsync(config);
+
+        LogManager.GetLogger("CodeAlta.Program").Info("startup info");
+        LogManager.GetLogger("External.Component").Warn("startup warning");
+
+        LogManager.Shutdown();
+
+        var snapshot = CodeAltaLogging.GetUiLogBuffer().Subscribe(static _ => { }, out var replaySnapshot);
+        snapshot.Dispose();
+
+        Assert.AreEqual(2, replaySnapshot.Length);
+        Assert.IsTrue(replaySnapshot.All(static entry => entry.IsMarkup));
+        StringAssert.Contains(replaySnapshot[0].Text, "startup info");
+        StringAssert.Contains(replaySnapshot[1].Text, "startup warning");
+    }
+
+    [TestMethod]
+    public void UiLogBuffer_ClearEmptiesEntriesAndNotifiesSubscribers()
+    {
+        var buffer = new CodeAltaUiLogBuffer(capacity: 4);
+        var events = new List<CodeAltaUiLogBufferEvent>();
+        using var subscription = buffer.Subscribe(events.Add, out var initialSnapshot);
+
+        Assert.AreEqual(0, initialSnapshot.Length);
+
+        buffer.Append("first", isMarkup: false);
+        buffer.Append("second", isMarkup: true);
+        buffer.Clear();
+
+        using var snapshotHandle = buffer.Subscribe(static _ => { }, out var finalSnapshot);
+
+        Assert.AreEqual(0, finalSnapshot.Length);
+        Assert.AreEqual(3, events.Count);
+        Assert.AreEqual(CodeAltaUiLogBufferEventKind.Appended, events[0].Kind);
+        Assert.AreEqual(CodeAltaUiLogBufferEventKind.Appended, events[1].Kind);
+        Assert.AreEqual(CodeAltaUiLogBufferEventKind.Cleared, events[2].Kind);
+    }
+
     private sealed class CaptureLogWriter : LogWriter
     {
         private readonly object _gate = new();

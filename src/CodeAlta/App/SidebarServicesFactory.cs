@@ -45,6 +45,9 @@ internal static class SidebarServicesFactory
             () => GetSidebarFocusTarget(sidebar),
             refreshCatalogAndThreadWorkspace,
             setStatus);
+        var applicationLogs = new ApplicationLogsCoordinator(
+            () => GetSidebarDialogBounds(sidebar),
+            () => GetSidebarFocusTarget(sidebar));
         sidebar = new SidebarCoordinator(
             viewModel,
             catalogOptions,
@@ -56,7 +59,8 @@ internal static class SidebarServicesFactory
             navigatorActions.ConfirmDeleteProject,
             navigatorActions.OpenProjectThreads,
             navigatorActions.OpenProjectDetails,
-            navigatorActions.OpenFolder);
+            navigatorActions.OpenFolder,
+            applicationLogs.Open);
         return (navigatorActions, sidebar);
     }
 

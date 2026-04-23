@@ -10,6 +10,10 @@ internal static class CodeAltaLogging
     internal const string LogFileName = "codealta.log";
     internal const long LogFileSizeLimitBytes = 10L * 1024L * 1024L;
     internal const int RetainedLogFileCountLimit = 10;
+    internal const int UiLogCapacity = 20000;
+
+    private static readonly CodeAltaUiLogBuffer UiLogBufferStorage = new(UiLogCapacity);
+    private static readonly CodeAltaUiLogWriter UiLogWriter = CreateUiLogWriter();
 
     public static bool Initialize(string homeRoot)
     {
@@ -30,6 +34,8 @@ internal static class CodeAltaLogging
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(homeRoot);
 
+        UiLogBufferStorage.Clear();
+
         var fileWriterOptions = CreateFileWriterOptions(homeRoot);
         var config = new LogManagerConfig
         {
@@ -47,10 +53,14 @@ internal static class CodeAltaLogging
 
         config.RootLogger.MinimumLevel = LogLevel.Warn;
         config.RootLogger.Writers.Add(new FileLogWriter(fileWriterOptions));
+        config.RootLogger.Writers.Add(UiLogWriter);
         config.Loggers.Add("CodeAlta", LogLevel.Info);
         config.Loggers.Add(CodexAgentLoggerName, LogLevel.Debug);
         return config;
     }
+
+    internal static CodeAltaUiLogBuffer GetUiLogBuffer()
+        => UiLogBufferStorage;
 
     internal static FileLogWriterOptions CreateFileWriterOptions(string homeRoot)
     {
@@ -70,5 +80,22 @@ internal static class CodeAltaLogging
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(homeRoot);
         return Path.Combine(homeRoot, "logs", LogFileName);
+    }
+
+    private static CodeAltaUiLogWriter CreateUiLogWriter()
+    {
+        var writer = new CodeAltaUiLogWriter(UiLogBufferStorage)
+        {
+            EnableRichFormatting = true,
+            EnableMarkupMessages = true,
+        };
+
+        writer.Styles.ResetToDefaults();
+        writer.Styles.SetStyle(LogMessageFormatSegmentKind.Timestamp, "dim");
+        writer.Styles.SetStyle(LogMessageFormatSegmentKind.LoggerName, "bold cyan");
+        writer.Styles.SetLevelStyle(LogLevel.Info, "bold green");
+        writer.Styles.SetLevelStyle(LogLevel.Warn, "bold yellow");
+        writer.Styles.SetLevelStyle(LogLevel.Error, "bold white on red");
+        return writer;
     }
 }
