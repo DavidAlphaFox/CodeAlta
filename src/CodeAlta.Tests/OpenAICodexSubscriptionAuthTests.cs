@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using CodeAlta.Agent.OpenAI.CodexSubscription;
 
 namespace CodeAlta.Tests;
@@ -137,6 +138,27 @@ public sealed class OpenAICodexSubscriptionAuthTests
     }
 
     [TestMethod]
+    public async Task CodexAuthFileReader_ReturnsNullForMissingFileAndRejectsInvalidShape()
+    {
+        using var missing = TempDirectory.Create();
+        Assert.IsNull(await CodexAuthFileReader.ReadAuthJsonAsync(missing.Path).ConfigureAwait(false));
+
+        using var invalid = TempDirectory.Create();
+        await File.WriteAllTextAsync(
+            Path.Combine(invalid.Path, "auth.json"),
+            """{"tokens":""").ConfigureAwait(false);
+
+        try
+        {
+            _ = await CodexAuthFileReader.ReadAuthJsonAsync(invalid.Path).ConfigureAwait(false);
+            Assert.Fail("Expected malformed Codex auth JSON to throw.");
+        }
+        catch (JsonException)
+        {
+        }
+    }
+
+    [TestMethod]
     public async Task CodexAuthFileReader_ImportCopiesIntoCodeAltaStore()
     {
         using var codexHome = TempDirectory.Create();
@@ -231,6 +253,53 @@ public sealed class OpenAICodexSubscriptionAuthTests
     }
 
     [TestMethod]
+    public async Task LoginManager_CompleteBrowserLoginStoresCredentialAndExtractsAccountId()
+    {
+        using var temp = TempDirectory.Create();
+        var jwt = CreateUnsignedJwt(
+            """
+            {
+              "https://api.openai.com/auth": {
+                "chatgpt_account_id": "acct_from_login"
+              }
+            }
+            """);
+        using var httpClient = new HttpClient(new QueueHttpMessageHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    $$"""
+                    {
+                      "access_token": "{{jwt}}",
+                      "refresh_token": "refresh-secret",
+                      "expires_in": 3600
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json"),
+            }));
+        var store = new FileOpenAICodexSubscriptionCredentialStore(temp.Path);
+        var manager = new OpenAICodexSubscriptionLoginManager(
+            store,
+            new OpenAICodexSubscriptionOAuthClient(httpClient),
+            "codex_subscription");
+        var login = new OpenAICodexSubscriptionBrowserLogin(
+            new Uri("https://auth.openai.com/oauth/authorize"),
+            new OpenAICodexSubscriptionPkce("verifier", "challenge"),
+            "expected-state");
+
+        var credential = await manager.CompleteBrowserLoginAsync(
+                login,
+                new Uri("http://localhost:1455/auth/callback?code=auth-code&state=expected-state"))
+            .ConfigureAwait(false);
+        var stored = await store.LoadAsync("codex_subscription").ConfigureAwait(false);
+
+        Assert.AreEqual("acct_from_login", credential.AccountId);
+        Assert.AreEqual("acct_from_login", stored?.AccountId);
+        Assert.AreEqual("refresh-secret", stored?.RefreshToken);
+    }
+
+    [TestMethod]
     public async Task OAuthClient_RequestDeviceCodeParsesVerificationDetails()
     {
         using var httpClient = new HttpClient(new QueueHttpMessageHandler(
@@ -258,6 +327,62 @@ public sealed class OpenAICodexSubscriptionAuthTests
         Assert.AreEqual(OpenAICodexSubscriptionOAuthDefaults.DeviceVerificationUri, deviceCode.VerificationUri);
         Assert.AreEqual(TimeSpan.FromSeconds(900), deviceCode.ExpiresIn);
         Assert.AreEqual(TimeSpan.FromSeconds(3), deviceCode.Interval);
+    }
+
+    [TestMethod]
+    public async Task LoginManager_CompleteDeviceLoginDisplaysCodeAndStoresCredential()
+    {
+        using var temp = TempDirectory.Create();
+        using var httpClient = new HttpClient(new QueueHttpMessageHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "device_code": "device",
+                      "user_code": "ABCD-EFGH",
+                      "verification_uri": "https://auth.openai.com/codex/device",
+                      "expires_in": 900,
+                      "interval": 0
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json"),
+            },
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "access_token": "access-secret",
+                      "refresh_token": "refresh-secret",
+                      "expires_in": 3600
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json"),
+            }));
+        var store = new FileOpenAICodexSubscriptionCredentialStore(temp.Path);
+        var manager = new OpenAICodexSubscriptionLoginManager(
+            store,
+            new OpenAICodexSubscriptionOAuthClient(httpClient),
+            "codex_subscription");
+        OpenAICodexSubscriptionDeviceCode? displayed = null;
+
+        _ = await manager.CompleteDeviceLoginAsync(
+                (deviceCode, _) =>
+                {
+                    displayed = deviceCode;
+                    return ValueTask.CompletedTask;
+                })
+            .ConfigureAwait(false);
+        var stored = await store.LoadAsync("codex_subscription").ConfigureAwait(false);
+
+        Assert.IsNotNull(displayed);
+        Assert.AreEqual("ABCD-EFGH", displayed!.UserCode);
+        Assert.AreEqual(OpenAICodexSubscriptionOAuthDefaults.DeviceVerificationUri, displayed.VerificationUri);
+        Assert.AreEqual("access-secret", stored?.AccessToken);
+        Assert.AreEqual("refresh-secret", stored?.RefreshToken);
     }
 
     [TestMethod]
@@ -323,6 +448,43 @@ public sealed class OpenAICodexSubscriptionAuthTests
         Assert.AreEqual("acct_123", account.AccountId);
         Assert.AreEqual("Workspace", account.AccountLabel);
         Assert.IsTrue(account.IsFedRamp);
+    }
+
+    [TestMethod]
+    public async Task AuthManager_RefreshFailureDeletesOnlyCodeAltaCredentials()
+    {
+        using var state = TempDirectory.Create();
+        using var codexHome = TempDirectory.Create();
+        var codexAuthPath = Path.Combine(codexHome.Path, "auth.json");
+        await File.WriteAllTextAsync(codexAuthPath, """{"auth_mode":"chatgpt"}""").ConfigureAwait(false);
+        var before = File.GetLastWriteTimeUtc(codexAuthPath);
+        var store = new FileOpenAICodexSubscriptionCredentialStore(state.Path);
+        await store.SaveAsync(
+                "codex_subscription",
+                new OpenAICodexSubscriptionCredential
+                {
+                    AccessToken = "old-token",
+                    RefreshToken = "refresh-secret",
+                    ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+                })
+            .ConfigureAwait(false);
+        using var httpClient = new HttpClient(new QueueHttpMessageHandler(
+            new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent("""{"error":"invalid_grant"}""", Encoding.UTF8, "application/json"),
+            }));
+        var manager = new OpenAICodexSubscriptionAuthManager(
+            store,
+            new OpenAICodexSubscriptionOAuthClient(httpClient),
+            "codex_subscription",
+            codexHome: codexHome.Path);
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            () => manager.GetAccessTokenAsync().AsTask()).ConfigureAwait(false);
+
+        Assert.IsNull(await store.LoadAsync("codex_subscription").ConfigureAwait(false));
+        Assert.IsTrue(File.Exists(codexAuthPath));
+        Assert.AreEqual(before, File.GetLastWriteTimeUtc(codexAuthPath));
     }
 
     [TestMethod]
