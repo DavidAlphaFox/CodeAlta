@@ -354,6 +354,49 @@ public sealed class OpenAICodexSubscriptionPipelineTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, exception.StatusCode);
     }
 
+    [TestMethod]
+    public async Task ConcurrencyLimiter_AllowsOnlyOneTurnPerSessionAndAccountByDefault()
+    {
+        var first = await CodexSubscriptionConcurrencyLimiter.AcquireAsync(
+            "codex_subscription",
+            "session-one",
+            "acct_123",
+            maxConcurrentRequests: 1,
+            CancellationToken.None).ConfigureAwait(false);
+
+        var sameSession = CodexSubscriptionConcurrencyLimiter.AcquireAsync(
+            "codex_subscription",
+            "session-one",
+            "acct_123",
+            maxConcurrentRequests: 1,
+            CancellationToken.None).AsTask();
+        await Task.Delay(25).ConfigureAwait(false);
+        Assert.IsFalse(sameSession.IsCompleted);
+
+        await first.DisposeAsync().ConfigureAwait(false);
+        var second = await sameSession.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+        await second.DisposeAsync().ConfigureAwait(false);
+
+        var accountFirst = await CodexSubscriptionConcurrencyLimiter.AcquireAsync(
+            "codex_subscription",
+            "session-two",
+            "acct_123",
+            maxConcurrentRequests: 1,
+            CancellationToken.None).ConfigureAwait(false);
+        var sameAccount = CodexSubscriptionConcurrencyLimiter.AcquireAsync(
+            "codex_subscription",
+            "session-three",
+            "acct_123",
+            maxConcurrentRequests: 1,
+            CancellationToken.None).AsTask();
+        await Task.Delay(25).ConfigureAwait(false);
+        Assert.IsFalse(sameAccount.IsCompleted);
+
+        await accountFirst.DisposeAsync().ConfigureAwait(false);
+        var third = await sameAccount.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+        await third.DisposeAsync().ConfigureAwait(false);
+    }
+
     private static ClientPipeline CreatePipeline(
         OpenAICodexSubscriptionAuthManager authManager,
         CodexSubscriptionHeaderContext headerContext,

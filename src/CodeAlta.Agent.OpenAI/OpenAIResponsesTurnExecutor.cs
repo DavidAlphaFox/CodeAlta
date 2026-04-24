@@ -28,6 +28,9 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
 
         try
         {
+            await using var concurrencyLease = await CreateCodexConcurrencyLeaseAsync(
+                request,
+                cancellationToken).ConfigureAwait(false);
             var client = OpenAIProviderSdkFactory.CreateResponsesClient(
                 provider,
                 new OpenAIResponsesClientFactoryContext(
@@ -150,6 +153,29 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
             throw CreateTurnExecutionException(ex);
         }
     }
+
+    private ValueTask<IAsyncDisposable?> CreateCodexConcurrencyLeaseAsync(
+        LocalAgentTurnRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (provider.CodexSubscription is not { } codexOptions)
+        {
+            return ValueTask.FromResult<IAsyncDisposable?>(null);
+        }
+
+        return AcquireCodexConcurrencyLeaseAsync(request, codexOptions, cancellationToken);
+    }
+
+    private async ValueTask<IAsyncDisposable?> AcquireCodexConcurrencyLeaseAsync(
+        LocalAgentTurnRequest request,
+        OpenAICodexSubscriptionOptions codexOptions,
+        CancellationToken cancellationToken)
+        => await CodexSubscriptionConcurrencyLimiter.AcquireAsync(
+            provider.ProviderKey,
+            request.SessionId,
+            codexOptions.AccountId,
+            codexOptions.MaxConcurrentRequests,
+            cancellationToken).ConfigureAwait(false);
 
     private static ResponseResult? TryCreateResponseWithoutTerminalPayload(
         LocalAgentTurnRequest request,
