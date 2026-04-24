@@ -224,6 +224,7 @@ public sealed class CodeAltaConfigStore
         foreach (var definition in normalizedDefinitions.Values)
         {
             NormalizeProviderEntry(definition.ProviderKey, definition);
+            ValidateProviderCredentialsForSave(definition);
         }
 
         document.Providers = normalizedDefinitions.Count == 0
@@ -837,13 +838,6 @@ public sealed class CodeAltaConfigStore
             case "openai-responses":
                 RejectUnsupportedField(definition, "project", definition.Project);
                 RejectUnsupportedField(definition, "location", definition.Location);
-                if (definition.Enabled != false &&
-                    string.IsNullOrWhiteSpace(definition.ApiKey) &&
-                    string.IsNullOrWhiteSpace(definition.ApiKeyEnv))
-                {
-                    throw new InvalidOperationException($"providers.{definition.ProviderKey} requires api_key or api_key_env when enabled.");
-                }
-
                 break;
 
             case CodexSubscriptionProviderType:
@@ -864,13 +858,6 @@ public sealed class CodeAltaConfigStore
                 RejectUnsupportedField(definition, "project", definition.Project);
                 RejectUnsupportedField(definition, "location", definition.Location);
                 RejectUnsupportedField(definition, "extra_body", definition.ExtraBody);
-                if (definition.Enabled != false &&
-                    string.IsNullOrWhiteSpace(definition.ApiKey) &&
-                    string.IsNullOrWhiteSpace(definition.ApiKeyEnv))
-                {
-                    throw new InvalidOperationException($"providers.{definition.ProviderKey} requires api_key or api_key_env when enabled.");
-                }
-
                 break;
 
             case "google-genai":
@@ -879,13 +866,6 @@ public sealed class CodeAltaConfigStore
                 RejectUnsupportedField(definition, "project", definition.Project);
                 RejectUnsupportedField(definition, "location", definition.Location);
                 RejectUnsupportedField(definition, "extra_body", definition.ExtraBody);
-                if (definition.Enabled != false &&
-                    string.IsNullOrWhiteSpace(definition.ApiKey) &&
-                    string.IsNullOrWhiteSpace(definition.ApiKeyEnv))
-                {
-                    throw new InvalidOperationException($"providers.{definition.ProviderKey} requires api_key or api_key_env when enabled.");
-                }
-
                 break;
 
             case "vertex-ai":
@@ -1278,6 +1258,29 @@ public sealed class CodeAltaConfigStore
             .Where(static definition => definition.Enabled != false)
             .Select(static definition => definition.ProviderKey)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static void ValidateProviderCredentialsForSave(CodeAltaProviderDocument definition)
+    {
+        if (definition.Enabled == false)
+        {
+            return;
+        }
+
+        switch (definition.ProviderType)
+        {
+            case "openai-chat":
+            case "openai-responses":
+            case "anthropic":
+            case "google-genai":
+                if (string.IsNullOrWhiteSpace(definition.ApiKey) &&
+                    string.IsNullOrWhiteSpace(definition.ApiKeyEnv))
+                {
+                    throw new InvalidOperationException($"providers.{definition.ProviderKey} requires api_key or api_key_env when enabled.");
+                }
+
+                break;
+        }
     }
 
     private static AcpBackendDefinition CloneAcpBackendDefinition(AcpBackendDefinition definition)

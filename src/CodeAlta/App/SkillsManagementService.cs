@@ -52,7 +52,7 @@ internal sealed class SkillsManagementService
             IncludeUntrusted = true,
         };
 
-        return await _skillCatalog.ListAsync(query, cancellationToken).ConfigureAwait(false);
+        return await _skillCatalog.ListAsync(query, cancellationToken);
     }
 
     public async Task<SkillCreationResult> CreateSkillAsync(
@@ -80,7 +80,7 @@ internal sealed class SkillsManagementService
                 skillFilePath,
                 BuildSkillTemplate(normalizedName, normalizedDescription),
                 cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         return new SkillCreationResult(normalizedName, skillRootPath, skillFilePath, target.Kind);
     }

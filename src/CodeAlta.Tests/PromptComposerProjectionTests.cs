@@ -101,9 +101,9 @@ public sealed class PromptComposerProjectionTests
             selectedThreadCanCompact: false,
             selectedThreadCanAbort: false);
 
-        Assert.AreEqual("Install or connect a provider to start a thread...", projection.Placeholder);
+        Assert.AreEqual("Configure model providers (Ctrl+G Ctrl+M) to start a thread...", projection.Placeholder);
         Assert.IsTrue(projection.HasUnavailableStatus);
-        Assert.AreEqual("No chat provider is connected. Browse threads and projects, but prompt sending is unavailable.", projection.UnavailableStatusMessage);
+        Assert.AreEqual("No model provider is ready. Open Model Providers (Ctrl+G Ctrl+M) to configure one.", projection.UnavailableStatusMessage);
         Assert.AreEqual(StatusTone.Warning, projection.UnavailableStatusTone);
     }
 

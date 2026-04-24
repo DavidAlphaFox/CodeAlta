@@ -123,7 +123,7 @@ internal sealed class ProviderFrontendCoordinator
         var waitForCallbackTask = manager.WaitForBrowserCallbackAsync(login, cancellationToken).AsTask();
         reportStatus($"Open ChatGPT login in your browser: {login.AuthorizeUri}");
         TryOpenBrowser(login.AuthorizeUri);
-        var credential = await waitForCallbackTask.ConfigureAwait(false);
+        var credential = await waitForCallbackTask;
         return new ProviderTestResult(
             true,
             FormatCodexCredentialMessage("ChatGPT browser login completed", credential),
@@ -146,8 +146,7 @@ internal sealed class ProviderFrontendCoordinator
                         $"Open {deviceCode.VerificationUri} and enter code {deviceCode.UserCode}. Waiting for ChatGPT authorization...");
                     return ValueTask.CompletedTask;
                 },
-                cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+                cancellationToken: cancellationToken);
         return new ProviderTestResult(
             true,
             FormatCodexCredentialMessage("ChatGPT device-code login completed", credential),
@@ -161,7 +160,7 @@ internal sealed class ProviderFrontendCoordinator
         ArgumentNullException.ThrowIfNull(definition);
 
         var manager = CreateCodexSubscriptionLoginManager(definition);
-        await manager.DeleteCredentialAsync(cancellationToken).ConfigureAwait(false);
+        await manager.DeleteCredentialAsync(cancellationToken);
         return new ProviderTestResult(true, "Deleted CodeAlta-owned ChatGPT/Codex credentials for this provider.", 0);
     }
 
@@ -172,7 +171,7 @@ internal sealed class ProviderFrontendCoordinator
         ArgumentNullException.ThrowIfNull(definition);
 
         var authManager = CreateCodexSubscriptionAuthManager(definition);
-        var context = await authManager.GetAccountContextAsync(cancellationToken).ConfigureAwait(false);
+        var context = await authManager.GetAccountContextAsync(cancellationToken);
         var account = string.IsNullOrWhiteSpace(context.AccountId) ? "no account/workspace id in token" : context.AccountId;
         return new ProviderTestResult(true, $"Authenticated without sending a model turn · account/workspace: {account}.", 0);
     }
@@ -183,7 +182,7 @@ internal sealed class ProviderFrontendCoordinator
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        var result = await TestProviderAsync(definition, cancellationToken).ConfigureAwait(false);
+        var result = await TestProviderAsync(definition, cancellationToken);
         return result.Success
             ? result with { Message = $"Model listing completed without sending a model turn · {result.ModelCount} model(s) available." }
             : result;
@@ -196,7 +195,7 @@ internal sealed class ProviderFrontendCoordinator
         ArgumentNullException.ThrowIfNull(definition);
 
         var store = new FileOpenAICodexSubscriptionCredentialStore(GetProviderStateRootPath());
-        var credential = await store.LoadAsync(definition.ProviderKey, cancellationToken).ConfigureAwait(false);
+        var credential = await store.LoadAsync(definition.ProviderKey, cancellationToken);
         if (credential is null)
         {
             return new ProviderTestResult(false, "Login required before account/workspace metadata can be listed.", 0);

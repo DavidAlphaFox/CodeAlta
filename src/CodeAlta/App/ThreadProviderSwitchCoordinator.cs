@@ -115,7 +115,7 @@ internal sealed class ThreadProviderSwitchCoordinator
                 sourceBackend.ProviderKey,
                 sessionId,
                 cancellationToken)
-            .ConfigureAwait(false)
+            
             ?? throw new InvalidOperationException(
                 $"The local-runtime session '{thread.BackendSessionId}' was not found for provider '{sourceBackend.ProviderKey}'.");
         var sourceState = await store.GetStateAsync(
@@ -123,7 +123,7 @@ internal sealed class ThreadProviderSwitchCoordinator
                 sourceBackend.ProviderKey,
                 sessionId,
                 cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         var timestamp = DateTimeOffset.UtcNow;
 
@@ -135,7 +135,7 @@ internal sealed class ThreadProviderSwitchCoordinator
 
         try
         {
-            await _detachThreadSessionAsync(oldThreadId).ConfigureAwait(false);
+            await _detachThreadSessionAsync(oldThreadId);
         }
         catch
         {
@@ -153,7 +153,7 @@ internal sealed class ThreadProviderSwitchCoordinator
         tab.Usage = null;
 
         _rekeyThreadIdentity(oldThreadId, thread);
-        await _applyThreadPreferenceAsync(tab).ConfigureAwait(false);
+        await _applyThreadPreferenceAsync(tab);
 
         var targetSummary = sourceSummary with
         {
@@ -181,8 +181,8 @@ internal sealed class ThreadProviderSwitchCoordinator
             UpdatedAt = timestamp,
         };
 
-        await store.UpsertSessionAsync(targetSummary, cancellationToken).ConfigureAwait(false);
-        await store.UpsertStateAsync(targetState, cancellationToken).ConfigureAwait(false);
+        await store.UpsertSessionAsync(targetSummary, cancellationToken);
+        await store.UpsertStateAsync(targetState, cancellationToken);
         await store.AppendEventsAsync(
                 targetBackend.ProtocolFamily,
                 targetBackend.ProviderKey,
@@ -197,11 +197,11 @@ internal sealed class ThreadProviderSwitchCoordinator
                         $"Provider switched from {sourceBackend.ProviderKey} to {targetBackend.ProviderKey}."),
                 ],
                 cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (thread.Kind == WorkThreadKind.InternalThread)
         {
-            await _threadCatalog.SaveInternalAsync(thread, cancellationToken).ConfigureAwait(false);
+            await _threadCatalog.SaveInternalAsync(thread, cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(oldInternalDirectory) &&
                 !string.Equals(oldInternalDirectory, Path.GetDirectoryName(thread.SourcePath), StringComparison.OrdinalIgnoreCase) &&
@@ -211,7 +211,7 @@ internal sealed class ThreadProviderSwitchCoordinator
             }
         }
 
-        await _persistViewStateAsync().ConfigureAwait(false);
+        await _persistViewStateAsync();
         return true;
     }
 

@@ -514,6 +514,57 @@ public sealed partial class CodexClient : IAsyncDisposable
             "thread/metadata/update", parameters, cancellationToken);
     }
 
+    /// <summary>
+    /// Approves an action that Guardian denied for a thread.
+    /// </summary>
+    /// <param name="parameters">Parameters for the approval request.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The server response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<ThreadApproveGuardianDeniedActionResponse> ThreadApproveGuardianDeniedActionAsync(
+        ThreadApproveGuardianDeniedActionParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<ThreadApproveGuardianDeniedActionParams, ThreadApproveGuardianDeniedActionResponse>(
+            "thread/approveGuardianDeniedAction", parameters, cancellationToken);
+    }
+
+    /// <summary>
+    /// Lists turns for a thread.
+    /// </summary>
+    /// <param name="parameters">Parameters identifying the thread and listing options.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The server response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<ThreadTurnsListResponse> ThreadTurnsListAsync(
+        ThreadTurnsListParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<ThreadTurnsListParams, ThreadTurnsListResponse>(
+            "thread/turns/list", parameters, cancellationToken);
+    }
+
+    /// <summary>
+    /// Appends raw items to a thread history without starting a user turn.
+    /// </summary>
+    /// <param name="parameters">Items to inject into the thread.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The server response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<ThreadInjectItemsResponse> ThreadInjectItemsAsync(
+        ThreadInjectItemsParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<ThreadInjectItemsParams, ThreadInjectItemsResponse>(
+            "thread/inject_items", parameters, cancellationToken);
+    }
+
     // ── Turn APIs ─────────────────────────────────────────────────
 
     /// <summary>
@@ -860,6 +911,42 @@ public sealed partial class CodexClient : IAsyncDisposable
     //         "skills/remote/export", parameters, cancellationToken);
     // }
 
+    // ── Marketplace APIs ──────────────────────────────────────────
+
+    /// <summary>
+    /// Adds an item to the Codex marketplace configuration.
+    /// </summary>
+    /// <param name="parameters">Marketplace add parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The marketplace add response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<MarketplaceAddResponse> MarketplaceAddAsync(
+        MarketplaceAddParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<MarketplaceAddParams, MarketplaceAddResponse>(
+            "marketplace/add", parameters, cancellationToken);
+    }
+
+    /// <summary>
+    /// Removes an item from the Codex marketplace configuration.
+    /// </summary>
+    /// <param name="parameters">Marketplace remove parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The marketplace remove response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<MarketplaceRemoveResponse> MarketplaceRemoveAsync(
+        MarketplaceRemoveParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<MarketplaceRemoveParams, MarketplaceRemoveResponse>(
+            "marketplace/remove", parameters, cancellationToken);
+    }
+
     // ── Plugin APIs ───────────────────────────────────────────────
 
     /// <summary>
@@ -947,6 +1034,59 @@ public sealed partial class CodexClient : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(parameters);
         return _transport.SendRequestAsync<AppsListParams, AppsListResponse>(
             "app/list", parameters, cancellationToken);
+    }
+
+    // ── Device Key APIs ───────────────────────────────────────────
+
+    /// <summary>
+    /// Creates a device key for Codex authentication.
+    /// </summary>
+    /// <param name="parameters">Device key creation parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The created device key response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<DeviceKeyCreateResponse> DeviceKeyCreateAsync(
+        DeviceKeyCreateParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<DeviceKeyCreateParams, DeviceKeyCreateResponse>(
+            "device/key/create", parameters, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reads the current device public key.
+    /// </summary>
+    /// <param name="parameters">Device public key parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The device public key response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<DeviceKeyPublicResponse> DeviceKeyPublicAsync(
+        DeviceKeyPublicParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<DeviceKeyPublicParams, DeviceKeyPublicResponse>(
+            "device/key/public", parameters, cancellationToken);
+    }
+
+    /// <summary>
+    /// Signs a payload with the current device key.
+    /// </summary>
+    /// <param name="parameters">Device key signing parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The device key signing response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<DeviceKeySignResponse> DeviceKeySignAsync(
+        DeviceKeySignParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<DeviceKeySignParams, DeviceKeySignResponse>(
+            "device/key/sign", parameters, cancellationToken);
     }
 
     // ── File System APIs ──────────────────────────────────────────
@@ -1183,6 +1323,23 @@ public sealed partial class CodexClient : IAsyncDisposable
             "account/rateLimits/read", cancellationToken);
     }
 
+    /// <summary>
+    /// Requests that the backend send an add-credits nudge email for the current account.
+    /// </summary>
+    /// <param name="parameters">Parameters for the add-credits nudge email.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The add-credits nudge email response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<SendAddCreditsNudgeEmailResponse> AccountSendAddCreditsNudgeEmailAsync(
+        SendAddCreditsNudgeEmailParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<SendAddCreditsNudgeEmailParams, SendAddCreditsNudgeEmailResponse>(
+            "account/sendAddCreditsNudgeEmail", parameters, cancellationToken);
+    }
+
     // ── Feedback API ──────────────────────────────────────────────
 
     /// <summary>
@@ -1236,6 +1393,40 @@ public sealed partial class CodexClient : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(parameters);
         return _transport.SendRequestAsync<ListMcpServerStatusParams, ListMcpServerStatusResponse>(
             "mcpServerStatus/list", parameters, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reads a resource from a configured MCP server.
+    /// </summary>
+    /// <param name="parameters">MCP resource read parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The MCP resource read response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<McpResourceReadResponse> McpServerResourceReadAsync(
+        McpResourceReadParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<McpResourceReadParams, McpResourceReadResponse>(
+            "mcpServer/resource/read", parameters, cancellationToken);
+    }
+
+    /// <summary>
+    /// Calls a tool on a configured MCP server.
+    /// </summary>
+    /// <param name="parameters">MCP tool call parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The MCP tool call response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<McpServerToolCallResponse> McpServerToolCallAsync(
+        McpServerToolCallParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<McpServerToolCallParams, McpServerToolCallResponse>(
+            "mcpServer/tool/call", parameters, cancellationToken);
     }
 
     // ── Windows Sandbox APIs ──────────────────────────────────────

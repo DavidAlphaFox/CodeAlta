@@ -248,6 +248,8 @@ public sealed class ArchitectureGuardrailTests
     public void CodeAltaApp_DelegatesThreadCommandWorkflow()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var shellViewSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.ShellView.cs"));
+        var combinedAppSource = appSource + shellViewSource;
         var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
         var creationSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadCreationCoordinator.cs"));
         var shellCommandSurfaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Frontend", "Commands", "ShellCommandSurfaceCoordinator.cs"));
@@ -255,8 +257,8 @@ public sealed class ArchitectureGuardrailTests
         var executionOptionsSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadExecutionOptionsFactory.cs"));
 
         Assert.IsTrue(appSource.Contains("CodeAltaFrontendComposition.Create(", StringComparison.Ordinal));
-        Assert.IsTrue(appSource.Contains("_shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync", StringComparison.Ordinal));
-        Assert.IsTrue(appSource.Contains("_shellCommandSurfaceCoordinator.SubmitCurrentDelegationAsync", StringComparison.Ordinal));
+        Assert.IsTrue(combinedAppSource.Contains("_shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync", StringComparison.Ordinal));
+        Assert.IsTrue(combinedAppSource.Contains("_shellCommandSurfaceCoordinator.SubmitCurrentDelegationAsync", StringComparison.Ordinal));
         Assert.IsTrue(compositionSource.Contains("new ThreadCommandCoordinator(", StringComparison.Ordinal));
         Assert.IsTrue(shellCommandSurfaceSource.Contains("new ShellInputCoordinator(", StringComparison.Ordinal));
         Assert.IsFalse(threadCommandSource.Contains("GetThreadInput()", StringComparison.Ordinal));
@@ -411,6 +413,7 @@ public sealed class ArchitectureGuardrailTests
     public void ThreadDraftPersistence_UsesMachineSavedPromptsAndDeleteHooks()
     {
         var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
+        var catalogOptionsSource = File.ReadAllText(Path.GetFullPath(Path.Combine(GetCodeAltaSourceRoot(), "..", "CodeAlta.Catalog", "CatalogOptions.cs")));
         var promptDraftSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "PromptDraftUiCoordinator.cs"));
         var persistenceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadPromptDraftPersistenceCoordinator.cs"));
         var threadStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ShellThreadStateCoordinator.cs"));
@@ -418,7 +421,8 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsTrue(compositionSource.Contains("callbacks.LoadPromptDraft", StringComparison.Ordinal));
         Assert.IsTrue(compositionSource.Contains("callbacks.DeletePromptDraft", StringComparison.Ordinal));
         Assert.IsTrue(promptDraftSource.Contains("_promptDraftPersistence.ObservePromptDraft", StringComparison.Ordinal));
-        Assert.IsTrue(persistenceSource.Contains("saved_prompts", StringComparison.Ordinal));
+        Assert.IsTrue(catalogOptionsSource.Contains("saved_prompts", StringComparison.Ordinal));
+        Assert.IsTrue(persistenceSource.Contains("PromptDraftsRoot", StringComparison.Ordinal));
         Assert.IsTrue(persistenceSource.Contains("saved_prompt_", StringComparison.Ordinal));
         Assert.IsTrue(threadStateSource.Contains("_deletePromptDraft(threadId);", StringComparison.Ordinal));
     }
@@ -703,7 +707,7 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
-    public void CodeAltaApp_IsNoLongerPartial()
+    public void CodeAltaApp_UsesOnlyApprovedPartialSlices()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
         var partialFiles = Directory
@@ -714,7 +718,7 @@ public sealed class ArchitectureGuardrailTests
             .ToArray();
 
         Assert.AreEqual(
-            string.Empty,
+            "Views/CodeAltaApp.ShellView.cs|Views/CodeAltaApp.cs",
             string.Join("|", partialFiles));
     }
 

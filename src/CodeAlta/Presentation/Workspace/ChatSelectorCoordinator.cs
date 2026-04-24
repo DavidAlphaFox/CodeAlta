@@ -277,7 +277,7 @@ internal sealed class ChatSelectorCoordinator
             return;
         }
 
-        if (await _trySwitchThreadBackendAsync(thread, tab, targetBackendId).ConfigureAwait(false))
+        if (await _trySwitchThreadBackendAsync(thread, tab, targetBackendId))
         {
             _refreshSelectionAndThreadWorkspace();
             return;

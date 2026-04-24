@@ -424,7 +424,7 @@ internal sealed class ThreadCommandCoordinator
                     BuildExecutionOptions(thread, tab),
                     skillName,
                     cancellationToken)
-                .ConfigureAwait(false);
+                ;
             _commandContext.SetThreadStatus(tab, $"Activated skill '{skillName}'.", false, StatusTone.Ready);
         }
         catch (Exception ex)

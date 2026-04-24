@@ -259,7 +259,7 @@ internal sealed class SkillsManagementDialog
         var scope = GetSelectedScope();
         try
         {
-            var descriptors = await Task.Run(() => _service.LoadAsync(scope)).ConfigureAwait(false);
+            var descriptors = await Task.Run(() => _service.LoadAsync(scope));
             await _dialog.Dispatcher.InvokeAsync(
                 () =>
                 {
@@ -270,7 +270,7 @@ internal sealed class SkillsManagementDialog
                         .ToArray();
 
                     ApplyFilter(selectFirst: true);
-                }).ConfigureAwait(false);
+                });
         }
         catch (Exception ex)
         {
@@ -283,7 +283,7 @@ internal sealed class SkillsManagementDialog
                     _selectedSkillIndex.Value = -1;
                     _summaryText = $"[error]Failed to load skills: {AnsiMarkup.Escape(ex.Message)}[/]";
                     EnsureRelatedFilesForSelection();
-                }).ConfigureAwait(false);
+                });
         }
     }
 
