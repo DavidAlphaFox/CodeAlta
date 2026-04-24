@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text;
 using CodeAlta.Agent.OpenAI.CodexSubscription;
 
 namespace CodeAlta.Tests;
@@ -157,6 +159,108 @@ public sealed class OpenAICodexSubscriptionAuthTests
         CollectionAssert.AreEqual(new[] { "openid", "offline_access" }, stored.Scopes);
     }
 
+    [TestMethod]
+    public void OAuthClient_BuildAuthorizeUriIncludesRequiredParameters()
+    {
+        var pkce = new OpenAICodexSubscriptionPkce("verifier", "challenge");
+        var uri = OpenAICodexSubscriptionOAuthClient.BuildAuthorizeUri(pkce, "state", "workspace_123");
+        var query = ParseQuery(uri.Query);
+
+        Assert.AreEqual("https://auth.openai.com/oauth/authorize", uri.GetLeftPart(UriPartial.Path));
+        Assert.AreEqual("code", query["response_type"]);
+        Assert.AreEqual(OpenAICodexSubscriptionOAuthDefaults.ClientId, query["client_id"]);
+        Assert.AreEqual(OpenAICodexSubscriptionOAuthDefaults.RedirectUri, query["redirect_uri"]);
+        Assert.AreEqual(OpenAICodexSubscriptionOAuthDefaults.Scope, query["scope"]);
+        Assert.AreEqual("challenge", query["code_challenge"]);
+        Assert.AreEqual("S256", query["code_challenge_method"]);
+        Assert.AreEqual("state", query["state"]);
+        Assert.AreEqual("true", query["id_token_add_organizations"]);
+        Assert.AreEqual("true", query["codex_cli_simplified_flow"]);
+        Assert.AreEqual("codealta", query["originator"]);
+        Assert.AreEqual("workspace_123", query["allowed_workspace_id"]);
+    }
+
+    [TestMethod]
+    public void OAuthClient_StateMismatchThrows()
+    {
+        Assert.ThrowsExactly<InvalidOperationException>(
+            () => OpenAICodexSubscriptionOAuthClient.ValidateState("expected", "actual"));
+    }
+
+    [TestMethod]
+    public async Task OAuthClient_ExchangeAuthorizationCodeStoresExpiryAndScopes()
+    {
+        using var httpClient = new HttpClient(new QueueHttpMessageHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "access_token": "access-secret",
+                      "refresh_token": "refresh-secret",
+                      "id_token": "id-secret",
+                      "expires_in": 3600,
+                      "scope": "openid offline_access"
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json"),
+            }));
+        var client = new OpenAICodexSubscriptionOAuthClient(httpClient);
+        var before = DateTimeOffset.UtcNow;
+
+        var credential = await client.ExchangeAuthorizationCodeAsync(
+                "code",
+                "verifier",
+                OpenAICodexSubscriptionOAuthDefaults.RedirectUri)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual("access-secret", credential.AccessToken);
+        Assert.AreEqual("refresh-secret", credential.RefreshToken);
+        Assert.AreEqual("id-secret", credential.IdToken);
+        Assert.IsTrue(credential.ExpiresAt >= before.AddMinutes(59));
+        CollectionAssert.AreEqual(new[] { "openid", "offline_access" }, credential.Scopes);
+    }
+
+    [TestMethod]
+    public async Task OAuthClient_RequestDeviceCodeParsesVerificationDetails()
+    {
+        using var httpClient = new HttpClient(new QueueHttpMessageHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "device_code": "device",
+                      "user_code": "ABCD-EFGH",
+                      "verification_uri": "https://auth.openai.com/codex/device",
+                      "expires_in": 900,
+                      "interval": 3
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json"),
+            }));
+        var client = new OpenAICodexSubscriptionOAuthClient(httpClient);
+
+        var deviceCode = await client.RequestDeviceCodeAsync().ConfigureAwait(false);
+
+        Assert.AreEqual("device", deviceCode.DeviceCode);
+        Assert.AreEqual("ABCD-EFGH", deviceCode.UserCode);
+        Assert.AreEqual(OpenAICodexSubscriptionOAuthDefaults.DeviceVerificationUri, deviceCode.VerificationUri);
+        Assert.AreEqual(TimeSpan.FromSeconds(900), deviceCode.ExpiresIn);
+        Assert.AreEqual(TimeSpan.FromSeconds(3), deviceCode.Interval);
+    }
+
+    private static Dictionary<string, string> ParseQuery(string query)
+        => query.TrimStart('?')
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(static pair => pair.Split('=', 2))
+            .ToDictionary(
+                static parts => Uri.UnescapeDataString(parts[0]),
+                static parts => Uri.UnescapeDataString(parts[1].Replace('+', ' ')),
+                StringComparer.Ordinal);
+
     private sealed class TempDirectory(string path) : IDisposable
     {
         public string Path { get; } = path;
@@ -177,6 +281,21 @@ public sealed class OpenAICodexSubscriptionAuthTests
             {
                 Directory.Delete(Path, recursive: true);
             }
+        }
+    }
+
+    private sealed class QueueHttpMessageHandler(params HttpResponseMessage[] responses) : HttpMessageHandler
+    {
+        private readonly Queue<HttpResponseMessage> _responses = new(responses);
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (_responses.Count == 0)
+            {
+                throw new InvalidOperationException("No HTTP response was queued.");
+            }
+
+            return Task.FromResult(_responses.Dequeue());
         }
     }
 }
