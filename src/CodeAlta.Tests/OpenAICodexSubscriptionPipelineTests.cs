@@ -194,6 +194,7 @@ public sealed class OpenAICodexSubscriptionPipelineTests
         var visibleModels = CodexSubscriptionStaticModelCatalog.List(provider);
         Assert.IsTrue(visibleModels.Any(static model => model.Id == "gpt-5.3-codex"));
         Assert.IsFalse(visibleModels.Any(static model => model.Id == "codex-auto-review"));
+        Assert.IsTrue(visibleModels.All(static model => Equals(272000L, model.Capabilities?["contextWindow"])));
 
         var hiddenConfiguredModel = CodexSubscriptionStaticModelCatalog.List(provider, "codex-auto-review");
         Assert.AreEqual(1, hiddenConfiguredModel.Count);
@@ -205,6 +206,7 @@ public sealed class OpenAICodexSubscriptionPipelineTests
         Assert.AreEqual(true, hiddenConfiguredModel[0].Capabilities?["supportsTextVerbosity"]);
         Assert.AreEqual(true, hiddenConfiguredModel[0].Capabilities?["supportsTools"]);
         Assert.AreEqual(false, hiddenConfiguredModel[0].Capabilities?["requiresWebSocket"]);
+        Assert.AreEqual(272000L, hiddenConfiguredModel[0].Capabilities?["contextWindow"]);
 
         Assert.ThrowsExactly<InvalidOperationException>(
             () => CodexSubscriptionStaticModelCatalog.List(provider, "unknown-codex-model"));

@@ -8,11 +8,11 @@ internal static class CodexSubscriptionStaticModelCatalog
     // Offline fallback snapshot only. Prefer authenticated Codex model discovery when it is available.
     private static readonly CodexStaticModel[] Models =
     [
-        new("gpt-5.4", "GPT-5.4", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium),
-        new("gpt-5.4-mini", "GPT-5.4 mini", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium),
-        new("gpt-5.3-codex", "GPT-5.3 Codex", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.High),
-        new("gpt-5.2", "GPT-5.2", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium),
-        new("codex-auto-review", "Codex auto review", Hidden: true, SupportsImageInput: false, DefaultReasoningEffort: AgentReasoningEffort.High),
+        new("gpt-5.4", "GPT-5.4", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
+        new("gpt-5.4-mini", "GPT-5.4 mini", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
+        new("gpt-5.3-codex", "GPT-5.3 Codex", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.High, ContextWindow: 272_000),
+        new("gpt-5.2", "GPT-5.2", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
+        new("codex-auto-review", "Codex auto review", Hidden: true, SupportsImageInput: false, DefaultReasoningEffort: AgentReasoningEffort.High, ContextWindow: 272_000),
     ];
 
     public static IReadOnlyList<AgentModelInfo> List(
@@ -69,6 +69,7 @@ internal static class CodexSubscriptionStaticModelCatalog
                 ["supportsTools"] = true,
                 ["supportsImageInput"] = model.SupportsImageInput,
                 ["requiresWebSocket"] = false,
+                ["contextWindow"] = model.ContextWindow,
             });
 
     private sealed record CodexStaticModel(
@@ -76,5 +77,6 @@ internal static class CodexSubscriptionStaticModelCatalog
         string DisplayName,
         bool Hidden,
         bool SupportsImageInput,
-        AgentReasoningEffort DefaultReasoningEffort);
+        AgentReasoningEffort DefaultReasoningEffort,
+        long ContextWindow);
 }
