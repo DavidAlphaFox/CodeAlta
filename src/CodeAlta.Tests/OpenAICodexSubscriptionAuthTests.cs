@@ -317,6 +317,61 @@ public sealed class OpenAICodexSubscriptionAuthTests
         Assert.IsTrue(account.IsFedRamp);
     }
 
+    [TestMethod]
+    public async Task InstallationIdProvider_OmitsIdWhenDisabled()
+    {
+        using var temp = TempDirectory.Create();
+        var provider = new CodexSubscriptionInstallationIdProvider(temp.Path);
+
+        Assert.IsNull(await provider.ResolveAsync(sendInstallationId: false, "codealta_state").ConfigureAwait(false));
+        Assert.IsFalse(Directory.Exists(Path.Combine(temp.Path, "installation")));
+    }
+
+    [TestMethod]
+    public async Task InstallationIdProvider_GeneratesStableCodeAltaId()
+    {
+        using var temp = TempDirectory.Create();
+        var provider = new CodexSubscriptionInstallationIdProvider(temp.Path);
+
+        var first = await provider.ResolveAsync(sendInstallationId: true, "codealta_state").ConfigureAwait(false);
+        var second = await provider.ResolveAsync(sendInstallationId: true, "codealta_state").ConfigureAwait(false);
+
+        Assert.IsTrue(Guid.TryParse(first, out _));
+        Assert.AreEqual(first, second);
+    }
+
+    [TestMethod]
+    public async Task InstallationIdProvider_ImportsCodexHomeIdWithoutRewritingCodexFile()
+    {
+        using var state = TempDirectory.Create();
+        using var codexHome = TempDirectory.Create();
+        var codexId = Guid.NewGuid().ToString();
+        var codexPath = Path.Combine(codexHome.Path, "installation_id");
+        await File.WriteAllTextAsync(codexPath, codexId).ConfigureAwait(false);
+        var before = File.GetLastWriteTimeUtc(codexPath);
+        var provider = new CodexSubscriptionInstallationIdProvider(state.Path, codexHome.Path);
+
+        var resolved = await provider.ResolveAsync(sendInstallationId: true, "codex_home_import").ConfigureAwait(false);
+        var imported = await provider.ResolveAsync(sendInstallationId: true, "codealta_state").ConfigureAwait(false);
+
+        Assert.AreEqual(codexId, resolved);
+        Assert.AreEqual(codexId, imported);
+        Assert.AreEqual(before, File.GetLastWriteTimeUtc(codexPath));
+    }
+
+    [TestMethod]
+    public async Task InstallationIdProvider_ReadonlyCodexHomeFallsBackForInvalidUuid()
+    {
+        using var state = TempDirectory.Create();
+        using var codexHome = TempDirectory.Create();
+        await File.WriteAllTextAsync(Path.Combine(codexHome.Path, "installation_id"), "not-a-uuid").ConfigureAwait(false);
+        var provider = new CodexSubscriptionInstallationIdProvider(state.Path, codexHome.Path);
+
+        var resolved = await provider.ResolveAsync(sendInstallationId: true, "codex_home_readonly").ConfigureAwait(false);
+
+        Assert.IsTrue(Guid.TryParse(resolved, out _));
+    }
+
     private static string CreateUnsignedJwt(string payloadJson)
     {
         static string Encode(string text)
