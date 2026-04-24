@@ -97,6 +97,26 @@ internal sealed class OpenAICodexSubscriptionOAuthClient
         return await ReadTokenResponseAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<OpenAICodexSubscriptionCredential> RefreshAsync(
+        string refreshToken,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
+        using var content = new FormUrlEncodedContent(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["grant_type"] = "refresh_token",
+                ["client_id"] = OpenAICodexSubscriptionOAuthDefaults.ClientId,
+                ["refresh_token"] = refreshToken,
+            });
+        using var response = await _httpClient.PostAsync(
+                OpenAICodexSubscriptionOAuthDefaults.TokenEndpoint,
+                content,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return await ReadTokenResponseAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<OpenAICodexSubscriptionDeviceCode> RequestDeviceCodeAsync(
         CancellationToken cancellationToken = default)
     {

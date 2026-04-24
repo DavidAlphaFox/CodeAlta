@@ -252,6 +252,82 @@ public sealed class OpenAICodexSubscriptionAuthTests
         Assert.AreEqual(TimeSpan.FromSeconds(3), deviceCode.Interval);
     }
 
+    [TestMethod]
+    public void AuthManager_ExtractsAccountIdFromJwtClaimMetadata()
+    {
+        var jwt = CreateUnsignedJwt(
+            """
+            {
+              "https://api.openai.com/auth": {
+                "chatgpt_account_id": "acct_from_jwt"
+              }
+            }
+            """);
+
+        Assert.AreEqual("acct_from_jwt", OpenAICodexSubscriptionAuthManager.TryExtractAccountIdFromJwt(jwt));
+    }
+
+    [TestMethod]
+    public async Task AuthManager_RefreshesExpiredTokenOnceForConcurrentCallers()
+    {
+        using var temp = TempDirectory.Create();
+        var store = new FileOpenAICodexSubscriptionCredentialStore(temp.Path);
+        await store.SaveAsync(
+                "codex_subscription",
+                new OpenAICodexSubscriptionCredential
+                {
+                    AccessToken = "old-token",
+                    RefreshToken = "refresh-secret",
+                    ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    AccountId = "acct_123",
+                    AccountLabel = "Workspace",
+                    IsFedRamp = true,
+                })
+            .ConfigureAwait(false);
+        using var handler = new QueueHttpMessageHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "access_token": "new-token",
+                      "refresh_token": "new-refresh",
+                      "expires_in": 3600
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json"),
+            });
+        using var httpClient = new HttpClient(handler);
+        var manager = new OpenAICodexSubscriptionAuthManager(
+            store,
+            new OpenAICodexSubscriptionOAuthClient(httpClient),
+            "codex_subscription");
+
+        var tokens = await Task.WhenAll(
+                manager.GetAccessTokenAsync().AsTask(),
+                manager.GetAccessTokenAsync().AsTask())
+            .ConfigureAwait(false);
+        var account = await manager.GetAccountContextAsync().ConfigureAwait(false);
+
+        CollectionAssert.AreEqual(new[] { "new-token", "new-token" }, tokens);
+        Assert.AreEqual(1, handler.RequestCount);
+        Assert.AreEqual("acct_123", account.AccountId);
+        Assert.AreEqual("Workspace", account.AccountLabel);
+        Assert.IsTrue(account.IsFedRamp);
+    }
+
+    private static string CreateUnsignedJwt(string payloadJson)
+    {
+        static string Encode(string text)
+            => Convert.ToBase64String(Encoding.UTF8.GetBytes(text))
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
+
+        return Encode("""{"alg":"none"}""") + "." + Encode(payloadJson) + ".";
+    }
+
     private static Dictionary<string, string> ParseQuery(string query)
         => query.TrimStart('?')
             .Split('&', StringSplitOptions.RemoveEmptyEntries)
@@ -288,8 +364,11 @@ public sealed class OpenAICodexSubscriptionAuthTests
     {
         private readonly Queue<HttpResponseMessage> _responses = new(responses);
 
+        public int RequestCount { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            RequestCount++;
             if (_responses.Count == 0)
             {
                 throw new InvalidOperationException("No HTTP response was queued.");
