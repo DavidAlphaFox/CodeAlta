@@ -8,6 +8,7 @@ internal static class CodexSubscriptionStaticModelCatalog
     // Offline fallback snapshot only. Prefer authenticated Codex model discovery when it is available.
     private static readonly CodexStaticModel[] Models =
     [
+        new("gpt-5.5", "GPT-5.5", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
         new("gpt-5.4", "GPT-5.4", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
         new("gpt-5.4-mini", "GPT-5.4 mini", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
         new("gpt-5.3-codex", "GPT-5.3 Codex", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.High, ContextWindow: 272_000),
