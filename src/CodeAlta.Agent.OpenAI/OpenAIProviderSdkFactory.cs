@@ -16,6 +16,7 @@ namespace CodeAlta.Agent.OpenAI;
 
 internal static class OpenAIProviderSdkFactory
 {
+    private static readonly TimeSpan CodexSubscriptionNetworkTimeout = TimeSpan.FromMinutes(10);
     private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.Agent.OpenAI");
     private static readonly HttpClient CodexOAuthHttpClient = new();
 
@@ -326,6 +327,10 @@ internal static class OpenAIProviderSdkFactory
             Endpoint = provider.BaseUri,
             OrganizationId = provider.OrganizationId,
             ProjectId = provider.ProjectId,
+            // Codex subscription responses can legitimately sit in model-side reasoning for longer than
+            // the SDK pipeline's default per-read timeout. Keep a finite watchdog, but avoid cutting off
+            // quiet long-running SSE streams too aggressively.
+            NetworkTimeout = provider.CodexSubscription is null ? null : CodexSubscriptionNetworkTimeout,
         };
 
     private static ResponsesClient CreateCodexSubscriptionResponsesClient(

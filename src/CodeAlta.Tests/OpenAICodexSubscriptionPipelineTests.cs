@@ -2,10 +2,12 @@
 
 using System.ClientModel.Primitives;
 using System.Net;
+using System.Reflection;
 using CodeAlta.Agent;
 using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Agent.OpenAI;
 using CodeAlta.Agent.OpenAI.CodexSubscription;
+using OpenAI;
 
 namespace CodeAlta.Tests;
 
@@ -177,6 +179,26 @@ public sealed class OpenAICodexSubscriptionPipelineTests
                 }));
 
         Assert.AreEqual("https://chatgpt.com/backend-api/codex", client.Endpoint.ToString());
+    }
+
+    [TestMethod]
+    public void SdkFactory_ConfiguresLongerNetworkTimeoutForCodexSubscription()
+    {
+        var nonCodexOptions = CreateClientOptions(new OpenAIProviderOptions
+        {
+            ProviderKey = "openai",
+        });
+        var codexOptions = CreateClientOptions(new OpenAIProviderOptions
+        {
+            ProviderKey = "codex_subscription",
+            CodexSubscription = new OpenAICodexSubscriptionOptions
+            {
+                Experimental = true,
+            },
+        });
+
+        Assert.IsNull(nonCodexOptions.NetworkTimeout);
+        Assert.AreEqual(TimeSpan.FromMinutes(10), codexOptions.NetworkTimeout);
     }
 
     [TestMethod]
@@ -400,6 +422,15 @@ public sealed class OpenAICodexSubscriptionPipelineTests
         await accountFirst.DisposeAsync().ConfigureAwait(false);
         var third = await sameAccount.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
         await third.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private static OpenAIClientOptions CreateClientOptions(OpenAIProviderOptions provider)
+    {
+        var method = typeof(OpenAIProviderSdkFactory).GetMethod(
+            "CreateClientOptions",
+            BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("OpenAI client option factory was not found.");
+        return (OpenAIClientOptions)method.Invoke(null, [provider])!;
     }
 
     private static ClientPipeline CreatePipeline(

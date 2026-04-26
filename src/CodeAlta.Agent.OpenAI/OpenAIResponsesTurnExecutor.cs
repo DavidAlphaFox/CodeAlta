@@ -39,6 +39,7 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
             for (var attempt = 1; ; attempt++)
             {
                 var streamStarted = false;
+                var retryUnsafeStreamUpdateObserved = false;
                 try
                 {
                     await using var concurrencyLease = await CreateCodexConcurrencyLeaseAsync(
@@ -70,9 +71,11 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                         {
                             case StreamingResponseCreatedUpdate created:
                                 latestResponse = created.Response;
+                                retryUnsafeStreamUpdateObserved |= created.Response.OutputItems.Count > 0;
                                 break;
                             case StreamingResponseInProgressUpdate inProgress:
                                 latestResponse = inProgress.Response;
+                                retryUnsafeStreamUpdateObserved |= inProgress.Response.OutputItems.Count > 0;
                                 break;
                             case StreamingResponseOutputTextDeltaUpdate outputTextDelta when !string.IsNullOrEmpty(outputTextDelta.Delta):
                                 await onUpdate(
@@ -83,6 +86,7 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                                         Text = outputTextDelta.Delta,
                                     },
                                     cancellationToken).ConfigureAwait(false);
+                                retryUnsafeStreamUpdateObserved = true;
                                 break;
                             case StreamingResponseRefusalDeltaUpdate refusalDelta when !string.IsNullOrEmpty(refusalDelta.Delta):
                                 await onUpdate(
@@ -93,6 +97,7 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                                         Text = refusalDelta.Delta,
                                     },
                                     cancellationToken).ConfigureAwait(false);
+                                retryUnsafeStreamUpdateObserved = true;
                                 break;
                             case StreamingResponseReasoningSummaryTextDeltaUpdate reasoningSummaryDelta when !string.IsNullOrEmpty(reasoningSummaryDelta.Delta):
                                 await onUpdate(
@@ -103,6 +108,7 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                                         Text = reasoningSummaryDelta.Delta,
                                     },
                                     cancellationToken).ConfigureAwait(false);
+                                retryUnsafeStreamUpdateObserved = true;
                                 break;
                             case StreamingResponseReasoningTextDeltaUpdate reasoningTextDelta when !string.IsNullOrEmpty(reasoningTextDelta.Delta):
                                 await onUpdate(
@@ -113,9 +119,11 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                                         Text = reasoningTextDelta.Delta,
                                     },
                                     cancellationToken).ConfigureAwait(false);
+                                retryUnsafeStreamUpdateObserved = true;
                                 break;
                             case StreamingResponseOutputItemDoneUpdate outputItemDone when outputItemDone.Item is not null:
                                 streamedOutputItems[outputItemDone.OutputIndex] = outputItemDone.Item;
+                                retryUnsafeStreamUpdateObserved = true;
                                 break;
                             case StreamingResponseIncompleteUpdate incomplete:
                                 latestResponse = incomplete.Response;
@@ -205,6 +213,7 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                     attempt,
                     retryBudget,
                     streamStarted,
+                    retryUnsafeStreamUpdateObserved,
                     out var delay))
                 {
                     LogCodexDiagnostic(
@@ -859,6 +868,13 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
             return new InvalidOperationException(message, exception);
         }
 
+        if (IsPrematureResponseEnded(exception))
+        {
+            return new InvalidOperationException(
+                "ChatGPT/Codex response stream ended prematurely before a terminal response was received. This is usually a transient network or service hiccup; retry the prompt if no answer was recorded.",
+                exception);
+        }
+
         if (exception is JsonException ||
             exception is InvalidOperationException invalidOperationException &&
             invalidOperationException.Message.Contains(
@@ -889,15 +905,52 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
         int attempt,
         int retryBudget,
         bool streamStarted,
+        bool retryUnsafeStreamUpdateObserved,
         out TimeSpan delay)
     {
         delay = TimeSpan.Zero;
         if (provider.CodexSubscription is null ||
-            streamStarted ||
             attempt >= retryBudget ||
             exception is OperationCanceledException or LocalAgentTurnExecutionException)
         {
             return false;
+        }
+
+        if (streamStarted && retryUnsafeStreamUpdateObserved)
+        {
+            return false;
+        }
+
+        if (IsRetryableCodexSubscriptionException(exception))
+        {
+            delay = GetRetryAfterDelay(exception) ?? GetExponentialBackoffDelay(attempt);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsPrematureResponseEnded(Exception exception)
+    {
+        if (exception is HttpIOException { HttpRequestError: HttpRequestError.ResponseEnded })
+        {
+            return true;
+        }
+
+        if (exception.Message.Contains("response ended prematurely", StringComparison.OrdinalIgnoreCase) &&
+            exception.Message.Contains("ResponseEnded", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return exception.InnerException is not null && IsPrematureResponseEnded(exception.InnerException);
+    }
+
+    private static bool IsRetryableCodexSubscriptionException(Exception exception)
+    {
+        if (IsPrematureResponseEnded(exception))
+        {
+            return true;
         }
 
         if (exception is not HttpRequestException httpException)
@@ -906,18 +959,12 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
         }
 
         var statusCode = httpException.StatusCode;
-        if (statusCode is null ||
+        return statusCode is null ||
             statusCode is System.Net.HttpStatusCode.TooManyRequests ||
-            statusCode >= System.Net.HttpStatusCode.InternalServerError)
-        {
-            delay = GetRetryAfterDelay(httpException) ?? GetExponentialBackoffDelay(attempt);
-            return true;
-        }
-
-        return false;
+            statusCode >= System.Net.HttpStatusCode.InternalServerError;
     }
 
-    private static TimeSpan? GetRetryAfterDelay(HttpRequestException exception)
+    private static TimeSpan? GetRetryAfterDelay(Exception exception)
     {
         foreach (var key in new[] { "Retry-After", "retry-after", "RetryAfter" })
         {
