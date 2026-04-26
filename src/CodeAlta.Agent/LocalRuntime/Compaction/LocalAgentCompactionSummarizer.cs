@@ -202,7 +202,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
             preparation.PreviousSummary,
             fileActivity,
             maxOutputTokens);
-        ValidateSummary(normalizedSummary, maxOutputTokens);
+        ValidateSummaryShape(normalizedSummary);
 
         return new LocalAgentCompactionResult(
             Summary: normalizedSummary,
@@ -469,8 +469,8 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                 maxOutputTokens,
                 cancellationToken)
             .ConfigureAwait(false);
-        ValidateOversizedAnchorSynopsis(response.Summary, maxOutputTokens);
-        return (response.Summary, 1);
+        var normalizedSynopsis = NormalizeOversizedAnchorSynopsis(response.Summary, serializedAnchor, previousSynopsis);
+        return (normalizedSynopsis, 1);
     }
 
     private async Task<LocalAgentCompactionSummaryResponse> ExecuteSummaryRequestAsync(
@@ -500,17 +500,11 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                 cancellationToken)
             .ConfigureAwait(false);
 
-    private static void ValidateSummary(string summary, int maxOutputTokens)
+    private static void ValidateSummaryShape(string summary)
     {
         if (string.IsNullOrWhiteSpace(summary))
         {
             throw new InvalidOperationException("The compaction summarizer returned an empty summary.");
-        }
-
-        var estimatedTokens = LocalAgentTokenEstimator.EstimateTextTokens(summary);
-        if (estimatedTokens > Math.Max(maxOutputTokens * 2L, 256L))
-        {
-            throw new InvalidOperationException("The compaction summarizer returned a summary that exceeds the configured checkpoint budget.");
         }
 
         if (!HasRequiredSummarySections(summary))
@@ -527,10 +521,6 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         int maxOutputTokens)
     {
         var trimmedSummary = summary.Trim();
-        if (string.IsNullOrWhiteSpace(trimmedSummary))
-        {
-            return summary;
-        }
 
         if (HasRequiredSummarySections(trimmedSummary))
         {
@@ -609,24 +599,47 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         return builder.ToString().Trim();
     }
 
-    private static void ValidateOversizedAnchorSynopsis(string synopsis, int maxOutputTokens)
+    private static string NormalizeOversizedAnchorSynopsis(
+        string synopsis,
+        string serializedAnchor,
+        string? previousSynopsis)
     {
-        if (string.IsNullOrWhiteSpace(synopsis))
+        var trimmedSynopsis = synopsis.Trim();
+        if (HasRequiredOversizedAnchorSynopsisSections(trimmedSynopsis))
         {
-            throw new InvalidOperationException("The oversized-anchor reducer returned an empty synopsis.");
+            return trimmedSynopsis;
         }
 
-        var estimatedTokens = LocalAgentTokenEstimator.EstimateTextTokens(synopsis);
-        if (estimatedTokens > Math.Max(maxOutputTokens * 2L, 192L))
-        {
-            throw new InvalidOperationException("The oversized-anchor reducer returned a synopsis that exceeds the configured checkpoint budget.");
-        }
+        var currentSections = ParseOversizedAnchorSections(trimmedSynopsis);
+        var previousSections = string.IsNullOrWhiteSpace(previousSynopsis)
+            ? null
+            : ParseOversizedAnchorSections(previousSynopsis);
 
-        if (!synopsis.Contains("## Task", StringComparison.Ordinal) ||
-            !synopsis.Contains("## Explicit Requirements", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("The oversized-anchor reducer returned a malformed synopsis.");
-        }
+        var task = FirstNonEmpty(
+            GetSection(currentSections, "## Task"),
+            GetSection(previousSections, "## Task"),
+            ExtractLeadParagraph(serializedAnchor, 480),
+            "- Continue from the oversized latest user request.");
+        var explicitRequirements = FirstNonEmpty(
+            GetSection(currentSections, "## Explicit Requirements"),
+            GetSection(previousSections, "## Explicit Requirements"),
+            "- Preserve continuation-critical details from the oversized latest user request.");
+        var filesAndIdentifiers = FirstNonEmpty(
+            GetSection(currentSections, "## Files and Identifiers"),
+            GetSection(previousSections, "## Files and Identifiers"),
+            "- None explicitly captured.");
+        var exactLiteralsAndErrors = FirstNonEmpty(
+            GetSection(currentSections, "## Exact Literals and Errors"),
+            GetSection(previousSections, "## Exact Literals and Errors"),
+            NormalizeMultiline(trimmedSynopsis, 1200),
+            "- None explicitly captured.");
+
+        var builder = new System.Text.StringBuilder();
+        AppendSummarySection(builder, "## Task", task);
+        AppendSummarySection(builder, "## Explicit Requirements", explicitRequirements);
+        AppendSummarySection(builder, "## Files and Identifiers", filesAndIdentifiers);
+        AppendSummarySection(builder, "## Exact Literals and Errors", exactLiteralsAndErrors, includeTrailingBlankLine: false);
+        return builder.ToString().Trim();
     }
 
     private static LocalAgentCompactionSerializerStatistics MergeStatistics(
@@ -717,6 +730,12 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
            summary.Contains("## Critical Context", StringComparison.Ordinal) &&
            summary.Contains("## Relevant Files", StringComparison.Ordinal);
 
+    private static bool HasRequiredOversizedAnchorSynopsisSections(string synopsis)
+        => synopsis.Contains("## Task", StringComparison.Ordinal) &&
+           synopsis.Contains("## Explicit Requirements", StringComparison.Ordinal) &&
+           synopsis.Contains("## Files and Identifiers", StringComparison.Ordinal) &&
+           synopsis.Contains("## Exact Literals and Errors", StringComparison.Ordinal);
+
     private static Dictionary<string, string> ParseMarkdownSections(string summary)
     {
         var sections = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -727,6 +746,47 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         {
             var line = rawLine.TrimEnd();
             if (IsSupportedSummaryHeading(line))
+            {
+                FlushSection(sections, currentHeading, builder);
+                currentHeading = line.Trim();
+                builder.Clear();
+                continue;
+            }
+
+            if (currentHeading is not null)
+            {
+                builder.AppendLine(line);
+            }
+        }
+
+        FlushSection(sections, currentHeading, builder);
+        return sections;
+
+        static void FlushSection(IDictionary<string, string> sections, string? heading, System.Text.StringBuilder content)
+        {
+            if (heading is null)
+            {
+                return;
+            }
+
+            var text = content.ToString().Trim();
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                sections[heading] = text;
+            }
+        }
+    }
+
+    private static Dictionary<string, string> ParseOversizedAnchorSections(string synopsis)
+    {
+        var sections = new Dictionary<string, string>(StringComparer.Ordinal);
+        string? currentHeading = null;
+        var builder = new System.Text.StringBuilder();
+
+        foreach (var rawLine in synopsis.Split(["\r\n", "\n"], StringSplitOptions.None))
+        {
+            var line = rawLine.TrimEnd();
+            if (IsSupportedOversizedAnchorHeading(line))
             {
                 FlushSection(sections, currentHeading, builder);
                 currentHeading = line.Trim();
@@ -770,6 +830,12 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
             or "## Next Steps"
             or "## Critical Context"
             or "## Relevant Files";
+
+    private static bool IsSupportedOversizedAnchorHeading(string line)
+        => line is "## Task"
+            or "## Explicit Requirements"
+            or "## Files and Identifiers"
+            or "## Exact Literals and Errors";
 
     private static string? GetSection(IReadOnlyDictionary<string, string>? sections, string heading)
         => sections is not null && sections.TryGetValue(heading, out var value) && !string.IsNullOrWhiteSpace(value)

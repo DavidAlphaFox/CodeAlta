@@ -2584,7 +2584,7 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
-    public async Task LocalAgentSession_CompactAsync_RejectsOversizedGeneratedSummary()
+    public async Task LocalAgentSession_CompactAsync_AllowsOversizedGeneratedSummary()
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
@@ -2619,8 +2619,8 @@ public sealed class LocalAgentSessionTests
                         "GPT-5.4",
                         Capabilities: new Dictionary<string, object?>(StringComparer.Ordinal)
                         {
-                            ["contextWindow"] = 400L,
-                            ["inputTokenLimit"] = 300L,
+                            ["contextWindow"] = 9000L,
+                            ["inputTokenLimit"] = 8000L,
                             ["outputTokenLimit"] = 64L,
                         }),
                 ],
@@ -2654,13 +2654,85 @@ public sealed class LocalAgentSessionTests
         _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("First prompt " + new string('x', 160)) }).ConfigureAwait(false);
         _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Second prompt " + new string('y', 160)) }).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(
-            () => ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync()).ConfigureAwait(false);
+        var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);
 
+        Assert.IsNotNull(outcome);
+        Assert.IsTrue(outcome.Success);
         Assert.AreEqual(1, summaryAttempts);
         var persistedState = await store.GetStateAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
         Assert.IsNotNull(persistedState);
-        Assert.IsNull(persistedState.CompactionCheckpointEventId);
+        Assert.IsNotNull(persistedState.CompactionCheckpointEventId);
+
+        var persistedHistory = await store.ReadEventsAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
+        var checkpointEvent = persistedHistory
+            .OfType<AgentRawEvent>()
+            .Last(static evt => evt.BackendEventType == "local.compactionCheckpoint");
+        var checkpoint = checkpointEvent.Raw.Deserialize(AgentJsonSerializerContext.Default.LocalAgentCompactionCheckpoint);
+        Assert.IsNotNull(checkpoint);
+        Assert.IsTrue(LocalAgentTokenEstimator.EstimateTextTokens(checkpoint!.Summary) > 256);
+    }
+
+    [TestMethod]
+    public async Task LocalAgentSession_CompactAsync_NormalizesEmptyGeneratedSummary()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
+        {
+            RecentSuffixTargetTokens = 160,
+        });
+        var summary = CreateSummary("session-summary-empty");
+        var state = CreateState("session-summary-empty");
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                [new AgentModelInfo("gpt-5.4", "GPT-5.4")],
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("   ")]),
+                    }),
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("First answer " + new string('a', 160))]),
+                    }),
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("Second answer " + new string('b', 160))]),
+                    })),
+            CreateOptions(provider, temp.Path));
+
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("First prompt " + new string('x', 180)) }).ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Second prompt " + new string('y', 180)) }).ConfigureAwait(false);
+
+        var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);
+        Assert.IsNotNull(outcome);
+        Assert.IsTrue(outcome.Success);
+
+        var persistedHistory = await store.ReadEventsAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
+        var checkpointEvent = persistedHistory
+            .OfType<AgentRawEvent>()
+            .Last(static evt => evt.BackendEventType == "local.compactionCheckpoint");
+        var checkpoint = checkpointEvent.Raw.Deserialize(AgentJsonSerializerContext.Default.LocalAgentCompactionCheckpoint);
+        Assert.IsNotNull(checkpoint);
+        StringAssert.Contains(checkpoint!.Summary, "## Objective");
+        StringAssert.Contains(checkpoint.Summary, "Second prompt");
     }
 
     [TestMethod]

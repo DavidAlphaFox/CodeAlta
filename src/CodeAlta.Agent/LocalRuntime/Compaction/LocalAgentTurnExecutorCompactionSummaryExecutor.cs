@@ -42,11 +42,6 @@ internal sealed class LocalAgentTurnExecutorCompactionSummaryExecutor(ILocalAgen
             .OfType<LocalAgentMessagePart.Text>()
             .Select(static part => part.Value)
             .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
-        if (string.IsNullOrWhiteSpace(summary))
-        {
-            throw new InvalidOperationException("The compaction summarizer did not return a textual summary.");
-        }
-
-        return new LocalAgentCompactionSummaryResponse(summary.Trim(), response.Usage);
+        return new LocalAgentCompactionSummaryResponse(summary?.Trim() ?? string.Empty, response.Usage);
     }
 }
