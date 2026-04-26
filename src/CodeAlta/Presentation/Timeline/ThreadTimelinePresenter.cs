@@ -839,7 +839,12 @@ internal sealed class ThreadTimelinePresenter
         }
 
         _deferredTailScrollQueued = true;
-        _enqueueDeferredUiAction(DrainDeferredTailScroll);
+        _enqueueDeferredUiAction(QueueDeferredTailScrollDrainOnUi);
+    }
+
+    private void QueueDeferredTailScrollDrainOnUi()
+    {
+        _uiDispatcher.Post(DrainDeferredTailScroll);
     }
 
     private void DrainDeferredTailScroll()

@@ -234,6 +234,30 @@ public sealed class ThreadTimelinePresenterTests
     }
 
     [TestMethod]
+    public void RevealTail_DeferredDrainWaitsForNextDispatcherTurn()
+    {
+        var dispatcher = new QueueingUiDispatcher();
+        var deferredActions = new Queue<Action>();
+        var presenter = new ThreadTimelinePresenter(dispatcher, () => true, static () => null, enqueueDeferredUiAction: deferredActions.Enqueue);
+        presenter.Flow.FollowTail = false;
+
+        presenter.RevealTail();
+        dispatcher.DrainPostedActions();
+
+        Assert.IsTrue(presenter.Flow.FollowTail);
+        Assert.AreEqual(1, deferredActions.Count);
+
+        presenter.Flow.FollowTail = false;
+        deferredActions.Dequeue()();
+
+        Assert.IsFalse(presenter.Flow.FollowTail, "Deferred tail reveal should wait for a dispatcher turn so layout can settle first.");
+
+        dispatcher.DrainPostedActions();
+
+        Assert.IsTrue(presenter.Flow.FollowTail);
+    }
+
+    [TestMethod]
     public void ScrollToPreviousMessage_FirstPressSelectsLastNavigableMessage()
     {
         var presenter = CreatePresenter();
