@@ -114,6 +114,12 @@ internal sealed class OpenThreadState
         set => Session.ActiveRunId = value;
     }
 
+    public DateTimeOffset? ActiveRunStartedAt
+    {
+        get => Session.ActiveRunStartedAt;
+        set => Session.ActiveRunStartedAt = value;
+    }
+
     public AgentSessionUsage? Usage
     {
         get => Session.Usage;

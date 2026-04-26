@@ -13,6 +13,21 @@ internal static class StatusVisualFormatter
 
     public static string BuildThinkingStatusText() => ThinkingStatusMessage;
 
+    public static string BuildThinkingStatusText(TimeSpan elapsed)
+    {
+        if (elapsed < TimeSpan.FromSeconds(1))
+        {
+            return ThinkingStatusMessage;
+        }
+
+        return $"Thinking for {FormatElapsedTime(elapsed)}...";
+    }
+
+    public static bool IsThinkingStatusText(string? message)
+        => !string.IsNullOrWhiteSpace(message) &&
+           (string.Equals(message, ThinkingStatusMessage, StringComparison.Ordinal) ||
+            message.StartsWith("Thinking for ", StringComparison.Ordinal));
+
     public static string BuildPromptEditedStatusText() => PromptEditedStatusMessage;
 
     public static string BuildStatusIconMarkup(StatusTone tone)
@@ -33,7 +48,7 @@ internal static class StatusVisualFormatter
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        if (busy && string.Equals(message, ThinkingStatusMessage, StringComparison.Ordinal))
+        if (busy && IsThinkingStatusText(message))
         {
             var sweepBrush = Brush.LinearGradient(
                 new GradientPoint(-0.55f + (0.75f * thinkingAnimationPhase01), 0f),
@@ -68,4 +83,33 @@ internal static class StatusVisualFormatter
             new GradientStop(1.00f, baseColor.WithOpacity(0.50f)),
         ];
     }
+
+    private static string FormatElapsedTime(TimeSpan elapsed)
+    {
+        var totalSeconds = Math.Max(1, (int)Math.Floor(elapsed.TotalSeconds));
+        var hours = totalSeconds / 3600;
+        var minutes = (totalSeconds % 3600) / 60;
+        var seconds = totalSeconds % 60;
+
+        var parts = new List<string>(capacity: 3);
+        if (hours > 0)
+        {
+            parts.Add(FormatUnit(hours, "hour"));
+        }
+
+        if (minutes > 0)
+        {
+            parts.Add(FormatUnit(minutes, "minute"));
+        }
+
+        if ((hours == 0 && seconds > 0) || parts.Count == 0)
+        {
+            parts.Add(FormatUnit(seconds, "second"));
+        }
+
+        return string.Join(' ', parts);
+    }
+
+    private static string FormatUnit(int value, string unit)
+        => value == 1 ? $"1 {unit}" : $"{value} {unit}s";
 }

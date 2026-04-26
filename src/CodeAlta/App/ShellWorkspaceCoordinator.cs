@@ -174,6 +174,46 @@ internal sealed class ShellWorkspaceCoordinator
     public void InvalidateThreadChrome()
         => _workspaceContext.DispatchToUi(() => _viewRefreshState.Value++);
 
+    public void RefreshRunningStatusElapsed(DateTimeOffset now)
+    {
+        _workspaceContext.DispatchToUi(
+            () =>
+            {
+                _workspaceContext.VerifyBindableAccess();
+                var selectedThread = _threadSelection.GetSelectedThread();
+                if (selectedThread is null)
+                {
+                    return;
+                }
+
+                var selectedTab = _threadSelection.EnsureThreadTab(selectedThread);
+                if (!selectedTab.HasCustomStatus ||
+                    !selectedTab.StatusBusy ||
+                    selectedTab.ActiveRunStartedAt is not { } startedAt ||
+                    !StatusVisualFormatter.IsThinkingStatusText(selectedTab.StatusMessage))
+                {
+                    return;
+                }
+
+                var elapsed = now - startedAt;
+                if (elapsed < TimeSpan.Zero)
+                {
+                    elapsed = TimeSpan.Zero;
+                }
+
+                var message = StatusVisualFormatter.BuildThinkingStatusText(elapsed);
+                if (string.Equals(selectedTab.StatusMessage, message, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                selectedTab.StatusMessage = message;
+                _shellViewModel.StatusText = message;
+                _workspaceContext.RefreshSidebarProjection();
+                _viewRefreshState.Value++;
+            });
+    }
+
     public void SetReadyStatusForCurrentSelection()
     {
         var selection = _threadSelection.Selection;

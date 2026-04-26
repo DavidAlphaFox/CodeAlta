@@ -88,7 +88,7 @@ public sealed class CodeAltaAppStatusTests
     public void BuildStatusTextStyle_UsesGradientBrushForThinking()
     {
         var style = StatusVisualFormatter.BuildStatusTextStyle(
-            StatusVisualFormatter.BuildThinkingStatusText(),
+            StatusVisualFormatter.BuildThinkingStatusText(TimeSpan.FromSeconds(5)),
             busy: true,
             StatusTone.Info,
             thinkingAnimationPhase01: 0.25f);
@@ -108,5 +108,14 @@ public sealed class CodeAltaAppStatusTests
 
         Assert.IsNull(style.ForegroundBrush);
         Assert.IsNotNull(style.Foreground);
+    }
+
+    [TestMethod]
+    public void BuildThinkingStatusText_IncludesHumanFriendlyElapsedTime()
+    {
+        Assert.AreEqual("Thinking...", StatusVisualFormatter.BuildThinkingStatusText(TimeSpan.FromMilliseconds(500)));
+        Assert.AreEqual("Thinking for 5 seconds...", StatusVisualFormatter.BuildThinkingStatusText(TimeSpan.FromSeconds(5)));
+        Assert.AreEqual("Thinking for 4 minutes 30 seconds...", StatusVisualFormatter.BuildThinkingStatusText(TimeSpan.FromMinutes(4) + TimeSpan.FromSeconds(30)));
+        Assert.AreEqual("Thinking for 1 hour 2 minutes...", StatusVisualFormatter.BuildThinkingStatusText(TimeSpan.FromHours(1) + TimeSpan.FromMinutes(2) + TimeSpan.FromSeconds(3)));
     }
 }

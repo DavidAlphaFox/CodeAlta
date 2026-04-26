@@ -128,6 +128,7 @@ internal sealed class ThreadPromptDispatchCoordinator
         string? pendingSteerId = null;
         try
         {
+            tab.ActiveRunStartedAt ??= DateTimeOffset.UtcNow;
             _commandContext.SetThreadStatus(tab, StatusVisualFormatter.BuildThinkingStatusText(), true, StatusTone.Info);
             var executionOptions = _executionOptionsFactory.BuildExecutionOptions(thread, tab);
             var promptInput = await ProjectFilePromptInputBuilder.BuildAsync(
@@ -211,6 +212,7 @@ internal sealed class ThreadPromptDispatchCoordinator
             }
 
             tab.Timeline.RenderFailure(BuildPromptDispatchFailureMarkdown(ex.Message, prompt, restoredToDraft));
+            tab.ActiveRunStartedAt = null;
             _commandContext.SetThreadStatus(tab, $"Failed to send prompt: {ex.Message}", false, StatusTone.Error);
         }
     }

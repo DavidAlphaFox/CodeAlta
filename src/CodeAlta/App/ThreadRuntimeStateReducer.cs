@@ -317,12 +317,19 @@ internal sealed class ThreadRuntimeStateReducer
 
         if (@event.RunId is { } runId)
         {
+            if (tab.ActiveRunId != runId)
+            {
+                tab.ActiveRunStartedAt = @event.Timestamp;
+            }
+
             tab.ActiveRunId = runId;
+            tab.ActiveRunStartedAt ??= @event.Timestamp;
         }
 
         if (@event is AgentErrorEvent or AgentSessionUpdateEvent { Kind: AgentSessionUpdateKind.Idle or AgentSessionUpdateKind.Shutdown })
         {
             tab.ActiveRunId = null;
+            tab.ActiveRunStartedAt = null;
         }
     }
 

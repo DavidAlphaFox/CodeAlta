@@ -38,5 +38,7 @@ internal sealed class ThreadSessionState
 
     public AgentRunId? ActiveRunId { get; set; }
 
+    public DateTimeOffset? ActiveRunStartedAt { get; set; }
+
     public AgentSessionUsage? Usage { get; set; }
 }

@@ -435,7 +435,9 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         }
 
         _shellAnimationRuntime.Advance();
-        _sidebarCoordinator.RefreshRecency(DateTimeOffset.UtcNow, VerifyBindableAccess);
+        var now = DateTimeOffset.UtcNow;
+        _workspaceCoordinator.RefreshRunningStatusElapsed(now);
+        _sidebarCoordinator.RefreshRecency(now, VerifyBindableAccess);
         _initialCatalogStateCoordinator.EnsureStarted(cancellationToken);
         if (!TryResolveInitialCatalogState(cancellationToken))
         {
