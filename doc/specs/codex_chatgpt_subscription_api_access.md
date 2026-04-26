@@ -504,10 +504,10 @@ Implement model discovery in this order:
 1. If `model_discovery = "codex_endpoint"` or `codex_endpoint_with_static_fallback`, call the Codex model endpoint:
 
 ```text
-GET https://chatgpt.com/backend-api/codex/models?client_version=<codealta-version>
+GET https://chatgpt.com/backend-api/codex/models?client_version=<semver>
 ```
 
-Use the same auth/header policies as Responses. Decode Codex's `ModelsResponse { models: Vec<ModelInfo> }` shape, not the public OpenAI model-list shape. Preserve ETag for caching if returned.
+Use the same auth/header policies as Responses. Decode Codex's `ModelsResponse { models: Vec<ModelInfo> }` shape (including current fields such as `slug`, `visibility`, `input_modalities`, `support_verbosity`, `default_reasoning_level`, and `default_verbosity`), not the public OpenAI model-list shape. Preserve ETag for caching if returned.
 
 2. Filter dynamic results to models where Codex metadata says `supported_in_api = true`. Prefer listable models for UI pickers, but allow a configured hidden model only if it appears in the authenticated dynamic response and is `supported_in_api`.
 3. If a `model` is configured, validate it against the authenticated dynamic response when available. If the endpoint is unavailable and fallback is enabled, validate against the cached/static Codex catalog.

@@ -331,7 +331,7 @@ Recommended baseline:
 - `rename_file_or_dir`
 - `delete_file_or_dir`
 
-Official OpenAI providers (`https://api.openai.com/`, matched on base URL/host rather than full path) should additionally expose:
+Official OpenAI providers (`https://api.openai.com/`, matched on base URL/host rather than full path) and the Codex ChatGPT subscription provider should additionally expose:
 
 - `apply_patch`
 
@@ -389,8 +389,8 @@ Deterministic edit tools for all providers
 - `grep` should document that matching is case-insensitive by default and that likely-binary/image files are skipped
 - text-oriented tools such as `read_file`, `replace_in_file`, `grep`, and `apply_patch` should reject or skip likely-binary files instead of dumping binary content into the conversation
 
-`apply_patch` for official OpenAI providers
-- keep `apply_patch` available only when the provider is actually targeting `https://api.openai.com/`
+`apply_patch` for official OpenAI/Codex providers
+- keep `apply_patch` available only when the provider is actually targeting `https://api.openai.com/` or using the `openai-codex-subscription` protocol family
 - add/update/delete/move in one tool
 - better auditability and diff rendering
 - better fit for approvals and coding workflows

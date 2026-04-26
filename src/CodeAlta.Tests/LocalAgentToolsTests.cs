@@ -869,7 +869,7 @@ public sealed class LocalAgentToolsTests
     }
 
     [TestMethod]
-    public void CreateDefaultTools_ExposesApplyPatchOnlyForOfficialOpenAIProviders()
+    public void CreateDefaultTools_ExposesApplyPatchOnlyForOfficialOpenAIAndCodexSubscriptionProviders()
     {
         using var temp = TestTempDirectory.Create();
 
@@ -883,6 +883,12 @@ public sealed class LocalAgentToolsTests
             provider: CreateProviderDescriptor(
                 LocalAgentTransportKind.OpenAIResponses,
                 new Uri("https://openrouter.ai/api/v1"))));
+        var codexSubscriptionTools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(
+            temp.Path,
+            provider: CreateProviderDescriptor(
+                LocalAgentTransportKind.OpenAIResponses,
+                new Uri("https://chatgpt.com/backend-api/codex"),
+                protocolFamily: "openai-codex-subscription")));
         var anthropicTools = LocalAgentBuiltInToolFactory.CreateDefaultTools(CreateOptions(
             temp.Path,
             provider: CreateProviderDescriptor(
@@ -890,6 +896,7 @@ public sealed class LocalAgentToolsTests
                 new Uri("https://api.anthropic.com/v1/messages"))));
 
         Assert.IsTrue(officialOpenAiTools.Any(static tool => tool.Spec.Name == "apply_patch"));
+        Assert.IsTrue(codexSubscriptionTools.Any(static tool => tool.Spec.Name == "apply_patch"));
         Assert.IsFalse(compatibleTools.Any(static tool => tool.Spec.Name == "apply_patch"));
         Assert.IsFalse(anthropicTools.Any(static tool => tool.Spec.Name == "apply_patch"));
         Assert.IsFalse(officialOpenAiTools.Any(static tool => tool.Spec.Name == "request_user_input"));
@@ -1253,11 +1260,12 @@ public sealed class LocalAgentToolsTests
     private static LocalAgentProviderDescriptor CreateProviderDescriptor(
         LocalAgentTransportKind transportKind,
         Uri? baseUri,
-        LocalAgentProviderProfile? profile = null)
+        LocalAgentProviderProfile? profile = null,
+        string? protocolFamily = null)
     {
         return new LocalAgentProviderDescriptor
         {
-            ProtocolFamily = transportKind.ToString(),
+            ProtocolFamily = protocolFamily ?? transportKind.ToString(),
             ProviderKey = "provider-1",
             DisplayName = "Provider 1",
             BackendId = AgentBackendIds.OpenAIResponses,

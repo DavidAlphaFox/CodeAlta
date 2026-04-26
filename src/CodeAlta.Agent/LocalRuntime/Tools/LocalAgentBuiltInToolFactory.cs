@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -980,7 +981,7 @@ public static class LocalAgentBuiltInToolFactory
         return new AgentToolResult(true, [new AgentToolResultItem.Text(json)]);
     }
 
-    private static JsonElement ParseSchema(string json)
+    private static JsonElement ParseSchema([StringSyntax("json")] string json)
         => JsonDocument.Parse(json).RootElement.Clone();
 
     private static AgentToolResult Failure(string message)
@@ -1014,6 +1015,11 @@ public static class LocalAgentBuiltInToolFactory
         if (provider.TransportKind is not (LocalAgentTransportKind.OpenAIResponses or LocalAgentTransportKind.OpenAIChatCompletions))
         {
             return false;
+        }
+
+        if (string.Equals(provider.ProtocolFamily, "openai-codex-subscription", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
         }
 
         if (provider.BaseUri is null)

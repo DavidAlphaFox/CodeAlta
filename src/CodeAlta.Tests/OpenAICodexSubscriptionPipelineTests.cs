@@ -242,9 +242,12 @@ public sealed class OpenAICodexSubscriptionPipelineTests
         Assert.AreEqual("codex-endpoint", models[0].Capabilities?["source"]);
         Assert.AreEqual(200000L, models[0].Capabilities?["contextWindow"]);
         Assert.AreEqual("medium", models[0].Capabilities?["defaultTextVerbosity"]);
+        Assert.AreEqual(AgentReasoningEffort.High, models[0].DefaultReasoningEffort);
+        Assert.AreEqual(true, models[0].Capabilities?["supportsImageInput"]);
+        Assert.AreEqual(true, models[0].Capabilities?["supportsTextVerbosity"]);
+        var version = typeof(OpenAIProviderSdkFactory).Assembly.GetName().Version!;
         Assert.AreEqual(
-            "https://chatgpt.com/backend-api/codex/models?client_version=CodeAlta%2F" +
-            typeof(OpenAIProviderSdkFactory).Assembly.GetName().Version,
+            $"https://chatgpt.com/backend-api/codex/models?client_version={version.Major}.{version.Minor}.{version.Build}",
             handler.RequestUris[0].ToString());
         Assert.AreEqual("Bearer access-token", handler.Requests[0]["Authorization"]);
         Assert.AreEqual("acct_configured", handler.Requests[0]["ChatGPT-Account-Id"]);
@@ -471,14 +474,14 @@ public sealed class OpenAICodexSubscriptionPipelineTests
                 {
                   "models": [
                     {
-                      "id": "gpt-5.3-codex",
+                      "slug": "gpt-5.3-codex",
                       "display_name": "Codex model",
                       "supported_in_api": true,
-                      "listable": true,
-                      "hidden": false,
-                      "supports_image_input": true,
-                      "default_reasoning_effort": "high",
-                      "default_text_verbosity": "medium",
+                      "visibility": "list",
+                      "input_modalities": ["text", "image"],
+                      "support_verbosity": true,
+                      "default_reasoning_level": "high",
+                      "default_verbosity": "medium",
                       "context_window": 200000
                     },
                     {
