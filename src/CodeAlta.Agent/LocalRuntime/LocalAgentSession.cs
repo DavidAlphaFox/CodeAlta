@@ -281,8 +281,11 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                     using var progressGate = new SemaphoreSlim(1, 1);
                     var toolOutputContentId = $"{toolCall.CallId}:output";
                     var trackedModifiedFiles = GetTrackedFileMutationPaths(toolCall, _summary.WorkingDirectory);
+                    LocalAgentTurnFileChangeTracker? toolFileChangeTracker = null;
                     if (trackedModifiedFiles.Count > 0)
                     {
+                        toolFileChangeTracker = new LocalAgentTurnFileChangeTracker(_summary.WorkingDirectory);
+                        await toolFileChangeTracker.CaptureBeforeAsync(trackedModifiedFiles, linkedCts.Token).ConfigureAwait(false);
                         await fileChangeTracker.CaptureBeforeAsync(trackedModifiedFiles, linkedCts.Token).ConfigureAwait(false);
                     }
 
@@ -337,8 +340,15 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
 
                     if (trackedModifiedFiles.Count > 0)
                     {
+                        if (toolFileChangeTracker is not null)
+                        {
+                            await toolFileChangeTracker.CaptureAfterAsync(trackedModifiedFiles, linkedCts.Token).ConfigureAwait(false);
+                        }
+
                         await fileChangeTracker.CaptureAfterAsync(trackedModifiedFiles, linkedCts.Token).ConfigureAwait(false);
                     }
+
+                    var toolDiff = toolFileChangeTracker?.CreateUnifiedDiff();
 
                     var toolMessage = new LocalAgentConversationMessage(
                         LocalAgentConversationRole.Tool,
@@ -356,7 +366,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                         null,
                         toolCall.Name,
                         result.Error,
-                        CreateToolResultDetails(toolCall, result, _summary.WorkingDirectory));
+                        CreateToolResultDetails(toolCall, result, _summary.WorkingDirectory, toolDiff));
                     var rawToolEvent = new AgentRawEvent(
                         BackendId,
                         SessionId,
@@ -394,7 +404,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                         toolOutputContentId,
                         toolCall.CallId,
                         RenderToolResult(result),
-                        CreateToolResultDetails(toolCall, result, _summary.WorkingDirectory));
+                        CreateToolResultDetails(toolCall, result, _summary.WorkingDirectory, toolDiff));
                     var events = rawSkillActivationEvent is null
                         ? new AgentEvent[] { rawToolEvent, completed, toolOutputText }
                         : [rawToolEvent, rawSkillActivationEvent, completed, toolOutputText];
@@ -1726,7 +1736,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
     }
 
-    private static JsonElement CreateToolResultDetails(LocalAgentMessagePart.ToolCall toolCall, AgentToolResult result, string? workingDirectory)
+    private static JsonElement CreateToolResultDetails(LocalAgentMessagePart.ToolCall toolCall, AgentToolResult result, string? workingDirectory, string? diff = null)
     {
         var fileActivity = GetToolFileActivity(toolCall, workingDirectory);
         using var stream = new MemoryStream();
@@ -1739,6 +1749,11 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             toolCall.Arguments.WriteTo(writer);
             WritePaths(writer, "readFiles", fileActivity.ReadFiles);
             WritePaths(writer, "modifiedFiles", fileActivity.ModifiedFiles);
+            if (!string.IsNullOrWhiteSpace(diff))
+            {
+                writer.WriteString("diff", diff);
+            }
+
             writer.WritePropertyName("result");
             JsonSerializer.Serialize(writer, result, AgentJsonSerializerContext.Default.AgentToolResult);
             writer.WriteEndObject();

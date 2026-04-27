@@ -37,9 +37,14 @@ internal static class ToolCallSummaryFormatter
 
         builder.AppendLine()
             .Append("[dim]")
-            .Append(AnsiMarkup.Escape(detailLine))
-            .Append("[/]")
-            .Append("[/]");
+            .Append(AnsiMarkup.Escape(detailLine));
+        if (TryGetDiffStats(entry.DiffText, out var additions, out var deletions))
+        {
+            builder.Append(" · ");
+            AppendChangeCounts(builder, additions, deletions);
+        }
+
+        builder.Append("[/]");
 
         return builder.ToString();
     }
@@ -102,6 +107,15 @@ internal static class ToolCallSummaryFormatter
         if (!string.IsNullOrWhiteSpace(entry.ParentToolCallId))
         {
             builder.Append("- Parent: `").Append(entry.ParentToolCallId).AppendLine("`");
+        }
+
+        if (TryGetDiffStats(entry.DiffText, out var additions, out var deletions))
+        {
+            builder.Append("- Changes: `+")
+                .Append(additions.ToString(CultureInfo.InvariantCulture))
+                .Append(" -")
+                .Append(deletions.ToString(CultureInfo.InvariantCulture))
+                .AppendLine("`");
         }
 
         if (!string.IsNullOrWhiteSpace(entry.CommandText))
@@ -168,6 +182,48 @@ internal static class ToolCallSummaryFormatter
         return string.Equals(prefix, SplitPascalCase(entry.Status.ToString()), StringComparison.OrdinalIgnoreCase) && entry.OutputLineCount > 0
             ? $"{entry.OutputLineCount.ToString(CultureInfo.InvariantCulture)}L · {FormatToolCallKilobytes(entry.OutputByteCount)}"
             : $"{prefix} · {entry.OutputLineCount.ToString(CultureInfo.InvariantCulture)}L · {FormatToolCallKilobytes(entry.OutputByteCount)}";
+    }
+
+    private static void AppendChangeCounts(StringBuilder builder, int additions, int deletions)
+    {
+        builder.Append('[')
+            .Append(UiPalette.GetToolStatusMarkup(ToolCallDisplayStatus.Completed))
+            .Append("]+")
+            .Append(additions.ToString(CultureInfo.InvariantCulture))
+            .Append("[/] [")
+            .Append(UiPalette.GetToolStatusMarkup(ToolCallDisplayStatus.Failed))
+            .Append("]-")
+            .Append(deletions.ToString(CultureInfo.InvariantCulture))
+            .Append("[/]");
+    }
+
+    private static bool TryGetDiffStats(string? diffText, out int additions, out int deletions)
+    {
+        additions = 0;
+        deletions = 0;
+        if (string.IsNullOrWhiteSpace(diffText))
+        {
+            return false;
+        }
+
+        foreach (var line in SplitToolOutputLines(diffText!))
+        {
+            if (line.StartsWith("+++", StringComparison.Ordinal) || line.StartsWith("---", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (line.StartsWith('+'))
+            {
+                additions++;
+            }
+            else if (line.StartsWith('-'))
+            {
+                deletions++;
+            }
+        }
+
+        return additions > 0 || deletions > 0;
     }
 
     private static string GetToolStatusIconMarkup(ToolCallDisplayStatus status)
@@ -480,6 +536,13 @@ internal static class ToolCallSummaryFormatter
             }
         }
 
+        if ((TryGetFirstStringArrayValue(details, "modifiedFiles", out var modifiedFile) ||
+             TryGetFirstStringArrayValue(details, "readFiles", out modifiedFile)) &&
+            TryBuildCompactContextPreview(modifiedFile, out preview))
+        {
+            return true;
+        }
+
         if (details.TryGetProperty("input", out var input) &&
             input.ValueKind == JsonValueKind.Object)
         {
@@ -501,6 +564,26 @@ internal static class ToolCallSummaryFormatter
             var end = viewRange[1].ToString();
             preview = $"{start}-{end}";
             return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetFirstStringArrayValue(JsonElement details, string propertyName, out string? value)
+    {
+        value = null;
+        if (!details.TryGetProperty(propertyName, out var array) || array.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (var item in array.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(item.GetString()))
+            {
+                value = item.GetString();
+                return true;
+            }
         }
 
         return false;

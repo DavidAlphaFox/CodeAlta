@@ -117,6 +117,19 @@ public sealed class LocalAgentBackendTests
         StringAssert.Contains(diff, "--- /dev/null");
         StringAssert.Contains(diff, "+++ b/created.txt");
         StringAssert.Contains(diff, "+hello");
+
+        var completedTool = history
+            .OfType<AgentActivityEvent>()
+            .Single(@event => @event.ActivityId == "call-1" && @event.Phase == AgentActivityPhase.Completed);
+        var toolDiff = completedTool.Details?.GetProperty("diff").GetString();
+        Assert.IsNotNull(toolDiff);
+        StringAssert.Contains(toolDiff, "diff --git a/created.txt b/created.txt");
+        StringAssert.Contains(toolDiff, "+hello");
+
+        var toolOutput = history
+            .OfType<AgentContentCompletedEvent>()
+            .Single(@event => @event.ParentActivityId == "call-1" && @event.Kind == AgentContentKind.ToolOutput);
+        Assert.AreEqual(toolDiff, toolOutput.Details?.GetProperty("diff").GetString());
     }
 
     [TestMethod]

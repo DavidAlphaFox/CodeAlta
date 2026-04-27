@@ -942,6 +942,39 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
+    public void BuildToolCallSummaryMarkup_ShowsDiffStatsForModifyingTools()
+    {
+        var entry = new ToolCallEntryState(
+            "call-1",
+            new Button(new TextBlock("tool")),
+            new Markup("tool"))
+        {
+            ActivityKind = AgentActivityKind.ToolCall,
+            Status = ToolCallDisplayStatus.Completed,
+            DisplayName = "apply_patch",
+            DiffText =
+                """
+                diff --git a/src/App.cs b/src/App.cs
+                --- a/src/App.cs
+                +++ b/src/App.cs
+                @@ -1,2 +1,2 @@
+                 unchanged
+                -old
+                +new
+                """,
+        };
+        entry.OutputBuffer.AppendLine("Patch applied");
+
+        var markup = ToolCallSummaryFormatter.BuildSummaryMarkup(entry);
+        var markdown = ToolCallSummaryFormatter.BuildDetailMarkdown(entry);
+
+        StringAssert.Contains(markup, "+1");
+        StringAssert.Contains(markup, "-1");
+        StringAssert.Contains(markup, "apply_patch");
+        StringAssert.Contains(markdown, "- Changes: `+1 -1`");
+    }
+
+    [TestMethod]
     public void FormatChatContentMarkdown_SanitizesInlineImagePayloads()
     {
         var markdown = ChatMarkdownFormatter.FormatChatContentMarkdown(

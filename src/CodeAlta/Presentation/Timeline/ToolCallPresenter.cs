@@ -90,6 +90,7 @@ internal sealed class ToolCallPresenter
         entry.ArgumentText = PreferLongerText(entry.ArgumentText, ToolCallEventInterpreter.ResolveToolArgumentText(activity));
         entry.ArgumentPreview = ToolCallEventInterpreter.BuildToolPreview(entry.ArgumentText);
         entry.Details = activity.Details;
+        entry.DiffText = PreferLongerText(entry.DiffText, ToolCallEventInterpreter.ResolveToolDiff(activity.Details));
         entry.FirstSeenAt = entry.FirstSeenAt == default ? activity.Timestamp : entry.FirstSeenAt;
         entry.LastUpdatedAt = activity.Timestamp;
         entry.CompletedAt = IsCompletedStatus(entry.Status) ? activity.Timestamp : null;
@@ -128,6 +129,7 @@ internal sealed class ToolCallPresenter
             AppendOutputDelta(entry, delta.Delta);
         }
 
+        entry.DiffText = PreferLongerText(entry.DiffText, ToolCallEventInterpreter.ResolveToolDiff(delta.Details));
         entry.LastUpdatedAt = delta.Timestamp;
         if (entry.Status == ToolCallDisplayStatus.Pending)
         {
@@ -154,6 +156,7 @@ internal sealed class ToolCallPresenter
         var entry = GetOrCreateToolCallEntry(toolCallId, completed.Timestamp, MapContentKind(completed.Kind));
         var refreshGroupSummary = isNewEntry || entry.Status == ToolCallDisplayStatus.Pending;
         ReplaceOutput(entry, completed.Content, completed.Timestamp);
+        entry.DiffText = PreferLongerText(entry.DiffText, ToolCallEventInterpreter.ResolveToolDiff(completed.Details));
         UpdateEntryVisual(entry);
         UpdateGroupVisual(entry.Group, refreshSummary: refreshGroupSummary, scrollToTail: true);
         UpdateDialogVisual(entry);
@@ -318,7 +321,7 @@ internal sealed class ToolCallPresenter
             var log = new LogControl { MaxCapacity = ToolCallDialogLogCapacity, HorizontalAlignment = Align.Stretch, VerticalAlignment = Align.Stretch }.WrapText(wrapText);
             var statsText = new Markup(string.Empty);
             var detailsGroup = new Group("Details", metadata).Padding(new Thickness(1, 0, 1, 0)).HorizontalAlignment(Align.Stretch).VerticalAlignment(Align.Start);
-            var outputGroup = new Group("Output", log).TopRightText(new CheckBox("Wrap").IsChecked(wrapText)).Padding(0).HorizontalAlignment(Align.Stretch).VerticalAlignment(Align.Stretch);
+            var outputGroup = new Group("Diff / Output", log).TopRightText(new CheckBox("Wrap").IsChecked(wrapText)).Padding(0).HorizontalAlignment(Align.Stretch).VerticalAlignment(Align.Stretch);
             var bounds = _getDialogBounds() ?? entry.Button.GetAbsoluteBounds();
             var closeButton = new Button(new TextBlock($"{NerdFont.MdClose} Close")) { HorizontalAlignment = Align.End, VerticalAlignment = Align.Start, Tone = ControlTone.Error };
             closeButton.Click(() => CloseDialog(entry));
@@ -354,6 +357,21 @@ internal sealed class ToolCallPresenter
             entry.DetailMetadata.Markdown = ToolCallSummaryFormatter.BuildDetailMarkdown(entry);
             entry.DetailStatsText.Text = ToolCallSummaryFormatter.BuildStatsMarkup(entry);
             entry.DetailLog.Clear();
+            if (!string.IsNullOrWhiteSpace(entry.DiffText))
+            {
+                entry.DetailLog.AppendMarkupLine($"[{UiPalette.MutedMarkup}]Diff[/]");
+                foreach (var line in ToolCallEventInterpreter.SplitToolOutputLines(entry.DiffText!))
+                {
+                    entry.DetailLog.AppendMarkupLine(FileChangeSummaryFormatter.GetDiffLineMarkup(line));
+                }
+
+                if (entry.OutputBuffer.Length > 0)
+                {
+                    entry.DetailLog.AppendLine(string.Empty);
+                    entry.DetailLog.AppendMarkupLine($"[{UiPalette.MutedMarkup}]Output[/]");
+                }
+            }
+
             foreach (var line in ToolCallEventInterpreter.SplitToolOutputLines(entry.OutputBuffer.ToString()))
             {
                 entry.DetailLog.AppendLine(line);

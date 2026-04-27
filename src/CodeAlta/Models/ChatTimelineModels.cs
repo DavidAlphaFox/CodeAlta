@@ -181,6 +181,8 @@ namespace CodeAlta.Models
 
         public string? StatusMessage { get; set; }
 
+        public string? DiffText { get; set; }
+
         public JsonElement? Details { get; set; }
 
         public StringBuilder OutputBuffer { get; } = new();

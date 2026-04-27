@@ -202,6 +202,24 @@ internal static class ToolCallEventInterpreter
             : null;
     }
 
+    public static string? ResolveToolDiff(JsonElement? details)
+    {
+        if (details is not { ValueKind: JsonValueKind.Object } detailObject)
+        {
+            return null;
+        }
+
+        if (ToolCallSummaryFormatter.TryGetStringProperty(detailObject, "diff", out var diff))
+        {
+            return diff;
+        }
+
+        return TryResolveNestedString(detailObject, out diff, "result", "diff") ||
+               TryResolveNestedString(detailObject, out diff, "output", "diff")
+            ? diff
+            : null;
+    }
+
     public static bool TryInferCopilotToolName(JsonElement details, out string? toolName)
     {
         toolName = null;
