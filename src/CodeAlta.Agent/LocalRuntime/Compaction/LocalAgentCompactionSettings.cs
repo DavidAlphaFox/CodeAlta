@@ -143,7 +143,7 @@ public sealed record LocalAgentCompactionSettings(
     public int SummaryOutputTokens { get; init; } = DefaultSummaryOutputTokens;
 
     /// <summary>
-    /// Gets or initializes the maximum input tokens allowed for a single summarizer request.
+    /// Gets or initializes the preferred input-token target for a single summarizer request.
     /// </summary>
     public int SummaryInputTokens { get; init; } = DefaultSummaryInputTokens;
 

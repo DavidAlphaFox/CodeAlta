@@ -2386,6 +2386,105 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public async Task LocalAgentSession_CompactAsync_TreatsSummaryInputBudgetAsOptimizationTarget()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
+        {
+            SummaryInputTokens = 120,
+            RecentSuffixTargetTokens = 180,
+            MaxChunkPasses = 1,
+        });
+        var summary = CreateSummary("session-summary-input-target");
+        var state = CreateState("session-summary-input-target");
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        var summaryPayloads = new List<string>();
+        var largePrompt = string.Join(' ', Enumerable.Range(1, 300).Select(static index => $"prompt-token-{index}"));
+        var largeAnswer = string.Join(' ', Enumerable.Range(1, 300).Select(static index => $"answer-token-{index}"));
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                [
+                    new AgentModelInfo(
+                        "gpt-5.4",
+                        "GPT-5.4",
+                        Capabilities: new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["contextWindow"] = 20_000L,
+                            ["inputTokenLimit"] = 18_000L,
+                            ["outputTokenLimit"] = 8_192L,
+                        }),
+                ],
+                (request, _, _) =>
+                {
+                    summaryPayloads.Add(Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(request.Conversation[0].Parts.Single()).Value);
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [new LocalAgentMessagePart.Text(
+                                    """
+                                    ## Objective
+                                    Continue the task.
+                                    ## Active User Request
+                                    Continue after compaction.
+                                    ## Constraints
+                                    - Do not treat local summary-input targets as hard blockers.
+                                    ## Progress
+                                    ### Done
+                                    - Produced a summary from an over-target request.
+                                    ### In Progress
+                                    - Continue the user's work.
+                                    ### Blocked
+                                    - None recorded.
+                                    ## Decisions
+                                    - Summary-input tokens are optimization targets.
+                                    ## Next Steps
+                                    - Resume from the checkpoint.
+                                    ## Critical Context
+                                    - The compaction request intentionally exceeded the configured target.
+                                    ## Relevant Files
+                                    - None tracked.
+                                    """)]),
+                        });
+                },
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("First answer " + largeAnswer)]),
+                    }),
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("Second answer")]),
+                    })),
+            CreateOptions(provider, temp.Path));
+
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("First prompt " + largePrompt) }).ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Second prompt") }).ConfigureAwait(false);
+
+        var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);
+
+        Assert.IsNotNull(outcome);
+        Assert.IsTrue(outcome.Success);
+        Assert.AreEqual(1, summaryPayloads.Count);
+        Assert.IsTrue(LocalAgentTokenEstimator.EstimateTextTokens(summaryPayloads[0]) > provider.Compaction!.SummaryInputTokens);
+    }
+
+    [TestMethod]
     public async Task LocalAgentSession_SendAsync_ReducesOversizedLatestUserAnchorBeforeTurnExecution()
     {
         using var temp = TestTempDirectory.Create();

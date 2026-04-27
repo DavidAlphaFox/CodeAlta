@@ -178,11 +178,6 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                 .ConfigureAwait(false);
         }
 
-        if (serialization.EstimatedInputTokens > settings.SummaryInputTokens)
-        {
-            throw new InvalidOperationException("Compaction input exceeded the configured summary-input budget after bounded chunking.");
-        }
-
         var response = await ExecuteSummaryRequestAsync(
                 backendId,
                 provider,
@@ -240,7 +235,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         var chunks = GetChunksIfNeeded(preparation, latestUserRequest, fileActivity, settings, oversizedAnchorSynopsis);
         if (chunks.Count <= 1)
         {
-            throw new InvalidOperationException("Compaction input exceeded the summary-input budget, but chunking could not reduce it further.");
+            chunks = [preparation.MessagesToSummarize];
         }
 
         var rollingSummary = preparation.PreviousSummary;
@@ -410,13 +405,9 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
     {
         var requestBody = BuildOversizedAnchorRequestBody(serializedAnchor, previousSynopsis);
         var requestTokens = LocalAgentTokenEstimator.EstimateTextTokens(requestBody);
-        if (requestTokens > settings.SummaryInputTokens)
+        if (requestTokens > settings.SummaryInputTokens &&
+            currentPass < settings.MaxChunkPasses)
         {
-            if (currentPass >= settings.MaxChunkPasses)
-            {
-                throw new InvalidOperationException("Oversized-anchor reduction exceeded the configured summary-input budget after bounded chunking.");
-            }
-
             var overheadTokens = LocalAgentTokenEstimator.EstimateTextTokens(BuildOversizedAnchorRequestBody(string.Empty, previousSynopsis));
             var availableChunkTokens = Math.Max(settings.SummaryInputTokens - (int)overheadTokens, 32);
             var chunkTexts = SplitTextByBudget(serializedAnchor, Math.Max(availableChunkTokens * 4, 128));
@@ -425,35 +416,33 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                 chunkTexts = SplitTextByBudget(serializedAnchor, Math.Max(serializedAnchor.Length / 2, 64));
             }
 
-            if (chunkTexts.Count <= 1)
+            if (chunkTexts.Count > 1)
             {
-                throw new InvalidOperationException("Oversized-anchor reduction could not split the latest user input enough to fit the configured summary-input budget.");
-            }
+                var rollingSynopsis = previousSynopsis;
+                var totalInvocations = 0;
+                foreach (var chunkText in chunkTexts)
+                {
+                    var (chunkSynopsis, invocationCount) = await ReduceOversizedAnchorTextAsync(
+                            backendId,
+                            provider,
+                            sessionId,
+                            modelId,
+                            modelInfo,
+                            workingDirectory,
+                            state,
+                            chunkText,
+                            rollingSynopsis,
+                            settings,
+                            maxOutputTokens,
+                            currentPass + 1,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    rollingSynopsis = chunkSynopsis;
+                    totalInvocations += invocationCount;
+                }
 
-            var rollingSynopsis = previousSynopsis;
-            var totalInvocations = 0;
-            foreach (var chunkText in chunkTexts)
-            {
-                var (chunkSynopsis, invocationCount) = await ReduceOversizedAnchorTextAsync(
-                        backendId,
-                        provider,
-                        sessionId,
-                        modelId,
-                        modelInfo,
-                        workingDirectory,
-                        state,
-                        chunkText,
-                        rollingSynopsis,
-                        settings,
-                        maxOutputTokens,
-                        currentPass + 1,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                rollingSynopsis = chunkSynopsis;
-                totalInvocations += invocationCount;
+                return (rollingSynopsis ?? throw new InvalidOperationException("Oversized-anchor reduction did not produce a synopsis."), totalInvocations);
             }
-
-            return (rollingSynopsis ?? throw new InvalidOperationException("Oversized-anchor reduction did not produce a synopsis."), totalInvocations);
         }
 
         var response = await ExecuteSummaryRequestAsync(

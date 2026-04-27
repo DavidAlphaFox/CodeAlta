@@ -235,7 +235,7 @@ The runtime must treat these budgets separately:
 
 These must not be conflated.
 
-The post-compaction target numbers and summary-input limits must all be configurable.
+The post-compaction target numbers and summary-input optimization targets must all be configurable.
 
 ### 10.2 Recommended defaults
 
@@ -794,6 +794,7 @@ Notes:
 
 - `recent_suffix_target_tokens` is the pi-mono-inspired “keep recent raw context” control and should guide how much verbatim recent context the planner tries to preserve
 - `summary_input_tokens` should usually be set high enough that threshold compaction can summarize the full canonical non-delta selected history when it fits
+- `summary_input_tokens` is an optimization target for serializer reduction and chunking, not a local correctness limit; if bounded optimization cannot fit the target, compaction should still proceed unless the actual provider/model context limit is reached
 - the larger defaults above do **not** mean serializer output should become verbose; global omission caps and recency-aware prioritization remain mandatory
 
 Additional recommended policy flags:
@@ -822,16 +823,17 @@ At minimum:
 12. huge tool output does not dominate the checkpoint
 13. verbose reasoning is budgeted or omitted
 14. summarization request itself exceeds one call and is chunked
-15. previous checkpoint iterative update does not grow unbounded
-16. post-compaction fit validation replans or fails
-17. overflow compact-and-retry once
-18. provider last-operation usage plus trailing estimate is used when needed
-19. per-provider overrides take precedence
-20. no transient delta events participate
-21. very large initial prompt or attachment is reducible
-22. summary output token limit is applied to actual provider requests
-23. automatic compaction does not silently downgrade to heuristic-only summary generation
-24. a representative large tool-heavy session compacts to `<= 6%` with default v2 settings, while still remaining under the configured `10%` ceiling
+15. summarization request still proceeds when bounded chunking cannot fit the configured summary-input target but the provider/model limit is not exceeded
+16. previous checkpoint iterative update does not grow unbounded
+17. post-compaction fit validation replans or fails
+18. overflow compact-and-retry once
+19. provider last-operation usage plus trailing estimate is used when needed
+20. per-provider overrides take precedence
+21. no transient delta events participate
+22. very large initial prompt or attachment is reducible
+23. summary output token limit is applied to actual provider requests
+24. automatic compaction does not silently downgrade to heuristic-only summary generation
+25. a representative large tool-heavy session compacts to `<= 6%` with default v2 settings, while still remaining under the configured `10%` ceiling
 
 ## 25. Concrete v2 decisions
 
