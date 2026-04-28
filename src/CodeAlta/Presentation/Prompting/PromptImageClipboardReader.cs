@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using XenoAtom.Terminal;
+using XenoAtom.Terminal.UI.Controls;
 
 namespace CodeAlta.Presentation.Prompting;
 
@@ -18,24 +19,24 @@ internal static class PromptImageClipboardReader
     ];
 
     public static bool TryReadImage(
-        TerminalClipboard clipboard,
+        TextEditorClipboardPasteContext context,
         string title,
         out PromptImageAttachment? image,
         out string? failureReason)
     {
-        ArgumentNullException.ThrowIfNull(clipboard);
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
 
-        foreach (var format in EnumerateCandidateFormats(clipboard))
+        foreach (var format in EnumerateCandidateFormats(context))
         {
-            if (!clipboard.TryGetData(format.Format, out var data) || data is null || data.Length == 0)
+            if (!context.TryGetData(format.Format, out var data) || data.IsEmpty)
             {
                 continue;
             }
 
             if (format.IsWindowsDib)
             {
-                if (!TryConvertDibToBmp(data, out var bmpBytes))
+                if (!TryConvertDibToBmp(data.Span, out var bmpBytes))
                 {
                     continue;
                 }
@@ -45,22 +46,22 @@ internal static class PromptImageClipboardReader
                 return true;
             }
 
-            image = PromptImageAttachment.Create(title, data, format.MediaType, format.Extension);
+            image = PromptImageAttachment.Create(title, data.Span, format.MediaType, format.Extension);
             failureReason = null;
             return true;
         }
 
         image = null;
-        failureReason = clipboard.CanGetFormats || clipboard.CanGetText
+        failureReason = context.Formats.Count > 0
             ? "The clipboard does not contain a supported image payload."
             : "Clipboard image access is not supported by this terminal backend.";
         return false;
     }
 
-    private static IEnumerable<ClipboardImageFormat> EnumerateCandidateFormats(TerminalClipboard clipboard)
+    private static IEnumerable<ClipboardImageFormat> EnumerateCandidateFormats(TextEditorClipboardPasteContext context)
     {
         HashSet<string>? advertisedFormats = null;
-        if (clipboard.TryGetFormats(out var formats) && formats is { Count: > 0 })
+        if (context.Formats is { Count: > 0 } formats)
         {
             advertisedFormats = new HashSet<string>(formats, StringComparer.OrdinalIgnoreCase);
             foreach (var preferred in PreferredFormats)

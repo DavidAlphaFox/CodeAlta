@@ -351,7 +351,7 @@ internal sealed class ThreadWorkspaceView
             commandBindings,
             promptText)
             .IsEnabled(promptComposerViewModel.Bind.IsEnabled);
-        AddPromptImagePasteCommands(ThreadInput);
+        ConfigurePromptImagePasteHandler(ThreadInput);
         ThreadInputView = ThreadInput.Scrollable();
 
         SendPromptButton = CreatePromptActionButton(promptComposerViewModel, sendPrompt, abortThread);
@@ -638,84 +638,37 @@ internal sealed class ThreadWorkspaceView
         .Padding(new Thickness(1, 0, 1, 0));
     }
 
-    private void AddPromptImagePasteCommands(ChatPromptEditor editor)
+    private void ConfigurePromptImagePasteHandler(ChatPromptEditor editor)
     {
         ArgumentNullException.ThrowIfNull(editor);
 
-        editor.AddCommand(new Command
-        {
-            Id = "CodeAlta.Prompt.PasteClipboard",
-            LabelMarkup = "Paste",
-            DescriptionMarkup = "Paste text or add an image from the clipboard when the selected model supports images.",
-            Gesture = new KeyGesture(TerminalChar.CtrlV, TerminalModifiers.Ctrl),
-            Presentation = CommandPresentation.None,
-            Execute = _ => PasteClipboardIntoPrompt(editor, allowTextFallback: true),
-        });
-        editor.AddCommand(new Command
-        {
-            Id = "CodeAlta.Prompt.PasteImage",
-            LabelMarkup = "Paste Image",
-            DescriptionMarkup = "Add an image from the clipboard to the current prompt.",
-            Sequence = new KeySequence(
-                new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
-                new KeyGesture(TerminalChar.CtrlV, TerminalModifiers.Ctrl)),
-            Presentation = CommandPresentation.None,
-            Execute = _ => PasteClipboardIntoPrompt(editor, allowTextFallback: false),
-        });
+        editor.ClipboardPasteHandler = new TextEditorClipboardPasteHandler(HandlePromptClipboardPaste);
     }
 
-    private void PasteClipboardIntoPrompt(ChatPromptEditor editor, bool allowTextFallback)
+    private string? HandlePromptClipboardPaste(TextEditorClipboardPasteContext context)
     {
-        ArgumentNullException.ThrowIfNull(editor);
+        ArgumentNullException.ThrowIfNull(context);
 
-        var clipboard = (editor.App ?? ThreadPaneLayout.App)?.Terminal.Clipboard;
-        if (clipboard is null)
+        if (!context.HasImage)
         {
-            _setPromptImageStatus("Clipboard access is not available.", StatusTone.Warning);
-            return;
+            return null;
         }
 
         var defaultTitle = _getNextPromptImageTitle();
-        if (_canPastePromptImages())
-        {
-            if (PromptImageClipboardReader.TryReadImage(clipboard, defaultTitle, out var image, out var failureReason) && image is not null)
-            {
-                OpenAddPromptImageDialog(image);
-                return;
-            }
-
-            if (allowTextFallback && TryPasteClipboardText(editor, clipboard))
-            {
-                return;
-            }
-
-            _setPromptImageStatus(failureReason ?? "The clipboard does not contain a supported image payload.", StatusTone.Warning);
-            return;
-        }
-
-        if (PromptImageClipboardReader.TryReadImage(clipboard, defaultTitle, out _, out _) && !allowTextFallback)
+        if (!_canPastePromptImages())
         {
             _setPromptImageStatus(_getPromptImageUnsupportedMessage(), StatusTone.Warning);
-            return;
+            return string.Empty;
         }
 
-        if (allowTextFallback && TryPasteClipboardText(editor, clipboard))
+        if (PromptImageClipboardReader.TryReadImage(context, defaultTitle, out var image, out var failureReason) && image is not null)
         {
-            return;
+            OpenAddPromptImageDialog(image);
+            return string.Empty;
         }
 
-        _setPromptImageStatus(_getPromptImageUnsupportedMessage(), StatusTone.Warning);
-    }
-
-    private static bool TryPasteClipboardText(ChatPromptEditor editor, TerminalClipboard clipboard)
-    {
-        if (clipboard.TryGetText(out var text) && !string.IsNullOrEmpty(text))
-        {
-            editor.InsertTextAtSelection(text);
-            return true;
-        }
-
-        return false;
+        _setPromptImageStatus(failureReason ?? "The clipboard does not contain a supported image payload.", StatusTone.Warning);
+        return string.Empty;
     }
 
     private void OpenAddPromptImageDialog(PromptImageAttachment image)
@@ -1011,7 +964,7 @@ internal sealed class ThreadWorkspaceView
             .Text(promptText)
             .MinHeight(12)
             .IsEnabled(promptComposerViewModel.Bind.IsEnabled);
-        AddPromptImagePasteCommands(editor);
+        ConfigurePromptImagePasteHandler(editor);
         editor.AddCommand(CreateExpandedPromptDialogCloseCommand());
 
         var closeButton = new Button(new TextBlock($"{NerdFont.MdClose} Close"))
