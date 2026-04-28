@@ -102,6 +102,8 @@ Launch helpers:
 
 `CodeAlta` and the small CLI utilities under `src/` now use `XenoAtom.CommandLine` with `TerminalVisualCommandOutput`, so `--help` and parse errors render through the shared visual command help/error path.
 
+Only one `alta` application instance can run on a machine at a time via `~/.alta/alta.lock`, the same lock-file location on every OS/platform. If another instance is already running, startup exits with an error that reports the PID of the existing alta process and explains that multiple instances would share thread/session state unsafely.
+
 `--test` still starts the real terminal UI, but it schedules cancellation after the requested duration so a smoke test can verify startup and a short steady-state run without manual Ctrl+C. Smoke-test lifecycle markers and normal diagnostic activity are written to the rolling logs under `~/.alta/logs/`.
 
 Current terminal shell capabilities:

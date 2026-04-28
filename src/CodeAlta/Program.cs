@@ -1,5 +1,6 @@
 using CodeAlta;
 using CodeAlta.Views;
+using XenoAtom.Ansi;
 using XenoAtom.Logging;
 using XenoAtom.Terminal;
 
@@ -9,6 +10,11 @@ try
     await using var session = Terminal.Open();
     var command = CodeAltaCliOptions.CreateCommandApp(options => Program.RunAsync(options, mainThreadId));
     return await command.RunAsync(args);
+}
+catch (CodeAltaAlreadyRunningException ex)
+{
+    Terminal.WriteMarkupLine($"[bright-red]{AnsiMarkup.Escape(ex.Message)}[/]");
+    return 1;
 }
 catch (Exception ex)
 {
@@ -22,6 +28,7 @@ internal partial class Program
     {
         ArgumentNullException.ThrowIfNull(options);
 
+        using var singleInstanceGuard = CodeAltaSingleInstanceGuard.Acquire();
         var cancellationTokenSource = new CancellationTokenSource();
 
         // Defer async app startup until the terminal loop is already running so XenoAtom keeps the UI
