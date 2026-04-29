@@ -574,6 +574,7 @@ internal static class ChatMarkdownFormatter
     {
         ArgumentNullException.ThrowIfNull(update);
         return update.Kind is AgentSessionUpdateKind.Warning
+            or AgentSessionUpdateKind.ModelChanged
             or AgentSessionUpdateKind.CompactionStarted
             or AgentSessionUpdateKind.CompactionCompleted;
     }

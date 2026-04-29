@@ -418,6 +418,39 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
+    public void CreateInitialThreadHistoryLoadPlan_PinsLatestAuditEventsBeforeLastUserPrompt()
+    {
+        var timestamp = DateTimeOffset.UtcNow;
+        var systemPrompt = CreateSystemPromptEvent(timestamp.AddSeconds(3), "sha256:latest");
+        var modelChanged = new AgentSessionUpdateEvent(
+            AgentBackendIds.Copilot,
+            "session-1",
+            timestamp.AddSeconds(2),
+            null,
+            AgentSessionUpdateKind.ModelChanged,
+            "Model changed to gpt-5.");
+        AgentEvent[] history =
+        [
+            CreateSystemPromptEvent(timestamp, "sha256:old"),
+            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-1", null, "First prompt"),
+            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.Assistant, "assistant-1", null, "First reply"),
+            modelChanged,
+            systemPrompt,
+            new AgentContentDeltaEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-2", null, "Second prompt"),
+            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-2", null, "Second prompt"),
+            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.Assistant, "assistant-2", null, "Second reply"),
+        ];
+
+        var plan = ThreadHistoryCoordinator.CreateInitialLoadPlan(history);
+
+        Assert.AreEqual(5, plan.EventsToRender.Count);
+        Assert.AreSame(modelChanged, plan.EventsToRender[0]);
+        Assert.AreSame(systemPrompt, plan.EventsToRender[1]);
+        Assert.AreSame(history[5], plan.EventsToRender[2]);
+        Assert.AreEqual(3, plan.OmittedMessageCount);
+    }
+
+    [TestMethod]
     public void BuildTruncatedHistoryTexts_UseHelpfulPluralization()
     {
         Assert.AreEqual("Load 1 previous message", ChatTimelineVisualFactory.BuildTruncatedHistoryLoadButtonText(1));
@@ -1212,7 +1245,7 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void ShouldDisplaySessionUpdate_ShowsWarningsAndCompactionLifecycle()
+    public void ShouldDisplaySessionUpdate_ShowsWarningsModelChangesAndCompactionLifecycle()
     {
         var copilotUsage = new AgentSessionUpdateEvent(
             AgentBackendIds.Copilot,
@@ -1235,6 +1268,13 @@ public sealed class CodeAltaAppTests
             null,
             AgentSessionUpdateKind.Warning,
             "warning");
+        var copilotModelChanged = new AgentSessionUpdateEvent(
+            AgentBackendIds.Copilot,
+            "session-1",
+            DateTimeOffset.UtcNow,
+            null,
+            AgentSessionUpdateKind.ModelChanged,
+            "Model changed to gpt-5.");
         var copilotCompactionStarted = new AgentSessionUpdateEvent(
             AgentBackendIds.Copilot,
             "session-1",
@@ -1260,6 +1300,7 @@ public sealed class CodeAltaAppTests
         Assert.IsFalse(ChatMarkdownFormatter.ShouldDisplaySessionUpdate(copilotUsage));
         Assert.IsFalse(ChatMarkdownFormatter.ShouldDisplaySessionUpdate(copilotResumed));
         Assert.IsTrue(ChatMarkdownFormatter.ShouldDisplaySessionUpdate(copilotWarning));
+        Assert.IsTrue(ChatMarkdownFormatter.ShouldDisplaySessionUpdate(copilotModelChanged));
         Assert.IsTrue(ChatMarkdownFormatter.ShouldDisplaySessionUpdate(copilotCompactionStarted));
         Assert.IsTrue(ChatMarkdownFormatter.ShouldDisplaySessionUpdate(copilotCompactionCompleted));
         Assert.IsFalse(ChatMarkdownFormatter.ShouldDisplaySessionUpdate(codexUsage));
@@ -2532,6 +2573,21 @@ public sealed class CodeAltaAppTests
             InvokeTerminalApp(app, "EndRun");
         }
     }
+
+    private static AgentSystemPromptEvent CreateSystemPromptEvent(DateTimeOffset timestamp, string hash)
+        => new(
+            AgentBackendIds.Copilot,
+            "session-1",
+            timestamp,
+            null,
+            "session_start",
+            hash,
+            "system",
+            "developer",
+            new AgentSystemPromptProviderPayloadSummary("native-system-and-developer", true, false),
+            null,
+            new AgentSystemPromptStatistics(1, 1, 2, 6, 9),
+            new AgentSystemPromptChangeSummary("initial", ["base/default"], [], []));
 
     private static void TickTerminalApp(TerminalApp app)
     {

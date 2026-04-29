@@ -121,10 +121,39 @@ internal sealed class ThreadHistoryCoordinator
             return new ThreadHistoryLoadPlan(history, OmittedMessageCount: 0);
         }
 
-        var eventsToRender = history.Skip(startIndex).ToArray();
+        var pinnedPrefixIndexes = FindPinnedPrefixEventIndexes(history, startIndex);
+        var pinnedPrefixIndexSet = pinnedPrefixIndexes.ToHashSet();
+        var eventsToRender = pinnedPrefixIndexes
+            .Select(index => history[index])
+            .Concat(history.Skip(startIndex))
+            .ToArray();
         return new ThreadHistoryLoadPlan(
             eventsToRender,
-            CountRenderableMessages(history.Take(startIndex)));
+            CountRenderableMessages(history.Take(startIndex).Where((_, index) => !pinnedPrefixIndexSet.Contains(index))));
+    }
+
+    private static IReadOnlyList<int> FindPinnedPrefixEventIndexes(IReadOnlyList<AgentEvent> history, int endIndex)
+    {
+        var latestSystemPromptIndex = -1;
+        var latestModelChangedIndex = -1;
+        for (var index = 0; index < endIndex; index++)
+        {
+            switch (history[index])
+            {
+                case AgentSystemPromptEvent:
+                    latestSystemPromptIndex = index;
+                    break;
+                case AgentSessionUpdateEvent { Kind: AgentSessionUpdateKind.ModelChanged }:
+                    latestModelChangedIndex = index;
+                    break;
+            }
+        }
+
+        return new[] { latestSystemPromptIndex, latestModelChangedIndex }
+            .Where(static index => index >= 0)
+            .Distinct()
+            .Order()
+            .ToArray();
     }
 
     public static int FindInitialStartIndex(IReadOnlyList<AgentEvent> history)
