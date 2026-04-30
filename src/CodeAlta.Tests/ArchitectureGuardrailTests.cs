@@ -524,7 +524,7 @@ public sealed class ArchitectureGuardrailTests
     {
         var dialogSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ModelProvidersDialog.cs"));
 
-        Assert.IsTrue(dialogSource.Contains("private int _activeOperationCount;", StringComparison.Ordinal));
+        Assert.IsTrue(dialogSource.Contains("private readonly State<int> _activeOperationCount = new(0);", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("Please wait for the current provider operation to complete before closing this dialog.", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("TryBeginDialogOperation(", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("EndDialogOperation();", StringComparison.Ordinal));

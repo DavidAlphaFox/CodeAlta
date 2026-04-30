@@ -53,12 +53,15 @@ internal sealed class ModelProvidersDialog
     private readonly ListBox<ModelProviderEditorItemViewModel> _providerList;
     private readonly BindableList<ModelProviderEditorItemViewModel> _providers;
     private readonly State<int> _selectedProviderIndex = new(-1);
+    private readonly State<int> _providerEditVersion = new(0);
     private readonly Markup _statusMarkup;
+    private readonly Markup _changeSummaryMarkup;
+    private readonly Button _saveButton;
     private readonly Visual _detailHost;
     private IReadOnlyList<ProviderDraftSnapshot> _loadedSnapshot = [];
-    private int _activeOperationCount;
-    private bool _hasLoadedDefinitions;
-    private string _statusText = "[dim]Configure model providers and save to refresh the runtime.[/]";
+    private readonly State<int> _activeOperationCount = new(0);
+    private readonly State<bool> _hasLoadedDefinitions = new(false);
+    private readonly State<string> _statusText = new("[dim]Configure model providers and save to refresh the runtime.[/]");
 
     public ModelProvidersDialog(
         Func<IReadOnlyList<CodeAltaProviderDocument>> loadDefinitions,
@@ -112,6 +115,11 @@ internal sealed class ModelProvidersDialog
         {
             Wrap = true,
         };
+        _changeSummaryMarkup = new Markup(BuildChangeSummaryMarkup)
+        {
+            Wrap = false,
+            VerticalAlignment = Align.Center,
+        };
 
         _detailHost = new ComputedVisual(
             () =>
@@ -131,15 +139,27 @@ internal sealed class ModelProvidersDialog
         var reloadButton = new Button("Reload")
             .Tone(ControlTone.Warning)
             .Click(() => StartReload(confirmWhenDirty: true));
-        var saveButton = new Button("Save")
+        _saveButton = new Button("Save")
             .Tone(ControlTone.Success)
+            .IsEnabled(() => _activeOperationCount.Value == 0 && HasUnsavedChanges())
             .Click(StartSave);
 
-        var toolbar = new HStack(addButton, deleteButton, reloadButton, saveButton)
+        var toolbar = new HStack(addButton, deleteButton, reloadButton, _saveButton)
         {
             HorizontalAlignment = Align.End,
             Spacing = 1,
         };
+
+        var header = new Grid
+            {
+                HorizontalAlignment = Align.Stretch,
+            }
+            .Rows(new RowDefinition { Height = GridLength.Auto })
+            .Columns(
+                new ColumnDefinition { Width = GridLength.Star(1) },
+                new ColumnDefinition { Width = GridLength.Auto });
+        header.Cell(_changeSummaryMarkup, 0, 0);
+        header.Cell(toolbar, 0, 1);
 
         var leftPane = new VStack(
             new TextBlock("Providers") { Wrap = false },
@@ -184,7 +204,7 @@ internal sealed class ModelProvidersDialog
                 new RowDefinition { Height = GridLength.Star(1) },
                 new RowDefinition { Height = GridLength.Auto })
             .Columns(new ColumnDefinition { Width = GridLength.Star(1) });
-        content.Cell(toolbar, 0, 0);
+        content.Cell(header, 0, 0);
         content.Cell(intro, 1, 0);
         content.Cell(splitter, 2, 0);
         content.Cell(_statusMarkup, 3, 0);
@@ -216,7 +236,7 @@ internal sealed class ModelProvidersDialog
         }
 
         _dialog.Show();
-        if (!_hasLoadedDefinitions)
+        if (!_hasLoadedDefinitions.Value)
         {
             StartReload(confirmWhenDirty: false);
         }
@@ -249,14 +269,14 @@ internal sealed class ModelProvidersDialog
 
         try
         {
-            _statusText = "[primary]Loading provider configuration...[/]";
+            SetStatus("[primary]Loading provider configuration...[/]");
             QueueBackgroundOperation(
                 _loadDefinitions,
                 definitions => LoadDefinitionsIntoDialog(
                     definitions,
                     emptyStatusText: "[warning]No providers are configured yet. Add one, or enable Codex/Copilot.[/]",
                     loadedStatusText: "[dim]Provider configuration loaded from disk.[/]"),
-                ex => _statusText = $"[error]{AnsiMarkup.Escape(ex.GetBaseException().Message)}[/]");
+                ex => SetStatus($"[error]{AnsiMarkup.Escape(ex.GetBaseException().Message)}[/]"));
         }
         catch
         {
@@ -278,6 +298,8 @@ internal sealed class ModelProvidersDialog
         var item = CreateEditorItem(ModelProviderEditorItemViewModel.Create(providerKey));
         _providers.Add(item);
         SetSelectedProviderIndex(_providers.Count - 1);
+        NotifyProviderDraftChanged();
+        SetStatus("[warning]Added provider. Configure required fields, then Save to apply.[/]");
     }
 
     private void DeleteSelectedProvider()
@@ -285,25 +307,33 @@ internal sealed class ModelProvidersDialog
         var item = GetSelectedItem();
         if (item is null)
         {
-            _statusText = "[warning]Select a provider to delete.[/]";
+            SetStatus("[warning]Select a provider to delete.[/]");
             return;
         }
 
         if (item.IsReserved)
         {
-            _statusText = "[warning]Reserved providers cannot be deleted. Disable them instead.[/]";
+            SetStatus("[warning]Reserved providers cannot be deleted. Disable them instead.[/]");
             return;
         }
 
         _providers.Remove(item);
         SetSelectedProviderIndex(Math.Clamp(_selectedProviderIndex.Value, 0, _providers.Count - 1));
+        NotifyProviderDraftChanged();
+        SetStatus("[warning]Removed provider. Save to apply, or Reload to discard.[/]");
     }
 
     private void StartSave()
     {
         if (!TryBuildDefinitions(out var definitions, out var errorMessage))
         {
-            _statusText = $"[warning]{AnsiMarkup.Escape(errorMessage)}[/]";
+            SetStatus($"[warning]{AnsiMarkup.Escape(errorMessage)}[/]");
+            return;
+        }
+
+        if (!HasUnsavedChanges())
+        {
+            SetStatus("[dim]No provider changes to save.[/]");
             return;
         }
 
@@ -312,7 +342,7 @@ internal sealed class ModelProvidersDialog
             return;
         }
 
-        _statusText = "[primary]Saving provider configuration...[/]";
+        SetStatus("[primary]Saving provider configuration...[/]");
         QueueBackgroundOperation(
             async () =>
             {
@@ -326,7 +356,7 @@ internal sealed class ModelProvidersDialog
                     emptyStatusText: "[warning]No providers are configured yet. Add one, or enable Codex/Copilot.[/]",
                     loadedStatusText: "[success]Provider configuration saved and runtime refreshed.[/]");
             },
-            ex => _statusText = $"[error]{AnsiMarkup.Escape(ex.GetBaseException().Message)}[/]");
+            ex => SetStatus($"[error]{AnsiMarkup.Escape(ex.GetBaseException().Message)}[/]"));
     }
 
     private void StartTest(ModelProviderEditorItemViewModel item)
@@ -335,13 +365,13 @@ internal sealed class ModelProvidersDialog
 
         if (!_providers.Contains(item))
         {
-            _statusText = "[warning]Select a provider to test.[/]";
+            SetStatus("[warning]Select a provider to test.[/]");
             return;
         }
 
         if (!TryBuildDefinition(item, out var definition, out var errorMessage))
         {
-            _statusText = $"[warning]{AnsiMarkup.Escape(errorMessage)}[/]";
+            SetStatus($"[warning]{AnsiMarkup.Escape(errorMessage)}[/]");
             return;
         }
 
@@ -350,7 +380,7 @@ internal sealed class ModelProvidersDialog
             return;
         }
 
-        _statusText = $"[primary]Testing {AnsiMarkup.Escape(item.Label)}...[/]";
+        SetStatus($"[primary]Testing {AnsiMarkup.Escape(item.Label)}...[/]");
         QueueBackgroundOperation(
             () => _testProviderAsync(definition),
             result =>
@@ -360,9 +390,9 @@ internal sealed class ModelProvidersDialog
                     item.SetTestResult(result.Success, result.Message);
                 }
 
-                _statusText = result.Success
+                SetStatus(result.Success
                     ? $"[success]{AnsiMarkup.Escape(result.Message)}[/]"
-                    : $"[warning]{AnsiMarkup.Escape(result.Message)}[/]";
+                    : $"[warning]{AnsiMarkup.Escape(result.Message)}[/]");
             },
             ex =>
             {
@@ -372,7 +402,7 @@ internal sealed class ModelProvidersDialog
                     item.SetTestResult(success: false, message);
                 }
 
-                _statusText = $"[error]{AnsiMarkup.Escape(message)}[/]";
+                SetStatus($"[error]{AnsiMarkup.Escape(message)}[/]");
             });
     }
 
@@ -402,13 +432,13 @@ internal sealed class ModelProvidersDialog
 
         if (!_providers.Contains(item))
         {
-            _statusText = $"[warning]Select a provider to {AnsiMarkup.Escape(operationDescription)}.[/]";
+            SetStatus($"[warning]Select a provider to {AnsiMarkup.Escape(operationDescription)}.[/]");
             return;
         }
 
         if (!TryBuildDefinition(item, out var definition, out var errorMessage))
         {
-            _statusText = $"[warning]{AnsiMarkup.Escape(errorMessage)}[/]";
+            SetStatus($"[warning]{AnsiMarkup.Escape(errorMessage)}[/]");
             return;
         }
 
@@ -417,12 +447,12 @@ internal sealed class ModelProvidersDialog
             return;
         }
 
-        _statusText = $"[primary]{AnsiMarkup.Escape(progressMessage)}[/]";
+        SetStatus($"[primary]{AnsiMarkup.Escape(progressMessage)}[/]");
         QueueBackgroundOperation(
             () => actionAsync(
                 definition,
                 message => _ = _dialog.Dispatcher.InvokeAsync(
-                    () => _statusText = $"[primary]{AnsiMarkup.Escape(message)}[/]")),
+                    () => SetStatus($"[primary]{AnsiMarkup.Escape(message)}[/]"))),
             result =>
             {
                 if (_providers.Contains(item))
@@ -430,9 +460,9 @@ internal sealed class ModelProvidersDialog
                     item.SetTestResult(result.Success, result.Message);
                 }
 
-                _statusText = result.Success
+                SetStatus(result.Success
                     ? $"[success]{AnsiMarkup.Escape(result.Message)}[/]"
-                    : $"[warning]{AnsiMarkup.Escape(result.Message)}[/]";
+                    : $"[warning]{AnsiMarkup.Escape(result.Message)}[/]");
             },
             ex =>
             {
@@ -442,7 +472,7 @@ internal sealed class ModelProvidersDialog
                     item.SetTestResult(success: false, message);
                 }
 
-                _statusText = $"[error]{AnsiMarkup.Escape(message)}[/]";
+                SetStatus($"[error]{AnsiMarkup.Escape(message)}[/]");
             });
     }
 
@@ -888,25 +918,44 @@ internal sealed class ModelProvidersDialog
     private ModelProviderEditorItemViewModel CreateEditorItem(ModelProviderEditorItemViewModel item)
     {
         ArgumentNullException.ThrowIfNull(item);
+        item.SetEditedCallback(NotifyProviderDraftChanged);
         return item;
     }
 
     private string BuildStatusMarkup()
     {
-        if (_activeOperationCount > 0)
+        var statusText = _statusText.Value;
+        if (_activeOperationCount.Value > 0)
         {
-            return _statusText;
+            return statusText;
         }
 
         if (!HasUnsavedChanges())
         {
-            return _statusText;
+            return statusText;
         }
 
         const string unsavedStatus = "[warning]Unsaved model provider changes. Save to refresh the runtime, or Reload to discard them.[/]";
-        return IsPersistentStatusText(_statusText)
+        return IsPersistentStatusText(statusText)
             ? unsavedStatus
-            : $"{_statusText}{Environment.NewLine}{unsavedStatus}";
+            : $"{statusText}{Environment.NewLine}{unsavedStatus}";
+    }
+
+    private string BuildChangeSummaryMarkup()
+    {
+        if (_activeOperationCount.Value > 0)
+        {
+            return "[primary]Operation in progress...[/]";
+        }
+
+        if (!_hasLoadedDefinitions.Value)
+        {
+            return "[dim]Provider configuration not loaded yet.[/]";
+        }
+
+        return HasUnsavedChanges()
+            ? "[warning]● Unsaved changes[/] [dim]Save applies them; Reload discards them.[/]"
+            : "[success]✓ No unsaved changes[/] [dim]Configuration matches disk.[/]";
     }
 
     private static bool IsPersistentStatusText(string statusText)
@@ -982,9 +1031,9 @@ internal sealed class ModelProvidersDialog
 
     private void RequestClose()
     {
-        if (_activeOperationCount > 0)
+        if (_activeOperationCount.Value > 0)
         {
-            _statusText = "[warning]Please wait for the current provider operation to complete before closing this dialog.[/]";
+            SetStatus("[warning]Please wait for the current provider operation to complete before closing this dialog.[/]");
             return;
         }
 
@@ -1070,8 +1119,8 @@ internal sealed class ModelProvidersDialog
         _providers.Clear();
         _providers.AddRange(definitions.Select(CreateEditorItem));
         _loadedSnapshot = _providers.Select(CreateSnapshot).ToArray();
-        _hasLoadedDefinitions = true;
-        _statusText = _providers.Count == 0 ? emptyStatusText : loadedStatusText;
+        _hasLoadedDefinitions.Value = true;
+        SetStatus(_providers.Count == 0 ? emptyStatusText : loadedStatusText);
 
         var selectedIndex = selectedProviderKey is null
             ? (_providers.Count == 0 ? -1 : 0)
@@ -1088,22 +1137,28 @@ internal sealed class ModelProvidersDialog
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationDescription);
 
-        if (_activeOperationCount > 0)
+        if (_activeOperationCount.Value > 0)
         {
-            _statusText = $"[warning]Please wait for the current provider operation to complete before trying to {AnsiMarkup.Escape(operationDescription)}.[/]";
+            SetStatus($"[warning]Please wait for the current provider operation to complete before trying to {AnsiMarkup.Escape(operationDescription)}.[/]");
             return false;
         }
 
-        _activeOperationCount++;
+        _activeOperationCount.Value++;
         return true;
     }
 
     private void EndDialogOperation()
     {
-        if (_activeOperationCount > 0)
+        if (_activeOperationCount.Value > 0)
         {
-            _activeOperationCount--;
+            _activeOperationCount.Value--;
         }
+    }
+
+    private void SetStatus(string statusText)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(statusText);
+        _statusText.Value = statusText;
     }
 
     private static ModelProviderEditorItemViewModel.IBindings GetBindings(ModelProviderEditorItemViewModel item)
@@ -1140,6 +1195,8 @@ internal sealed class ModelProvidersDialog
 
     private bool HasUnsavedChanges()
     {
+        _ = _providerEditVersion.Value;
+
         if (_providers.Count != _loadedSnapshot.Count)
         {
             return true;
@@ -1155,6 +1212,9 @@ internal sealed class ModelProvidersDialog
 
         return false;
     }
+
+    private void NotifyProviderDraftChanged()
+        => _providerEditVersion.Value++;
 
     private int FindProviderIndex(string providerKey)
     {

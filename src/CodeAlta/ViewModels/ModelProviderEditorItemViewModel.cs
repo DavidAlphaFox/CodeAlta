@@ -6,6 +6,7 @@ namespace CodeAlta.ViewModels;
 internal sealed partial class ModelProviderEditorItemViewModel
 {
     private readonly CodeAltaProviderDocument _source;
+    private Action? _editedCallback;
     private bool _isInitialized;
 
     private ModelProviderEditorItemViewModel(CodeAltaProviderDocument source)
@@ -175,6 +176,9 @@ internal sealed partial class ModelProviderEditorItemViewModel
             ProviderType = "openai-chat",
         });
 
+    public void SetEditedCallback(Action? editedCallback)
+        => _editedCallback = editedCallback;
+
     public CodeAltaProviderDocument ToDocument()
     {
         var definition = Clone(_source);
@@ -300,5 +304,6 @@ internal sealed partial class ModelProviderEditorItemViewModel
         }
 
         ClearTestResult();
+        _editedCallback?.Invoke();
     }
 }

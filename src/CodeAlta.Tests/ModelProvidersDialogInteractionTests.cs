@@ -118,6 +118,63 @@ public sealed class ModelProvidersDialogInteractionTests
     }
 
     [TestMethod]
+    public void ModelProvidersDialog_StatusAndChangeSummaryReflectLoadedAndDirtyState()
+    {
+        using var session = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(120, 40)), new TerminalOptions { ImplicitStartInput = true }, force: true);
+        var root = new TextBlock("Root");
+        var app = new TerminalApp(
+            root,
+            session.Instance,
+            new TerminalAppOptions
+            {
+                HostKind = TerminalHostKind.Fullscreen,
+            });
+
+        var definitions = new[]
+        {
+            new CodeAltaProviderDocument
+            {
+                ProviderKey = "provider-1",
+                Enabled = true,
+                ProviderType = "openai-chat",
+                ApiKey = "key-1",
+            },
+        };
+
+        var dialog = new ModelProvidersDialog(
+            () => definitions,
+            _ => Task.CompletedTask,
+            definition => Task.FromResult(new ProviderTestResult(true, $"Connected successfully · {definition.ProviderKey}", 1)),
+            () => new Rectangle(0, 0, 120, 40),
+            () => root);
+
+        InvokeTerminalApp(app, "BeginRun");
+        try
+        {
+            dialog.Show();
+            WaitUntil(() => GetProviderCount(dialog) == 1, app);
+            WaitUntil(() => GetStatusMarkupText(dialog).Contains("loaded", StringComparison.OrdinalIgnoreCase), app);
+
+            Assert.IsFalse(GetStatusMarkupText(dialog).Contains("Loading provider configuration", StringComparison.OrdinalIgnoreCase));
+            Assert.IsTrue(GetChangeSummaryMarkupText(dialog).Contains("No unsaved changes", StringComparison.OrdinalIgnoreCase));
+            Assert.IsFalse(GetSaveButton(dialog).IsEnabled);
+
+            var provider = GetProviders(dialog)[0];
+            provider.UseDefaultDisplayName = false;
+            provider.DisplayName = "Updated provider";
+            TickTerminalApp(app);
+
+            Assert.IsTrue(GetStatusMarkupText(dialog).Contains("Unsaved model provider changes", StringComparison.OrdinalIgnoreCase));
+            Assert.IsTrue(GetChangeSummaryMarkupText(dialog).Contains("Unsaved changes", StringComparison.OrdinalIgnoreCase));
+            Assert.IsTrue(GetSaveButton(dialog).IsEnabled);
+        }
+        finally
+        {
+            InvokeTerminalApp(app, "EndRun");
+        }
+    }
+
+    [TestMethod]
     public void ModelProvidersDialog_SaveIgnoresTransientFailedTestResult()
     {
         using var session = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(120, 40)), new TerminalOptions { ImplicitStartInput = true }, force: true);
@@ -427,6 +484,21 @@ public sealed class ModelProvidersDialogInteractionTests
         => (string)typeof(ModelProvidersDialog)
             .GetMethod("BuildStatusMarkup", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(dialog, null)!;
+
+    private static string GetStatusMarkupText(ModelProvidersDialog dialog)
+        => ((Markup)typeof(ModelProvidersDialog)
+            .GetField("_statusMarkup", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(dialog)!).Text ?? string.Empty;
+
+    private static string GetChangeSummaryMarkupText(ModelProvidersDialog dialog)
+        => ((Markup)typeof(ModelProvidersDialog)
+            .GetField("_changeSummaryMarkup", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(dialog)!).Text ?? string.Empty;
+
+    private static Button GetSaveButton(ModelProvidersDialog dialog)
+        => (Button)typeof(ModelProvidersDialog)
+            .GetField("_saveButton", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(dialog)!;
 
     private static void InvokeSetSelectedProviderIndex(ModelProvidersDialog dialog, int index)
         => typeof(ModelProvidersDialog)
