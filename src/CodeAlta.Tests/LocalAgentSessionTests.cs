@@ -1865,6 +1865,229 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public void LocalAgentTokenEstimator_ImageData_UsesBoundedMediaEstimate()
+    {
+        var base64Image = Convert.ToBase64String(new byte[512 * 1024]);
+        var message = new LocalAgentConversationMessage(
+            LocalAgentConversationRole.User,
+            [
+                new LocalAgentMessagePart.Text("Inspect this screenshot."),
+                new LocalAgentMessagePart.Data(base64Image, "image/png", "screenshot.png"),
+            ]);
+
+        var estimatedTokens = LocalAgentTokenEstimator.EstimateMessage(message);
+
+        Assert.IsTrue(
+            estimatedTokens < 2_000,
+            $"Expected image data to use a bounded media estimate instead of base64 length, but got {estimatedTokens} tokens.");
+    }
+
+    [TestMethod]
+    public void LocalAgentMediaCompaction_PruneInlineImages_ReplacesImageDataWithPlaceholder()
+    {
+        var base64Image = Convert.ToBase64String(new byte[] { 1, 2, 3, 4, 5, 6 });
+        var message = new LocalAgentConversationMessage(
+            LocalAgentConversationRole.User,
+            [
+                new LocalAgentMessagePart.Text("Look at this."),
+                new LocalAgentMessagePart.Data(base64Image, "image/png", "screenshot.png"),
+            ]);
+
+        var result = LocalAgentMediaCompaction.PruneInlineImages([message]);
+
+        Assert.AreEqual(1, result.PrunedImageCount);
+        Assert.AreEqual(base64Image.Length, result.PrunedBase64Characters);
+        Assert.AreEqual(1, result.Messages.Count);
+        Assert.AreEqual(2, result.Messages[0].Parts.Count);
+        Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(result.Messages[0].Parts[0]);
+        var placeholder = Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(result.Messages[0].Parts[1]).Value;
+        StringAssert.Contains(placeholder, "Image attachment omitted from retained context");
+        StringAssert.Contains(placeholder, "mediaType=image/png");
+        Assert.IsFalse(result.Messages[0].Parts.OfType<LocalAgentMessagePart.Data>().Any());
+        Assert.IsFalse(placeholder.Contains(base64Image, StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task LocalAgentSession_CompactAsync_WhenOnlyInlineImagesArePrunable_RemovesImageDataFromKeptMessages()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider();
+        var summary = CreateSummary("session-image-media-only");
+        var state = CreateState("session-image-media-only");
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        var imageBytes = new byte[256 * 1024];
+        Array.Fill<byte>(imageBytes, 42);
+        var imageBase64 = Convert.ToBase64String(imageBytes);
+        var imagePath = Path.Combine(temp.Path, "screenshot.png");
+        File.WriteAllBytes(imagePath, imageBytes);
+
+        var summaryPayloads = new List<string>();
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                [new AgentModelInfo("gpt-5.4", "GPT-5.4")],
+                (request, _, _) =>
+                {
+                    var payload = Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(request.Conversation[0].Parts.Single()).Value;
+                    summaryPayloads.Add(payload);
+                    StringAssert.Contains(payload, "base64 omitted");
+                    Assert.IsFalse(payload.Contains(imageBase64, StringComparison.Ordinal));
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [new LocalAgentMessagePart.Text(
+                                    """
+                                    ## Objective
+                                    Continue the image review.
+                                    ## Active User Request
+                                    Inspect the screenshot.
+                                    ## Constraints
+                                    - Do not retain inline image bytes in compacted history.
+                                    ## Progress
+                                    ### Done
+                                    - Noted the screenshot attachment without copying image bytes.
+                                    ### In Progress
+                                    - Continue from compacted context.
+                                    ### Blocked
+                                    - None recorded.
+                                    ## Decisions
+                                    - Represent old images as attachment metadata.
+                                    ## Next Steps
+                                    - Continue the review if requested.
+                                    ## Critical Context
+                                    - The prior user turn included a screenshot attachment.
+                                    ## Relevant Files
+                                    - None tracked.
+                                    """)]),
+                        });
+                },
+                (request, _, _) =>
+                {
+                    Assert.AreEqual(1, request.Conversation.Count);
+                    Assert.IsTrue(request.Conversation[0].Parts.OfType<LocalAgentMessagePart.Data>().Any());
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [new LocalAgentMessagePart.Text("The screenshot was received.")]),
+                        });
+                }),
+            CreateOptions(provider, temp.Path));
+
+        _ = await session.SendAsync(
+                new AgentSendOptions
+                {
+                    Input = new AgentInput(
+                    [
+                        new AgentInputItem.Text("Inspect the screenshot."),
+                        new AgentInputItem.LocalImage(imagePath, "screenshot.png", "image/png"),
+                    ]),
+                })
+            .ConfigureAwait(false);
+
+        var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);
+        Assert.IsNotNull(outcome);
+        Assert.IsTrue(outcome.Success);
+        Assert.AreEqual(1, summaryPayloads.Count);
+        Assert.AreNotEqual("Nothing to compact.", outcome.Message);
+
+        var persistedHistory = await store.ReadEventsAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
+        var checkpointEvent = persistedHistory
+            .OfType<AgentRawEvent>()
+            .Single(static evt => evt.BackendEventType == "local.compactionCheckpoint");
+        var checkpoint = checkpointEvent.Raw.Deserialize(AgentJsonSerializerContext.Default.LocalAgentCompactionCheckpoint);
+        Assert.IsNotNull(checkpoint);
+        Assert.AreEqual(0, checkpoint!.SummarizedMessageCount);
+        Assert.IsFalse(checkpoint.KeptMessages.SelectMany(static message => message.Parts).OfType<LocalAgentMessagePart.Data>().Any());
+        var retainedText = string.Join("\n", checkpoint.KeptMessages.SelectMany(static message => message.Parts.OfType<LocalAgentMessagePart.Text>()).Select(static part => part.Value));
+        StringAssert.Contains(retainedText, "Image attachment omitted from retained context");
+        Assert.IsFalse(retainedText.Contains(imageBase64, StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task LocalAgentSession_SendAsync_DoesNotReplayPastInlineImagesOnLaterTurns()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider();
+        var summary = CreateSummary("session-image-current-turn-only");
+        var state = CreateState("session-image-current-turn-only");
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        var imageBytes = new byte[] { 1, 2, 3, 4, 5, 6 };
+        var imageBase64 = Convert.ToBase64String(imageBytes);
+        var imagePath = Path.Combine(temp.Path, "screenshot.png");
+        File.WriteAllBytes(imagePath, imageBytes);
+
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                (request, _, _) =>
+                {
+                    Assert.AreEqual(1, request.Conversation.Count);
+                    Assert.IsTrue(request.Conversation[0].Parts.OfType<LocalAgentMessagePart.Data>().Any());
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [new LocalAgentMessagePart.Text("Saw the image.")]),
+                        });
+                },
+                (request, _, _) =>
+                {
+                    Assert.AreEqual(3, request.Conversation.Count);
+                    Assert.AreEqual(LocalAgentConversationRole.User, request.Conversation[0].Role);
+                    Assert.IsFalse(request.Conversation[0].Parts.OfType<LocalAgentMessagePart.Data>().Any());
+                    var firstTurnText = string.Join(
+                        "\n",
+                        request.Conversation[0].Parts.OfType<LocalAgentMessagePart.Text>().Select(static part => part.Value));
+                    StringAssert.Contains(firstTurnText, "Inspect the screenshot.");
+                    StringAssert.Contains(firstTurnText, "Image attachment omitted from retained context");
+                    Assert.IsFalse(firstTurnText.Contains(imageBase64, StringComparison.Ordinal));
+                    Assert.AreEqual(LocalAgentConversationRole.User, request.Conversation[^1].Role);
+                    Assert.IsFalse(request.Conversation[^1].Parts.OfType<LocalAgentMessagePart.Data>().Any());
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [new LocalAgentMessagePart.Text("Continuing without replaying the old image.")]),
+                        });
+                }),
+            CreateOptions(provider, temp.Path));
+
+        _ = await session.SendAsync(
+                new AgentSendOptions
+                {
+                    Input = new AgentInput(
+                    [
+                        new AgentInputItem.Text("Inspect the screenshot."),
+                        new AgentInputItem.LocalImage(imagePath, "screenshot.png", "image/png"),
+                    ]),
+                })
+            .ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Continue.") }).ConfigureAwait(false);
+    }
+
+    [TestMethod]
     public async Task LocalAgentSession_CompactAsync_UsesSummarizerExecutorAndPreviousSummaryOnUpdate()
     {
         using var temp = TestTempDirectory.Create();

@@ -141,9 +141,20 @@ internal static class LocalAgentTokenEstimator
             LocalAgentMessagePart.ToolCall toolCall => EstimateText(toolCall.Name) + EstimateText(toolCall.Arguments.GetRawText()) + 16,
             LocalAgentMessagePart.ToolResult toolResult => EstimateToolResult(toolResult.Result) + 16,
             LocalAgentMessagePart.Uri uri => EstimateText(uri.Value) + EstimateText(uri.MediaType) + EstimateText(uri.Name) + 8,
-            LocalAgentMessagePart.Data data => EstimateText(data.Name) + EstimateText(data.MediaType) + Math.Max(data.Base64Data.Length / 8, 32),
+            LocalAgentMessagePart.Data data => EstimateData(data),
             _ => 4,
         };
+    }
+
+    private static long EstimateData(LocalAgentMessagePart.Data data)
+    {
+        var metadataTokens = EstimateText(data.Name) + EstimateText(data.MediaType) + 8;
+        if (LocalAgentMediaCompaction.IsImage(data.MediaType))
+        {
+            return metadataTokens + 1_024;
+        }
+
+        return metadataTokens + Math.Max(data.Base64Data.Length / 8, 32);
     }
 
     private static long EstimateToolResult(AgentToolResult result)

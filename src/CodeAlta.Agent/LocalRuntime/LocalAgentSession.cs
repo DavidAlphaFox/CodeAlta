@@ -46,6 +46,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
     private LocalAgentSessionSummary _summary;
     private LocalAgentSessionState _state;
     private AgentRunId? _activeRunId;
+    private int? _activeRunConversationStartIndex;
     private CancellationTokenSource? _activeRunCancellation;
     private bool _disposed;
 
@@ -150,6 +151,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             }
 
             _activeRunId = runId;
+            _activeRunConversationStartIndex = _conversation.Count;
             _activeRunCancellation = linkedCts;
             _pendingSteerInputs.Clear();
         }
@@ -248,6 +250,13 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
 
                     await AppendTurnDiffUpdatedAsync(fileChangeTracker, runId, linkedCts.Token).ConfigureAwait(false);
                     await CompleteActiveRunAsync(runId, CancellationToken.None).ConfigureAwait(false);
+                    await RefreshEstimatedUsageAsync(
+                            runId,
+                            instructionBundle.SystemMessage,
+                            instructionBundle.DeveloperInstructions,
+                            modelInfo,
+                            linkedCts.Token)
+                        .ConfigureAwait(false);
                     await MaybeCompactForThresholdAsync(
                             runId,
                             instructionBundle.SystemMessage,
@@ -264,7 +273,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                         runId,
                         AgentSessionUpdateKind.Idle,
                         null,
-                        Usage: response.Usage);
+                        Usage: _state.Usage);
                     await AppendEventsAsync([idleEvent], linkedCts.Token).ConfigureAwait(false);
                     return runId;
                 }
@@ -601,11 +610,14 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             SystemMessage = systemMessage,
             DeveloperInstructions = developerInstructions,
             ReasoningEffort = _options.ReasoningEffort,
-            Conversation = conversation?.ToArray() ?? _conversation.ToArray(),
+            Conversation = conversation?.ToArray() ?? CreateProviderConversation().Messages.ToArray(),
             Tools = tools,
             State = _state,
         };
     }
+
+    private LocalAgentInlineMediaPruneResult CreateProviderConversation()
+        => LocalAgentMediaCompaction.PruneInlineImages(_conversation, ShouldPreserveInlineMediaForActiveRun);
 
     private static AgentSessionUsage? CreateConversationUsageSnapshot(
         string? systemMessage,
@@ -736,6 +748,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             }
 
             _activeRunId = null;
+            _activeRunConversationStartIndex = null;
             _activeRunCancellation = null;
             _pendingSteerInputs.Clear();
         }
@@ -757,11 +770,12 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             return;
         }
 
+        var providerConversation = CreateProviderConversation();
         var estimate = LocalAgentTokenEstimator.EstimatePromptTokens(
             systemMessage,
             developerInstructions,
-            _conversation,
-            _state.Usage);
+            providerConversation.Messages,
+            providerConversation.PrunedImageCount > 0 ? null : _state.Usage);
         var label = estimate.IsEstimated
             ? "Estimated active context"
             : "Active context window";
@@ -769,7 +783,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             _state.Usage,
             modelInfo,
             estimate.Tokens,
-            _conversation.Count,
+            providerConversation.Messages.Count,
             DateTimeOffset.UtcNow,
             label);
         if (refreshedUsage is null || Equals(refreshedUsage, _state.Usage))
@@ -832,11 +846,12 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         CancellationToken cancellationToken)
     {
         _conversation.Add(response.AssistantMessage);
+        var providerConversation = CreateProviderConversation();
         var effectiveUsage = CreateConversationUsageSnapshot(
             systemMessage,
             developerInstructions,
             modelInfo,
-            _conversation,
+            providerConversation.Messages,
             response.Usage);
 
         _state = _state with
@@ -1257,9 +1272,29 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                 continue;
             }
 
+            if (preparation?.OversizedAnchorMessage is { } oversizedAnchorMessage &&
+                LocalAgentMediaCompaction.ContainsPrunableInlineImages(
+                    [oversizedAnchorMessage],
+                    ShouldPreserveInlineMediaInCompactedMessage))
+            {
+                preparation = TryCreateInlineMediaCompactionPreparation(
+                    trigger,
+                    systemMessage,
+                    developerInstructions,
+                    planningUsage) ?? preparation;
+            }
+
             if (preparation is null)
             {
-                return null;
+                preparation = TryCreateInlineMediaCompactionPreparation(
+                    trigger,
+                    systemMessage,
+                    developerInstructions,
+                    planningUsage);
+                if (preparation is null)
+                {
+                    return null;
+                }
             }
 
             var summaryResult = await _compactionSummarizer.SummarizeAsync(
@@ -1278,14 +1313,22 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                 .ConfigureAwait(false);
 
             checkpointTokenEstimate = LocalAgentTokenEstimator.EstimateCheckpointTokens(summaryResult.Summary);
-            retainedConversation = [.. preparation.TurnPrefixMessages, .. preparation.MessagesToKeep];
+            var unprunedRetainedConversation = new List<LocalAgentConversationMessage>(
+                preparation.TurnPrefixMessages.Count + preparation.MessagesToKeep.Count);
+            unprunedRetainedConversation.AddRange(preparation.TurnPrefixMessages);
+            unprunedRetainedConversation.AddRange(preparation.MessagesToKeep);
+            var firstKeptEventOffset = TryResolveFirstKeptEventOffset(unprunedRetainedConversation);
+            var retainedMediaPruneResult = LocalAgentMediaCompaction.PruneInlineImages(
+                unprunedRetainedConversation,
+                ShouldPreserveInlineMediaInCompactedMessage);
+            retainedConversation = retainedMediaPruneResult.Messages;
             checkpoint = new LocalAgentCompactionCheckpoint
             {
                 Version = 2,
                 ContentId = checkpointContentId,
                 Trigger = trigger.ToString().ToLowerInvariant(),
                 Summary = summaryResult.Summary,
-                FirstKeptEventOffset = TryResolveFirstKeptEventOffset(retainedConversation),
+                FirstKeptEventOffset = firstKeptEventOffset,
                 AnchorContentId = preparation.AnchorContentId,
                 IsSplitTurn = summaryResult.IsSplitTurn,
                 TokensBefore = summaryResult.TokensBefore,
@@ -1398,7 +1441,9 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             CompactionCheckpointEventType,
             JsonSerializer.SerializeToElement(checkpoint, AgentJsonSerializerContext.Default.LocalAgentCompactionCheckpoint),
             runId);
-        var completionMessage = $"{trigger} local compaction summarized {result.MessagesSummarized} messages.";
+        var completionMessage = result.MessagesSummarized == 0 && result.SerializerStatistics.OmittedAttachmentCount > 0
+            ? $"{trigger} local compaction compacted inline media attachments in retained context."
+            : $"{trigger} local compaction summarized {result.MessagesSummarized} messages.";
         if (result.CompressionRatio is { } realizedCompressionRatio &&
             realizedCompressionRatio > settings.TargetContextRatioMax)
         {
@@ -1569,6 +1614,66 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
 
     private long CountDurableEvents()
         => _history.Count(static @event => @event is not AgentContentDeltaEvent);
+
+    private LocalAgentCompactionPreparation? TryCreateInlineMediaCompactionPreparation(
+        LocalAgentCompactionTrigger trigger,
+        string? systemMessage,
+        string? developerInstructions,
+        AgentSessionUsage? planningUsage)
+    {
+        if (_conversation.Count == 0)
+        {
+            return null;
+        }
+
+        var previousSummary = LocalAgentCompactionCheckpoint.TryExtractSummary(_conversation[0]);
+        var conversationStartIndex = previousSummary is null ? 0 : 1;
+        var messagesToKeep = _conversation.Skip(conversationStartIndex).ToArray();
+        if (messagesToKeep.Length == 0 ||
+            !LocalAgentMediaCompaction.ContainsPrunableInlineImages(messagesToKeep, ShouldPreserveInlineMediaInCompactedMessage))
+        {
+            return null;
+        }
+
+        var tokensBefore = LocalAgentTokenEstimator.EstimatePromptTokens(
+            systemMessage,
+            developerInstructions,
+            _conversation,
+            planningUsage);
+
+        return new LocalAgentCompactionPreparation(
+            trigger,
+            MessagesToSummarize: [],
+            TurnPrefixMessages: [],
+            MessagesToKeep: messagesToKeep,
+            AnchorContentId: FindLatestUserContentId(),
+            IsSplitTurn: false,
+            TokensBefore: tokensBefore,
+            PreviousSummary: previousSummary);
+    }
+
+    private bool ShouldPreserveInlineMediaInCompactedMessage(LocalAgentConversationMessage message)
+        => _conversation.Count > 0 &&
+           _conversation[^1].Role is LocalAgentConversationRole.User &&
+           ReferenceEquals(message, _conversation[^1]);
+
+    private bool ShouldPreserveInlineMediaForActiveRun(LocalAgentConversationMessage message)
+    {
+        if (_activeRunConversationStartIndex is not { } startIndex)
+        {
+            return false;
+        }
+
+        for (var index = Math.Max(startIndex, 0); index < _conversation.Count; index++)
+        {
+            if (ReferenceEquals(_conversation[index], message))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private string? FindLatestUserContentId()
         => _history
