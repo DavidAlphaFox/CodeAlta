@@ -726,6 +726,23 @@ public sealed partial class CodexClient : IAsyncDisposable
             "model/list", parameters, cancellationToken);
     }
 
+    /// <summary>
+    /// Reads model-provider capabilities supported by the current configuration.
+    /// </summary>
+    /// <param name="parameters">Model-provider capabilities read parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The model-provider capabilities response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<ModelProviderCapabilitiesReadResponse> ModelProviderCapabilitiesReadAsync(
+        ModelProviderCapabilitiesReadParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<ModelProviderCapabilitiesReadParams, ModelProviderCapabilitiesReadResponse>(
+            "modelProvider/capabilities/read", parameters, cancellationToken);
+    }
+
     // ── Config APIs ───────────────────────────────────────────────
 
     /// <summary>
@@ -876,6 +893,23 @@ public sealed partial class CodexClient : IAsyncDisposable
         return _transport.SendRequestAsync<SkillsConfigWriteParams, SkillsConfigWriteResponse>(
             "skills/config/write", parameters, cancellationToken);
     }
+
+    /// <summary>
+    /// Lists configured hooks, optionally scoped by working directories.
+    /// </summary>
+    /// <param name="parameters">Hooks list parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The hooks list response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<HooksListResponse> HooksListAsync(
+        HooksListParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<HooksListParams, HooksListResponse>(
+            "hooks/list", parameters, cancellationToken);
+    }
     //
     // /// <summary>
     // /// Lists remote skills from the skills marketplace.
@@ -945,6 +979,23 @@ public sealed partial class CodexClient : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(parameters);
         return _transport.SendRequestAsync<MarketplaceRemoveParams, MarketplaceRemoveResponse>(
             "marketplace/remove", parameters, cancellationToken);
+    }
+
+    /// <summary>
+    /// Upgrades one or more configured Codex marketplaces.
+    /// </summary>
+    /// <param name="parameters">Marketplace upgrade parameters.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The marketplace upgrade response.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="JsonRpcException">Thrown when the server returns an error.</exception>
+    public Task<MarketplaceUpgradeResponse> MarketplaceUpgradeAsync(
+        MarketplaceUpgradeParams parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return _transport.SendRequestAsync<MarketplaceUpgradeParams, MarketplaceUpgradeResponse>(
+            "marketplace/upgrade", parameters, cancellationToken);
     }
 
     // ── Plugin APIs ───────────────────────────────────────────────
