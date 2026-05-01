@@ -22,7 +22,7 @@ public sealed class AgentInstructionTemplateProviderTests
         Assert.IsFalse(string.IsNullOrWhiteSpace(instructions.SystemMessage));
         StringAssert.Contains(instructions.SystemMessage, "You are CodeAlta");
         StringAssert.Contains(instructions.SystemMessage, "# Engineering Discipline");
-        StringAssert.Contains(instructions.SystemMessage, "minimal unnecessary churn");
+        StringAssert.Contains(instructions.SystemMessage, "minimal churn");
         Assert.IsNotNull(instructions.DeveloperInstructions);
         StringAssert.Contains(instructions.DeveloperInstructions, "# Role");
         StringAssert.Contains(instructions.DeveloperInstructions, "# Runtime Context");

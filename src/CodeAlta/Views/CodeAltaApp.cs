@@ -726,8 +726,10 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private bool GetAutoApproveEnabled() => DefaultAutoApproveEnabled;
     private async Task PersistViewStateAsync()
         => await _threadStateCoordinator.PersistViewStateAsync();
-    internal async Task InitializeChatBackendsAsync(CancellationToken cancellationToken)
-        => await _chatBackendInitializationCoordinator.InitializeAsync(cancellationToken);
+    internal Task InitializeChatBackendsAsync(CancellationToken cancellationToken)
+        => _chatBackendInitializationCoordinator.InitializeAsync(cancellationToken);
+    internal Task InitializeChatBackendAsync(AgentBackendId backendId, CancellationToken cancellationToken)
+        => _chatBackendInitializationCoordinator.RefreshBackendAsync(backendId, cancellationToken);
 
     internal void ApplyRecoveredCatalogState(
         IReadOnlyList<ProjectDescriptor> projects,

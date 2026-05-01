@@ -82,21 +82,15 @@ public sealed class CodeAltaShellControllerTests
 
         await controller.InitializeAsync(CancellationToken.None);
 
-        CollectionAssert.AreEqual(
-            new[]
-            {
-                "Shell.InitializeChatBackends",
-                "Shell.RefreshCatalogAndThreadWorkspace",
-                "Shell.SetReadyStatus",
-                "Shell.SetInitialized:True",
-                "Shell.TrySchedulePendingStartupThreadRestore",
-                "Importer.Import",
-                "ProjectCatalog.Load",
-                "ThreadSource.List",
-                "Shell.ApplyRecoveredCatalogState:1:1",
-                "Shell.TrySchedulePendingStartupThreadRestore",
-            },
-            log);
+        CollectionAssert.Contains(log, "Shell.InitializeChatBackends");
+        CollectionAssert.Contains(log, "Shell.RefreshCatalogAndThreadWorkspace");
+        CollectionAssert.Contains(log, "Shell.SetReadyStatus");
+        CollectionAssert.Contains(log, "Shell.SetInitialized:True");
+        CollectionAssert.Contains(log, "Importer.Import");
+        CollectionAssert.Contains(log, "ProjectCatalog.Load");
+        CollectionAssert.Contains(log, "ThreadSource.List");
+        CollectionAssert.Contains(log, "Shell.ApplyRecoveredCatalogState:1:1");
+        CollectionAssert.Contains(log, "Shell.TrySchedulePendingStartupThreadRestore");
     }
 
     [TestMethod]
@@ -172,6 +166,49 @@ public sealed class CodeAltaShellControllerTests
     }
 
     [TestMethod]
+    public async Task InitializeAsync_LoadsReadyProviderSessionsWhileAnotherProviderIsInitializing()
+    {
+        var log = new List<string>();
+        var codexBackendId = new AgentBackendId("codex");
+        var slowBackendId = new AgentBackendId("slow");
+        var shell = new FakeShell(log);
+        shell.BlockBackendInitialization(slowBackendId);
+        var importer = new FakeProgressImporter(log, codexBackendId, slowBackendId, blockSecondImport: false);
+        var project = new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" };
+        var threadSource = new FakeRecoverableThreadSource(
+            log,
+            [
+                CreateThread("thread-codex", backendId: codexBackendId.Value),
+                CreateThread("thread-slow", backendId: slowBackendId.Value),
+            ]);
+        var controller = new CodeAltaShellController(
+            shell,
+            importer,
+            new FakeProjectCatalogStore(log, [project]),
+            threadSource,
+            new FakeWorkThreadDeleter(log),
+            [
+                new AgentBackendDescriptor(codexBackendId, "Codex"),
+                new AgentBackendDescriptor(slowBackendId, "Slow"),
+            ]);
+        controller.AttachUiDispatcher(new FakeUiDispatcher());
+
+        var initializationTask = controller.InitializeAsync(CancellationToken.None);
+
+        await WaitUntilAsync(() => log.Contains("ThreadSource.List:codex")).ConfigureAwait(false);
+
+        Assert.IsFalse(initializationTask.IsCompleted, "The slow provider should still be initializing.");
+        CollectionAssert.Contains(log, "ProgressImporter.ImportBackend:codex");
+        Assert.IsFalse(log.Contains("ProgressImporter.ImportBackend:slow"), "The slow provider should not load sessions before initialization completes.");
+        Assert.IsFalse(log.Contains("ThreadSource.List:slow"), "The slow provider should not be queried before initialization completes.");
+
+        shell.CompleteBackendInitialization(slowBackendId);
+        await initializationTask.ConfigureAwait(false);
+
+        CollectionAssert.Contains(log, "ThreadSource.List:slow");
+    }
+
+    [TestMethod]
     public async Task ApplyRuntimeEventAsync_RoutesEventThroughDispatcher()
     {
         var log = new List<string>();
@@ -224,6 +261,20 @@ public sealed class CodeAltaShellControllerTests
                 []));
 
         Assert.IsNull(status);
+    }
+
+    [TestMethod]
+    public void FormatStartupProviderLoadStatus_ShowsCombinedProviderProgress()
+    {
+        var status = CodeAltaShellController.FormatStartupProviderLoadStatus(
+            new ProviderSessionLoadProgress(
+                AgentBackendIds.Codex,
+                "Codex",
+                1,
+                3,
+                ["OpenAI", "Gemma", "Anthropic"]));
+
+        Assert.AreEqual("Loading OpenAI, Gemma, … [■■■□□□□□] 1/3", status);
     }
 
     [TestMethod]
@@ -642,6 +693,8 @@ public sealed class CodeAltaShellControllerTests
 
     private sealed class FakeShell(List<string> log) : ICodeAltaShell
     {
+        private readonly Dictionary<string, TaskCompletionSource<bool>> _backendInitializationCompletions = new(StringComparer.OrdinalIgnoreCase);
+
         public WorkThreadRuntimeEvent? LastRuntimeEvent { get; private set; }
 
         public TaskCompletionSource<bool>? InitializeChatBackendsCompletion { get; init; }
@@ -651,6 +704,20 @@ public sealed class CodeAltaShellControllerTests
             log.Add("Shell.InitializeChatBackends");
             return InitializeChatBackendsCompletion?.Task ?? Task.CompletedTask;
         }
+
+        public Task InitializeChatBackendAsync(AgentBackendId backendId, CancellationToken cancellationToken)
+        {
+            log.Add($"Shell.InitializeChatBackend:{backendId.Value}");
+            return _backendInitializationCompletions.TryGetValue(backendId.Value, out var completion)
+                ? completion.Task.WaitAsync(cancellationToken)
+                : Task.CompletedTask;
+        }
+
+        public void BlockBackendInitialization(AgentBackendId backendId)
+            => _backendInitializationCompletions[backendId.Value] = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void CompleteBackendInitialization(AgentBackendId backendId)
+            => _backendInitializationCompletions[backendId.Value].TrySetResult(true);
 
         public void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
             => log.Add($"Shell.Status:{message}:{showSpinner}:{tone}");
@@ -712,11 +779,15 @@ public sealed class CodeAltaShellControllerTests
         }
     }
 
-    private sealed class FakeProgressImporter(List<string> log, AgentBackendId firstBackendId, AgentBackendId secondBackendId) : IKnownProjectImporterWithProgress
+    private sealed class FakeProgressImporter(
+        List<string> log,
+        AgentBackendId firstBackendId,
+        AgentBackendId secondBackendId,
+        bool blockSecondImport = true) : IKnownProjectImporterWithProgress
     {
-        private readonly TaskCompletionSource _allowCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _allowCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public TaskCompletionSource FirstProgressReported { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> FirstProgressReported { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task ImportAsync(CancellationToken cancellationToken)
             => ImportAsync(static _ => { }, cancellationToken);
@@ -725,7 +796,7 @@ public sealed class CodeAltaShellControllerTests
         {
             log.Add("ProgressImporter.Import.Start");
             reportProgress(new ProviderSessionLoadProgress(firstBackendId, "Codex", 1, 2, ["Slow"]));
-            FirstProgressReported.TrySetResult();
+            FirstProgressReported.TrySetResult(true);
 
             await _allowCompletion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -734,7 +805,22 @@ public sealed class CodeAltaShellControllerTests
         }
 
         public void AllowCompletion()
-            => _allowCompletion.TrySetResult();
+            => _allowCompletion.TrySetResult(true);
+
+        public async Task ImportBackendAsync(AgentBackendDescriptor descriptor, CancellationToken cancellationToken)
+        {
+            log.Add($"ProgressImporter.ImportBackend:{descriptor.BackendId.Value}");
+            if (descriptor.BackendId == firstBackendId)
+            {
+                FirstProgressReported.TrySetResult(true);
+                return;
+            }
+
+            if (blockSecondImport && descriptor.BackendId == secondBackendId)
+            {
+                await _allowCompletion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     private sealed class FakeProjectCatalogStore(List<string> log, IReadOnlyList<ProjectDescriptor> projects) : IProjectCatalogStore

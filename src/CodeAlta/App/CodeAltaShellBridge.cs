@@ -1,3 +1,4 @@
+using CodeAlta.Agent;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
@@ -17,6 +18,9 @@ internal sealed class CodeAltaShellBridge : ICodeAltaShell
 
     public Task InitializeChatBackendsAsync(CancellationToken cancellationToken)
         => _app.InitializeChatBackendsAsync(cancellationToken);
+
+    public Task InitializeChatBackendAsync(AgentBackendId backendId, CancellationToken cancellationToken)
+        => _app.InitializeChatBackendAsync(backendId, cancellationToken);
 
     public void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
         => _app.SetStatus(message, showSpinner, tone);

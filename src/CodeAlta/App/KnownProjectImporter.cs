@@ -11,6 +11,7 @@ internal sealed class KnownProjectImporter : IKnownProjectImporterWithProgress
     private readonly AgentHub _agentHub;
     private readonly IReadOnlyList<AgentBackendDescriptor> _backendDescriptors;
     private readonly ProjectCatalog _projectCatalog;
+    private readonly SemaphoreSlim _importGate = new(initialCount: 1, maxCount: 1);
 
     public KnownProjectImporter(
         AgentHub agentHub,
@@ -31,12 +32,50 @@ internal sealed class KnownProjectImporter : IKnownProjectImporterWithProgress
     public Task ImportAsync(CancellationToken cancellationToken)
         => ImportAsync(static _ => { }, cancellationToken);
 
+    public async Task ImportBackendAsync(AgentBackendDescriptor descriptor, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+
+        if (ShouldLoadProviderSessions is { } shouldLoadProviderSessions &&
+            !shouldLoadProviderSessions(descriptor.BackendId))
+        {
+            return;
+        }
+
+        try
+        {
+            var sessions = await _agentHub.ListSessionsAsync(descriptor.BackendId, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var workingDirectories = new List<string?>();
+            foreach (var session in sessions)
+            {
+                workingDirectories.Add(session.Context?.Cwd ?? session.WorkspacePath);
+            }
+
+            await _importGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await _projectCatalog.ImportWorkingDirectoriesAsync(workingDirectories, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _importGate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, $"Failed to import project history from backend '{descriptor.BackendId.Value}'.");
+        }
+    }
+
     public async Task ImportAsync(Action<ProviderSessionLoadProgress> reportProgress, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(reportProgress);
 
         var descriptors = _backendDescriptors.ToArray();
-        using var importGate = new SemaphoreSlim(initialCount: 1, maxCount: 1);
         var progressGate = new object();
         var loadingProviderNames = descriptors.Select(static descriptor => descriptor.DisplayName).ToList();
         var completedProviderCount = 0;
@@ -48,39 +87,9 @@ internal sealed class KnownProjectImporter : IKnownProjectImporterWithProgress
 
         async Task ImportBackendProjectsAsync(AgentBackendDescriptor descriptor)
         {
-            if (ShouldLoadProviderSessions is { } shouldLoadProviderSessions &&
-                !shouldLoadProviderSessions(descriptor.BackendId))
-            {
-                ReportProgress(descriptor);
-                return;
-            }
-
             try
             {
-                var sessions = await _agentHub.ListSessionsAsync(descriptor.BackendId, cancellationToken: cancellationToken).ConfigureAwait(false);
-                var workingDirectories = new List<string?>();
-                foreach (var session in sessions)
-                {
-                    workingDirectories.Add(session.Context?.Cwd ?? session.WorkspacePath);
-                }
-
-                await importGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
-                {
-                    await _projectCatalog.ImportWorkingDirectoriesAsync(workingDirectories, cancellationToken).ConfigureAwait(false);
-                }
-                finally
-                {
-                    importGate.Release();
-                }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, $"Failed to import project history from backend '{descriptor.BackendId.Value}'.");
+                await ImportBackendAsync(descriptor, cancellationToken).ConfigureAwait(false);
             }
             finally
             {

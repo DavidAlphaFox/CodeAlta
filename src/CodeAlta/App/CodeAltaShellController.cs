@@ -353,11 +353,12 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
         try
         {
             // These startup calls are background I/O and must not assume UI-thread affinity.
-            var chatBackendInitializationTask = _shell.InitializeChatBackendsAsync(cancellationToken);
+            var startupProviderLoadTask = Task.Run(
+                () => InitializeAndLoadStartupProviderStateAsync(cancellationToken),
+                CancellationToken.None);
             await MarkInitializedForInteractionAsync(cancellationToken).ConfigureAwait(false);
             initializedForInteraction = true;
-            await chatBackendInitializationTask.ConfigureAwait(false);
-            await RefreshCatalogFromBackendsAsync(cancellationToken).ConfigureAwait(false);
+            await startupProviderLoadTask.ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -371,6 +372,74 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
                     await MarkInitializedForInteractionAsync(CancellationToken.None).ConfigureAwait(false);
                 }
             }
+        }
+    }
+
+    private async Task InitializeAndLoadStartupProviderStateAsync(CancellationToken cancellationToken)
+    {
+        if (_backendDescriptors.Count == 0 || _knownProjectImporter is not IKnownProjectImporterWithProgress progressImporter)
+        {
+            await _shell.InitializeChatBackendsAsync(cancellationToken).ConfigureAwait(false);
+            await RefreshCatalogFromBackendsAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            var progress = new ProviderStartupLoadProgress(_backendDescriptors);
+            var recoveredThreads = new Dictionary<string, WorkThreadDescriptor>(StringComparer.OrdinalIgnoreCase);
+            using var applyGate = new SemaphoreSlim(initialCount: 1, maxCount: 1);
+
+            ReportStartupProviderLoadProgress(progress.Snapshot(null));
+            var providerTasks = _backendDescriptors
+                .Select(descriptor => InitializeLoadAndRecoverProviderAsync(descriptor, progressImporter, progress, recoveredThreads, applyGate, cancellationToken))
+                .ToArray();
+            await Task.WhenAll(providerTasks).ConfigureAwait(false);
+
+            var projects = await _projectCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
+            var threads = recoveredThreads.Values
+                .OrderByDescending(static thread => thread.LastActiveAt)
+                .ToArray();
+
+            await UiDispatcher.InvokeAsync(
+                    () =>
+                    {
+                        _shell.ApplyRecoveredCatalogState(projects, threads);
+                        _shell.SetProviderSessionLoadStatus(null);
+                        _shell.TrySchedulePendingStartupThreadRestore(CancellationToken.None);
+                    })
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            await UiDispatcher.InvokeAsync(() => _shell.SetProviderSessionLoadStatus(null)).ConfigureAwait(false);
+            if (LogManager.IsInitialized && CodeAltaApp.UiLogger.IsEnabled(LogLevel.Error))
+            {
+                CodeAltaApp.UiLogger.Error(ex, "Failed to refresh backend startup state.");
+            }
+        }
+    }
+
+    private async Task InitializeLoadAndRecoverProviderAsync(
+        AgentBackendDescriptor descriptor,
+        IKnownProjectImporterWithProgress projectImporter,
+        ProviderStartupLoadProgress progress,
+        Dictionary<string, WorkThreadDescriptor> recoveredThreads,
+        SemaphoreSlim applyGate,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _shell.InitializeChatBackendAsync(descriptor.BackendId, cancellationToken).ConfigureAwait(false);
+            await projectImporter.ImportBackendAsync(descriptor, cancellationToken).ConfigureAwait(false);
+            await ApplyBackendRecoverableThreadsAsync(descriptor.BackendId, recoveredThreads, applyGate, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReportStartupProviderLoadProgress(progress.Snapshot(descriptor));
         }
     }
 
@@ -559,6 +628,33 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
         _ = UiDispatcher.InvokeAsync(() => _shell.SetProviderSessionLoadStatus(status));
     }
 
+    private void ReportStartupProviderLoadProgress(ProviderSessionLoadProgress progress)
+    {
+        var status = FormatStartupProviderLoadStatus(progress);
+        _ = UiDispatcher.InvokeAsync(() => _shell.SetProviderSessionLoadStatus(status));
+    }
+
+    internal static string? FormatStartupProviderLoadStatus(ProviderSessionLoadProgress progress)
+    {
+        if (progress.TotalProviderCount <= 0 ||
+            progress.CompletedProviderCount >= progress.TotalProviderCount)
+        {
+            return null;
+        }
+
+        var completed = Math.Clamp(progress.CompletedProviderCount, 0, progress.TotalProviderCount);
+        var loadingNames = progress.LoadingProviderDisplayNames
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(2)
+            .ToArray();
+        var loadingText = loadingNames.Length == 0
+            ? "providers"
+            : string.Join(", ", loadingNames) + (progress.LoadingProviderDisplayNames.Count > loadingNames.Length ? ", …" : string.Empty);
+
+        return $"Loading {loadingText} {BuildProgressBar(completed, progress.TotalProviderCount)} {completed}/{progress.TotalProviderCount}";
+    }
+
     internal static string? FormatProviderSessionLoadStatus(ProviderSessionLoadProgress progress)
     {
         if (progress.TotalProviderCount <= 0 ||
@@ -586,6 +682,41 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
         var filled = total <= 0 ? 0 : (int)Math.Round((double)completed / total * width, MidpointRounding.AwayFromZero);
         filled = Math.Clamp(filled, 0, width);
         return "[" + new string('■', filled) + new string('□', width - filled) + "]";
+    }
+
+    private sealed class ProviderStartupLoadProgress
+    {
+        private readonly object _gate = new();
+        private readonly List<string> _loadingProviderDisplayNames;
+        private int _completedProviderCount;
+
+        public ProviderStartupLoadProgress(IReadOnlyList<AgentBackendDescriptor> descriptors)
+        {
+            _loadingProviderDisplayNames = descriptors.Select(static descriptor => descriptor.DisplayName).ToList();
+            TotalProviderCount = descriptors.Count;
+        }
+
+        public int TotalProviderCount { get; }
+
+        public ProviderSessionLoadProgress Snapshot(AgentBackendDescriptor? completedDescriptor)
+        {
+            lock (_gate)
+            {
+                if (completedDescriptor is not null)
+                {
+                    _completedProviderCount++;
+                    _loadingProviderDisplayNames.RemoveAll(
+                        name => string.Equals(name, completedDescriptor.DisplayName, StringComparison.Ordinal));
+                }
+
+                return new ProviderSessionLoadProgress(
+                    completedDescriptor?.BackendId ?? default,
+                    completedDescriptor?.DisplayName ?? string.Empty,
+                    _completedProviderCount,
+                    TotalProviderCount,
+                    _loadingProviderDisplayNames.ToArray());
+            }
+        }
     }
 
     internal static bool TryMergeRuntimeEvents(
