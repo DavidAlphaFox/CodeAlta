@@ -369,6 +369,7 @@ Set these headers:
 | `User-Agent` | truthful CodeAlta identifier if SDK default is insufficient |
 | `OpenAI-Beta` | `responses=experimental` when `send_responses_beta_header = true` |
 | `session_id` | `LocalAgentTurnRequest.SessionId` or stable CodeAlta thread/session id |
+| `x-client-request-id` | same stable session/request id used for `session_id` |
 | `X-OpenAI-Fedramp` | `true` only when token/account metadata says FedRAMP |
 
 Do not set Codex WebSocket beta headers in the SSE provider.
@@ -576,7 +577,7 @@ Transport rules:
 - If a reused WebSocket is stale and fails while sending the next request, reconnect once and send the full request payload instead of a `previous_response_id` delta.
 - Parse wrapped WebSocket error frames such as `{ "type": "error", "status": ..., "error": ... }` into status-bearing request failures; treat `websocket_connection_limit_reached` as retryable on a fresh connection rather than as an HTTP fallback signal.
 - Wrap WebSocket receive waits in a per-message idle timeout so a silent socket cannot hang indefinitely.
-- Capture known non-response side-channel frames such as `codex.rate_limits`, model verification, server-model notifications, and models-etag metadata as redacted provider-state diagnostics only; they must not alter assistant content, tool execution, retry policy, request identity, or usage-limit handling.
+- Capture known side-channel frames and handshake/header metadata such as `codex.rate_limits`, `response.metadata`, model verification, server-model notifications, and models-etag metadata as redacted provider-state diagnostics only; they must not alter assistant content, tool execution, retry policy, request identity, or usage-limit handling.
 - `previous_response_id` and input-delta continuation may be used only on a currently live/reused WebSocket for in-memory CodeAlta sessions created in the current process. HTTP/SSE, HTTP fallback, new WebSocket connections, and sessions reloaded from disk must send full replayable input and must not resume a stored provider response id.
 - When request fields change or the transcript is not a strict extension of the previous request plus assistant/tool output, send full input and clear continuation state.
 - CodeAlta's ChatGPT subscription WebSocket transport applies the Responses WebSocket message shape with ChatGPT OAuth/account headers and must remain independent from platform API-key WebSocket helpers in the OpenAI SDK.
@@ -595,7 +596,8 @@ Retries:
 - Add provider-level throttling around 429/5xx only if it does not duplicate SDK retries.
 - Honor `Retry-After` exactly when present.
 - Use exponential backoff with jitter for retryable transient failures.
-- Stop after a small retry budget, default 3 attempts including SDK attempts if observable.
+- Stop after a small retry budget; the Codex subscription path defaults to six total pre-visible attempts to match Codex CLI reconnect behavior.
+- Treat transient `response.failed` payloads such as `server_overloaded` like other retryable pre-visible failures, but keep subscription enforcement payloads terminal.
 
 Do not retry:
 

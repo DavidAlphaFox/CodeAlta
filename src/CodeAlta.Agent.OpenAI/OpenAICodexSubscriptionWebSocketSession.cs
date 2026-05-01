@@ -139,21 +139,22 @@ internal sealed class OpenAICodexSubscriptionWebSocketSession : IOpenAIResponses
 
             await foreach (var message in ReceiveMessagesAsync(_webSocket!, cancellationToken).ConfigureAwait(false))
             {
-                if (!TryCreateResponseUpdateMessage(
-                        message,
-                        out var normalizedMessage,
-                        out var eventType,
-                        out var messageException,
-                        out var sideChannelEvent))
+                var handled = TryCreateResponseUpdateMessage(
+                    message,
+                    out var normalizedMessage,
+                    out var eventType,
+                    out var messageException,
+                    out var sideChannelEvent);
+                if (sideChannelEvent is not null)
+                {
+                    SideChannelReceived?.Invoke(sideChannelEvent);
+                }
+
+                if (!handled)
                 {
                     if (messageException is not null)
                     {
                         throw messageException;
-                    }
-
-                    if (sideChannelEvent is not null)
-                    {
-                        SideChannelReceived?.Invoke(sideChannelEvent);
                     }
 
                     continue;
@@ -230,6 +231,7 @@ internal sealed class OpenAICodexSubscriptionWebSocketSession : IOpenAIResponses
         {
             await webSocket.ConnectAsync(ResolveWebSocketUri(_baseUri), cancellationToken).ConfigureAwait(false);
             CaptureResponseTurnState(webSocket.HttpResponseHeaders);
+            CaptureHandshakeSideChannels(webSocket.HttpResponseHeaders);
             return webSocket;
         }
         catch
@@ -390,6 +392,47 @@ internal sealed class OpenAICodexSubscriptionWebSocketSession : IOpenAIResponses
         _turnState.Capture(turnState);
     }
 
+    private void CaptureHandshakeSideChannels(IReadOnlyDictionary<string, IEnumerable<string>>? headers)
+    {
+        var hasServerModel = TryGetHeaderValue(headers, "OpenAI-Model", out var serverModel);
+        var hasModelsEtag = TryGetHeaderValue(headers, "x-models-etag", out var modelsEtag);
+        var hasServerReasoning = TryGetHeaderValue(headers, "x-reasoning-included", out var serverReasoning);
+        if (!hasServerModel && !hasModelsEtag && !hasServerReasoning)
+        {
+            return;
+        }
+
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("type"u8, "websocket.handshake");
+            writer.WritePropertyName("headers"u8);
+            writer.WriteStartObject();
+            if (hasServerModel)
+            {
+                writer.WriteString("OpenAI-Model"u8, serverModel);
+            }
+
+            if (hasModelsEtag)
+            {
+                writer.WriteString("x-models-etag"u8, modelsEtag);
+            }
+
+            if (hasServerReasoning)
+            {
+                writer.WriteString("x-reasoning-included"u8, serverReasoning);
+            }
+
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+
+        SideChannelReceived?.Invoke(new OpenAIResponsesWebSocketSideChannelEvent(
+            "websocket.handshake",
+            BinaryData.FromBytes(stream.ToArray())));
+    }
+
     internal static bool TryGetHeaderValue(
         IReadOnlyDictionary<string, IEnumerable<string>>? headers,
         string name,
@@ -508,13 +551,10 @@ internal sealed class OpenAICodexSubscriptionWebSocketSession : IOpenAIResponses
                 return false;
             }
 
+            sideChannelEvent = TryCreateSideChannelEvent(document.RootElement, eventType, message);
+
             if (IsIgnorableSideChannelEvent(eventType))
             {
-                if (!string.IsNullOrWhiteSpace(eventType))
-                {
-                    sideChannelEvent = new OpenAIResponsesWebSocketSideChannelEvent(eventType, message);
-                }
-
                 return false;
             }
 
@@ -549,7 +589,38 @@ internal sealed class OpenAICodexSubscriptionWebSocketSession : IOpenAIResponses
 
     internal static bool IsIgnorableSideChannelEvent(string? eventType)
         => string.IsNullOrWhiteSpace(eventType) ||
-           !eventType.StartsWith("response.", StringComparison.Ordinal);
+           !eventType.StartsWith("response.", StringComparison.Ordinal) ||
+           eventType.StartsWith("response.rate_limits", StringComparison.Ordinal) ||
+           eventType.StartsWith("response.model_verification", StringComparison.Ordinal) ||
+           string.Equals(eventType, "response.metadata", StringComparison.Ordinal) ||
+           string.Equals(eventType, "response.server_model", StringComparison.Ordinal) ||
+           string.Equals(eventType, "response.models_etag", StringComparison.Ordinal);
+
+    private static OpenAIResponsesWebSocketSideChannelEvent? TryCreateSideChannelEvent(
+        JsonElement root,
+        string? eventType,
+        BinaryData message)
+    {
+        if (string.IsNullOrWhiteSpace(eventType))
+        {
+            return null;
+        }
+
+        return IsIgnorableSideChannelEvent(eventType) || HasResponseSideChannelMetadata(root)
+            ? new OpenAIResponsesWebSocketSideChannelEvent(eventType, message)
+            : null;
+    }
+
+    private static bool HasResponseSideChannelMetadata(JsonElement root)
+        => HasObjectProperty(root, "headers") ||
+           HasObjectProperty(root, "metadata") ||
+           (root.TryGetProperty("response"u8, out var response) &&
+            (HasObjectProperty(response, "headers") || HasObjectProperty(response, "metadata")));
+
+    private static bool HasObjectProperty(JsonElement element, string propertyName)
+        => element.ValueKind == JsonValueKind.Object &&
+           element.TryGetProperty(propertyName, out var property) &&
+           property.ValueKind == JsonValueKind.Object;
 
     internal static Exception CreateWrappedWebSocketErrorException(JsonElement errorEvent, string payload)
     {

@@ -1826,8 +1826,27 @@ public sealed class OpenAIRawApiAgentBackendTests
                     """
                     {
                       "type": "codex.rate_limits",
-                      "primary": { "used_percent": 12.5, "resets_at": 1234567890 },
-                      "secondary": { "used_percent": 3 }
+                      "limit_name": "ChatGPT Plus",
+                      "metered_limit_name": "gpt-5",
+                      "plan_type": "plus",
+                      "rate_limits": {
+                        "primary": { "used_percent": 12.5, "reset_at": 1234567890, "window_minutes": 300 },
+                        "secondary": { "used_percent": 3 }
+                      },
+                      "credits": { "has_credits": true, "unlimited": false, "balance": "42" }
+                    }
+                    """)),
+            new OpenAIResponsesWebSocketSideChannelEvent(
+                "websocket.handshake",
+                BinaryData.FromString(
+                    """
+                    {
+                      "type": "websocket.handshake",
+                      "headers": {
+                        "OpenAI-Model": "gpt-5.3-codex",
+                        "x-models-etag": "models-etag-handshake",
+                        "x-reasoning-included": "true"
+                      }
                     }
                     """)),
             new OpenAIResponsesWebSocketSideChannelEvent(
@@ -1841,12 +1860,12 @@ public sealed class OpenAIRawApiAgentBackendTests
                     }
                     """)),
             new OpenAIResponsesWebSocketSideChannelEvent(
-                "model_verification",
+                "response.metadata",
                 BinaryData.FromString(
                     """
                     {
-                      "type": "model_verification",
-                      "params": { "verifications": ["trustedAccessForCyber"] }
+                      "type": "response.metadata",
+                      "metadata": { "openai_verification_recommendation": ["trustedAccessForCyber"] }
                     }
                     """)),
         ]);
@@ -1870,15 +1889,23 @@ public sealed class OpenAIRawApiAgentBackendTests
         var providerState = response.ProviderState.Value;
         Assert.AreEqual("response-side-channel", providerState.GetProperty("responseId").GetString());
         var sideChannels = providerState.GetProperty("codexWebSocketSideChannels");
-        Assert.AreEqual(3, sideChannels.GetArrayLength());
+        Assert.AreEqual(4, sideChannels.GetArrayLength());
         Assert.AreEqual("codex.rate_limits", sideChannels[0].GetProperty("type").GetString());
+        Assert.AreEqual("gpt-5", sideChannels[0].GetProperty("limitId").GetString());
+        Assert.AreEqual("ChatGPT Plus", sideChannels[0].GetProperty("limitName").GetString());
         Assert.AreEqual(12.5, sideChannels[0].GetProperty("primary").GetProperty("usedPercent").GetDouble());
         Assert.AreEqual(1234567890, sideChannels[0].GetProperty("primary").GetProperty("resetsAt").GetInt64());
-        Assert.AreEqual("server_model", sideChannels[1].GetProperty("type").GetString());
+        Assert.AreEqual(300, sideChannels[0].GetProperty("primary").GetProperty("windowDurationMins").GetInt32());
+        Assert.IsTrue(sideChannels[0].GetProperty("credits").GetProperty("hasCredits").GetBoolean());
+        Assert.AreEqual("websocket.handshake", sideChannels[1].GetProperty("type").GetString());
         Assert.AreEqual("gpt-5.3-codex", sideChannels[1].GetProperty("model").GetString());
-        Assert.AreEqual("models-etag-123", sideChannels[1].GetProperty("modelsEtag").GetString());
-        Assert.AreEqual("model_verification", sideChannels[2].GetProperty("type").GetString());
-        Assert.AreEqual("trustedAccessForCyber", sideChannels[2].GetProperty("verifications")[0].GetString());
+        Assert.AreEqual("models-etag-handshake", sideChannels[1].GetProperty("modelsEtag").GetString());
+        Assert.AreEqual("true", sideChannels[1].GetProperty("serverReasoning").GetString());
+        Assert.AreEqual("server_model", sideChannels[2].GetProperty("type").GetString());
+        Assert.AreEqual("gpt-5.3-codex", sideChannels[2].GetProperty("model").GetString());
+        Assert.AreEqual("models-etag-123", sideChannels[2].GetProperty("modelsEtag").GetString());
+        Assert.AreEqual("response.metadata", sideChannels[3].GetProperty("type").GetString());
+        Assert.AreEqual("trustedAccessForCyber", sideChannels[3].GetProperty("verifications")[0].GetString());
     }
 
     [TestMethod]
@@ -2447,6 +2474,41 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
+    public async Task OpenAIResponsesTurnExecutor_RetriesCodexResponseFailedServerOverloadedBeforeVisibleOutput()
+    {
+        var responsesClient = new RecordingOpenAIResponseClient(
+        [
+            [CreateFailedResponseUpdate("response-overloaded", "gpt-5.3-codex", "server_overloaded", "Server overloaded.")],
+            [
+                CreateAssistantResponseUpdate(
+                    responseId: "response-retried",
+                    modelId: "gpt-5.3-codex",
+                    text: "Retried answer.",
+                    reasoningText: "Thinking.",
+                    encryptedReasoning: null),
+            ],
+        ]);
+        var executor = new OpenAIResponsesTurnExecutor(new OpenAIProviderOptions
+        {
+            ProviderKey = "codex_subscription",
+            ResponsesClientFactory = _ => responsesClient,
+            CodexSubscription = new OpenAICodexSubscriptionOptions
+            {
+                Experimental = true,
+                ResponseTransport = "http",
+            },
+        });
+
+        var response = await executor.ExecuteTurnAsync(
+            CreateCodexTurnRequest(),
+            static (_, _) => ValueTask.CompletedTask).ConfigureAwait(false);
+
+        Assert.AreEqual(2, responsesClient.Requests.Count);
+        var text = response.AssistantMessage.Parts.OfType<LocalAgentMessagePart.Text>().Single().Value;
+        Assert.AreEqual("Retried answer.", text);
+    }
+
+    [TestMethod]
     public async Task OpenAIResponsesTurnExecutor_DoesNotRetryCodexUsageLimit429()
     {
         var usageLimit = new ClientResultException(
@@ -2476,6 +2538,35 @@ public sealed class OpenAIRawApiAgentBackendTests
 
         Assert.AreEqual(1, responsesClient.RequestCount);
         StringAssert.Contains(exception.Failure.Message, "usage limit");
+    }
+
+    [TestMethod]
+    public async Task OpenAIResponsesTurnExecutor_DoesNotRetryCodexResponseFailedUsageLimit()
+    {
+        var responsesClient = new RecordingOpenAIResponseClient(
+        [
+            [CreateFailedResponseUpdate("response-usage-limit", "gpt-5.3-codex", "usage_limit_reached", "The usage limit has been reached.")],
+            [CreateTextOnlyAssistantResponseUpdate("response-should-not-run", "gpt-5.3-codex", "Unexpected.")],
+        ]);
+        var executor = new OpenAIResponsesTurnExecutor(new OpenAIProviderOptions
+        {
+            ProviderKey = "codex_subscription",
+            ResponsesClientFactory = _ => responsesClient,
+            CodexSubscription = new OpenAICodexSubscriptionOptions
+            {
+                Experimental = true,
+                ResponseTransport = "http",
+            },
+        });
+
+        var exception = await Assert.ThrowsExactlyAsync<LocalAgentTurnExecutionException>(
+                () => executor.ExecuteTurnAsync(
+                    CreateCodexTurnRequest(),
+                    static (_, _) => ValueTask.CompletedTask))
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(1, responsesClient.Requests.Count);
+        StringAssert.Contains(exception.Failure.Message, "usage_limit_reached");
     }
 
     [TestMethod]
@@ -2676,6 +2767,31 @@ public sealed class OpenAIRawApiAgentBackendTests
             }
             """);
     }
+
+    private static StreamingResponseUpdate CreateFailedResponseUpdate(
+        string responseId,
+        string modelId,
+        string code,
+        string message)
+        => DeserializeStreamingResponseUpdate(
+            $$"""
+            {
+              "type": "response.failed",
+              "sequence_number": 0,
+              "response": {
+                "id": "{{responseId}}",
+                "object": "response",
+                "created_at": {{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}},
+                "model": "{{modelId}}",
+                "status": "failed",
+                "error": {
+                  "code": "{{code}}",
+                  "message": "{{message}}"
+                },
+                "output": []
+              }
+            }
+            """);
 
     private static StreamingResponseUpdate CreateOutputItemDoneUpdate(
         int outputIndex,

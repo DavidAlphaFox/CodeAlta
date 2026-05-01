@@ -58,6 +58,7 @@ public sealed class OpenAICodexSubscriptionPipelineTests
         Assert.AreEqual("codealta", handler.Requests[0]["originator"]);
         Assert.AreEqual("responses=experimental", handler.Requests[0]["OpenAI-Beta"]);
         Assert.AreEqual("session_456", handler.Requests[0]["session_id"]);
+        Assert.AreEqual("session_456", handler.Requests[0]["x-client-request-id"]);
         Assert.AreEqual("true", handler.Requests[0]["X-OpenAI-Fedramp"]);
         Assert.IsFalse(handler.Requests[0].ContainsKey("api-key"));
         Assert.IsFalse(handler.Requests[0].ContainsKey("x-codex-beta-features"));
@@ -291,6 +292,33 @@ public sealed class OpenAICodexSubscriptionPipelineTests
             out var modelType,
             out var modelException,
             out var modelSideChannel);
+        var metadataHandled = TryCreateWebSocketResponseUpdateMessage(
+            BinaryData.FromString(
+                """
+                {
+                  "type": "response.metadata",
+                  "metadata": { "openai_verification_recommendation": ["approved"] }
+                }
+                """),
+            out _,
+            out var metadataType,
+            out var metadataException,
+            out var metadataSideChannel);
+        var createdHandled = TryCreateWebSocketResponseUpdateMessage(
+            BinaryData.FromString(
+                """
+                {
+                  "type": "response.created",
+                  "response": {
+                    "id": "resp_1",
+                    "headers": { "OpenAI-Model": "gpt-5.3-codex" }
+                  }
+                }
+                """),
+            out _,
+            out var createdType,
+            out var createdException,
+            out var createdSideChannel);
         var doneHandled = TryCreateWebSocketResponseUpdateMessage(
             BinaryData.FromString(
                 """
@@ -312,6 +340,14 @@ public sealed class OpenAICodexSubscriptionPipelineTests
         Assert.AreEqual("server_model", modelType);
         Assert.IsNull(modelException);
         AssertSideChannelType("server_model", modelSideChannel);
+        Assert.IsFalse(metadataHandled);
+        Assert.AreEqual("response.metadata", metadataType);
+        Assert.IsNull(metadataException);
+        AssertSideChannelType("response.metadata", metadataSideChannel);
+        Assert.IsTrue(createdHandled);
+        Assert.AreEqual("response.created", createdType);
+        Assert.IsNull(createdException);
+        AssertSideChannelType("response.created", createdSideChannel);
         Assert.IsTrue(doneHandled);
         Assert.AreEqual("response.done", doneType);
         Assert.IsNull(doneException);

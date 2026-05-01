@@ -177,7 +177,7 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                                     completedResponse = incomplete.Response;
                                     break;
                                 case StreamingResponseFailedUpdate failed:
-                                    throw CreateTurnExecutionException(CreateResponseFailureException(failed.Response, "failed"));
+                                    throw CreateResponseFailureException(failed.Response, "failed");
                                 case StreamingResponseErrorUpdate error:
                                     throw CreateTurnExecutionException(CreateStreamErrorException(error));
                                 case StreamingResponseCompletedUpdate completed:
@@ -224,7 +224,7 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
 
                     if (completedResponse.Status is ResponseStatus.Failed)
                     {
-                        throw CreateTurnExecutionException(CreateResponseFailureException(completedResponse, "failed"));
+                        throw CreateResponseFailureException(completedResponse, "failed");
                     }
 
                     if (completedResponse.Status is ResponseStatus.Incomplete &&
@@ -1324,15 +1324,37 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
             }
             else
             {
-                var metadata = TryGetProperty(root, out var parameters, "params") &&
-                    parameters.ValueKind == JsonValueKind.Object
-                    ? parameters
-                    : root;
-                WriteOptionalStringProperty(writer, "model", metadata, "model", "server_model", "serverModel");
+                var metadata = SelectSideChannelMetadata(root);
+                if (!TryWriteOptionalStringProperty(writer, "model", metadata, "model", "server_model", "serverModel") &&
+                    !TryWriteOptionalStringProperty(writer, "model", root, "model", "server_model", "serverModel"))
+                {
+                    TryWriteHeaderStringProperty(writer, "model", root, "OpenAI-Model", "openai-model", "x-openai-model");
+                }
+
                 WriteOptionalStringProperty(writer, "status", metadata, "status");
-                WriteOptionalStringProperty(writer, "modelsEtag", metadata, "models_etag", "modelsEtag", "etag");
-                WriteOptionalStringProperty(writer, "message", metadata, "message", "detail");
-                WriteStringArrayProperty(writer, "verifications", metadata, "verifications");
+                if (!TryWriteOptionalStringProperty(writer, "modelsEtag", metadata, "models_etag", "modelsEtag", "etag") &&
+                    !TryWriteOptionalStringProperty(writer, "modelsEtag", root, "models_etag", "modelsEtag", "etag"))
+                {
+                    TryWriteHeaderStringProperty(writer, "modelsEtag", root, "x-models-etag", "OpenAI-Models-Etag");
+                }
+
+                if (!TryWriteOptionalStringProperty(
+                        writer,
+                        "serverReasoning",
+                        metadata,
+                        "server_reasoning",
+                        "serverReasoning",
+                        "reasoning_included",
+                        "reasoningIncluded"))
+                {
+                    TryWriteHeaderStringProperty(writer, "serverReasoning", root, "x-reasoning-included", "X-Reasoning-Included");
+                }
+                if (!TryWriteOptionalStringProperty(writer, "message", metadata, "message", "detail"))
+                {
+                    WriteOptionalStringProperty(writer, "message", root, "message", "detail");
+                }
+
+                WriteStringArrayProperty(writer, "verifications", metadata, "verifications", "openai_verification_recommendation");
             }
         }
         catch (JsonException)
@@ -1345,13 +1367,84 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
 
     private static void WriteRateLimitSummary(Utf8JsonWriter writer, JsonElement root)
     {
-        var rateLimits = TryGetProperty(root, out var nested, "rate_limits", "rateLimits") ? nested : root;
-        WriteOptionalStringProperty(writer, "limitId", rateLimits, "limit_id", "limitId");
-        WriteOptionalStringProperty(writer, "limitName", rateLimits, "limit_name", "limitName");
-        WriteOptionalStringProperty(writer, "planType", rateLimits, "plan_type", "planType");
-        WriteOptionalStringProperty(writer, "rateLimitReachedType", rateLimits, "rate_limit_reached_type", "rateLimitReachedType");
-        WriteRateLimitWindowSummary(writer, "primary", rateLimits, "primary");
-        WriteRateLimitWindowSummary(writer, "secondary", rateLimits, "secondary");
+        var rateLimitDetails = TryGetProperty(root, out var nested, "rate_limits", "rateLimits") ? nested : root;
+        if (!TryWriteOptionalStringProperty(
+                writer,
+                "limitId",
+                root,
+                "metered_limit_name",
+                "limit_id",
+                "limitId",
+                "limit_name"))
+        {
+            WriteOptionalStringProperty(
+                writer,
+                "limitId",
+                rateLimitDetails,
+                "metered_limit_name",
+                "limit_id",
+                "limitId",
+                "limit_name");
+        }
+
+        if (!TryWriteOptionalStringProperty(writer, "limitName", root, "limit_name", "limitName"))
+        {
+            WriteOptionalStringProperty(writer, "limitName", rateLimitDetails, "limit_name", "limitName");
+        }
+
+        if (!TryWriteOptionalStringProperty(writer, "planType", root, "plan_type", "planType"))
+        {
+            WriteOptionalStringProperty(writer, "planType", rateLimitDetails, "plan_type", "planType");
+        }
+
+        if (!TryWriteOptionalStringProperty(
+                writer,
+                "rateLimitReachedType",
+                root,
+                "rate_limit_reached_type",
+                "rateLimitReachedType"))
+        {
+            WriteOptionalStringProperty(
+                writer,
+                "rateLimitReachedType",
+                rateLimitDetails,
+                "rate_limit_reached_type",
+                "rateLimitReachedType");
+        }
+
+        WriteRateLimitWindowSummary(writer, "primary", rateLimitDetails, "primary");
+        WriteRateLimitWindowSummary(writer, "secondary", rateLimitDetails, "secondary");
+        WriteCreditsSummary(writer, root);
+        if (!TryGetProperty(root, out _, "credits"))
+        {
+            WriteCreditsSummary(writer, rateLimitDetails);
+        }
+    }
+
+    private static JsonElement SelectSideChannelMetadata(JsonElement root)
+    {
+        if (TryGetProperty(root, out var parameters, "params") && parameters.ValueKind == JsonValueKind.Object)
+        {
+            return parameters;
+        }
+
+        if (TryGetProperty(root, out var response, "response") && response.ValueKind == JsonValueKind.Object)
+        {
+            if (TryGetProperty(response, out var responseMetadata, "metadata") &&
+                responseMetadata.ValueKind == JsonValueKind.Object)
+            {
+                return responseMetadata;
+            }
+
+            return response;
+        }
+
+        if (TryGetProperty(root, out var metadata, "metadata") && metadata.ValueKind == JsonValueKind.Object)
+        {
+            return metadata;
+        }
+
+        return root;
     }
 
     private static void WriteRateLimitWindowSummary(
@@ -1369,8 +1462,37 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
         writer.WritePropertyName(outputName);
         writer.WriteStartObject();
         WriteOptionalNumberProperty(writer, "usedPercent", window, "used_percent", "usedPercent");
-        WriteOptionalNumberProperty(writer, "resetsAt", window, "resets_at", "resetsAt");
-        WriteOptionalNumberProperty(writer, "windowDurationMins", window, "window_duration_mins", "windowDurationMins");
+        WriteOptionalNumberProperty(writer, "resetsAt", window, "reset_at", "resets_at", "resetsAt");
+        WriteOptionalNumberProperty(
+            writer,
+            "windowDurationMins",
+            window,
+            "window_minutes",
+            "window_duration_mins",
+            "windowDurationMins",
+            "windowMinutes");
+        writer.WriteEndObject();
+    }
+
+    private static void WriteCreditsSummary(Utf8JsonWriter writer, JsonElement rateLimits)
+    {
+        if (!TryGetProperty(rateLimits, out var credits, "credits") || credits.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        writer.WritePropertyName("credits"u8);
+        writer.WriteStartObject();
+        WriteOptionalBooleanProperty(writer, "hasCredits", credits, "has_credits", "hasCredits");
+        WriteOptionalBooleanProperty(writer, "unlimited", credits, "unlimited");
+        WriteOptionalStringProperty(
+            writer,
+            "balance",
+            credits,
+            "balance",
+            "remaining",
+            "remaining_credits",
+            "remainingCredits");
         writer.WriteEndObject();
     }
 
@@ -1379,31 +1501,47 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
         string outputName,
         JsonElement element,
         params string[] propertyNames)
+        => TryWriteOptionalStringProperty(writer, outputName, element, propertyNames);
+
+    private static bool TryWriteOptionalStringProperty(
+        Utf8JsonWriter writer,
+        string outputName,
+        JsonElement element,
+        params string[] propertyNames)
     {
         if (!TryGetProperty(element, out var property, propertyNames) ||
-            property.ValueKind != JsonValueKind.String)
+            !TryGetStringValue(property, out var value))
         {
-            return;
-        }
-
-        var value = property.GetString();
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return;
+            return false;
         }
 
         writer.WriteString(outputName, TruncateForConsole(
             OpenAICodexSubscriptionSecretRedactor.Redact(value),
             512));
+        return true;
+    }
+
+    private static bool TryWriteHeaderStringProperty(
+        Utf8JsonWriter writer,
+        string outputName,
+        JsonElement root,
+        params string[] headerNames)
+    {
+        if (!TryGetHeadersElement(root, out var headers))
+        {
+            return false;
+        }
+
+        return TryWriteOptionalStringProperty(writer, outputName, headers, headerNames);
     }
 
     private static void WriteStringArrayProperty(
         Utf8JsonWriter writer,
         string outputName,
         JsonElement element,
-        string propertyName)
+        params string[] propertyNames)
     {
-        if (!TryGetProperty(element, out var array, propertyName) ||
+        if (!TryGetProperty(element, out var array, propertyNames) ||
             array.ValueKind != JsonValueKind.Array)
         {
             return;
@@ -1422,6 +1560,21 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
         }
 
         writer.WriteEndArray();
+    }
+
+    private static void WriteOptionalBooleanProperty(
+        Utf8JsonWriter writer,
+        string outputName,
+        JsonElement element,
+        params string[] propertyNames)
+    {
+        if (!TryGetProperty(element, out var property, propertyNames) ||
+            property.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+        {
+            return;
+        }
+
+        writer.WriteBoolean(outputName, property.GetBoolean());
     }
 
     private static void WriteOptionalNumberProperty(
@@ -1462,10 +1615,67 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                     return true;
                 }
             }
+
+            foreach (var candidate in element.EnumerateObject())
+            {
+                foreach (var propertyName in propertyNames)
+                {
+                    if (string.Equals(candidate.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        property = candidate.Value;
+                        return true;
+                    }
+                }
+            }
         }
 
         property = default;
         return false;
+    }
+
+    private static bool TryGetHeadersElement(JsonElement root, out JsonElement headers)
+    {
+        if (TryGetProperty(root, out headers, "headers") && headers.ValueKind == JsonValueKind.Object)
+        {
+            return true;
+        }
+
+        if (TryGetProperty(root, out var response, "response") &&
+            response.ValueKind == JsonValueKind.Object &&
+            TryGetProperty(response, out headers, "headers") &&
+            headers.ValueKind == JsonValueKind.Object)
+        {
+            return true;
+        }
+
+        headers = default;
+        return false;
+    }
+
+    private static bool TryGetStringValue(JsonElement element, out string value)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.String:
+                value = element.GetString() ?? string.Empty;
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (TryGetStringValue(item, out value))
+                    {
+                        return true;
+                    }
+                }
+
+                value = string.Empty;
+                return false;
+            default:
+                value = string.Empty;
+                return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(value);
     }
 
     private static JsonElement DeserializeJson(BinaryData data)
@@ -1685,14 +1895,17 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
             return true;
         }
 
-        var statusCode = GetHttpStatusCode(exception);
-        if (statusCode is System.Net.HttpStatusCode.TooManyRequests &&
-            IsNonRetryableCodexSubscriptionLimit(exception))
+        if (IsNonRetryableCodexSubscriptionLimit(exception))
         {
             return false;
         }
 
-        return statusCode is null && exception is HttpRequestException ||
+        var statusCode = GetHttpStatusCode(exception);
+        var retryableResponseFailure = ContainsRetryableCodexSubscriptionFailureSignal(
+            GetCodexSubscriptionErrorDetail(exception));
+
+        return retryableResponseFailure ||
+            statusCode is null && exception is HttpRequestException ||
             statusCode is System.Net.HttpStatusCode.TooManyRequests ||
             statusCode >= System.Net.HttpStatusCode.InternalServerError;
     }
@@ -1740,6 +1953,22 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                normalized.Contains("billing limit", StringComparison.Ordinal) ||
                (normalized.Contains("billing", StringComparison.Ordinal) && normalized.Contains("limit", StringComparison.Ordinal)) ||
                (normalized.Contains("plan", StringComparison.Ordinal) && normalized.Contains("limit", StringComparison.Ordinal));
+    }
+
+    private static bool ContainsRetryableCodexSubscriptionFailureSignal(string detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            return false;
+        }
+
+        var normalized = detail.ToLowerInvariant();
+        return normalized.Contains("server_overloaded", StringComparison.Ordinal) ||
+               normalized.Contains("server overloaded", StringComparison.Ordinal) ||
+               normalized.Contains("overloaded", StringComparison.Ordinal) ||
+               normalized.Contains("service unavailable", StringComparison.Ordinal) ||
+               normalized.Contains("temporarily unavailable", StringComparison.Ordinal) ||
+               normalized.Contains("upstream", StringComparison.Ordinal);
     }
 
     private static string GetCodexSubscriptionErrorDetail(Exception exception)

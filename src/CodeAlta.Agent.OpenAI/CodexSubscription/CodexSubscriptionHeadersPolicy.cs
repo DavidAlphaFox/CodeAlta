@@ -70,6 +70,7 @@ internal sealed class CodexSubscriptionHeadersPolicy : PipelinePolicy
         if (!string.IsNullOrWhiteSpace(_context.SessionId))
         {
             headers.Set("session_id", _context.SessionId);
+            headers.Set("x-client-request-id", _context.SessionId);
         }
 
         if (_context.IsFedRamp || accountContext?.IsFedRamp == true)
