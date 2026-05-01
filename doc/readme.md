@@ -280,7 +280,8 @@ The `openai-codex-subscription` provider is experimental and intentionally disti
 - it uses ChatGPT/Codex OAuth credentials stored in CodeAlta-owned state and never treats ChatGPT tokens as OpenAI platform API keys;
 - requests target `https://chatgpt.com/backend-api/codex` by default and use WebSocket Responses transport with HTTP/SSE fallback; set `response_transport = "http"` to force HTTP-only mode;
 - `previous_response_id` continuation is used only for active in-memory CodeAlta sessions and is not resumed from sessions reloaded from disk;
-- model discovery uses authenticated `GET /backend-api/codex/models?client_version=<semver>` and falls back to the bundled static Codex allow-list only in the configured fallback mode;
+- model discovery defaults to a bundled Codex subscription picker allow-list (`gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.2`); set `model_discovery` to `codex_endpoint` or `codex_endpoint_with_static_fallback` to opt into authenticated endpoint discovery;
+- `model` is optional and only sets the preferred default selection; it does not narrow the picker to a single entry;
 - requests may count against the user's ChatGPT/Codex subscription limits, and CodeAlta does not rotate accounts, bypass limits, or automatically fall back to a different provider;
 - `send_installation_id` defaults to `false`; when explicitly enabled, CodeAlta sends a stable CodeAlta-owned UUID in `client_metadata.x-codex-installation-id`.
 

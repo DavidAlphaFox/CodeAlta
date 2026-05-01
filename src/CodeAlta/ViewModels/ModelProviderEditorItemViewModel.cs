@@ -47,7 +47,7 @@ internal sealed partial class ModelProviderEditorItemViewModel
         UseDefaultAuthSource = source.AuthSource is null;
         AccountId = source.AccountId;
         UseDefaultAccountId = source.AccountId is null;
-        ModelDiscovery = source.ModelDiscovery ?? "codex_endpoint_with_static_fallback";
+        ModelDiscovery = source.ModelDiscovery ?? "static";
         UseDefaultModelDiscovery = source.ModelDiscovery is null;
         ResponseTransport = source.ResponseTransport ?? "websocket_with_http_fallback";
         UseDefaultResponseTransport = source.ResponseTransport is null;

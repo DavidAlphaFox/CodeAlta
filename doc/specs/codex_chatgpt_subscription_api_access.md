@@ -109,7 +109,7 @@ Required or defaulted fields:
 |---|---:|---:|---|---|
 | `type` | string | yes | | Must be `openai-codex-subscription`. |
 | `display_name` | string | no | `Codex (ChatGPT subscription)` | UI label. |
-| `model` | string | yes for v1 | | Must match the provider allow-list unless unsafe overrides are enabled. |
+| `model` | string | no | first visible picker entry | Optional preferred default model. It must not narrow the model picker/catalog. |
 | `base_url` / `api_url` | URI | no | `https://chatgpt.com/backend-api/codex` | Advanced/debug only. Reject non-HTTPS except localhost test transports. |
 | `auth_source` | enum | no | `codealta_oauth` | See auth sources below. |
 | `account_id` | string | no | token default | Explicit ChatGPT account/workspace id override. |
@@ -117,7 +117,7 @@ Required or defaulted fields:
 | `reasoning_effort` | enum | no | backend/model default | Normal CodeAlta reasoning mapping. |
 | `text_verbosity` | enum | no | `medium` | `low`, `medium`, or `high`. |
 | `include_encrypted_reasoning` | bool | no | `true` | Adds `reasoning.encrypted_content`. |
-| `model_discovery` | enum | no | `codex_endpoint_with_static_fallback` | `codex_endpoint_with_static_fallback`, `codex_endpoint`, or `static`. |
+| `model_discovery` | enum | no | `static` | `static`, `codex_endpoint_with_static_fallback`, or `codex_endpoint`. |
 | `response_transport` | enum | no | `websocket_with_http_fallback` | `websocket_with_http_fallback` or `http`. The default tries the Codex Responses WebSocket transport and falls back to HTTP/SSE only before any user-visible stream delta is emitted. |
 | `send_responses_beta_header` | bool | no | `true` | Sends `OpenAI-Beta: responses=experimental` through a typed SDK pipeline policy. |
 | `send_installation_id` | bool | no | `false` | Adds a stable non-secret installation id to `client_metadata` only when explicitly enabled. |
@@ -503,9 +503,10 @@ If the hook becomes too awkward, implement a dedicated `CodexSubscriptionRespons
 
 Do not use `OpenAIModelClient` for this provider.
 
-Implement model discovery in this order:
+CodeAlta defaults to a curated static picker list so the ChatGPT subscription experience stays aligned with Codex/pi-mono model visibility. Implement model discovery in this order:
 
-1. If `model_discovery = "codex_endpoint"` or `codex_endpoint_with_static_fallback`, call the Codex model endpoint:
+1. If `model_discovery = "static"`, expose the bundled static Codex catalog.
+2. If `model_discovery = "codex_endpoint"` or `codex_endpoint_with_static_fallback`, call the Codex model endpoint:
 
 ```text
 GET https://chatgpt.com/backend-api/codex/models?client_version=<semver>
@@ -513,15 +514,15 @@ GET https://chatgpt.com/backend-api/codex/models?client_version=<semver>
 
 Use the same auth/header policies as Responses. Decode Codex's `ModelsResponse { models: Vec<ModelInfo> }` shape (including current fields such as `slug`, `visibility`, `input_modalities`, `support_verbosity`, `default_reasoning_level`, and `default_verbosity`), not the public OpenAI model-list shape. Preserve ETag for caching if returned.
 
-2. Filter dynamic results to models where Codex metadata says `supported_in_api = true`. Prefer listable models for UI pickers, include `requires_websocket` models when WebSocket transport is enabled, and allow a configured hidden model only if it appears in the authenticated dynamic response and is `supported_in_api`.
-3. If a `model` is configured, validate it against the authenticated dynamic response when available. If the endpoint is unavailable and fallback is enabled, validate against the cached/static Codex catalog.
-4. If `model_discovery = "static"` or the default endpoint mode falls back, expose the bundled static Codex catalog.
+3. Filter dynamic results to models where Codex metadata says `supported_in_api = true`. Expose only listable, non-hidden models for UI pickers, and include `requires_websocket` models only when WebSocket transport is enabled.
+4. Treat a configured `model` as a preferred default selection only. It must not narrow the picker/catalog to one entry; if the preferred model is not visible, the UI falls back to the first visible entry.
+5. If `model_discovery = "codex_endpoint_with_static_fallback"` falls back, expose the bundled static Codex catalog.
 
 Static allow-list requirements:
 
 - Mirror the model catalog Codex provides at CodeAlta release time. Do not invent or hand-curate unrelated public OpenAI models.
 - Generate the list from Codex's bundled model catalog or from a checked-in copy of the Codex `ModelsResponse` shape reviewed during release.
-- Treat this list as an offline fallback, not the authoritative source when the authenticated endpoint works.
+- Treat this list as the default UI picker source; endpoint discovery remains an explicit opt-in for development or diagnostics.
 - Include capability metadata per model:
   - context window when known;
   - supports reasoning effort;
@@ -531,10 +532,10 @@ Static allow-list requirements:
   - supports image input;
   - supports tools/function calls;
   - default reasoning effort and verbosity.
-- Reject unknown models by default with an actionable error.
+- Do not show unknown, hidden, or non-listable models in the picker by default.
 - Allow an unsafe explicit model override only behind a clearly named debug flag.
 
-At the time of this spec update, the inspected Codex bundled API-supported catalog includes `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.2`, and a hidden `codex-auto-review` entry. This list is not normative for release; re-read the Codex catalog at implementation/release time and prefer the authenticated `/codex/models` result.
+At the time of this spec update, the curated visible/listable picker catalog is `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex`, and `gpt-5.2`.
 
 Model-list failures:
 

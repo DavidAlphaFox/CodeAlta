@@ -203,7 +203,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
         Assert.AreEqual(1, provider.MaxConcurrentRequests);
         Assert.AreEqual("medium", provider.TextVerbosity);
         Assert.IsTrue(provider.IncludeEncryptedReasoning);
-        Assert.AreEqual("codex_endpoint_with_static_fallback", provider.ModelDiscovery);
+        Assert.AreEqual("static", provider.ModelDiscovery);
         Assert.AreEqual("websocket_with_http_fallback", provider.ResponseTransport);
         Assert.IsTrue(provider.SendResponsesBetaHeader);
         Assert.IsFalse(provider.SendInstallationId);
@@ -313,7 +313,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
     }
 
     [TestMethod]
-    public void LoadGlobalProviderDefinitions_CodexSubscriptionRejectsMissingModel()
+    public void LoadGlobalProviderDefinitions_CodexSubscriptionAllowsMissingModel()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
@@ -325,8 +325,11 @@ public sealed class CodeAltaConfigStoreRawApiTests
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
-        var ex = Assert.ThrowsExactly<InvalidDataException>(() => store.LoadGlobalProviderDefinitions(includeDisabled: true));
-        StringAssert.Contains(ex.InnerException?.Message, "model is required");
+        var provider = store.LoadGlobalProviderDefinitions(includeDisabled: true)
+            .Single(static provider => provider.ProviderKey == "codex_subscription");
+
+        Assert.IsNull(provider.Model);
+        Assert.AreEqual("static", provider.ModelDiscovery);
     }
 
     [TestMethod]

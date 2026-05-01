@@ -160,7 +160,7 @@ internal static class OpenAIProviderSdkFactory
             ?? throw new InvalidOperationException("Codex subscription options are required.");
         if (string.Equals(options.ModelDiscovery, "static", StringComparison.OrdinalIgnoreCase))
         {
-            return ListCodexSubscriptionStaticModels(provider, providerDescriptor);
+            return ListCodexSubscriptionStaticModels(providerDescriptor);
         }
 
         try
@@ -178,8 +178,7 @@ internal static class OpenAIProviderSdkFactory
             var models = MapCodexSubscriptionDiscoveredModels(
                 discoveredModels,
                 providerDescriptor,
-                options,
-                provider.SingleModelId);
+                options);
             LogInfo(
                 $"Using Codex subscription authenticated model catalog backend={providerDescriptor.BackendId.Value} provider={providerDescriptor.ProviderKey} displayName={providerDescriptor.DisplayName} models={models.Count}");
             return models;
@@ -189,15 +188,14 @@ internal static class OpenAIProviderSdkFactory
             LogWarn(
                 ex,
                 $"Codex model discovery failed; falling back to static catalog backend={providerDescriptor.BackendId.Value} provider={providerDescriptor.ProviderKey} displayName={providerDescriptor.DisplayName}");
-            return ListCodexSubscriptionStaticModels(provider, providerDescriptor);
+            return ListCodexSubscriptionStaticModels(providerDescriptor);
         }
     }
 
     private static IReadOnlyList<AgentModelInfo> ListCodexSubscriptionStaticModels(
-        OpenAIProviderOptions provider,
         LocalAgentProviderDescriptor providerDescriptor)
     {
-        var models = CodexSubscriptionStaticModelCatalog.List(providerDescriptor, provider.SingleModelId);
+        var models = CodexSubscriptionStaticModelCatalog.List(providerDescriptor);
         LogInfo(
             $"Using Codex subscription static model catalog backend={providerDescriptor.BackendId.Value} provider={providerDescriptor.ProviderKey} displayName={providerDescriptor.DisplayName} models={models.Count}");
         return models;
@@ -230,8 +228,7 @@ internal static class OpenAIProviderSdkFactory
     private static IReadOnlyList<AgentModelInfo> MapCodexSubscriptionDiscoveredModels(
         IReadOnlyList<CodexSubscriptionDiscoveredModel> discoveredModels,
         LocalAgentProviderDescriptor providerDescriptor,
-        OpenAICodexSubscriptionOptions options,
-        string? configuredModelId)
+        OpenAICodexSubscriptionOptions options)
     {
         var includeWebSocketRequiredModels = AllowsWebSocketRequiredModels(options);
         var supportedModels = discoveredModels
@@ -239,20 +236,6 @@ internal static class OpenAIProviderSdkFactory
             .GroupBy(static model => model.Id, StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.First())
             .ToArray();
-
-        if (!string.IsNullOrWhiteSpace(configuredModelId))
-        {
-            var trimmedModelId = configuredModelId.Trim();
-            var configuredModel = supportedModels.FirstOrDefault(model =>
-                string.Equals(model.Id, trimmedModelId, StringComparison.OrdinalIgnoreCase));
-            if (configuredModel is null)
-            {
-                throw new InvalidOperationException(
-                    $"Codex subscription model '{trimmedModelId}' is not available from the authenticated API-supported model catalog.");
-            }
-
-            return [CreateModelInfo(configuredModel, providerDescriptor)];
-        }
 
         return supportedModels
             .Where(static model => model.Listable && !model.Hidden)

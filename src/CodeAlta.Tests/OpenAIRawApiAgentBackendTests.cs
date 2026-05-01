@@ -1068,7 +1068,6 @@ public sealed class OpenAIRawApiAgentBackendTests
                     ProviderKey = "codex_subscription",
                     IsDefault = true,
                     BaseUri = new Uri("https://chatgpt.com/backend-api/codex"),
-                    SingleModelId = "gpt-5.5",
                     CodexSubscriptionHttpClient = new HttpClient(handler),
                     CodexSubscription = new OpenAICodexSubscriptionOptions
                     {
@@ -1082,9 +1081,10 @@ public sealed class OpenAIRawApiAgentBackendTests
 
         var models = await backend.ListModelsAsync().ConfigureAwait(false);
 
-        Assert.AreEqual(1, models.Count);
-        Assert.AreEqual("gpt-5.5", models[0].Id);
-        Assert.AreEqual("codex-static-fallback", models[0].Capabilities?["source"]);
+        Assert.AreEqual(
+            "gpt-5.2|gpt-5.3-codex|gpt-5.4|gpt-5.4-mini|gpt-5.5",
+            string.Join('|', models.Select(static model => model.Id)));
+        Assert.IsTrue(models.All(static model => Equals("codex-static-fallback", model.Capabilities?["source"])));
         Assert.AreEqual(1, handler.Requests.Count);
         Assert.AreEqual("/backend-api/codex/models", handler.Requests[0].AbsolutePath);
     }

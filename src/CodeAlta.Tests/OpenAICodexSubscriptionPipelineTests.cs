@@ -388,7 +388,7 @@ public sealed class OpenAICodexSubscriptionPipelineTests
     }
 
     [TestMethod]
-    public void StaticModelCatalog_ReturnsConfiguredHiddenModelAndRejectsUnknownModels()
+    public void StaticModelCatalog_ReturnsVisiblePickerModels()
     {
         var provider = new LocalAgentProviderDescriptor
         {
@@ -400,24 +400,13 @@ public sealed class OpenAICodexSubscriptionPipelineTests
         };
 
         var visibleModels = CodexSubscriptionStaticModelCatalog.List(provider);
-        Assert.IsTrue(visibleModels.Any(static model => model.Id == "gpt-5.3-codex"));
+        Assert.AreEqual(
+            "gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.3-codex|gpt-5.2",
+            string.Join('|', visibleModels.Select(static model => model.Id)));
         Assert.IsFalse(visibleModels.Any(static model => model.Id == "codex-auto-review"));
         Assert.IsTrue(visibleModels.All(static model => Equals(272000L, model.Capabilities?["contextWindow"])));
-
-        var hiddenConfiguredModel = CodexSubscriptionStaticModelCatalog.List(provider, "codex-auto-review");
-        Assert.AreEqual(1, hiddenConfiguredModel.Count);
-        Assert.AreEqual("codex-auto-review", hiddenConfiguredModel[0].Id);
-        Assert.AreEqual(true, hiddenConfiguredModel[0].Capabilities?["hidden"]);
-        Assert.AreEqual(true, hiddenConfiguredModel[0].Capabilities?["supportedInApi"]);
-        Assert.AreEqual(true, hiddenConfiguredModel[0].Capabilities?["supportsReasoningSummary"]);
-        Assert.AreEqual(true, hiddenConfiguredModel[0].Capabilities?["supportsEncryptedReasoning"]);
-        Assert.AreEqual(true, hiddenConfiguredModel[0].Capabilities?["supportsTextVerbosity"]);
-        Assert.AreEqual(true, hiddenConfiguredModel[0].Capabilities?["supportsTools"]);
-        Assert.AreEqual(false, hiddenConfiguredModel[0].Capabilities?["requiresWebSocket"]);
-        Assert.AreEqual(272000L, hiddenConfiguredModel[0].Capabilities?["contextWindow"]);
-
-        Assert.ThrowsExactly<InvalidOperationException>(
-            () => CodexSubscriptionStaticModelCatalog.List(provider, "unknown-codex-model"));
+        Assert.IsTrue(visibleModels.All(static model => Equals(true, model.Capabilities?["listable"])));
+        Assert.IsTrue(visibleModels.All(static model => Equals(false, model.Capabilities?["hidden"])));
     }
 
     [TestMethod]
@@ -436,6 +425,7 @@ public sealed class OpenAICodexSubscriptionPipelineTests
             {
                 Experimental = true,
                 AccountId = "acct_configured",
+                ModelDiscovery = "codex_endpoint_with_static_fallback",
             },
         };
 
@@ -480,6 +470,7 @@ public sealed class OpenAICodexSubscriptionPipelineTests
             {
                 Experimental = true,
                 ResponseTransport = "http",
+                ModelDiscovery = "codex_endpoint_with_static_fallback",
             },
         };
 
@@ -493,7 +484,7 @@ public sealed class OpenAICodexSubscriptionPipelineTests
     }
 
     [TestMethod]
-    public async Task ModelDiscovery_AllowsConfiguredHiddenModelFromAuthenticatedResponse()
+    public async Task ModelDiscovery_IgnoresSingleModelIdForPickerCatalog()
     {
         using var temp = TempDirectory.Create();
         await SaveCredentialAsync(temp.Path).ConfigureAwait(false);
@@ -507,6 +498,7 @@ public sealed class OpenAICodexSubscriptionPipelineTests
             CodexSubscription = new OpenAICodexSubscriptionOptions
             {
                 Experimental = true,
+                ModelDiscovery = "codex_endpoint_with_static_fallback",
             },
         };
 
@@ -515,9 +507,10 @@ public sealed class OpenAICodexSubscriptionPipelineTests
             CreateProviderDescriptor(),
             CancellationToken.None).ConfigureAwait(false);
 
-        Assert.AreEqual(1, models.Count);
-        Assert.AreEqual("hidden-codex", models[0].Id);
-        Assert.AreEqual(true, models[0].Capabilities?["hidden"]);
+        Assert.AreEqual(
+            "gpt-5.3-codex|websocket-only-codex",
+            string.Join('|', models.Select(static model => model.Id)));
+        Assert.IsFalse(models.Any(static model => model.Id == "hidden-codex"));
     }
 
     [TestMethod]
@@ -530,7 +523,6 @@ public sealed class OpenAICodexSubscriptionPipelineTests
             ProviderKey = "codex_subscription",
             BaseUri = new Uri("https://chatgpt.com/backend-api/codex"),
             StateRootPath = temp.Path,
-            SingleModelId = "gpt-5.3-codex",
             CodexSubscriptionHttpClient = new HttpClient(new RecordingHttpMessageHandler(
                 new HttpResponseMessage(HttpStatusCode.NotFound)
                 {
@@ -548,8 +540,9 @@ public sealed class OpenAICodexSubscriptionPipelineTests
             CreateProviderDescriptor(),
             CancellationToken.None).ConfigureAwait(false);
 
-        Assert.AreEqual(1, models.Count);
-        Assert.AreEqual("gpt-5.3-codex", models[0].Id);
+        Assert.AreEqual(
+            "gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.3-codex|gpt-5.2",
+            string.Join('|', models.Select(static model => model.Id)));
 
         provider.CodexSubscriptionHttpClient = new HttpClient(new RecordingHttpMessageHandler(
             new HttpResponseMessage(HttpStatusCode.NotFound)
@@ -575,7 +568,6 @@ public sealed class OpenAICodexSubscriptionPipelineTests
             ProviderKey = "codex_subscription",
             BaseUri = new Uri("https://chatgpt.com/backend-api/codex"),
             StateRootPath = temp.Path,
-            SingleModelId = "gpt-5.3-codex",
             CodexSubscriptionHttpClient = new HttpClient(new RecordingHttpMessageHandler(
                 new HttpResponseMessage(HttpStatusCode.Unauthorized)
                 {

@@ -33,7 +33,7 @@ public sealed class CodeAltaConfigStore
     private const string CodexSubscriptionDefaultApiUrl = "https://chatgpt.com/backend-api/codex";
     private const string CodexSubscriptionDefaultAuthSource = "codealta_oauth";
     private const string CodexSubscriptionDefaultTextVerbosity = "medium";
-    private const string CodexSubscriptionDefaultModelDiscovery = "codex_endpoint_with_static_fallback";
+    private const string CodexSubscriptionDefaultModelDiscovery = "static";
     private const string CodexSubscriptionDefaultResponseTransport = "websocket_with_http_fallback";
     private const string CodexSubscriptionDefaultInstallationIdSource = "codealta_state";
     private const int CodexSubscriptionDefaultMaxConcurrentRequests = 1;
@@ -1046,11 +1046,6 @@ public sealed class CodeAltaConfigStore
         if (definition.Enabled != false && definition.Experimental != true)
         {
             throw new InvalidOperationException($"providers.{definition.ProviderKey} requires experimental = true for type '{CodexSubscriptionProviderType}'.");
-        }
-
-        if (definition.Enabled != false && string.IsNullOrWhiteSpace(definition.Model))
-        {
-            throw new InvalidOperationException($"providers.{definition.ProviderKey} model is required for type '{CodexSubscriptionProviderType}'.");
         }
 
         if (definition.MaxConcurrentRequests is <= 0)

@@ -185,9 +185,10 @@ public sealed class RawApiBackendRegistrarTests
         Assert.IsInstanceOfType<OpenAIResponsesAgentBackend>(backend);
 
         var models = await backend.ListModelsAsync().ConfigureAwait(false);
-        Assert.AreEqual(1, models.Count);
-        Assert.AreEqual("gpt-5.3-codex", models[0].Id);
-        Assert.AreEqual("codex_subscription", models[0].Provider);
+        Assert.AreEqual(
+            "gpt-5.2|gpt-5.3-codex|gpt-5.4|gpt-5.4-mini|gpt-5.5",
+            string.Join('|', models.Select(static model => model.Id)));
+        Assert.IsTrue(models.All(static model => model.Provider == "codex_subscription"));
     }
 
     [TestMethod]

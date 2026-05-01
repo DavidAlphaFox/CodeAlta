@@ -234,7 +234,6 @@ internal static class RawApiBackendRegistrar
         var backendId = new AgentBackendId(definition.ProviderKey);
         var displayName = ResolveProviderDisplayName(definition);
         var baseUri = ParseUri(definition.ApiUrl) ?? new Uri("https://chatgpt.com/backend-api/codex");
-        var configuredModel = NormalizeText(definition.Model);
         var providerOptions = new OpenAIProviderOptions
         {
             ProviderKey = definition.ProviderKey,
@@ -244,7 +243,6 @@ internal static class RawApiBackendRegistrar
             Profile = CreateCodexSubscriptionProfile(definition.Profile),
             Compaction = CreateCompactionSettings(definition.Compaction),
             ModelCatalog = modelCatalog,
-            SingleModelId = configuredModel,
             CodexSubscription = new OpenAICodexSubscriptionOptions
             {
                 AuthSource = NormalizeText(definition.AuthSource) ?? "codealta_oauth",
@@ -252,7 +250,7 @@ internal static class RawApiBackendRegistrar
                 MaxConcurrentRequests = definition.MaxConcurrentRequests ?? 1,
                 TextVerbosity = NormalizeText(definition.TextVerbosity) ?? "medium",
                 IncludeEncryptedReasoning = definition.IncludeEncryptedReasoning ?? true,
-                ModelDiscovery = NormalizeText(definition.ModelDiscovery) ?? "codex_endpoint_with_static_fallback",
+                ModelDiscovery = NormalizeText(definition.ModelDiscovery) ?? "static",
                 ResponseTransport = NormalizeText(definition.ResponseTransport) ?? "websocket_with_http_fallback",
                 SendResponsesBetaHeader = definition.SendResponsesBetaHeader ?? true,
                 SendInstallationId = definition.SendInstallationId ?? false,

@@ -180,7 +180,7 @@ public sealed class OpenAICodexSubscriptionOptions
     /// <summary>
     /// Gets or sets the model discovery mode.
     /// </summary>
-    public string ModelDiscovery { get; set; } = "codex_endpoint_with_static_fallback";
+    public string ModelDiscovery { get; set; } = "static";
 
     /// <summary>
     /// Gets or sets the Responses transport mode. Use <c>websocket_with_http_fallback</c> for the default WebSocket path or <c>http</c> to force SSE.

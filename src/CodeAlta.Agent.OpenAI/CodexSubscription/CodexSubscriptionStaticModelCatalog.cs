@@ -5,38 +5,21 @@ namespace CodeAlta.Agent.OpenAI.CodexSubscription;
 
 internal static class CodexSubscriptionStaticModelCatalog
 {
-    // Offline fallback snapshot only. Prefer authenticated Codex model discovery when it is available.
+    // User-visible Codex subscription picker entries, following the curated Codex/pi-mono catalog.
     private static readonly CodexStaticModel[] Models =
     [
-        new("gpt-5.5", "GPT-5.5", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
-        new("gpt-5.4", "GPT-5.4", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
-        new("gpt-5.4-mini", "GPT-5.4 mini", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
-        new("gpt-5.3-codex", "GPT-5.3 Codex", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.High, ContextWindow: 272_000),
-        new("gpt-5.2", "GPT-5.2", Hidden: false, SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
-        new("codex-auto-review", "Codex auto review", Hidden: true, SupportsImageInput: false, DefaultReasoningEffort: AgentReasoningEffort.High, ContextWindow: 272_000),
+        new("gpt-5.5", "GPT-5.5", SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
+        new("gpt-5.4", "GPT-5.4", SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
+        new("gpt-5.4-mini", "GPT-5.4 mini", SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
+        new("gpt-5.3-codex", "GPT-5.3 Codex", SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.High, ContextWindow: 272_000),
+        new("gpt-5.2", "GPT-5.2", SupportsImageInput: true, DefaultReasoningEffort: AgentReasoningEffort.Medium, ContextWindow: 272_000),
     ];
 
-    public static IReadOnlyList<AgentModelInfo> List(
-        LocalAgentProviderDescriptor providerDescriptor,
-        string? configuredModelId = null)
+    public static IReadOnlyList<AgentModelInfo> List(LocalAgentProviderDescriptor providerDescriptor)
     {
         ArgumentNullException.ThrowIfNull(providerDescriptor);
 
-        if (!string.IsNullOrWhiteSpace(configuredModelId))
-        {
-            var model = Models.FirstOrDefault(candidate =>
-                string.Equals(candidate.Id, configuredModelId.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (model is null)
-            {
-                throw new InvalidOperationException(
-                    $"Codex subscription model '{configuredModelId.Trim()}' is not in the static API-supported model catalog.");
-            }
-
-            return [CreateModelInfo(model, providerDescriptor)];
-        }
-
         return Models
-            .Where(static model => !model.Hidden)
             .Select(model => CreateModelInfo(model, providerDescriptor))
             .ToArray();
     }
@@ -63,7 +46,8 @@ internal static class CodexSubscriptionStaticModelCatalog
             {
                 ["source"] = "codex-static-fallback",
                 ["supportedInApi"] = true,
-                ["hidden"] = model.Hidden,
+                ["hidden"] = false,
+                ["listable"] = true,
                 ["supportsReasoningSummary"] = true,
                 ["supportsEncryptedReasoning"] = true,
                 ["supportsTextVerbosity"] = true,
@@ -76,7 +60,6 @@ internal static class CodexSubscriptionStaticModelCatalog
     private sealed record CodexStaticModel(
         string Id,
         string DisplayName,
-        bool Hidden,
         bool SupportsImageInput,
         AgentReasoningEffort DefaultReasoningEffort,
         long ContextWindow);
