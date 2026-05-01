@@ -375,8 +375,71 @@ internal sealed class AcpManagementService
         }
         catch (Exception ex) when (ex is InvalidOperationException or PlatformNotSupportedException)
         {
+            return BuildRegistryCommandPreview(manifest);
+        }
+    }
+
+    private static string? BuildRegistryCommandPreview(AcpRegistryAgentManifest manifest)
+    {
+        var targetId = TryGetCurrentAcpTargetId();
+        if (manifest.Distribution.Binary is { Count: > 0 } binary &&
+            targetId is not null &&
+            binary.TryGetValue(targetId, out var binaryPackage))
+        {
+            return FormatCommandPreview(binaryPackage.Command, binaryPackage.Arguments);
+        }
+
+        if (manifest.Distribution.Npx is { } npx)
+        {
+            return FormatCommandPreview("npx", ["--yes", npx.Package, .. npx.Arguments ?? []]);
+        }
+
+        if (manifest.Distribution.Uvx is { } uvx)
+        {
+            return FormatCommandPreview("uvx", [uvx.Package, .. uvx.Arguments ?? []]);
+        }
+
+        return null;
+    }
+
+    private static string? FormatCommandPreview(string? command, IReadOnlyList<string>? arguments)
+    {
+        if (string.IsNullOrWhiteSpace(command))
+        {
             return null;
         }
+
+        return arguments is { Count: > 0 }
+            ? $"{command} {string.Join(' ', arguments)}"
+            : command;
+    }
+
+    private static string? TryGetCurrentAcpTargetId()
+    {
+        var os = OperatingSystem.IsWindows()
+            ? "windows"
+            : OperatingSystem.IsMacOS()
+                ? "darwin"
+                : OperatingSystem.IsLinux()
+                    ? "linux"
+                    : null;
+        if (os is null)
+        {
+            return null;
+        }
+
+        var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture switch
+        {
+            System.Runtime.InteropServices.Architecture.Arm64 => "aarch64",
+            System.Runtime.InteropServices.Architecture.X64 => "x86_64",
+            _ => null,
+        };
+        if (arch is null)
+        {
+            return null;
+        }
+
+        return $"{os}-{arch}";
     }
 
     private static bool IsCommandAvailable(AcpBackendDefinition definition)
