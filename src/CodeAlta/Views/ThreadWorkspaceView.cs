@@ -401,6 +401,11 @@ internal sealed class ThreadWorkspaceView
             {
                 Wrap = false,
             })
+            .Style(ButtonStyle.Default with
+            {
+                Normal = Style.None,
+                Padding = Thickness.Zero,
+            })
             .Click(openModelProviders)
             .Tooltip(new TextBlock($"Configure model providers ({ModelProvidersShortcutSequence})."));
 
