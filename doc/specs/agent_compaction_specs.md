@@ -12,9 +12,6 @@ Primary references:
 - `doc/specs/agent_local_specs.md`
 
 Inspirational references:
-- `C:\code\pi-mono\packages\coding-agent\docs\compaction.md`
-- `C:\code\pi-mono\packages\coding-agent\src\core\compaction\compaction.ts`
-- `C:\code\pi-mono\packages\coding-agent\src\core\compaction\utils.ts`
 - `C:\code\codex\codex-rs\core\src\compact.rs`
 - `C:\code\codex\codex-rs\core\templates\compact\prompt.md`
 
@@ -256,8 +253,8 @@ These are defaults only. Deployments must be able to override them globally and 
 
 Rationale:
 
-- pi-mono's defaults keep roughly `20000` recent tokens and reserve `16384` tokens for the summarizer/response path
-- CodeAlta should not copy pi-mono's looser summary behavior directly, but it should take inspiration from that scale so threshold compaction does not feel artificially starved
+- the default scale should keep enough recent context and reserve enough summarizer/response capacity so threshold compaction does not feel artificially starved
+- CodeAlta should pair this larger scale with strict omission-first summary behavior rather than transcript-like summary output
 - the original v2 example values (`summary_output_tokens = 512`, `summary_input_tokens = 12000`) are likely too conservative as general defaults for long coding sessions
 - CodeAlta should instead pair a **larger summarizer input budget** with **stronger omission/global-cap logic**, so it can read enough context without reproducing transcript-like checkpoints
 
@@ -792,7 +789,7 @@ allow_oversized_anchor_reduction = true
 
 Notes:
 
-- `recent_suffix_target_tokens` is the pi-mono-inspired “keep recent raw context” control and should guide how much verbatim recent context the planner tries to preserve
+- `recent_suffix_target_tokens` is the “keep recent raw context” control and should guide how much verbatim recent context the planner tries to preserve
 - `summary_input_tokens` should usually be set high enough that threshold compaction can summarize the full canonical non-delta selected history when it fits
 - `summary_input_tokens` is an optimization target for serializer reduction and chunking, not a local correctness limit; if bounded optimization cannot fit the target, compaction should still proceed unless the actual provider/model context limit is reached
 - the larger defaults above do **not** mean serializer output should become verbose; global omission caps and recency-aware prioritization remain mandatory
@@ -848,7 +845,7 @@ At minimum:
 9. The latest user message remains a protected anchor whenever possible.
 10. The target post-compaction total context should usually land between `1%` and `6%`, with `10%` as the normal upper planning bound.
 11. Threshold-triggered compaction should keep the full canonical non-delta selected history when it fits the summarizer-input budget.
-12. The default tuning should be inspired by pi-mono's order of magnitude for reserved/recent budgets (`~16k` reserve, `~20k` recent), while keeping CodeAlta's stricter omission-first and global-cap design.
+12. The default tuning should use large enough reserved/recent budgets (`~16k` reserve, `~20k` recent) while keeping CodeAlta's stricter omission-first and global-cap design.
 13. When reduction is required, newer messages and newer high-signal tool context should be favored over older exploratory material.
 14. The regression suite should include at least one representative large tool-heavy conversation that validates the default v2 profile against both the `<= 6%` practical target and the configured `10%` hard ceiling.
 

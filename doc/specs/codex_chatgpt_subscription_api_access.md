@@ -503,7 +503,7 @@ If the hook becomes too awkward, implement a dedicated `CodexSubscriptionRespons
 
 Do not use `OpenAIModelClient` for this provider.
 
-CodeAlta defaults to a curated static picker list so the ChatGPT subscription experience stays aligned with Codex/pi-mono model visibility. Implement model discovery in this order:
+CodeAlta defaults to a curated static picker list so the ChatGPT subscription experience stays aligned with Codex model visibility. Implement model discovery in this order:
 
 1. If `model_discovery = "static"`, expose the bundled static Codex catalog.
 2. If `model_discovery = "codex_endpoint"` or `codex_endpoint_with_static_fallback`, call the Codex model endpoint:
