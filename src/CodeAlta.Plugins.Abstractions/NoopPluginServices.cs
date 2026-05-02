@@ -23,6 +23,7 @@ public sealed class NoopPluginServices : IPluginServices
         Threads = new NoopPluginThreadService();
         Prompts = new NoopPluginPromptService();
         Agents = new NoopPluginAgentService();
+        Tasks = new NoopPluginTaskService();
     }
 
     /// <inheritdoc />
@@ -45,6 +46,9 @@ public sealed class NoopPluginServices : IPluginServices
 
     /// <inheritdoc />
     public IPluginAgentService Agents { get; }
+
+    /// <inheritdoc />
+    public IPluginTaskService Tasks { get; }
 
     /// <summary>
     /// Creates no-op services with a default logger.
@@ -287,4 +291,146 @@ public sealed class NoopPluginAgentService : IPluginAgentService
         ArgumentException.ThrowIfNullOrWhiteSpace(capabilityName);
         return false;
     }
+}
+
+/// <summary>
+/// No-op implementation of <see cref="IPluginTaskService"/> that still tracks scheduled work.
+/// </summary>
+public sealed class NoopPluginTaskService : IPluginTaskService
+{
+    private readonly object _gate = new();
+    private readonly List<PluginTaskHandle> _runningTasks = [];
+
+    /// <inheritdoc />
+    public bool HasRunningTasks
+    {
+        get
+        {
+            lock (_gate)
+            {
+                RemoveCompletedTasks();
+                return _runningTasks.Count != 0;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public int RunningTaskCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                RemoveCompletedTasks();
+                return _runningTasks.Count;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public PluginTaskHandle Run(string name, Func<CancellationToken, ValueTask> work, PluginTaskOptions? options = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(work);
+
+        options ??= new PluginTaskOptions();
+        var cancellationTokenSource = new CancellationTokenSource();
+        var task = StartTask(work, cancellationTokenSource.Token, options.LongRunning);
+        var handle = new PluginTaskHandle(
+            name,
+            options.Description,
+            options.LongRunning,
+            DateTimeOffset.UtcNow,
+            task,
+            () => RequestCancellation(cancellationTokenSource));
+
+        lock (_gate)
+        {
+            _runningTasks.Add(handle);
+        }
+
+        _ = task.ContinueWith(
+            _ =>
+            {
+                lock (_gate)
+                {
+                    _runningTasks.Remove(handle);
+                }
+
+                cancellationTokenSource.Dispose();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+        return handle;
+    }
+
+    /// <inheritdoc />
+    public async ValueTask WhenIdleAsync(CancellationToken cancellationToken = default)
+    {
+        while (true)
+        {
+            Task[] runningTasks;
+            lock (_gate)
+            {
+                RemoveCompletedTasks();
+                if (_runningTasks.Count == 0)
+                {
+                    return;
+                }
+
+                runningTasks = [.. _runningTasks.Select(static task => task.Completion)];
+            }
+
+            try
+            {
+                await Task.WhenAll(runningTasks).WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                // Completion failures are exposed through PluginTaskHandle.Completion; waiting for idle only tracks lifetime.
+            }
+        }
+    }
+
+    private static Task StartTask(Func<CancellationToken, ValueTask> work, CancellationToken cancellationToken, bool longRunning)
+    {
+        return longRunning
+            ? Task.Factory.StartNew(
+                static state => RunWorkAsync((WorkState)state!),
+                new WorkState(work, cancellationToken),
+                cancellationToken,
+                TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach,
+                TaskScheduler.Default).Unwrap()
+            : Task.Run(() => RunWorkAsync(new WorkState(work, cancellationToken)), cancellationToken);
+    }
+
+    private static async Task RunWorkAsync(WorkState state)
+    {
+        await state.Work(state.CancellationToken).ConfigureAwait(false);
+    }
+
+    private static void RequestCancellation(CancellationTokenSource cancellationTokenSource)
+    {
+        try
+        {
+            cancellationTokenSource.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The task has already completed and the no-op tracker has released its cancellation source.
+        }
+    }
+
+    private void RemoveCompletedTasks()
+    {
+        _runningTasks.RemoveAll(static task => task.IsCompleted);
+    }
+
+    private readonly record struct WorkState(Func<CancellationToken, ValueTask> Work, CancellationToken CancellationToken);
 }

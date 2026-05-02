@@ -219,6 +219,21 @@ public sealed class PluginAbstractionsTests
         await services.Prompts.AddAttachmentAsync(new PluginPromptAttachment { Kind = PluginPromptAttachmentKind.File, Path = "file.txt" });
         Assert.AreEqual(0, (await services.Prompts.GetAttachmentsAsync()).Count);
         Assert.IsFalse(services.Agents.HasCapability("tools"));
+
+        var releaseTask = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var backgroundTask = services.Tasks.Run(
+            "background-work",
+            async cancellationToken => await releaseTask.Task.WaitAsync(cancellationToken),
+            new PluginTaskOptions { Description = "Background work.", LongRunning = true });
+        Assert.IsTrue(services.Tasks.HasRunningTasks);
+        Assert.AreEqual(1, services.Tasks.RunningTaskCount);
+        Assert.AreEqual("background-work", backgroundTask.Name);
+        Assert.AreEqual("Background work.", backgroundTask.Description);
+        Assert.IsTrue(backgroundTask.LongRunning);
+        releaseTask.SetResult();
+        await backgroundTask.Completion;
+        await services.Tasks.WhenIdleAsync();
+        Assert.IsFalse(services.Tasks.HasRunningTasks);
     }
 
     [TestMethod]

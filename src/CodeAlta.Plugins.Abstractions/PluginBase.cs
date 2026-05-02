@@ -38,6 +38,12 @@ public abstract class PluginBase : IAsyncDisposable
     protected IPluginUiService Ui => Context.Services.Ui;
 
     /// <summary>
+    /// Gets plugin-lifetime task services attached by the runtime.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the plugin has not been attached to a runtime context.</exception>
+    protected IPluginTaskService Tasks => Context.Services.Tasks;
+
+    /// <summary>
     /// Gets the runtime-assigned plugin scope.
     /// </summary>
     /// <remarks>

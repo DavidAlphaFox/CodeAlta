@@ -65,6 +65,7 @@ The abstraction package includes contracts for:
 - prompt processors, system/developer prompt parts, and before-agent-run hooks;
 - LLM-callable agent tools and tool call/result interception;
 - backend/provider factories returning `IAgentBackend`;
+- plugin-lifetime background tasks through `IPluginTaskService` so the runtime can block unload until tracked work completes;
 - resource roots such as skills, system prompts, templates, themes, MCP manifests, and agent definitions;
 - compaction hooks for before/instruction/reducer/after participation;
 - normalized agent event observation;
@@ -73,6 +74,8 @@ The abstraction package includes contracts for:
 Low-ceremony factories are available for common authoring tasks: `Command`, `Startup`, `Prompt`, `Attachments`, `PluginUi`, `Resources`, `Tool`, and `PluginBackend`.
 `PluginUi` also creates dialog requests for notifications, confirmations, input text, text editor dialogs, selections, and custom visuals.
 Command-line contributions intentionally use plain `XenoAtom.CommandLine` objects such as `Command` and `CommandGroup`, with options, arguments, validation, completion, and callbacks added through the command-line API directly instead of a CodeAlta-specific wrapper.
+
+Plugins should schedule long-running background work through `Services.Tasks.Run(...)` or the `PluginBase.Tasks` shortcut instead of calling `Task.Run` directly. The runtime tracks these handles, cancels them during deactivation, and can delay unload while `PluginTaskHandle.Completion` is still running.
 
 ## Backend/provider example
 

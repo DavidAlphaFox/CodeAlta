@@ -29,6 +29,110 @@ public interface IPluginServices
 
     /// <summary>Gets agent/backend services.</summary>
     IPluginAgentService Agents { get; }
+
+    /// <summary>Gets plugin-lifetime task services.</summary>
+    IPluginTaskService Tasks { get; }
+}
+
+/// <summary>
+/// Schedules plugin-owned background work that the runtime can track for plugin lifetime management.
+/// </summary>
+public interface IPluginTaskService
+{
+    /// <summary>Gets a value indicating whether the plugin has running background tasks.</summary>
+    bool HasRunningTasks { get; }
+
+    /// <summary>Gets the number of currently running background tasks.</summary>
+    int RunningTaskCount { get; }
+
+    /// <summary>
+    /// Schedules plugin-owned background work and returns a runtime-trackable task handle.
+    /// </summary>
+    /// <param name="name">The task name used for diagnostics and unload blocking.</param>
+    /// <param name="work">The work to run. The supplied token is cancelled when the plugin is deactivated or the handle is cancelled.</param>
+    /// <param name="options">Optional task metadata and scheduling hints.</param>
+    /// <returns>A handle that exposes task completion and cancellation.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null, empty, or whitespace.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="work"/> is <see langword="null"/>.</exception>
+    PluginTaskHandle Run(string name, Func<CancellationToken, ValueTask> work, PluginTaskOptions? options = null);
+
+    /// <summary>
+    /// Waits until all currently tracked plugin tasks complete.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the wait.</param>
+    /// <returns>A task that completes when no tracked tasks are running.</returns>
+    ValueTask WhenIdleAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Metadata and scheduling hints for a plugin-owned background task.
+/// </summary>
+public sealed record PluginTaskOptions
+{
+    /// <summary>Gets a human-readable task description for diagnostics.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Gets a value indicating whether the work is expected to run for a long time.</summary>
+    public bool LongRunning { get; init; }
+}
+
+/// <summary>
+/// Runtime-trackable handle for plugin-owned background work.
+/// </summary>
+public sealed class PluginTaskHandle
+{
+    private readonly Action _requestCancellation;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PluginTaskHandle"/> class.
+    /// </summary>
+    /// <param name="name">The task name.</param>
+    /// <param name="description">The task description.</param>
+    /// <param name="longRunning">A value indicating whether this task is expected to run for a long time.</param>
+    /// <param name="startedAt">The task start time.</param>
+    /// <param name="completion">The task completion.</param>
+    /// <param name="requestCancellation">The callback used to request task cancellation.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null, empty, or whitespace.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="completion"/> or <paramref name="requestCancellation"/> is <see langword="null"/>.</exception>
+    public PluginTaskHandle(
+        string name,
+        string? description,
+        bool longRunning,
+        DateTimeOffset startedAt,
+        Task completion,
+        Action requestCancellation)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(completion);
+        ArgumentNullException.ThrowIfNull(requestCancellation);
+        Name = name;
+        Description = description;
+        LongRunning = longRunning;
+        StartedAt = startedAt;
+        Completion = completion;
+        _requestCancellation = requestCancellation;
+    }
+
+    /// <summary>Gets the task name.</summary>
+    public string Name { get; }
+
+    /// <summary>Gets the task description.</summary>
+    public string? Description { get; }
+
+    /// <summary>Gets a value indicating whether this task is expected to run for a long time.</summary>
+    public bool LongRunning { get; }
+
+    /// <summary>Gets the task start time.</summary>
+    public DateTimeOffset StartedAt { get; }
+
+    /// <summary>Gets the task completion.</summary>
+    public Task Completion { get; }
+
+    /// <summary>Gets a value indicating whether the task has completed.</summary>
+    public bool IsCompleted => Completion.IsCompleted;
+
+    /// <summary>Requests cancellation for the task.</summary>
+    public void RequestCancellation() => _requestCancellation();
 }
 
 /// <summary>
