@@ -4,6 +4,7 @@ using CodeAlta.App.State;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
+using CodeAlta.Presentation.Shell;
 using CodeAlta.Presentation.Timeline;
 using CodeAlta.Threading;
 
@@ -143,6 +144,31 @@ public sealed class ThreadRuntimeStateReducerTests
 
         Assert.IsNotNull(tab.Usage);
         Assert.IsTrue(reduction.InvalidateSelectedSessionUsage);
+    }
+
+    [TestMethod]
+    public void ReduceAgentEvent_ReconnectingSessionUpdateSetsBusyStatus()
+    {
+        var thread = CreateThread();
+        var tab = CreateOpenThreadState(thread);
+        var reducer = new ThreadRuntimeStateReducer();
+
+        var reduction = reducer.ReduceAgentEvent(
+            thread,
+            tab,
+            new AgentSessionUpdateEvent(
+                AgentBackendIds.OpenAIResponses,
+                "session-1",
+                DateTimeOffset.UtcNow,
+                new AgentRunId("run-1"),
+                AgentSessionUpdateKind.Reconnecting,
+                "Reconnecting to ChatGPT/Codex... 1/5"),
+            isSelectedThread: true);
+
+        Assert.IsNotNull(reduction.ThreadStatus);
+        Assert.AreEqual("Reconnecting to ChatGPT/Codex... 1/5", reduction.ThreadStatus.Value.Message);
+        Assert.IsTrue(reduction.ThreadStatus.Value.ShowSpinner);
+        Assert.AreEqual(StatusTone.Info, reduction.ThreadStatus.Value.Tone);
     }
 
     [TestMethod]

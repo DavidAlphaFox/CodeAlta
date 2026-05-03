@@ -229,6 +229,11 @@ public enum AgentSessionUpdateKind
     Warning,
 
     /// <summary>
+    /// The provider stream is reconnecting or retrying after a transient failure.
+    /// </summary>
+    Reconnecting,
+
+    /// <summary>
     /// Model changed or was rerouted.
     /// </summary>
     ModelChanged,

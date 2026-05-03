@@ -63,13 +63,25 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
         return ValueTask.CompletedTask;
     }
 
+    public Task<LocalAgentTurnResponse> ExecuteTurnAsync(
+        LocalAgentTurnRequest request,
+        Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
+        CancellationToken cancellationToken = default)
+        => ExecuteTurnAsync(
+            request,
+            onUpdate,
+            static (_, _) => ValueTask.CompletedTask,
+            cancellationToken);
+
     public async Task<LocalAgentTurnResponse> ExecuteTurnAsync(
         LocalAgentTurnRequest request,
         Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
+        Func<LocalAgentTurnSessionUpdate, CancellationToken, ValueTask> onSessionUpdate,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(onUpdate);
+        ArgumentNullException.ThrowIfNull(onSessionUpdate);
 
         try
         {
@@ -292,6 +304,10 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
                         attempt,
                         httpStatus: GetHttpStatusCode(ex),
                         errorType: ex.GetType().Name);
+                    await onSessionUpdate(
+                            CreateCodexReconnectSessionUpdate(attempt, retryBudget),
+                            cancellationToken)
+                        .ConfigureAwait(false);
                     await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
                 }
             }
@@ -1848,6 +1864,18 @@ internal sealed class OpenAIResponsesTurnExecutor(OpenAIProviderOptions provider
         }
 
         return false;
+    }
+
+    private static LocalAgentTurnSessionUpdate CreateCodexReconnectSessionUpdate(int retryAttempt, int retryBudget)
+    {
+        var maxRetries = Math.Max(retryBudget - 1, 1);
+        var retryText = retryAttempt.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var maxRetriesText = maxRetries.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return new LocalAgentTurnSessionUpdate
+        {
+            Kind = AgentSessionUpdateKind.Reconnecting,
+            Message = $"Reconnecting to ChatGPT/Codex... {retryText}/{maxRetriesText}",
+        };
     }
 
     private static bool IsPrematureResponseEnded(Exception exception)

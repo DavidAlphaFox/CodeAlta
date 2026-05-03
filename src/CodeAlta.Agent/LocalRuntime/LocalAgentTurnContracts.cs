@@ -28,6 +28,24 @@ public interface ILocalAgentTurnExecutor
         LocalAgentTurnRequest request,
         Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a single assistant turn with a callback for provider session updates.
+    /// </summary>
+    /// <param name="request">The turn request.</param>
+    /// <param name="onUpdate">Streaming callback used for best-effort progress projection.</param>
+    /// <param name="onSessionUpdate">Session update callback used for best-effort status projection.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The final assistant turn response.</returns>
+    Task<LocalAgentTurnResponse> ExecuteTurnAsync(
+        LocalAgentTurnRequest request,
+        Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
+        Func<LocalAgentTurnSessionUpdate, CancellationToken, ValueTask> onSessionUpdate,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(onSessionUpdate);
+        return ExecuteTurnAsync(request, onUpdate, cancellationToken);
+    }
 }
 
 internal interface ILocalAgentProviderSessionCleanup
@@ -192,4 +210,25 @@ public sealed record LocalAgentTurnDelta
     /// Gets or initializes the delta text.
     /// </summary>
     public required string Text { get; init; }
+}
+
+/// <summary>
+/// Represents a best-effort provider session update emitted while a turn is running.
+/// </summary>
+public sealed record LocalAgentTurnSessionUpdate
+{
+    /// <summary>
+    /// Gets or initializes the session update kind.
+    /// </summary>
+    public required AgentSessionUpdateKind Kind { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the user-facing update message.
+    /// </summary>
+    public required string Message { get; init; }
+
+    /// <summary>
+    /// Gets or initializes optional structured update details.
+    /// </summary>
+    public JsonElement? Details { get; init; }
 }

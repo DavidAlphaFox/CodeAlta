@@ -985,6 +985,24 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         await AppendEventsAsync([@event], LocalAgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
     }
 
+    private async ValueTask OnSessionUpdateAsync(
+        AgentRunId runId,
+        LocalAgentTurnSessionUpdate update,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+
+        var @event = new AgentSessionUpdateEvent(
+            BackendId,
+            SessionId,
+            DateTimeOffset.UtcNow,
+            runId,
+            update.Kind,
+            update.Message,
+            update.Details);
+        await AppendEventsAsync([@event], LocalAgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task AppendSystemPromptEventIfChangedAsync(
         AgentRunId runId,
         string? systemMessage,
@@ -1109,6 +1127,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             return await _turnExecutor.ExecuteTurnAsync(
                     request,
                     (delta, ct) => OnStreamingDeltaAsync(runId, delta, ct),
+                    (update, ct) => OnSessionUpdateAsync(runId, update, ct),
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -1147,6 +1166,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                             State = _state,
                         },
                         (delta, ct) => OnStreamingDeltaAsync(runId, delta, ct),
+                        (update, ct) => OnSessionUpdateAsync(runId, update, ct),
                         cancellationToken)
                     .ConfigureAwait(false);
             }

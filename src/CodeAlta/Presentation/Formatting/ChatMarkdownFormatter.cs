@@ -415,6 +415,7 @@ internal static class ChatMarkdownFormatter
         {
             AgentSessionUpdateKind.Info => $"{NerdFont.CodInfo} Info",
             AgentSessionUpdateKind.Warning => $"{NerdFont.CodWarning} Warning",
+            AgentSessionUpdateKind.Reconnecting => $"{NerdFont.MdServerNetwork} Reconnecting",
             AgentSessionUpdateKind.ModelChanged => $"{NerdFont.MdChat} Model Changed",
             AgentSessionUpdateKind.ModeChanged => $"{NerdFont.MdCubeOutline} Mode Changed",
             AgentSessionUpdateKind.TitleChanged => $"{NerdFont.MdRenameBox} Title Changed",
@@ -598,6 +599,7 @@ internal static class ChatMarkdownFormatter
     {
         ArgumentNullException.ThrowIfNull(update);
         return update.Kind is AgentSessionUpdateKind.Warning
+            or AgentSessionUpdateKind.Reconnecting
             or AgentSessionUpdateKind.ModelChanged
             or AgentSessionUpdateKind.CompactionStarted
             or AgentSessionUpdateKind.CompactionCompleted;

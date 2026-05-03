@@ -223,6 +223,11 @@ internal sealed class ThreadRuntimeStateReducer
                     threadStatus = new ThreadRuntimeStatusUpdate($"Compacting '{thread.Title}'...", true, StatusTone.Info);
                 }
 
+                if (update.Kind == AgentSessionUpdateKind.Reconnecting && !string.IsNullOrWhiteSpace(update.Message))
+                {
+                    threadStatus = new ThreadRuntimeStatusUpdate(update.Message, true, StatusTone.Info);
+                }
+
                 if (update.Kind == AgentSessionUpdateKind.CompactionCompleted && tab.PendingManualCompaction)
                 {
                     tab.PendingManualCompaction = false;

@@ -2624,6 +2624,7 @@ public sealed class OpenAIRawApiAgentBackendTests
             },
         });
         var deltas = new List<LocalAgentTurnDelta>();
+        var sessionUpdates = new List<LocalAgentTurnSessionUpdate>();
 
         var response = await executor.ExecuteTurnAsync(
             CreateCodexTurnRequest(),
@@ -2631,10 +2632,18 @@ public sealed class OpenAIRawApiAgentBackendTests
             {
                 deltas.Add(delta);
                 return ValueTask.CompletedTask;
+            },
+            (update, _) =>
+            {
+                sessionUpdates.Add(update);
+                return ValueTask.CompletedTask;
             }).ConfigureAwait(false);
 
         Assert.AreEqual(2, responsesClient.RequestCount);
         Assert.AreEqual(0, deltas.Count);
+        Assert.AreEqual(1, sessionUpdates.Count);
+        Assert.AreEqual(AgentSessionUpdateKind.Reconnecting, sessionUpdates[0].Kind);
+        Assert.AreEqual("Reconnecting to ChatGPT/Codex... 1/5", sessionUpdates[0].Message);
         var text = response.AssistantMessage.Parts.OfType<LocalAgentMessagePart.Text>().Single().Value;
         Assert.AreEqual("Retried answer.", text);
     }

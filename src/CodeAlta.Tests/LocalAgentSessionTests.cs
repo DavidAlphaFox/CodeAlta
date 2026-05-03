@@ -230,6 +230,49 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public async Task LocalAgentSession_SendAsync_ProjectsTurnSessionUpdatesAsTransientEvents()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider();
+        var summary = CreateSummary("session-reconnect-update");
+        var state = CreateState("session-reconnect-update");
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new SessionUpdateTurnExecutor(),
+            new AgentSessionCreateOptions
+            {
+                ProviderKey = provider.ProviderKey,
+                Model = "gpt-5.4",
+                WorkingDirectory = temp.Path,
+                OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+            });
+
+        var runId = await session.SendAsync(
+                new AgentSendOptions
+                {
+                    Input = AgentInput.Text("Retry a transient stream failure"),
+                })
+            .ConfigureAwait(false);
+
+        var history = await session.GetHistoryAsync().ConfigureAwait(false);
+        var reconnect = history.OfType<AgentSessionUpdateEvent>().Single(evt => evt.Kind == AgentSessionUpdateKind.Reconnecting);
+        Assert.AreEqual(runId, reconnect.RunId);
+        Assert.AreEqual("Reconnecting to ChatGPT/Codex... 1/5", reconnect.Message);
+
+        var persistedHistory = await store.ReadEventsAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
+        Assert.IsFalse(persistedHistory.OfType<AgentSessionUpdateEvent>().Any(static evt => evt.Kind == AgentSessionUpdateKind.Reconnecting));
+    }
+
+    [TestMethod]
     public async Task LocalAgentSession_SendAsync_PersistsSkillActivationAndRestoresLoadedSkills()
     {
         using var temp = TestTempDirectory.Create();
@@ -3567,6 +3610,46 @@ public sealed class LocalAgentSessionTests
             DisposedSessionIds.Add(sessionId);
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class SessionUpdateTurnExecutor : ILocalAgentTurnExecutor
+    {
+        public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(
+            LocalAgentProviderDescriptor provider,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AgentModelInfo>>([new AgentModelInfo("gpt-5.4", "GPT-5.4")]);
+
+        public Task<LocalAgentTurnResponse> ExecuteTurnAsync(
+            LocalAgentTurnRequest request,
+            Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
+            CancellationToken cancellationToken = default)
+            => CreateResponseAsync();
+
+        public async Task<LocalAgentTurnResponse> ExecuteTurnAsync(
+            LocalAgentTurnRequest request,
+            Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
+            Func<LocalAgentTurnSessionUpdate, CancellationToken, ValueTask> onSessionUpdate,
+            CancellationToken cancellationToken = default)
+        {
+            await onSessionUpdate(
+                    new LocalAgentTurnSessionUpdate
+                    {
+                        Kind = AgentSessionUpdateKind.Reconnecting,
+                        Message = "Reconnecting to ChatGPT/Codex... 1/5",
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return await CreateResponseAsync().ConfigureAwait(false);
+        }
+
+        private static Task<LocalAgentTurnResponse> CreateResponseAsync()
+            => Task.FromResult(
+                new LocalAgentTurnResponse
+                {
+                    AssistantMessage = new LocalAgentConversationMessage(
+                        LocalAgentConversationRole.Assistant,
+                        [new LocalAgentMessagePart.Text("Recovered after reconnect.")]),
+                });
     }
 
     private sealed class ScriptedTurnExecutor : ILocalAgentTurnExecutor
