@@ -131,11 +131,12 @@ internal partial class Program
                     },
                     SafeMode = PluginRuntimeConfigResolver.IsSafeModeEnabled(args),
                     IsHeadless = false,
+                    KeepBuildLiveOutput = CodeAltaCliOptions.ShouldKeepPluginLiveOutput(args),
                     RawArguments = args,
                 },
                 cancellationToken);
             stopwatch.Stop();
-            ReportCommandLinePluginStartup(result, stopwatch.Elapsed);
+            ReportCommandLinePluginStartup(result, stopwatch.Elapsed, args);
             return runtime;
         }
         catch
@@ -145,9 +146,10 @@ internal partial class Program
         }
     }
 
-    internal static void ReportCommandLinePluginStartup(PluginRuntimeManagerStartResult result, TimeSpan elapsed)
+    internal static void ReportCommandLinePluginStartup(PluginRuntimeManagerStartResult result, TimeSpan elapsed, IReadOnlyList<string> args)
     {
         ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(args);
         var homeRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".alta");
         var checkedPackageCount = result.BuildResults.Count;
         var builtPackageCount = result.BuildResults.Count(static build => build.Succeeded && !build.IsUpToDate);
@@ -160,10 +162,14 @@ internal partial class Program
             return;
         }
 
-        var buildSummary = checkedPackageCount == 0
-            ? "no source plugins checked"
-            : $"{checkedPackageCount} source plugin {Pluralize(checkedPackageCount, "package")} checked ({builtPackageCount} built, {upToDatePackageCount} up-to-date{(failedPackageCount == 0 ? string.Empty : $", {failedPackageCount} failed")})";
-        Terminal.WriteLine($"CodeAlta plugins: {buildSummary}; {activatedSourcePluginCount} source {Pluralize(activatedSourcePluginCount, "plugin")} activated in {FormatElapsed(elapsed)}.");
+        if (checkedPackageCount > 0 || failedPackageCount > 0 || CodeAltaCliOptions.IsPluginsStatusRequested(args) || CodeAltaCliOptions.ShouldKeepPluginLiveOutput(args))
+        {
+            var buildSummary = checkedPackageCount == 0
+                ? "no source plugins checked"
+                : $"{checkedPackageCount} source plugin {Pluralize(checkedPackageCount, "package")} checked ({builtPackageCount} built, {upToDatePackageCount} up-to-date{(failedPackageCount == 0 ? string.Empty : $", {failedPackageCount} failed")})";
+            Terminal.WriteLine($"CodeAlta plugins: {buildSummary}; {activatedSourcePluginCount} source {Pluralize(activatedSourcePluginCount, "plugin")} activated in {FormatElapsed(elapsed)}.");
+        }
+
         ReportPluginFailuresToTerminal(result.BuildResults, homeRoot);
     }
 

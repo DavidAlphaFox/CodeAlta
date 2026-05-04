@@ -72,6 +72,18 @@ public sealed class CodeAltaCliOptionsTests
     }
 
     [TestMethod]
+    public void TryParse_ParsesPluginsKeepLiveOutput()
+    {
+        var result = CodeAltaCliOptions.TryParse(["--plugins-keep-live-output"], out var options, out var error);
+
+        Assert.IsTrue(result);
+        Assert.IsNull(error);
+        Assert.IsNotNull(options);
+        Assert.IsTrue(options.KeepPluginLiveOutput);
+        Assert.IsTrue(CodeAltaCliOptions.ShouldKeepPluginLiveOutput(["--plugins-keep-live-output"]));
+    }
+
+    [TestMethod]
     public async Task CreateCommandApp_AcceptsPluginOptionsBeforeDefaultUnknownValidation()
     {
         var pluginOptionSeen = false;

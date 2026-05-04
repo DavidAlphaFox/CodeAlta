@@ -141,6 +141,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
                         },
                         SafeMode = PluginRuntimeConfigResolver.IsSafeModeEnabled(Environment.GetCommandLineArgs()),
                         IsHeadless = false,
+                        KeepBuildLiveOutput = CodeAltaCliOptions.ShouldKeepPluginLiveOutput(Environment.GetCommandLineArgs()),
                         RawArguments = Environment.GetCommandLineArgs(),
                     },
                     cancellationToken)

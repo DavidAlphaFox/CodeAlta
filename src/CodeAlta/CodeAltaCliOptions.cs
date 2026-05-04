@@ -9,12 +9,13 @@ internal sealed class CodeAltaCliOptions
 {
     private static readonly TimeSpan DefaultTestDuration = TimeSpan.FromSeconds(10);
 
-    private CodeAltaCliOptions(bool testMode, TimeSpan? testDuration, bool pluginSafeMode, bool pluginsStatus)
+    private CodeAltaCliOptions(bool testMode, TimeSpan? testDuration, bool pluginSafeMode, bool pluginsStatus, bool keepPluginLiveOutput)
     {
         TestMode = testMode;
         TestDuration = testDuration;
         PluginSafeMode = pluginSafeMode;
         PluginsStatus = pluginsStatus;
+        KeepPluginLiveOutput = keepPluginLiveOutput;
     }
 
     public bool TestMode { get; }
@@ -24,6 +25,20 @@ internal sealed class CodeAltaCliOptions
     public bool PluginSafeMode { get; }
 
     public bool PluginsStatus { get; }
+
+    public bool KeepPluginLiveOutput { get; }
+
+    public static bool IsPluginsStatusRequested(IReadOnlyList<string> args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        return args.Any(static arg => string.Equals(arg, "--plugins-status", StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static bool ShouldKeepPluginLiveOutput(IReadOnlyList<string> args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        return args.Any(static arg => string.Equals(arg, "--plugins-keep-live-output", StringComparison.OrdinalIgnoreCase));
+    }
 
     public static bool TryParse(
         IReadOnlyList<string> args,
@@ -90,6 +105,7 @@ internal sealed class CodeAltaCliOptions
             { "no-plugins", "Disable plugin discovery, build, and load for this process", value => state.PluginSafeMode = value is not null },
             { "plugin-safe-mode", "Disable plugin discovery, build, and load for this process", value => state.PluginSafeMode = value is not null },
             { "plugins-status", "Print plugin discovery/config status and exit without starting the TUI", value => state.PluginsStatus = value is not null },
+            { "plugins-keep-live-output", "Keep source plugin build live output visible after builds complete", value => state.KeepPluginLiveOutput = value is not null },
         };
 
         if (pluginCommandLineContributions is not null)
@@ -140,7 +156,8 @@ internal sealed class CodeAltaCliOptions
                 ? TimeSpan.FromSeconds(state.TestDurationSeconds ?? DefaultTestDuration.TotalSeconds)
                 : null,
             state.PluginSafeMode || PluginRuntimeConfigResolver.IsSafeModeEnabled([]),
-            state.PluginsStatus);
+            state.PluginsStatus,
+            state.KeepPluginLiveOutput);
         error = null;
         return true;
     }
@@ -154,5 +171,7 @@ internal sealed class CodeAltaCliOptions
         public bool PluginSafeMode { get; set; }
 
         public bool PluginsStatus { get; set; }
+
+        public bool KeepPluginLiveOutput { get; set; }
     }
 }
