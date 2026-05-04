@@ -20,6 +20,7 @@ internal sealed class ThreadPromptDispatchCoordinator
     private readonly ThreadPromptQueueCoordinator _queueCoordinator;
     private readonly ThreadCommandContext _commandContext;
     private readonly IProjectFileSearchService _projectFileSearchService;
+    private readonly PluginHostBridge? _pluginHostBridge;
     private readonly PromptImageAttachmentStore _promptImageAttachmentStore;
 
     public ThreadPromptDispatchCoordinator(
@@ -28,7 +29,8 @@ internal sealed class ThreadPromptDispatchCoordinator
         ThreadPromptQueueCoordinator queueCoordinator,
         ThreadCommandContext commandContext,
         CatalogOptions catalogOptions,
-        IProjectFileSearchService projectFileSearchService)
+        IProjectFileSearchService projectFileSearchService,
+        PluginHostBridge? pluginHostBridge = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(executionOptionsFactory);
@@ -42,6 +44,7 @@ internal sealed class ThreadPromptDispatchCoordinator
         _queueCoordinator = queueCoordinator;
         _commandContext = commandContext;
         _projectFileSearchService = projectFileSearchService;
+        _pluginHostBridge = pluginHostBridge;
         _promptImageAttachmentStore = new PromptImageAttachmentStore(catalogOptions);
     }
 
@@ -73,6 +76,33 @@ internal sealed class ThreadPromptDispatchCoordinator
 
     public WorkThreadExecutionOptions BuildExecutionOptions(WorkThreadDescriptor thread, OpenThreadState tab)
         => _executionOptionsFactory.BuildExecutionOptions(thread, tab);
+
+    public WorkThreadExecutionOptions AppendAdditionalDeveloperInstructions(
+        WorkThreadExecutionOptions options,
+        string additionalDeveloperInstructions)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(additionalDeveloperInstructions);
+
+        var combinedInstructions = string.IsNullOrWhiteSpace(options.AdditionalDeveloperInstructions)
+            ? additionalDeveloperInstructions
+            : $"{options.AdditionalDeveloperInstructions}\n\n{additionalDeveloperInstructions}";
+        return new WorkThreadExecutionOptions
+        {
+            BackendId = options.BackendId,
+            ProviderKey = options.ProviderKey,
+            WorkingDirectory = options.WorkingDirectory,
+            ProjectRoots = options.ProjectRoots,
+            Model = options.Model,
+            ReasoningEffort = options.ReasoningEffort,
+            Tools = options.Tools,
+            AdditionalSystemMessage = options.AdditionalSystemMessage,
+            AdditionalDeveloperInstructions = combinedInstructions,
+            PreferredToolNames = options.PreferredToolNames,
+            OnPermissionRequest = options.OnPermissionRequest,
+            OnUserInputRequest = options.OnUserInputRequest,
+        };
+    }
 
     public WorkThreadExecutionOptions BuildPreferredExecutionOptions(
         AgentBackendId backendId,
@@ -153,6 +183,19 @@ internal sealed class ThreadPromptDispatchCoordinator
             tab.ActiveRunStartedAt ??= DateTimeOffset.UtcNow;
             _commandContext.SetThreadStatus(tab, StatusVisualFormatter.BuildThinkingStatusText(), true, StatusTone.Info);
             var executionOptions = _executionOptionsFactory.BuildExecutionOptions(thread, tab);
+            if (_pluginHostBridge is not null)
+            {
+                var processedPrompt = await _pluginHostBridge.ProcessPromptSubmittingAsync(thread, tab, prompt, IsCodeAltaManagedBackend(executionOptions.BackendId), cancellationToken);
+                if (processedPrompt is null)
+                {
+                    tab.ActiveRunStartedAt = null;
+                    _commandContext.SetThreadStatus(tab, "Prompt submission was handled or cancelled by a plugin.", false, StatusTone.Warning);
+                    return;
+                }
+
+                prompt = processedPrompt;
+            }
+
             var promptInput = await ProjectFilePromptInputBuilder.BuildAsync(
                     prompt.Text,
                     ResolveReferenceProjectRoot(executionOptions),
@@ -160,6 +203,20 @@ internal sealed class ThreadPromptDispatchCoordinator
                     cancellationToken);
             var imageReferences = await _promptImageAttachmentStore.SaveAsync(thread, prompt.Images, cancellationToken);
             var agentInput = prompt.AppendImageItems(promptInput.Input, imageReferences);
+            if (_pluginHostBridge is not null)
+            {
+                var augmentation = await _pluginHostBridge.BuildAgentRunAugmentationAsync(thread, tab, executionOptions, agentInput, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(augmentation.CancelReason))
+                {
+                    tab.ActiveRunStartedAt = null;
+                    _commandContext.SetThreadStatus(tab, augmentation.CancelReason, false, StatusTone.Warning);
+                    return;
+                }
+
+                agentInput = augmentation.Input ?? agentInput;
+                executionOptions = CopyExecutionOptions(executionOptions, augmentation);
+            }
+
             var dispatchAsSteer = steer && tab.ActiveRunId is not null;
             _ = RecordResolvedReferenceUsageAsync(promptInput.ResolvedReferences);
             AgentRunId runId;
@@ -243,6 +300,27 @@ internal sealed class ThreadPromptDispatchCoordinator
             _commandContext.SetThreadStatus(tab, $"Failed to send prompt: {ex.Message}", false, StatusTone.Error);
         }
     }
+
+    private static WorkThreadExecutionOptions CopyExecutionOptions(WorkThreadExecutionOptions source, PluginAgentRunAugmentation augmentation)
+        => new()
+        {
+            BackendId = source.BackendId,
+            ProviderKey = source.ProviderKey,
+            WorkingDirectory = source.WorkingDirectory,
+            ProjectRoots = source.ProjectRoots,
+            Model = source.Model,
+            ReasoningEffort = source.ReasoningEffort,
+            Tools = augmentation.Tools ?? source.Tools,
+            AdditionalSystemMessage = augmentation.AdditionalSystemMessage ?? source.AdditionalSystemMessage,
+            AdditionalDeveloperInstructions = augmentation.AdditionalDeveloperInstructions ?? source.AdditionalDeveloperInstructions,
+            PreferredToolNames = augmentation.PreferredToolNames.Count == 0 ? source.PreferredToolNames : augmentation.PreferredToolNames,
+            OnPermissionRequest = source.OnPermissionRequest,
+            OnUserInputRequest = source.OnUserInputRequest,
+        };
+
+    private static bool IsCodeAltaManagedBackend(AgentBackendId backendId)
+        => !string.Equals(backendId.Value, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase) &&
+           !string.Equals(backendId.Value, AgentBackendIds.Copilot.Value, StringComparison.OrdinalIgnoreCase);
 
     private static string? ResolveReferenceProjectRoot(WorkThreadExecutionOptions executionOptions)
     {

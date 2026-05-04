@@ -1,0 +1,95 @@
+using CodeAlta.Plugins.Abstractions;
+
+namespace CodeAlta.Plugins.Tests;
+
+[TestClass]
+public sealed class PluginRootBuildFileGeneratorTests
+{
+    [TestMethod]
+    public async Task GenerateAsyncWritesDeterministicGeneratedFiles()
+    {
+        using var temp = new TestTempDirectory();
+        var generator = new PluginRootBuildFileGenerator();
+        var options = CreateOptions(temp.Path);
+
+        var first = await generator.GenerateAsync(new PluginRoot { RootPath = temp.Path, Scope = PluginScope.Global }, options);
+        var propsPath = Path.Combine(temp.Path, "Directory.Build.props");
+        var targetsPath = Path.Combine(temp.Path, "Directory.Build.targets");
+        var packagesPath = Path.Combine(temp.Path, "Directory.Packages.props");
+        var globalJsonPath = Path.Combine(temp.Path, "global.json");
+
+        Assert.IsTrue(first.Succeeded);
+        Assert.AreEqual(4, first.WrittenFiles.Count);
+        Assert.IsTrue(File.ReadAllText(propsPath).Contains("<OutputType>Library</OutputType>", StringComparison.Ordinal));
+        Assert.IsTrue(File.ReadAllText(propsPath).Contains("<EnableDynamicLoading>true</EnableDynamicLoading>", StringComparison.Ordinal));
+        Assert.IsTrue(File.ReadAllText(targetsPath).Contains("<Private>false</Private>", StringComparison.Ordinal));
+        Assert.IsTrue(File.ReadAllText(targetsPath).Contains("<ExcludeAssets>runtime</ExcludeAssets>", StringComparison.Ordinal));
+        Assert.IsTrue(File.ReadAllText(targetsPath).Contains("<PackageReference Include=\"XenoAtom.CommandLine\" Version=\"2.0.3\">", StringComparison.Ordinal));
+        Assert.IsTrue(File.ReadAllText(targetsPath).Contains("CodeAltaPluginTargetPath", StringComparison.Ordinal));
+        Assert.IsTrue(File.ReadAllText(packagesPath).Contains("<ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>", StringComparison.Ordinal));
+        Assert.IsTrue(File.Exists(globalJsonPath));
+
+        var lastWriteTime = File.GetLastWriteTimeUtc(propsPath);
+        await Task.Delay(20);
+        var second = await generator.GenerateAsync(new PluginRoot { RootPath = temp.Path, Scope = PluginScope.Global }, options);
+
+        Assert.IsTrue(second.Succeeded);
+        Assert.AreEqual(4, second.UnchangedFiles.Count);
+        Assert.AreEqual(lastWriteTime, File.GetLastWriteTimeUtc(propsPath));
+    }
+
+    [TestMethod]
+    public async Task GenerateAsyncRefusesUserOwnedFiles()
+    {
+        using var temp = new TestTempDirectory();
+        File.WriteAllText(Path.Combine(temp.Path, "Directory.Build.props"), "<Project />");
+
+        var result = await new PluginRootBuildFileGenerator().GenerateAsync(
+            new PluginRoot { RootPath = temp.Path, Scope = PluginScope.Global },
+            CreateOptions(temp.Path));
+
+        Assert.IsFalse(result.Succeeded);
+        Assert.IsTrue(result.Diagnostics.Any(diagnostic => diagnostic.Message.Contains("Refusing to overwrite", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public async Task GenerateAsyncSerializesConcurrentWritesPerRoot()
+    {
+        using var temp = new TestTempDirectory();
+        var generator = new PluginRootBuildFileGenerator();
+        var root = new PluginRoot { RootPath = temp.Path, Scope = PluginScope.Global };
+        var options = CreateOptions(temp.Path);
+
+        var results = await Task.WhenAll(
+            generator.GenerateAsync(root, options).AsTask(),
+            generator.GenerateAsync(root, options).AsTask(),
+            generator.GenerateAsync(root, options).AsTask());
+
+        Assert.IsTrue(results.All(static result => result.Succeeded));
+        Assert.AreEqual(4, results.Sum(static result => result.WrittenFiles.Count));
+        Assert.AreEqual(8, results.Sum(static result => result.UnchangedFiles.Count));
+    }
+
+    [TestMethod]
+    public void ExtractPluginPackageVersionsReadsMarkerBlock()
+    {
+        var content = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Directory.Packages.props"));
+
+        var versions = PluginPackageVersionProvider.ExtractPluginPackageVersions(content);
+
+        Assert.IsTrue(versions.Any(version => version.Include == "XenoAtom.Terminal.UI"));
+        Assert.IsTrue(versions.Any(version => version.Include == "XenoAtom.CommandLine"));
+    }
+
+    private static PluginRootBuildFileOptions CreateOptions(string codeAltaExeFolder)
+        => new()
+        {
+            CodeAltaExeFolder = codeAltaExeFolder,
+            GlobalJsonContent = "{\n  \"sdk\": {\n    \"version\": \"10.0.100\"\n  }\n}\n",
+            PackageVersions =
+            [
+                new PluginPackageVersion { Include = "XenoAtom.CommandLine", Version = "2.0.3" },
+                new PluginPackageVersion { Include = "XenoAtom.Terminal.UI", Version = "3.1.0" },
+            ],
+        };
+}

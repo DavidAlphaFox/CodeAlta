@@ -1,5 +1,7 @@
 namespace CodeAlta.Tests;
 
+using XenoAtom.CommandLine;
+
 [TestClass]
 public sealed class CodeAltaCliOptionsTests
 {
@@ -45,5 +47,47 @@ public sealed class CodeAltaCliOptionsTests
         Assert.IsFalse(result);
         Assert.IsNull(options);
         Assert.AreEqual("Unknown option: --wat", error);
+    }
+
+    [TestMethod]
+    public void TryParse_ParsesPluginSafeMode()
+    {
+        var result = CodeAltaCliOptions.TryParse(["--no-plugins"], out var options, out var error);
+
+        Assert.IsTrue(result);
+        Assert.IsNull(error);
+        Assert.IsNotNull(options);
+        Assert.IsTrue(options.PluginSafeMode);
+    }
+
+    [TestMethod]
+    public void TryParse_ParsesPluginsStatusHeadlessCommand()
+    {
+        var result = CodeAltaCliOptions.TryParse(["--plugins-status"], out var options, out var error);
+
+        Assert.IsTrue(result);
+        Assert.IsNull(error);
+        Assert.IsNotNull(options);
+        Assert.IsTrue(options.PluginsStatus);
+    }
+
+    [TestMethod]
+    public async Task CreateCommandApp_AcceptsPluginOptionsBeforeDefaultUnknownValidation()
+    {
+        var pluginOptionSeen = false;
+        var app = CodeAltaCliOptions.CreateCommandApp(
+            _ => new ValueTask<int>(23),
+            [new TestPluginOption(() => pluginOptionSeen = true)]);
+
+        var result = await app.RunAsync(["--plugin-test-option"]);
+
+        Assert.AreEqual(23, result);
+        Assert.IsTrue(pluginOptionSeen);
+    }
+
+    private sealed class TestPluginOption(Action onParse) : Option("plugin-test-option", "Plugin test option", maxValueCount: 0)
+    {
+        protected override void OnParseComplete(OptionContext c)
+            => onParse();
     }
 }

@@ -10,8 +10,11 @@ CodeAlta discovers skills from these roots, in precedence order:
 2. Project portable Agent Skills: `<project>/.agents/skills/`
 3. User CodeAlta skills: `~/.alta/skills/`
 4. User portable Agent Skills: `~/.agents/skills/`
+5. CodeAlta built-in skills bundled with the application
 
 Use `.agents/skills/` for portable skills that should work across Agent Skills-compatible clients. Use `.alta/skills/` for CodeAlta-specific variants or workflows.
+
+CodeAlta includes a built-in `codealta-plugin-runtime` skill with plugin authoring and troubleshooting guidance plus real sample plugin folders. User/project skills with the same name shadow built-ins by normal precedence rules.
 
 ## `SKILL.md` format
 

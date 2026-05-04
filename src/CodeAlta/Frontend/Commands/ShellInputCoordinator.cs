@@ -17,6 +17,7 @@ internal sealed class ShellInputCoordinator
     private readonly Func<Task> _openModelProvidersAsync;
     private readonly Func<Task> _openFileEditorAsync;
     private readonly Func<Task> _openSkillsAsync;
+    private readonly Func<Task> _openPluginsAsync;
     private readonly Func<Task> _focusSidebarAsync;
     private readonly Func<Task> _focusPromptAsync;
     private readonly Func<Task> _showSessionUsageAsync;
@@ -31,6 +32,7 @@ internal sealed class ShellInputCoordinator
     private readonly Func<Task> _scrollToLastMessageAsync;
     private readonly Func<Task> _clearQueueAsync;
     private readonly ThreadCommandCoordinator _threadCommandCoordinator;
+    private readonly PluginHostBridge? _pluginHostBridge;
     private readonly Action<string, bool, StatusTone> _setStatus;
 
     public ShellInputCoordinator(
@@ -45,6 +47,7 @@ internal sealed class ShellInputCoordinator
         Func<Task> openModelProvidersAsync,
         Func<Task> openFileEditorAsync,
         Func<Task> openSkillsAsync,
+        Func<Task> openPluginsAsync,
         Func<Task> focusSidebarAsync,
         Func<Task> focusPromptAsync,
         Func<Task> showSessionUsageAsync,
@@ -59,7 +62,8 @@ internal sealed class ShellInputCoordinator
         Func<Task> scrollToLastMessageAsync,
         Func<Task> clearQueueAsync,
         ThreadCommandCoordinator threadCommandCoordinator,
-        Action<string, bool, StatusTone> setStatus)
+        Action<string, bool, StatusTone> setStatus,
+        PluginHostBridge? pluginHostBridge = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(getPromptText);
@@ -72,6 +76,7 @@ internal sealed class ShellInputCoordinator
         ArgumentNullException.ThrowIfNull(openModelProvidersAsync);
         ArgumentNullException.ThrowIfNull(openFileEditorAsync);
         ArgumentNullException.ThrowIfNull(openSkillsAsync);
+        ArgumentNullException.ThrowIfNull(openPluginsAsync);
         ArgumentNullException.ThrowIfNull(focusSidebarAsync);
         ArgumentNullException.ThrowIfNull(focusPromptAsync);
         ArgumentNullException.ThrowIfNull(showSessionUsageAsync);
@@ -99,6 +104,7 @@ internal sealed class ShellInputCoordinator
         _openModelProvidersAsync = openModelProvidersAsync;
         _openFileEditorAsync = openFileEditorAsync;
         _openSkillsAsync = openSkillsAsync;
+        _openPluginsAsync = openPluginsAsync;
         _focusSidebarAsync = focusSidebarAsync;
         _focusPromptAsync = focusPromptAsync;
         _showSessionUsageAsync = showSessionUsageAsync;
@@ -113,6 +119,7 @@ internal sealed class ShellInputCoordinator
         _scrollToLastMessageAsync = scrollToLastMessageAsync;
         _clearQueueAsync = clearQueueAsync;
         _threadCommandCoordinator = threadCommandCoordinator;
+        _pluginHostBridge = pluginHostBridge;
         _setStatus = setStatus;
     }
 
@@ -248,6 +255,10 @@ internal sealed class ShellInputCoordinator
                 await _openSkillsAsync();
                 return;
 
+            case OpenPluginsIntent:
+                await _openPluginsAsync();
+                return;
+
             case FocusSidebarIntent:
                 await _focusSidebarAsync();
                 return;
@@ -269,6 +280,25 @@ internal sealed class ShellInputCoordinator
                 return;
 
             case UnknownTextCommandIntent unknown:
+                if (_pluginHostBridge is not null)
+                {
+                    var result = await _pluginHostBridge.ExecuteCommandAsync(unknown.CommandName, unknown.Arguments, cancellationToken);
+                    if (result.Disposition != CodeAlta.Plugins.Abstractions.PluginCommandDisposition.NotHandled)
+                    {
+                        if (!string.IsNullOrWhiteSpace(result.UserMessage))
+                        {
+                            _setStatus(result.UserMessage, false, StatusTone.Info);
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(result.PromptText))
+                        {
+                            await _threadCommandCoordinator.SendPromptAsync(result.PromptText, steer: false, cancellationToken);
+                        }
+
+                        return;
+                    }
+                }
+
                 _setStatus($"Unknown command '/{unknown.CommandName}'. Press F1 or type /help.", false, StatusTone.Warning);
                 return;
 

@@ -657,6 +657,18 @@ public sealed class CodeAltaConfigStore
 
             document.Providers = providers.Count == 0 ? null : providers;
         }
+
+        if (document.Plugins is not null)
+        {
+            var plugins = document.Plugins
+                .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
+                .ToDictionary(
+                    static entry => entry.Key.Trim(),
+                    static entry => entry.Value ?? new CodeAltaPluginSettingsDocument(),
+                    StringComparer.OrdinalIgnoreCase);
+
+            document.Plugins = plugins.Count == 0 ? null : plugins;
+        }
     }
 
     private static AcpBackendDefinition NormalizeAcpEntry(string key, AcpBackendDefinition? value)

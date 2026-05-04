@@ -15,6 +15,7 @@ Current infrastructure-first progress includes project catalog and checkout prim
 - Scope resolution (`global`, `project`) into concrete checkout and `.alta` roots.
 - Checkout planning (`clone` vs `update`) without network side effects.
 - `CodeAlta.Persistence`: SQLite migrations, task/artifact/agent repositories, and markdown artifact store.
+- `CodeAlta.Plugins`: foundational plugin runtime services for source package discovery, generated plugin-root build files, explicit enablement, structured build/load, contribution ownership, lifecycle helpers, and change monitoring.
 
 ## Project Catalog Layout
 

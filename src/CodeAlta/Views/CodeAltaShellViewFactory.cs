@@ -1,7 +1,10 @@
+using CodeAlta.App;
 using CodeAlta.Frontend.Commands;
+using CodeAlta.Plugins.Abstractions;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Commands;
+using XenoAtom.Terminal.UI.Controls;
 using XenoAtom.Terminal.UI.Input;
 
 namespace CodeAlta.Views;
@@ -17,7 +20,8 @@ internal static class CodeAltaShellViewFactory
         Action toggleTerminalLoopCallback,
         Action focusSidebar,
         Action focusPromptEditor,
-        Func<bool> canUseCommandPalette)
+        Func<bool> canUseCommandPalette,
+        PluginHostBridge? pluginHostBridge = null)
     {
         ArgumentNullException.ThrowIfNull(sidebar);
         ArgumentNullException.ThrowIfNull(threadWorkspace);
@@ -32,9 +36,9 @@ internal static class CodeAltaShellViewFactory
         var shellView = new CodeAltaShellView(
             sidebar,
             threadWorkspace,
-            threadCommandBar,
+            ComposePluginFooter(threadCommandBar, pluginHostBridge),
             CodeAltaGlobalCommandConfigurator.Configure);
-        shellView.Root.AddCommand(new Command
+        shellView.Root.AddCommand(new XenoAtom.Terminal.UI.Commands.Command
         {
             Id = "CodeAlta.Diagnostics.ToggleTerminalLoop",
             LabelMarkup = "Loop",
@@ -43,7 +47,7 @@ internal static class CodeAltaShellViewFactory
             Execute = _ => toggleTerminalLoopCallback(),
         });
         var commandPaletteMetadata = ShellCommandCatalog.Get("CodeAlta.Shell.CommandPalette");
-        shellView.Root.AddCommand(new Command
+        shellView.Root.AddCommand(new XenoAtom.Terminal.UI.Commands.Command
         {
             Id = commandPaletteMetadata.Id,
             LabelMarkup = commandPaletteMetadata.DisplayLabelMarkup,
@@ -72,6 +76,9 @@ internal static class CodeAltaShellViewFactory
             ShellCommandCatalog.Get("CodeAlta.Skills.Manage"),
             () => _ = shellCommandSurfaceCoordinator.OpenSkillsAsync()));
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
+            ShellCommandCatalog.Get("CodeAlta.Plugins.Manage"),
+            () => _ = shellCommandSurfaceCoordinator.OpenPluginsAsync()));
+        shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.Acp.Manage"),
             openAcpManager));
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
@@ -84,5 +91,26 @@ internal static class CodeAltaShellViewFactory
             ShellCommandCatalog.Get("CodeAlta.Shell.ToggleCommandBarMultiLine"),
             shellCommandSurfaceCoordinator.ToggleCommandBarMultiLine));
         return shellView;
+    }
+
+    private static Visual ComposePluginFooter(Visual threadCommandBar, PluginHostBridge? pluginHostBridge)
+    {
+        if (pluginHostBridge is null)
+        {
+            return threadCommandBar;
+        }
+
+        var visuals = pluginHostBridge.CreateVisuals(PluginUiRegion.CommandBar)
+            .Concat(pluginHostBridge.CreateVisuals(PluginUiRegion.ThreadFooter))
+            .ToArray();
+        if (visuals.Length == 0)
+        {
+            return threadCommandBar;
+        }
+
+        return new VStack(visuals.Append(threadCommandBar).ToArray())
+        {
+            HorizontalAlignment = Align.Stretch,
+        };
     }
 }

@@ -119,3 +119,54 @@ public sealed class UserCommonSkillRootProvider : ISkillRootProvider
         ]);
     }
 }
+
+/// <summary>
+/// Resolves CodeAlta built-in skill roots bundled with the application.
+/// </summary>
+public sealed class BuiltInCodeAltaSkillRootProvider : ISkillRootProvider
+{
+    /// <inheritdoc />
+    public ValueTask<IReadOnlyList<SkillRootRegistration>> GetRootsAsync(
+        SkillDiscoveryContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+        var rootPath = ResolveRootPath();
+        return ValueTask.FromResult<IReadOnlyList<SkillRootRegistration>>(
+        [
+            new SkillRootRegistration
+            {
+                RootPath = rootPath,
+                SourceKind = SkillSourceKind.Builtin,
+                SourceId = "builtin:codealta",
+                Scope = SkillScopeKind.Builtin,
+                Precedence = 4,
+            },
+        ]);
+    }
+
+    private static string ResolveRootPath()
+    {
+        var assemblyDirectory = Path.GetDirectoryName(typeof(BuiltInCodeAltaSkillRootProvider).Assembly.Location)!;
+        for (var directory = new DirectoryInfo(assemblyDirectory); directory is not null; directory = directory.Parent)
+        {
+            var sourceRoot = Path.Combine(directory.FullName, "CodeAlta.Catalog", "BuiltinSkills");
+            if (Directory.Exists(sourceRoot))
+            {
+                return sourceRoot;
+            }
+        }
+
+        for (var directory = new DirectoryInfo(assemblyDirectory); directory is not null; directory = directory.Parent)
+        {
+            var copiedRoot = Path.Combine(directory.FullName, "BuiltinSkills");
+            if (Directory.Exists(copiedRoot))
+            {
+                return copiedRoot;
+            }
+        }
+
+        return Path.Combine(assemblyDirectory, "BuiltinSkills");
+    }
+}

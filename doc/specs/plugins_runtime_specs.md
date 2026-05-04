@@ -72,7 +72,7 @@ For each plugin root, CodeAlta generates shared build files:
 - `Directory.Packages.props`
 - `global.json`
 
-These files are generated before dynamic plugin discovery/build. They provide the common plugin TFM, library output type, host assembly references, centrally managed package versions, and SDK selection.
+These files are generated before dynamic plugin discovery/build. They provide the common plugin TFM, library output type, host assembly references, shared package versions, central-package-management settings, and SDK selection.
 
 For project-local plugin roots, CodeAlta should generate these files only when the project plugin root already exists or when a user action creates it. Starting CodeAlta in a repository should not create `<project>/.alta/plugins/` as an incidental side effect unless plugin management/scaffolding requested it.
 
@@ -159,7 +159,7 @@ The build/load service must also be callable by the plugin management UI for reb
 
 ### 3.10 Plugins are trusted code
 
-A collectible `AssemblyLoadContext` is an unload and dependency boundary, not a security sandbox. Building a plugin can also execute MSBuild/NuGet build logic from enabled plugin sources and packages. CodeAlta must treat dynamic plugins as trusted executable code and should not build or load newly discovered third-party plugins unless enabled by user policy.
+A collectible `AssemblyLoadContext` is an unload and dependency boundary, not a security sandbox. Building a plugin can also execute MSBuild/NuGet build logic from enabled plugin sources and packages. CodeAlta treats source plugins copied into a plugin root as user-selected trusted code and enables them by default unless disabled by configuration or host safe mode.
 
 ## 4. Directory model
 
@@ -266,7 +266,7 @@ Notes:
 
 ### 5.3 `Directory.Build.targets`
 
-`Directory.Build.targets` provides host assembly references and shared external package references. Output assembly discovery should use structured MSBuild target outputs received through `XenoAtom.MsBuildPipeLogger`, not console text or message sentinels.
+`Directory.Build.targets` provides host assembly references, shared external package references, and a deterministic `CodeAltaPluginTargetPath=` message emitted after successful builds. Current .NET 10 file-based builds do not accept forwarded MSBuild logger switches without falling back to project-build mode, so output assembly discovery is limited to parsing that generated target message from captured stdout.
 
 Recommended host references:
 
@@ -301,16 +301,16 @@ Recommended shared package references:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="Microsoft.Extensions.AI.Abstractions">
+  <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.0">
     <ExcludeAssets>runtime</ExcludeAssets>
   </PackageReference>
-  <PackageReference Include="XenoAtom.CommandLine">
+  <PackageReference Include="XenoAtom.CommandLine" Version="2.0.3">
     <ExcludeAssets>runtime</ExcludeAssets>
   </PackageReference>
-  <PackageReference Include="XenoAtom.Logging">
+  <PackageReference Include="XenoAtom.Logging" Version="1.1.3">
     <ExcludeAssets>runtime</ExcludeAssets>
   </PackageReference>
-  <PackageReference Include="XenoAtom.Terminal.UI">
+  <PackageReference Include="XenoAtom.Terminal.UI" Version="3.1.0">
     <ExcludeAssets>runtime</ExcludeAssets>
   </PackageReference>
   <PackageReference Include="XenoAtom.Terminal.UI.Extensions.CodeEditor.TextMateSharp">
@@ -328,29 +328,24 @@ Recommended shared package references:
 </ItemGroup>
 ```
 
-The list should stay aligned with `CodeAlta.Plugins.Abstractions` public dependencies.
+The list should stay aligned with `CodeAlta.Plugins.Abstractions` public dependencies. Shared package versions are written directly on generated `PackageReference` items so package-level `#:package Package@Version` directives remain compatible with NuGet's central package management rules.
 
-Do not add a text-output sentinel such as `CodeAltaPluginOutputAssembly=...` for normal builds. The build service should collect `TargetFinished` events and `TargetOutputs` from the `Build` target. If the SDK ever does not expose the desired output assembly through `Build` target outputs for file-based programs, CodeAlta may add a small generated target with proper MSBuild `Returns`/`Outputs` metadata and collect that target's structured outputs through the pipe logger. Even in that fallback, the runtime should not parse stdout/stderr to discover the assembly path.
+The build service may parse only the generated `CodeAltaPluginTargetPath=` message for output discovery. It should not infer diagnostics or output paths from general console formatting.
 
 ### 5.4 `Directory.Packages.props`
 
-The generated plugin root `Directory.Packages.props` enables central package management and includes the package versions CodeAlta wants plugin source builds to use:
+The generated plugin root `Directory.Packages.props` explicitly disables central package management for source-plugin builds so file-level `#:package Package@Version` directives work normally:
 
 ```xml
 <Project>
   <PropertyGroup>
-    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.0" />
-    <PackageVersion Include="XenoAtom.Logging" Version="1.1.3" />
-    <PackageVersion Include="XenoAtom.Terminal.UI" Version="3.1.0" />
-  </ItemGroup>
 </Project>
 ```
 
-The actual package list and versions are generated from CodeAlta's source package-version block; see section 6.
+CodeAlta still reads its source package-version block; those versions are written directly onto generated shared `PackageReference` items in `Directory.Build.targets`; see section 6.
 
 ### 5.5 `global.json`
 
@@ -366,7 +361,7 @@ The generated plugin root `global.json` should mirror `src/global.json` so plugi
 }
 ```
 
-The build process should run with `WorkingDirectory` set to the plugin root containing this `global.json`, passing the plugin entry file as a relative path such as `HelloWorld\plugin.cs`. This keeps SDK selection and root-level generated MSBuild files deterministic.
+The build process should run with `WorkingDirectory` set to the plugin package directory and pass the entry file as `plugin.cs`. The plugin-root `global.json` remains effective through normal SDK ancestor lookup, while file-based build semantics match running `dotnet build plugin.cs` manually from the package folder. CodeAlta should rely on .NET 10's native file-based build pipeline and let the SDK choose its own output/intermediate/cache paths; after a successful build, CodeAlta records the resolved output assembly path in its plugin build manifest for fast subsequent loads. CodeAlta should not create replacement `.csproj` files or generated entry-source shims for source plugin builds.
 
 If the required SDK is not available, the build fails with a plugin diagnostic. The runtime should not silently fall back to a different target framework or older SDK.
 
@@ -383,7 +378,7 @@ If the required SDK is not available, the build fails with a plugin diagnostic. 
 <!-- CodeAltaPluginPackageVersions:End -->
 ```
 
-Build/release packaging can copy this block as content into CodeAlta. At runtime, CodeAlta writes it into generated plugin `Directory.Packages.props` files.
+Build/release packaging can copy this block as content into CodeAlta. At runtime, CodeAlta uses it to add explicit versions to generated shared `PackageReference` items in plugin `Directory.Build.targets` files.
 
 Guidelines for this block:
 
@@ -393,7 +388,7 @@ Guidelines for this block:
 - include source-generator/analyzer packages when plugin authors need those build assets;
 - keep this block synchronized with `CodeAlta.Plugins.Abstractions` dependencies.
 
-The runtime implementation itself will also need normal package versions for `Microsoft.Build.Locator` and `XenoAtom.MsBuildPipeLogger` 1.0.0 in `src/Directory.Packages.props`, but those packages are runtime implementation dependencies and do not necessarily belong in the plugin-copied package-version block.
+The runtime implementation itself will also need normal package versions for MSBuild-related packages in `src/Directory.Packages.props`, but those packages are runtime implementation dependencies and do not necessarily belong in the plugin-copied package-version block.
 
 ## 7. Configuration and enablement
 
@@ -415,7 +410,7 @@ Recommended v1 semantics:
 - table key = stable built-in plugin id for built-in plugins;
 - `enabled = true` means CodeAlta may build and load the plugin;
 - `enabled = false` means CodeAlta should not build, load, or activate it during startup;
-- missing external source plugin entries default to disabled unless a future user setting explicitly opts into auto-enabling local plugin folders;
+- missing source plugin entries default to enabled because placing a folder under a plugin root is treated as user trust/selection;
 - missing built-in entries use built-in defaults chosen by CodeAlta;
 - unknown plugin config entries are preserved and shown as unresolved/unknown in diagnostics or management UI.
 
@@ -442,7 +437,7 @@ If `~/.alta/config.toml` is invalid, plugin build/load should not proceed with a
 
 Recommended startup sequence:
 
-1. `Program.Main` calls `MSBuildLocator.RegisterDefaults()` before any Microsoft.Build types or MSBuild pipe logger event types are used.
+1. `Program.Main` initializes plugin runtime services before source plugin builds run.
 2. CodeAlta resolves global paths (`~/.alta/`, `~/.alta/config.toml`, `~/.alta/plugins/`) and probes the current project root without plugin-contributed command-line behavior.
 3. CodeAlta checks raw safe-mode switches/environment.
 4. CodeAlta loads and validates global config, then project config if a project root is known and valid.
@@ -465,18 +460,9 @@ If a plugin fails to build or load, CodeAlta should continue startup without tha
 
 ### 9.1 Runtime package references
 
-The plugin runtime project should reference MSBuild-related packages following the pipe logger guidance:
+The plugin runtime may reference MSBuild-related packages for future structured build integration, but native file-based builds must not pass forwarded MSBuild logger switches until the .NET SDK accepts that combination without treating `plugin.cs` as an XML project file.
 
-```xml
-<ItemGroup>
-  <PackageReference Include="Microsoft.Build" ExcludeAssets="runtime" />
-  <PackageReference Include="Microsoft.Build.Utilities.Core" ExcludeAssets="runtime" />
-  <PackageReference Include="Microsoft.Build.Locator" />
-  <PackageReference Include="XenoAtom.MsBuildPipeLogger" Version="1.0.0" />
-</ItemGroup>
-```
-
-`Microsoft.Build*.dll` should not be copied from NuGet to the CodeAlta output. `MSBuildLocator.RegisterDefaults()` aligns CodeAlta's process with the MSBuild assemblies installed with the selected .NET SDK.
+`Microsoft.Build*.dll` should not be copied from NuGet to the CodeAlta output. `MSBuildLocator.RegisterDefaults()` aligns CodeAlta's process with the MSBuild assemblies installed with the selected .NET SDK when MSBuild APIs are used.
 
 ### 9.2 Registering MSBuild early
 
@@ -496,44 +482,28 @@ Avoid static fields, static constructors, or top-level code that references `Mic
 
 ### 9.3 Build process command
 
-For each stale plugin, the build service starts a `dotnet` process with one pipe logger instance:
+For each stale plugin, the build service starts a `dotnet` process:
 
 ```text
-dotnet build HelloWorld\plugin.cs --nologo -v:minimal /nr:false -l:<logger-spec>
-```
-
-Where `<logger-spec>` is created with:
-
-```csharp
-PipeLoggerServer.GetLoggerSpecification(server.GetClientHandle())
+dotnet build plugin.cs --nologo -v:minimal
 ```
 
 Implementation notes:
 
 - use `ProcessStartInfo.ArgumentList`, not shell-quoted command strings;
-- set `WorkingDirectory` to the plugin root containing generated `global.json`;
-- use a separate pipe logger server per build process;
-- follow the `dotnet-releaser` pattern of subscribing to `WarningRaised`, `ErrorRaised`, and `TargetFinished`, but use `dotnet build` rather than `dotnet msbuild` so .NET 10 file-based program build behavior is active;
-- set `/nr:false` to avoid node reuse holding locks across reloads;
+- set `WorkingDirectory` to the plugin package directory so the command is the same `dotnet build plugin.cs` shape authors run manually; the generated plugin-root `global.json` is found via SDK ancestor lookup;
+- do not pass forwarded MSBuild switches such as `/logger:` or `/nr:false`; current .NET 10 SDK file-based builds treat those as project-build mode and try to parse `plugin.cs` as XML;
 - pass cancellation when CodeAlta exits or the management operation is cancelled;
-- capture stdout/stderr as fallback diagnostics only; do not parse stdout/stderr to find the output assembly.
+- let .NET's native file-based build pipeline choose its output/intermediate/cache paths; CodeAlta stores only its own manifest state under `~/.alta/cache/plugins/build/`;
+- capture stdout/stderr for diagnostics and parse only the generated `CodeAltaPluginTargetPath=` message for output assembly discovery.
+
+If the selected SDK does not accept `dotnet build plugin.cs` as a file-based build and instead reports that the `.cs` file could not be loaded as a project file, the runtime should surface an actionable build diagnostic that identifies the SDK/file-build support issue and points users to safe mode. CodeAlta should not retry through a generated `.csproj`; the plugin root `global.json` is responsible for selecting a .NET 10 SDK with native file-based build support. Captured stdout/stderr are retained for troubleshooting, and stdout parsing is limited to the deterministic `CodeAltaPluginTargetPath=` message emitted by CodeAlta's generated target for output assembly discovery.
 
 ### 9.4 Capturing the output assembly
 
-`XenoAtom.MsBuildPipeLogger` gives the host structured MSBuild events. The plugin build service should treat those events as the primary data path and should not parse textual console output.
+The .NET 10 SDK currently falls back to project-build mode when file-based builds receive forwarded MSBuild logger switches such as `/logger:`. The plugin build service therefore records synthetic build-start/build-finish runtime diagnostics, process exit code, stdout/stderr tails, and the generated `CodeAltaPluginTargetPath=` message.
 
-The build service should record:
-
-- `BuildStarted` / `BuildFinished` success state;
-- warnings and errors from `WarningRaised` and `ErrorRaised` events;
-- `TargetFinished` events for relevant targets, especially the `Build` target;
-- `TargetFinishedEventArgs.TargetOutputs` converted to a stable internal model;
-- target framework and relevant item metadata when present;
-- elapsed time and process exit code.
-
-This should mirror the `dotnet-releaser` pattern of maintaining a dictionary of target name to `ITaskItem` outputs from `TargetFinished`, but the invoked command remains `dotnet build <plugin.cs>` rather than `dotnet msbuild`.
-
-The output assembly path should come from structured target outputs of the `Build` target for the file-based project. If multiple target outputs are present, the runtime should choose the managed plugin assembly for the requested target framework, verify that it exists, and diagnose ambiguity rather than guessing silently. If no suitable `Build` target output is exposed by the SDK for file-based builds, CodeAlta may invoke or generate a metadata target whose MSBuild `Returns`/`Outputs` surface `$(TargetPath)`, but that fallback must still be consumed through `TargetOutputs`. Do not rely on `CodeAltaPluginOutputAssembly=...` messages, generic `-> path\Plugin.dll` console lines, or stdout/stderr parsing.
+The output assembly path should come from the `CodeAltaPluginTargetPath=` message emitted by CodeAlta's generated target. If multiple target-path messages are present, the runtime should choose the managed plugin assembly for the requested target framework, verify that it exists, and diagnose ambiguity rather than guessing silently. Do not rely on generic `-> path\Plugin.dll` console lines or parse compiler diagnostics from stdout/stderr.
 
 ### 9.5 Build result model
 
@@ -631,7 +601,7 @@ Recommended headless/non-interactive behavior:
 - avoid terminal control sequences;
 - continue startup if plugins are skipped by fast path.
 
-Fast-path loads should be quiet by default or produce only a brief verbose diagnostic. Startup should not feel slow or noisy when plugins are already up to date.
+Fast-path loads should produce only a minimal one-line summary such as `CodeAlta plugins: 7 source plugin packages checked (0 built, 7 up-to-date); 7 source plugins activated in 120ms.` Startup should not feel slow or noisy when plugins are already up to date.
 
 ## 13. File change watching and reload notifications
 
@@ -650,7 +620,7 @@ Recommended watcher settings:
 - watch `FileName`, `DirectoryName`, `LastWrite`, `Size`, and `CreationTime` where supported;
 - listen to `Created`, `Changed`, `Deleted`, `Renamed`, and `Error`;
 - debounce and coalesce events per plugin package, for example with a short 250-1000 ms quiet period;
-- ignore known CodeAlta build cache/output folders if any are placed under the plugin root;
+- ignore known SDK build output folders if any are placed under the plugin root;
 - suppress self-generated events while CodeAlta writes `Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`, or `global.json`, then explicitly update the affected state.
 
 `FileSystemWatcher` can drop events under load. On watcher `Error` or overflow, the runtime should mark the root as needing a rescan and show an attributed diagnostic rather than reverting to continuous polling.
@@ -924,8 +894,8 @@ Important implications:
 
 Recommended safety posture:
 
-- do not build/load newly discovered external source plugin folders unless explicitly enabled;
-- show source path and README before enabling from management UI;
+- build/load discovered source plugin folders by default because the plugin root is treated as a user-selected trust boundary;
+- show source path and README before enable/disable/rebuild/reload actions in management UI;
 - provide safe mode that skips dynamic plugins;
 - keep build diagnostics visible before activation;
 - make built-in overrides and plugin overrides inspectable;
@@ -965,7 +935,7 @@ A practical first implementation order:
 
 1. Add runtime package references and call `MSBuildLocator.RegisterDefaults()` at the start of `Program.Main`.
 2. Implement generated plugin root files for a temporary/test root.
-3. Implement `IPluginBuildService` using `dotnet build plugin.cs` and `XenoAtom.MsBuildPipeLogger`.
+3. Implement `IPluginBuildService` using native `dotnet build plugin.cs` from each plugin package directory.
 4. Implement structured `Build` target output collection and build manifest fast path.
 5. Implement collectible ALC loading with host-shared assembly resolution.
 6. Discover `PluginBase` types and create descriptors/contexts.
@@ -980,7 +950,7 @@ A practical first implementation order:
 ## 23. Open questions
 
 - Should source plugin package enablement remain package-level only, or should v1 also support per-`PluginBase` type enablement inside one assembly?
-- What is the final default for newly discovered local source plugin folders: always disabled for safety, or enabled only when created by CodeAlta's own scaffold command?
+- Should CodeAlta add a stricter opt-in mode for environments that do not want plugin roots to act as a user-selected trust boundary?
 - Where should build manifests live for project-scoped plugins so they are durable but do not create noisy project files?
 - Should plugin roots support an explicit `plugin.toml` manifest before a broader package format exists?
 - How much of `Directory.Packages.props` should be copied into plugin roots versus generated from a smaller curated dependency list?

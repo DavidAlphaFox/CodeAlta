@@ -1,7 +1,9 @@
 using CodeAlta.App;
 using CodeAlta.App.State;
+using CodeAlta.Agent;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
+using CodeAlta.Plugins.Abstractions;
 using CodeAlta.ViewModels;
 using CodeAlta.Views;
 using XenoAtom.Terminal.UI;
@@ -39,6 +41,7 @@ internal sealed class ShellCommandSurfaceCoordinator
     private readonly Func<Task> _openModelProvidersAsync;
     private readonly Func<Task> _openFileEditorAsync;
     private readonly Func<Task> _openSkillsAsync;
+    private readonly Func<Task> _openPluginsAsync;
     private readonly Func<WorkThreadDescriptor?> _getSelectedThread;
     private readonly Func<WorkThreadDescriptor, OpenThreadState> _ensureThreadTab;
     private readonly Action _focusSidebar;
@@ -55,6 +58,7 @@ internal sealed class ShellCommandSurfaceCoordinator
     private readonly Func<Task> _scrollToFirstMessageAsync;
     private readonly Func<Task> _scrollToLastMessageAsync;
     private readonly ShellInputCoordinator _shellInputCoordinator;
+    private readonly PluginHostBridge? _pluginHostBridge;
     private CommandPaletteStyle _activeCommandPaletteStyle = CommandPalettePopupStyle;
     private CommandPalette? _commandPalette;
     private ShellHelpDialog? _helpDialog;
@@ -68,6 +72,7 @@ internal sealed class ShellCommandSurfaceCoordinator
         Func<Task> openModelProvidersAsync,
         Func<Task> openFileEditorAsync,
         Func<Task> openSkillsAsync,
+        Func<Task> openPluginsAsync,
         Func<string?> getPromptText,
         Func<Task> closeCurrentTabAsync,
         Action<string, bool, StatusTone> setStatus,
@@ -86,7 +91,8 @@ internal sealed class ShellCommandSurfaceCoordinator
         Func<Task> scrollToPreviousMessageAsync,
         Func<Task> scrollToNextMessageAsync,
         Func<Task> scrollToFirstMessageAsync,
-        Func<Task> scrollToLastMessageAsync)
+        Func<Task> scrollToLastMessageAsync,
+        PluginHostBridge? pluginHostBridge = null)
     {
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
         ArgumentNullException.ThrowIfNull(threadWorkspaceViewModel);
@@ -96,6 +102,7 @@ internal sealed class ShellCommandSurfaceCoordinator
         ArgumentNullException.ThrowIfNull(openModelProvidersAsync);
         ArgumentNullException.ThrowIfNull(openFileEditorAsync);
         ArgumentNullException.ThrowIfNull(openSkillsAsync);
+        ArgumentNullException.ThrowIfNull(openPluginsAsync);
         ArgumentNullException.ThrowIfNull(getPromptText);
         ArgumentNullException.ThrowIfNull(closeCurrentTabAsync);
         ArgumentNullException.ThrowIfNull(setStatus);
@@ -124,6 +131,7 @@ internal sealed class ShellCommandSurfaceCoordinator
         _openModelProvidersAsync = openModelProvidersAsync;
         _openFileEditorAsync = openFileEditorAsync;
         _openSkillsAsync = openSkillsAsync;
+        _openPluginsAsync = openPluginsAsync;
         _getHelpBounds = getHelpBounds;
         _getHelpFocusTarget = getHelpFocusTarget;
         _getSelectedThread = getSelectedThread;
@@ -141,6 +149,7 @@ internal sealed class ShellCommandSurfaceCoordinator
         _scrollToNextMessageAsync = scrollToNextMessageAsync;
         _scrollToFirstMessageAsync = scrollToFirstMessageAsync;
         _scrollToLastMessageAsync = scrollToLastMessageAsync;
+        _pluginHostBridge = pluginHostBridge;
         _shellInputCoordinator = new ShellInputCoordinator(
             new ShellInputRouter(),
             getPromptText,
@@ -153,6 +162,7 @@ internal sealed class ShellCommandSurfaceCoordinator
             OpenModelProvidersAsync,
             OpenFileEditorAsync,
             OpenSkillsAsync,
+            OpenPluginsAsync,
             FocusSidebarAsync,
             FocusPromptAsync,
             ShowSelectedSessionUsageAsync,
@@ -167,18 +177,20 @@ internal sealed class ShellCommandSurfaceCoordinator
             ScrollToLastMessageAsync,
             ClearSelectedThreadQueueAsync,
             threadCommandCoordinator,
-            setStatus);
+            setStatus,
+            pluginHostBridge);
     }
 
     public IReadOnlyList<ThreadWorkspaceCommandBinding> BuildWorkspaceCommandBindings()
     {
-        return
-        [
+        var bindings = new List<ThreadWorkspaceCommandBinding>
+        {
             CreateCommandBinding("CodeAlta.Shell.Help", () => ObserveUiTask(ShowHelpAsync(), "show help")),
             CreateCommandBinding("CodeAlta.Project.OpenFolder", () => ObserveUiTask(ShowOpenFolderDialogAsync(), "open a project")),
             CreateCommandBinding("CodeAlta.Providers.Manage", () => ObserveUiTask(OpenModelProvidersAsync(), "open model providers")),
             CreateCommandBinding("CodeAlta.File.Edit", () => ObserveUiTask(OpenFileEditorAsync(), "open a file")),
             CreateCommandBinding("CodeAlta.Skills.Manage", () => ObserveUiTask(OpenSkillsAsync(), "open skills")),
+            CreateCommandBinding("CodeAlta.Plugins.Manage", () => ObserveUiTask(OpenPluginsAsync(), "open plugins")),
             CreateCommandBinding("CodeAlta.Thread.SessionUsage", _openSessionUsage),
             CreateCommandBinding("CodeAlta.Thread.Info", _openThreadInfo),
             CreateCommandBinding("CodeAlta.Thread.ExpandPrompt", _openExpandedPromptEditor),
@@ -194,7 +206,9 @@ internal sealed class ShellCommandSurfaceCoordinator
             CreateCommandBinding("CodeAlta.Thread.MessageNext", () => ObserveUiTask(ScrollToNextMessageAsync(), "scroll to the next message")),
             CreateCommandBinding("CodeAlta.Thread.MessageFirst", () => ObserveUiTask(ScrollToFirstMessageAsync(), "scroll to the first message")),
             CreateCommandBinding("CodeAlta.Thread.MessageLast", () => ObserveUiTask(ScrollToLastMessageAsync(), "scroll to the last message")),
-        ];
+        };
+        AddPluginCommandBindings(bindings);
+        return bindings;
     }
 
     public Task HandleAcceptedPromptAsync(string? rawInput, CancellationToken cancellationToken = default)
@@ -266,6 +280,9 @@ internal sealed class ShellCommandSurfaceCoordinator
     public Task OpenSkillsAsync()
         => _openSkillsAsync();
 
+    public Task OpenPluginsAsync()
+        => _openPluginsAsync();
+
     private ThreadWorkspaceCommandBinding CreateCommandBinding(string commandId, Action execute)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commandId);
@@ -276,6 +293,108 @@ internal sealed class ShellCommandSurfaceCoordinator
             metadata,
             execute,
             () => CanExecuteShellCommand(metadata.Availability));
+    }
+
+    private void AddPluginCommandBindings(List<ThreadWorkspaceCommandBinding> bindings)
+    {
+        if (_pluginHostBridge is null)
+        {
+            return;
+        }
+
+        foreach (var contribution in _pluginHostBridge.GetCommandContributions())
+        {
+            var metadata = CreatePluginCommandMetadata(contribution);
+            bindings.Add(new ThreadWorkspaceCommandBinding(
+                metadata,
+                () => ObserveUiTask(ExecutePluginCommandAsync(contribution.Name, null, CancellationToken.None), $"run plugin command {contribution.Name}"),
+                () => CanExecutePluginCommand(contribution.Availability)));
+        }
+    }
+
+    private static ShellCommandMetadata CreatePluginCommandMetadata(PluginCommandContribution contribution)
+    {
+        var presentation = contribution.Presentation;
+        var keyBinding = contribution.KeyBinding;
+        return new ShellCommandMetadata(
+            $"Plugin.{contribution.Name}",
+            contribution.Label ?? contribution.Name,
+            contribution.Description ?? $"Run plugin command '{contribution.Name}'.",
+            ShellCommandHelpCategory.General,
+            contribution.Kind == PluginCommandKind.Thread ? ShellCommandScope.ThreadOnly : ShellCommandScope.AnyShell,
+            ShellCommandAvailability.Always,
+            keyBinding?.Gesture,
+            keyBinding?.Sequence,
+            contribution.Name,
+            contribution.Aliases,
+            presentation.ShowInCommandBar,
+            presentation.ShowInCommandPalette,
+            SupportsTextCommand: true,
+            presentation.ShowInHelp);
+    }
+
+    private bool CanExecutePluginCommand(PluginCommandAvailability availability)
+    {
+        if (availability.RequiresProject && _getSelectedThread()?.ProjectRef is null)
+        {
+            return false;
+        }
+
+        if (availability.RequiresThread && _getSelectedThread() is null)
+        {
+            return false;
+        }
+
+        if (availability.RequiresIdleThread && (_getSelectedThread() is not { } idleThread || _ensureThreadTab(idleThread).StatusBusy))
+        {
+            return false;
+        }
+
+        if (availability.RequiresBusyThread && (_getSelectedThread() is not { } busyThread || !_ensureThreadTab(busyThread).StatusBusy))
+        {
+            return false;
+        }
+
+        var backendThread = _getSelectedThread();
+        if ((availability.RequiresCodeAltaManagedBackend || availability.BackendFamilies.Count > 0) && backendThread is null)
+        {
+            return false;
+        }
+
+        if (availability.RequiresCodeAltaManagedBackend && !IsCodeAltaManagedBackend(backendThread!.BackendId))
+        {
+            return false;
+        }
+
+        if (availability.BackendFamilies.Count > 0 && !availability.BackendFamilies.Contains(backendThread!.BackendId, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsCodeAltaManagedBackend(string backendId)
+        => !string.Equals(backendId, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase) &&
+           !string.Equals(backendId, AgentBackendIds.Copilot.Value, StringComparison.OrdinalIgnoreCase);
+
+    private async Task ExecutePluginCommandAsync(string name, string? arguments, CancellationToken cancellationToken)
+    {
+        if (_pluginHostBridge is null)
+        {
+            return;
+        }
+
+        var result = await _pluginHostBridge.ExecuteCommandAsync(name, arguments, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(result.UserMessage))
+        {
+            _setStatus(result.UserMessage, false, StatusTone.Info);
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.PromptText))
+        {
+            await _threadCommandCoordinator.SendPromptAsync(result.PromptText, steer: false, cancellationToken);
+        }
     }
 
     private bool CanExecuteShellCommand(ShellCommandAvailability availability)

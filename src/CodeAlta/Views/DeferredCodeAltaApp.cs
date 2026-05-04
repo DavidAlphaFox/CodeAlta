@@ -1,5 +1,6 @@
 using CodeAlta.App;
 using CodeAlta.Catalog;
+using CodeAlta.Plugins;
 using CodeAlta.ViewModels;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.Graphics;
@@ -16,7 +17,9 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
     private readonly Padder _sidebarHost;
     private readonly Padder _workspaceHost;
     private readonly Padder _commandBarHost;
+    private readonly ToastHost _toastHost;
     private readonly TerminalImageGraphicsPresenter _graphicsPresenter;
+    private readonly PluginRuntimeManager? _prestartedPluginRuntime;
     private Task<CodeAltaOwnedServices>? _ownedServicesTask;
     private CodeAltaApp? _app;
     private ConfigRecoveryDialog? _configRecoveryDialog;
@@ -25,8 +28,9 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
     private bool _exitRequested;
     private bool _openProvidersAfterStartup;
 
-    public DeferredCodeAltaApp()
+    public DeferredCodeAltaApp(PluginRuntimeManager? prestartedPluginRuntime = null)
     {
+        _prestartedPluginRuntime = prestartedPluginRuntime;
         var sixelOptions = new TerminalSixelEncoderOptions();
         _graphicsPresenter = new TerminalImageGraphicsPresenter(new TerminalImageGraphicsPresenterOptions
         {
@@ -38,12 +42,13 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
         _sidebarHost = CreateStretchHost(BuildMessage("Loading sidebar..."));
         _workspaceHost = CreateStretchHost(BuildWorkspacePlaceholder("Starting CodeAlta..."));
         _commandBarHost = CreateStretchHost(new Placeholder { IsVisible = false });
-        _rootHost = CreateStretchHost(
+        _toastHost = new ToastHost(
             new CodeAltaShellView(
                 _sidebarHost,
                 _workspaceHost,
                 _commandBarHost,
                 CodeAltaGlobalCommandConfigurator.Configure).Root);
+        _rootHost = CreateStretchHost(_toastHost);
         _rootHost.RegisterClipboardScreenshotCommand();
     }
 
@@ -106,7 +111,7 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
             return TerminalLoopResult.Continue;
         }
 
-        _ownedServicesTask ??= CodeAltaOwnedServices.CreateAsync(cancellationToken);
+        _ownedServicesTask ??= CodeAltaOwnedServices.CreateAsync(cancellationToken, _prestartedPluginRuntime);
         if (!_ownedServicesTask.IsCompleted)
         {
             // Keep async service startup behind the terminal loop so the real app is attached
@@ -119,7 +124,7 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
             var ownedServices = _ownedServicesTask.GetAwaiter().GetResult();
             _app = CodeAltaApp.Create(ownedServices);
             _app.PrepareForRun();
-            _rootHost.Content = _app.GetRoot();
+            _toastHost.Content = _app.GetRoot();
             if (_openProvidersAfterStartup)
             {
                 _openProvidersAfterStartup = false;

@@ -53,7 +53,8 @@ internal sealed class CodeAltaFrontendComposition
         KnownProjectImporter knownProjectImporter,
         State<float> welcomePhase01,
         CodeAltaFrontendCallbacks callbacks,
-        CodexInstallProgressReporter? codexInstallProgress = null)
+        CodexInstallProgressReporter? codexInstallProgress = null,
+        PluginHostBridge? pluginHostBridge = null)
     {
         ArgumentNullException.ThrowIfNull(projectCatalog);
         ArgumentNullException.ThrowIfNull(threadCatalog);
@@ -233,7 +234,8 @@ internal sealed class CodeAltaFrontendComposition
             callbacks.ClearThreadStatus,
             () => threadPromptQueueCoordinator!.RefreshSelectedThreadQueueUi(),
             (tab, cancellationToken) => threadCommandCoordinator!.DrainQueuedPromptAsync(tab, cancellationToken),
-            projectFileSearchService);
+            projectFileSearchService,
+            pluginHostBridge);
         var threadCreationCoordinator = new ThreadCreationCoordinator(
             runtimeService,
             catalogOptions,
@@ -275,7 +277,8 @@ internal sealed class CodeAltaFrontendComposition
                 threadRuntimeEventCoordinator.TryRenderInteraction),
             threadPromptQueueCoordinator,
             promptComposerViewModel,
-            projectFileSearchService);
+            projectFileSearchService,
+            pluginHostBridge);
 
         return new CodeAltaFrontendComposition
         {

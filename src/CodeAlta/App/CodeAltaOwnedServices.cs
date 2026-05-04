@@ -13,6 +13,7 @@ using CodeAlta.Catalog.Skills;
 using CodeAlta.CodexSdk;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Persistence;
+using CodeAlta.Plugins;
 using CodeAlta.Search;
 using XenoAtom.Logging;
 
@@ -39,6 +40,8 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         AcpInstalledBackendStore installedBackendStore,
         CodexInstallProgressReporter codexInstallProgress,
         ModelsDevCatalogService modelsDevCatalogService,
+        PluginRuntimeManager pluginRuntime,
+        PluginHostBridge pluginHostBridge,
         CatalogOptions catalogOptions,
         List<AgentBackendDescriptor> backendDescriptors,
         AcpAgentRegistryService acpAgentRegistryService,
@@ -56,6 +59,8 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         _installedBackendStore = installedBackendStore;
         _codexInstallProgress = codexInstallProgress;
         _modelsDevCatalogService = modelsDevCatalogService;
+        PluginRuntime = pluginRuntime;
+        PluginHostBridge = pluginHostBridge;
         _backendDescriptors = backendDescriptors;
         CatalogOptions = catalogOptions;
         AcpAgentRegistryService = acpAgentRegistryService;
@@ -89,7 +94,13 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 
     public IProjectFileSearchService ProjectFileSearchService { get; }
 
-    public static async Task<CodeAltaOwnedServices> CreateAsync(CancellationToken cancellationToken)
+    public PluginRuntimeManager PluginRuntime { get; }
+
+    public PluginHostBridge PluginHostBridge { get; }
+
+    public static async Task<CodeAltaOwnedServices> CreateAsync(
+        CancellationToken cancellationToken,
+        PluginRuntimeManager? prestartedPluginRuntime = null)
     {
         var homeRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -114,11 +125,39 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             GlobalRoot = homeRoot,
         };
         var projectCatalog = new ProjectCatalog(catalogOptions);
-        await projectCatalog.UpsertFromPathAsync(Environment.CurrentDirectory, cancellationToken).ConfigureAwait(false);
+        var currentProject = await projectCatalog.UpsertFromPathAsync(Environment.CurrentDirectory, cancellationToken).ConfigureAwait(false);
+
+        var pluginRuntime = prestartedPluginRuntime ?? new PluginRuntimeManager();
+        if (prestartedPluginRuntime is null)
+        {
+            await pluginRuntime.StartAsync(
+                    new PluginRuntimeManagerOptions
+                    {
+                        GlobalRoot = homeRoot,
+                        ProjectContext = new PluginProjectContext
+                        {
+                            ProjectId = currentProject.Id,
+                            ProjectPath = currentProject.ProjectPath,
+                        },
+                        SafeMode = PluginRuntimeConfigResolver.IsSafeModeEnabled(Environment.GetCommandLineArgs()),
+                        IsHeadless = false,
+                        RawArguments = Environment.GetCommandLineArgs(),
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        var pluginHostBridge = new PluginHostBridge(pluginRuntime, () => currentProject);
 
         var threadCatalog = new WorkThreadCatalog(catalogOptions);
         var roleProfileStore = new RoleProfileStore();
-        var skillCatalog = new SkillCatalog();
+        var skillCatalog = new SkillCatalog([
+            new ProjectCodeAltaSkillRootProvider(),
+            new ProjectCommonSkillRootProvider(),
+            new UserCodeAltaSkillRootProvider(),
+            new UserCommonSkillRootProvider(),
+            new BuiltInCodeAltaSkillRootProvider(),
+            new PluginSkillRootProvider(pluginHostBridge.GetResources),
+        ]);
         var instructionTemplateProvider = new AgentInstructionTemplateProvider(skillCatalog, catalogOptions);
         var configStore = new CodeAltaConfigStore(catalogOptions);
         var installedBackendStore = new AcpInstalledBackendStore(catalogOptions);
@@ -164,6 +203,16 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
                 configStore,
                 homeRoot,
                 modelsDevCatalogService));
+        foreach (var pluginBackend in pluginRuntime.Adapter.GetAgentBackends(new PluginAdapterOperationOptions { HasInteractiveUi = true }))
+        {
+            var backendId = new AgentBackendId(pluginBackend.Name);
+            backendFactory.RegisterOrReplace(
+                backendId,
+                () => pluginRuntime.Adapter.CreateAgentBackendAsync(pluginRuntime.ActivePlugins, pluginBackend.Name, new PluginAdapterOperationOptions { HasInteractiveUi = true }, CancellationToken.None).AsTask().GetAwaiter().GetResult().Backend
+                    ?? throw new InvalidOperationException($"Plugin backend '{pluginBackend.Name}' did not create a backend instance."));
+            backendDescriptors.Add(new AgentBackendDescriptor(backendId, pluginBackend.DisplayName ?? pluginBackend.Name));
+        }
+
         foreach (var definition in configStore.LoadEffectiveAcpBackendDefinitions(installedBackendStore.Load()))
         {
             if (TryCreateAcpBackendOptions(catalogOptions, definition, out var acpOptions))
@@ -196,6 +245,8 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             installedBackendStore,
             codexInstallProgress,
             modelsDevCatalogService,
+            pluginRuntime,
+            pluginHostBridge,
             catalogOptions,
             backendDescriptors,
             acpAgentRegistryService,
@@ -234,6 +285,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
     {
         await RuntimeService.DisposeAsync().ConfigureAwait(false);
         await AgentHub.DisposeAsync().ConfigureAwait(false);
+        await PluginRuntime.DisposeAsync().ConfigureAwait(false);
         AcpAgentRegistryService.Dispose();
         await _modelsDevCatalogService.DisposeAsync().ConfigureAwait(false);
 

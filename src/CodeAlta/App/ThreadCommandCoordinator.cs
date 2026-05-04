@@ -29,6 +29,7 @@ internal sealed class ThreadCommandCoordinator
     private readonly PromptComposerViewModel _promptComposerViewModel;
     private readonly ThreadExecutionOptionsFactory _executionOptionsFactory;
     private readonly ThreadPromptDispatchCoordinator _promptDispatchCoordinator;
+    private readonly PluginHostBridge? _pluginHostBridge;
 
     public ThreadCommandCoordinator(
         WorkThreadRuntimeService runtimeService,
@@ -40,7 +41,8 @@ internal sealed class ThreadCommandCoordinator
         ThreadCommandContext commandContext,
         ThreadPromptQueueCoordinator queueCoordinator,
         PromptComposerViewModel promptComposerViewModel,
-        IProjectFileSearchService? projectFileSearchService = null)
+        IProjectFileSearchService? projectFileSearchService = null,
+        PluginHostBridge? pluginHostBridge = null)
         : this(
             runtimeService,
             catalogOptions,
@@ -54,7 +56,8 @@ internal sealed class ThreadCommandCoordinator
             commandContext,
             queueCoordinator,
             promptComposerViewModel,
-            projectFileSearchService)
+            projectFileSearchService,
+            pluginHostBridge)
     {
     }
 
@@ -69,7 +72,8 @@ internal sealed class ThreadCommandCoordinator
         ThreadCommandContext commandContext,
         ThreadPromptQueueCoordinator queueCoordinator,
         PromptComposerViewModel promptComposerViewModel,
-        IProjectFileSearchService? projectFileSearchService = null)
+        IProjectFileSearchService? projectFileSearchService = null,
+        PluginHostBridge? pluginHostBridge = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(backendDescriptors);
@@ -90,6 +94,7 @@ internal sealed class ThreadCommandCoordinator
         _commandContext = commandContext;
         _queueCoordinator = queueCoordinator;
         _promptComposerViewModel = promptComposerViewModel;
+        _pluginHostBridge = pluginHostBridge;
         var permissionRequests = new ThreadPermissionRequestCoordinator(threadSelection, commandContext);
         var userInputRequests = new ThreadUserInputRequestCoordinator(threadSelection, commandContext);
         _executionOptionsFactory = new ThreadExecutionOptionsFactory(catalogOptions, backendDescriptors, chatBackendStates, threadSelection, selectorState, permissionRequests, userInputRequests);
@@ -99,7 +104,8 @@ internal sealed class ThreadCommandCoordinator
             queueCoordinator,
             commandContext,
             catalogOptions,
-            projectFileSearchService ?? NullProjectFileSearchService.Instance);
+            projectFileSearchService ?? NullProjectFileSearchService.Instance,
+            pluginHostBridge);
     }
 
     public async Task SendPromptAsync(
@@ -327,11 +333,36 @@ internal sealed class ThreadCommandCoordinator
         {
             tab.PendingManualCompaction = true;
             _commandContext.SetThreadStatus(tab, $"Compacting '{thread.Title}'...", true, StatusTone.Info);
-            await _runtimeService.CompactAsync(thread, BuildExecutionOptions(thread, tab), CancellationToken.None);
+            var options = BuildExecutionOptions(thread, tab);
+            var augmentation = _pluginHostBridge is null
+                ? new PluginCompactionAugmentation()
+                : await _pluginHostBridge.BeforeCompactionAsync(thread, tab, CancellationToken.None);
+            if (!string.IsNullOrWhiteSpace(augmentation.CancelReason))
+            {
+                tab.PendingManualCompaction = false;
+                _commandContext.SetThreadStatus(tab, $"Compaction cancelled by plugin: {augmentation.CancelReason}", false, StatusTone.Warning);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(augmentation.AdditionalDeveloperInstructions))
+            {
+                options = _promptDispatchCoordinator.AppendAdditionalDeveloperInstructions(options, augmentation.AdditionalDeveloperInstructions);
+            }
+
+            await _runtimeService.CompactAsync(thread, options, CancellationToken.None);
+            if (_pluginHostBridge is not null)
+            {
+                await _pluginHostBridge.AfterCompactionAsync(thread, tab, succeeded: true, summary: null, CancellationToken.None);
+            }
         }
         catch (Exception ex)
         {
             tab.PendingManualCompaction = false;
+            if (_pluginHostBridge is not null)
+            {
+                await _pluginHostBridge.AfterCompactionAsync(thread, tab, succeeded: false, summary: ex.Message, CancellationToken.None);
+            }
+
             if (LogManager.IsInitialized && CodeAltaApp.UiLogger.IsEnabled(LogLevel.Error))
             {
                 CodeAltaApp.UiLogger.Error(ex, $"Failed to compact thread {thread.ThreadId}");

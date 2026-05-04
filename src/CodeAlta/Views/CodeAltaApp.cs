@@ -68,7 +68,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
     private readonly ThreadTabContext _threadTabContext;
     private readonly WorkspaceRefreshContext _workspaceRefreshContext;
     private readonly AcpManagementCoordinator? _acpManagementCoordinator;
-    private readonly SkillsManagementCoordinator? _skillsManagementCoordinator;
     private readonly AcpFrontendCoordinator _acpUi;
     private readonly ProviderFrontendCoordinator _providerUi;
     private readonly ProviderDialogCoordinator _providerDialogCoordinator;
@@ -227,7 +226,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable
                 RegisterCreatedThreadAsync = RegisterCreatedThreadAsync,
                 GetPromptFocusTarget = () => ThreadInput,
             },
-            codexInstallProgress);
+            codexInstallProgress,
+            ownedServices?.PluginHostBridge);
         _backendPreferences = composition.BackendPreferences;
         _shellController = composition.ShellController;
         _runtimeEventPump = composition.RuntimeEventPump;
@@ -287,14 +287,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             DispatchToUiDeferred,
             SyncThreadTabControl,
             SetStatus);
-        _skillsManagementCoordinator = _ownedServices is not null
-            ? new SkillsManagementCoordinator(
-                new SkillsManagementService(_ownedServices.SkillCatalog, _catalogOptions, GetSelectedProject),
-                path => _fileEditorWorkspaceCoordinator.OpenFilePathAsync(path),
-                skillName => _threadCommandCoordinator.ActivateSelectedSkillAsync(skillName),
-                () => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()),
-                GetDialogAnchor)
-            : null;
         _threadTabContext = new ThreadTabContext(
             () => ThreadTabControl,
             () => _threadWorkspaceView,
@@ -321,7 +313,15 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             OpenFolderAsync,
             OpenModelProvidersAsync,
             _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
-            OpenSkillsAsync,
+            SkillsManagementCoordinatorFactory.Create(
+                _ownedServices,
+                _catalogOptions,
+                GetSelectedProject,
+                GetDialogAnchor,
+                path => _fileEditorWorkspaceCoordinator.OpenFilePathAsync(path),
+                skillName => _threadCommandCoordinator.ActivateSelectedSkillAsync(skillName),
+                SetStatus),
+            PluginManagementCoordinatorFactory.Create(_catalogOptions, GetSelectedProject, GetDialogAnchor, SetStatus),
             () => ReadBindableState(() => _promptDraftUiCoordinator.PromptText),
             () => _fileEditorWorkspaceCoordinator.GetSelectedFileTab() is { } fileTab
                 ? _fileEditorWorkspaceCoordinator.CloseFileTabAsync(fileTab.TabId)
@@ -344,7 +344,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToPreviousMessage()),
             () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToNextMessage()),
             () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToFirstMessage()),
-            () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToLastMessage()));
+            () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToLastMessage()),
+            _ownedServices?.PluginHostBridge);
         _threadHistoryCoordinator = new ThreadHistoryCoordinator(
             _runtimeService,
             EnsureThreadTab,
@@ -589,7 +590,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             ToggleTerminalLoopCallback,
             FocusSidebar,
             FocusPromptEditor,
-            () => _fileEditorWorkspaceCoordinator.SelectedTabId is null);
+            () => _fileEditorWorkspaceCoordinator.SelectedTabId is null,
+            _ownedServices?.PluginHostBridge);
 
         return _shellView;
     }
@@ -775,18 +777,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
 
     internal void OpenAcpManagement() { if (_acpManagementCoordinator is null) { SetStatus("ACP management is unavailable in this app instance.", tone: StatusTone.Warning); return; } _acpManagementCoordinator.Open(); }
     internal Task OpenModelProvidersAsync() => _providerDialogCoordinator.OpenAsync();
-    internal Task OpenSkillsAsync()
-    {
-        if (_skillsManagementCoordinator is null)
-        {
-            SetStatus("Skills management is unavailable in this app instance.", tone: StatusTone.Warning);
-            return Task.CompletedTask;
-        }
-
-        _skillsManagementCoordinator.Open();
-        return Task.CompletedTask;
-    }
-
     internal void FocusSidebar() { SyncSidebarSelectionToCurrentState(); ApplyPendingSidebarSelection(); _sidebarCoordinator.View.Tree.App?.Focus(_sidebarCoordinator.View.Tree); }
     private async Task CloseSelectedThreadAsync()
         => await _threadStateCoordinator.CloseSelectedThreadAsync();

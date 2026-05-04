@@ -24,6 +24,8 @@ internal sealed record OpenFileEditorIntent : ShellInputIntent;
 
 internal sealed record OpenSkillsIntent : ShellInputIntent;
 
+internal sealed record OpenPluginsIntent : ShellInputIntent;
+
 internal sealed record OpenSessionUsageIntent : ShellInputIntent;
 
 internal sealed record OpenThreadInfoIntent : ShellInputIntent;
@@ -56,4 +58,4 @@ internal sealed record QueueStatusIntent : ShellInputIntent;
 
 internal sealed record DelegateThreadIntent(string PromptText) : ShellInputIntent;
 
-internal sealed record UnknownTextCommandIntent(string CommandName) : ShellInputIntent;
+internal sealed record UnknownTextCommandIntent(string CommandName, string? Arguments = null) : ShellInputIntent;

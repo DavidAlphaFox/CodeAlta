@@ -1416,7 +1416,7 @@ Minimum requirements for future runtime/UI:
 - show plugin type, version, author, dependencies, and contribution summary when available;
 - show diagnostics and failures;
 - allow enable/disable/deactivate;
-- avoid silently enabling newly discovered third-party plugins unless the user has opted into that behavior.
+- treat configured plugin roots as an explicit user-selected trust boundary, and provide clear disable/safe-mode controls for unwanted plugins.
 
 The v1 abstraction should not implement permission enforcement. Plugins can read/write files, execute processes, make network requests, override built-ins, and inspect/modify prompt/runtime behavior wherever CodeAlta exposes a plugin point.
 

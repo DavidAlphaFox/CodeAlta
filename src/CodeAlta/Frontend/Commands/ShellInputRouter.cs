@@ -50,6 +50,7 @@ internal sealed class ShellInputRouter
             { Id: "CodeAlta.File.Edit" } => new OpenFileEditorIntent(),
             { Id: "CodeAlta.Providers.Manage" } => new OpenModelProvidersIntent(),
             { Id: "CodeAlta.Skills.Manage" } => new OpenSkillsIntent(),
+            { Id: "CodeAlta.Plugins.Manage" } => new OpenPluginsIntent(),
             { Id: "CodeAlta.Shell.FocusSidebar" } => new FocusSidebarIntent(),
             { Id: "CodeAlta.Shell.FocusPrompt" } => new FocusPromptIntent(),
             { Id: "CodeAlta.Thread.SessionUsage" } => new OpenSessionUsageIntent(),
@@ -70,7 +71,7 @@ internal sealed class ShellInputRouter
             { Id: "CodeAlta.Thread.Queue" } => new QueueStatusIntent(),
             { Id: "CodeAlta.Thread.Delegate" } when !string.IsNullOrWhiteSpace(arguments) => new DelegateThreadIntent(arguments),
             { Id: "CodeAlta.Thread.Delegate" } => new DelegateThreadIntent(string.Empty),
-            _ => new UnknownTextCommandIntent(commandName)
+            _ => new UnknownTextCommandIntent(commandName, arguments)
         };
     }
 }

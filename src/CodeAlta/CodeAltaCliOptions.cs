@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using CodeAlta.Plugins;
 using XenoAtom.CommandLine;
 using XenoAtom.CommandLine.Terminal;
 
@@ -8,15 +9,21 @@ internal sealed class CodeAltaCliOptions
 {
     private static readonly TimeSpan DefaultTestDuration = TimeSpan.FromSeconds(10);
 
-    private CodeAltaCliOptions(bool testMode, TimeSpan? testDuration)
+    private CodeAltaCliOptions(bool testMode, TimeSpan? testDuration, bool pluginSafeMode, bool pluginsStatus)
     {
         TestMode = testMode;
         TestDuration = testDuration;
+        PluginSafeMode = pluginSafeMode;
+        PluginsStatus = pluginsStatus;
     }
 
     public bool TestMode { get; }
 
     public TimeSpan? TestDuration { get; }
+
+    public bool PluginSafeMode { get; }
+
+    public bool PluginsStatus { get; }
 
     public static bool TryParse(
         IReadOnlyList<string> args,
@@ -41,25 +48,29 @@ internal sealed class CodeAltaCliOptions
         return TryCreateOptions(state, out options, out error);
     }
 
-    public static CommandApp CreateCommandApp(Func<CodeAltaCliOptions, ValueTask<int>> execute)
+    public static CommandApp CreateCommandApp(
+        Func<CodeAltaCliOptions, ValueTask<int>> execute,
+        IReadOnlyList<CommandNode>? pluginCommandLineContributions = null)
     {
         ArgumentNullException.ThrowIfNull(execute);
 
         return CreateCommandAppCore(
             new ParseState(),
-            execute);
+            execute,
+            pluginCommandLineContributions);
     }
 
     private static CommandApp CreateCommandAppCore(
         ParseState state,
-        Func<CodeAltaCliOptions, ValueTask<int>> execute)
+        Func<CodeAltaCliOptions, ValueTask<int>> execute,
+        IReadOnlyList<CommandNode>? pluginCommandLineContributions = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(execute);
 
         const string _ = "";
 
-        return new CommandApp(
+        var app = new CommandApp(
             "alta",
             config: new CommandConfig
             {
@@ -76,8 +87,21 @@ internal sealed class CodeAltaCliOptions
             "Options:",
             { "test", "Run the terminal smoke test", value => state.TestMode = value is not null },
             { "test-duration=", "Smoke-test duration in {SECONDS}", (int value) => state.TestDurationSeconds = value },
-            new HelpOption(),
-            (_, _) =>
+            { "no-plugins", "Disable plugin discovery, build, and load for this process", value => state.PluginSafeMode = value is not null },
+            { "plugin-safe-mode", "Disable plugin discovery, build, and load for this process", value => state.PluginSafeMode = value is not null },
+            { "plugins-status", "Print plugin discovery/config status and exit without starting the TUI", value => state.PluginsStatus = value is not null },
+        };
+
+        if (pluginCommandLineContributions is not null)
+        {
+            foreach (var contribution in pluginCommandLineContributions)
+            {
+                app.Add(contribution);
+            }
+        }
+
+        app.Add(new HelpOption());
+        app.Add((_, _) =>
             {
                 if (!TryCreateOptions(state, out var options, out var error))
                 {
@@ -85,8 +109,8 @@ internal sealed class CodeAltaCliOptions
                 }
 
                 return execute(options!);
-            },
-        };
+            });
+        return app;
     }
 
     private static bool TryCreateOptions(
@@ -114,7 +138,9 @@ internal sealed class CodeAltaCliOptions
             state.TestMode,
             state.TestMode
                 ? TimeSpan.FromSeconds(state.TestDurationSeconds ?? DefaultTestDuration.TotalSeconds)
-                : null);
+                : null,
+            state.PluginSafeMode || PluginRuntimeConfigResolver.IsSafeModeEnabled([]),
+            state.PluginsStatus);
         error = null;
         return true;
     }
@@ -124,5 +150,9 @@ internal sealed class CodeAltaCliOptions
         public bool TestMode { get; set; }
 
         public int? TestDurationSeconds { get; set; }
+
+        public bool PluginSafeMode { get; set; }
+
+        public bool PluginsStatus { get; set; }
     }
 }

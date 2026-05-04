@@ -49,6 +49,8 @@
   <Project Path="CodeAlta.Catalog/CodeAlta.Catalog.csproj" />
   <Project Path="CodeAlta.Plugins.Abstractions/CodeAlta.Plugins.Abstractions.csproj" />
   <Project Path="CodeAlta.Plugins.Abstractions.Tests/CodeAlta.Plugins.Abstractions.Tests.csproj" />
+  <Project Path="CodeAlta.Plugins/CodeAlta.Plugins.csproj" />
+  <Project Path="CodeAlta.Plugins.Tests/CodeAlta.Plugins.Tests.csproj" />
   <Project Path="CodeAlta/CodeAlta.csproj" />
   <Project Path="RawCaptureApp/RawCaptureApp.csproj" />
 </Solution>

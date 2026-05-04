@@ -43,6 +43,21 @@ public sealed class WorkThreadExecutionOptions
     public IReadOnlyList<AgentToolDefinition>? Tools { get; init; }
 
     /// <summary>
+    /// Gets or initializes host/plugin-provided system prompt content appended to the coordinator profile system message.
+    /// </summary>
+    public string? AdditionalSystemMessage { get; init; }
+
+    /// <summary>
+    /// Gets or initializes host/plugin-provided developer instructions appended to coordinator developer instructions.
+    /// </summary>
+    public string? AdditionalDeveloperInstructions { get; init; }
+
+    /// <summary>
+    /// Gets or initializes preferred tool names for this run. Backends may use this as a hint when supported.
+    /// </summary>
+    public IReadOnlyList<string> PreferredToolNames { get; init; } = [];
+
+    /// <summary>
     /// Gets or initializes the permission request handler.
     /// </summary>
     public required AgentPermissionRequestHandler OnPermissionRequest { get; init; }

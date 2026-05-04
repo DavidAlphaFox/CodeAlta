@@ -15,4 +15,9 @@
     <ProjectReference Include="..\CodeAlta.Agent\CodeAlta.Agent.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="BuiltinSkills\**\*.cs" />
+    <Content Include="BuiltinSkills\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

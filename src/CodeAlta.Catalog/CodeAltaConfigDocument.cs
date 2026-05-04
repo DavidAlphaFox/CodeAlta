@@ -24,6 +24,24 @@ public sealed class CodeAltaConfigDocument
     /// </summary>
     [JsonPropertyName("providers")]
     public Dictionary<string, CodeAltaProviderDocument>? Providers { get; set; }
+
+    /// <summary>
+    /// Gets or sets plugin configuration keyed by plugin package id or built-in plugin id.
+    /// </summary>
+    [JsonPropertyName("plugins")]
+    public Dictionary<string, CodeAltaPluginSettingsDocument>? Plugins { get; set; }
+}
+
+/// <summary>
+/// Represents plugin-specific configuration settings.
+/// </summary>
+public sealed class CodeAltaPluginSettingsDocument
+{
+    /// <summary>
+    /// Gets or sets a value indicating whether the plugin is enabled.
+    /// </summary>
+    [JsonPropertyName("enabled")]
+    public bool? Enabled { get; set; }
 }
 
 /// <summary>

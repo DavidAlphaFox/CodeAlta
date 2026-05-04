@@ -422,8 +422,8 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             Streaming = true,
             WorkingDirectory = options.WorkingDirectory,
             ProjectRoots = options.ProjectRoots,
-            SystemMessage = instructions.SystemMessage,
-            DeveloperInstructions = developerInstructions,
+            SystemMessage = AppendPromptPart(instructions.SystemMessage, options.AdditionalSystemMessage),
+            DeveloperInstructions = AppendPromptPart(developerInstructions, options.AdditionalDeveloperInstructions),
             Tools = tools,
             OnPermissionRequest = options.OnPermissionRequest,
             OnUserInputRequest = options.OnUserInputRequest,
@@ -460,6 +460,8 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             options.WorkingDirectory,
             options.Model ?? coordinatorProfile.DefaultModel,
             options.ReasoningEffort ?? ParseReasoningEffort(coordinatorProfile.DefaultReasoningEffort),
+            options.AdditionalSystemMessage,
+            options.AdditionalDeveloperInstructions,
             projector,
             subscription);
 
@@ -626,6 +628,21 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
 
     private static bool UsesProviderManagedSkills(AgentBackendId backendId)
         => backendId == AgentBackendIds.Codex || backendId == AgentBackendIds.Copilot;
+
+    private static string? AppendPromptPart(string? baseText, string? additionalText)
+    {
+        if (string.IsNullOrWhiteSpace(additionalText))
+        {
+            return baseText;
+        }
+
+        if (string.IsNullOrWhiteSpace(baseText))
+        {
+            return additionalText.Trim();
+        }
+
+        return string.Concat(baseText.TrimEnd(), Environment.NewLine, Environment.NewLine, additionalText.Trim());
+    }
 
     /// <summary>
     /// Detaches and disposes the active coordinator session for a thread when present.
@@ -966,6 +983,8 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             string workingDirectory,
             string? model,
             AgentReasoningEffort? reasoningEffort,
+            string? additionalSystemMessage,
+            string? additionalDeveloperInstructions,
             EventProjector projector,
             IDisposable subscription)
         {
@@ -976,6 +995,8 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             WorkingDirectory = workingDirectory;
             Model = model;
             ReasoningEffort = reasoningEffort;
+            AdditionalSystemMessage = additionalSystemMessage;
+            AdditionalDeveloperInstructions = additionalDeveloperInstructions;
             Projector = projector;
             Subscription = subscription;
         }
@@ -994,6 +1015,10 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
 
         public AgentReasoningEffort? ReasoningEffort { get; }
 
+        public string? AdditionalSystemMessage { get; }
+
+        public string? AdditionalDeveloperInstructions { get; }
+
         public IDisposable Subscription { get; }
 
         public EventProjector Projector { get; }
@@ -1008,7 +1033,9 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                 && string.Equals(BackendSessionId, backendSessionId, StringComparison.Ordinal)
                 && string.Equals(WorkingDirectory, options.WorkingDirectory, StringComparison.Ordinal)
                 && string.Equals(Model, options.Model, StringComparison.Ordinal)
-                && ReasoningEffort == options.ReasoningEffort;
+                && ReasoningEffort == options.ReasoningEffort
+                && string.Equals(AdditionalSystemMessage, options.AdditionalSystemMessage, StringComparison.Ordinal)
+                && string.Equals(AdditionalDeveloperInstructions, options.AdditionalDeveloperInstructions, StringComparison.Ordinal);
         }
 
         public void MarkTerminated()

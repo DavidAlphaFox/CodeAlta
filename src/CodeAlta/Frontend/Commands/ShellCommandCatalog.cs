@@ -103,6 +103,16 @@ internal static class ShellCommandCatalog
             Aliases: ["skill"],
             ShowInCommandBar: true),
         new(
+            "CodeAlta.Plugins.Manage",
+            "Plugins",
+            "Open plugin management and inspect plugin state, diagnostics, and contributions.",
+            ShellCommandHelpCategory.General,
+            ShellCommandScope.AnyShell,
+            ShellCommandAvailability.Always,
+            CommandName: "plugins",
+            Aliases: ["plugin"],
+            ShowInCommandBar: true),
+        new(
             "CodeAlta.Shell.FocusSidebar",
             "Go to Sidebar",
             "Focus the navigator sidebar on the current selection.",

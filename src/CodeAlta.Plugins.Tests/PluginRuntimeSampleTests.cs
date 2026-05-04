@@ -1,0 +1,143 @@
+namespace CodeAlta.Plugins.Tests;
+
+[TestClass]
+public sealed class PluginRuntimeSampleTests
+{
+    private static readonly string[] ExpectedSamples =
+    [
+        "hello-command",
+        "prompt-guidance",
+        "ui-status",
+        "skill-root",
+        "package-reference",
+        "background-task",
+        "backend-provider",
+        "multi-plugin-assembly",
+    ];
+
+    [TestMethod]
+    public void BuiltInPluginRuntimeSkillContainsRealSamplePluginInputs()
+    {
+        var sampleRoot = GetSampleRoot();
+        foreach (var sampleName in ExpectedSamples)
+        {
+            var samplePath = Path.Combine(sampleRoot, sampleName);
+            var pluginPath = Path.Combine(samplePath, "plugin.cs");
+            var readmePath = Path.Combine(samplePath, "README.md");
+            Assert.IsTrue(Directory.Exists(samplePath), sampleName);
+            Assert.IsTrue(File.Exists(pluginPath), pluginPath);
+            Assert.IsTrue(File.ReadAllText(pluginPath).Contains("PluginBase", StringComparison.Ordinal), pluginPath);
+            Assert.IsTrue(File.Exists(readmePath), readmePath);
+            Assert.IsTrue(File.ReadAllText(readmePath).Length > 80, readmePath);
+        }
+    }
+
+    [TestMethod]
+    [TestCategory("RequiresDotNet10FileBuild")]
+    public async Task BuiltInPluginRuntimeSkillSamplesBuildLoadAndUnload()
+    {
+        CodeAltaPluginRuntimeStartup.RegisterMsBuildDefaults();
+        using var temp = new TestTempDirectory();
+        foreach (var sampleName in ExpectedSamples)
+        {
+            CopySample(sampleName, Path.Combine(temp.Path, sampleName));
+        }
+
+        var root = new PluginRoot { RootPath = temp.Path, Scope = CodeAlta.Plugins.Abstractions.PluginScope.Global };
+        var generation = await new PluginRootBuildFileGenerator().GenerateAsync(root, new PluginRootBuildFileOptions
+        {
+            CodeAltaExeFolder = AppContext.BaseDirectory,
+            GlobalJsonContent = """
+{
+  "sdk": {
+    "version": "10.0.100",
+    "rollForward": "latestMinor",
+    "allowPrerelease": false
+  }
+}
+""",
+            PackageVersions = LoadPluginPackageVersions(),
+        });
+        Assert.IsTrue(generation.Succeeded, string.Join(Environment.NewLine, generation.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+
+        var packages = new SourcePluginDiscoveryService().Discover(root).OrderBy(static package => package.PackageId, StringComparer.Ordinal).ToArray();
+        CollectionAssert.AreEquivalent(ExpectedSamples, packages.Select(static package => package.PackageId).ToArray());
+        foreach (var package in packages)
+        {
+            var buildResult = await new PluginBuildService().BuildAsync(new PluginBuildRequest { Package = package, ForceRebuild = true });
+            AssertIfFileBasedBuildIsUnsupported(buildResult);
+            Assert.IsTrue(buildResult.Succeeded, BuildFailureMessage(buildResult));
+            var unloadReference = LoadDiscoverAndStartUnload(buildResult);
+            Assert.IsTrue(PluginAssemblyLoader.VerifyUnload(unloadReference), package.PackageId);
+        }
+    }
+
+    private static void AssertIfFileBasedBuildIsUnsupported(PluginBuildResult buildResult)
+    {
+        if (!buildResult.Succeeded && BuildFailureMessage(buildResult).Contains("The project file could not be loaded", StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.Inconclusive("The installed .NET SDK did not accept `dotnet build plugin.cs` file-based builds in this environment.");
+        }
+    }
+
+    private static WeakReference LoadDiscoverAndStartUnload(PluginBuildResult buildResult)
+    {
+        var loadResult = new PluginAssemblyLoader().Load(buildResult);
+        Assert.IsTrue(loadResult.Succeeded, string.Join(Environment.NewLine, loadResult.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.IsNotNull(loadResult.LoadContext);
+        Assert.IsTrue(new PluginTypeDiscoveryService().Discover(loadResult).Count > 0, buildResult.Package.PackageId);
+        return PluginAssemblyLoader.CreateUnloadWeakReference(loadResult.LoadContext);
+    }
+
+    private static string BuildFailureMessage(PluginBuildResult buildResult)
+        => string.Join(Environment.NewLine,
+            buildResult.RuntimeDiagnostics.Select(static diagnostic => diagnostic.Message)
+                .Concat(buildResult.Diagnostics.Select(static diagnostic => diagnostic.Message))
+                .Concat([buildResult.StandardOutput, buildResult.StandardError]));
+
+    private static IReadOnlyList<PluginPackageVersion> LoadPluginPackageVersions()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var packagePath = Path.Combine(directory.FullName, "Directory.Packages.props");
+            if (File.Exists(packagePath))
+            {
+                return PluginPackageVersionProvider.ExtractPluginPackageVersionsFromFile(packagePath);
+            }
+
+            directory = directory.Parent;
+        }
+
+        return [];
+    }
+
+    private static void CopySample(string sampleName, string destination)
+    {
+        var source = Path.Combine(GetSampleRoot(), sampleName);
+        Directory.CreateDirectory(destination);
+        foreach (var sourceFile in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var targetFile = Path.Combine(destination, Path.GetRelativePath(source, sourceFile));
+            Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
+            File.Copy(sourceFile, targetFile, overwrite: true);
+        }
+    }
+
+    private static string GetSampleRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var sampleRoot = Path.Combine(directory.FullName, "CodeAlta.Catalog", "BuiltinSkills", "codealta-plugin-runtime", "samples");
+            if (Directory.Exists(sampleRoot))
+            {
+                return sampleRoot;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not find built-in plugin runtime sample folders.");
+    }
+}

@@ -43,7 +43,7 @@ public sealed class SkillCatalog
     {
         _rootProviders = rootProviders is { Count: > 0 }
             ? rootProviders
-            : [new ProjectCodeAltaSkillRootProvider(), new ProjectCommonSkillRootProvider(), new UserCodeAltaSkillRootProvider(), new UserCommonSkillRootProvider()];
+            : [new ProjectCodeAltaSkillRootProvider(), new ProjectCommonSkillRootProvider(), new UserCodeAltaSkillRootProvider(), new UserCommonSkillRootProvider(), new BuiltInCodeAltaSkillRootProvider()];
     }
 
     /// <summary>
