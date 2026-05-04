@@ -388,7 +388,7 @@ public sealed class CodeAltaShellControllerTests
     }
 
     [TestMethod]
-    public async Task OpenFolderAsync_UpsertsProjectReloadsCatalogAndSelectsProject()
+    public async Task OpenFolderAsync_UpsertsProjectAndSelectsProjectWithoutReloadingThreads()
     {
         var log = new List<string>();
         var shell = new FakeShell(log);
@@ -415,9 +415,7 @@ public sealed class CodeAltaShellControllerTests
                 {
                     $"Shell.Status:Opening '{projectPath}'...:True:Info",
                     $"ProjectCatalog.UpsertFromPath:{projectPath}",
-                    "ProjectCatalog.Load",
-                    "ThreadSource.List",
-                    "Shell.ApplyRecoveredCatalogState:1:1",
+                    $"Shell.UpsertProject:{project.Id}",
                     $"Shell.SelectProjectScope:{project.Id}",
                     "Shell.SetReadyStatus",
                     "Shell.FocusPromptEditor",
@@ -463,9 +461,7 @@ public sealed class CodeAltaShellControllerTests
             {
                 "Shell.Status:Opening 'CodeAlta'...:True:Info",
                 "ProjectCatalog.Load",
-                "ProjectCatalog.Load",
-                "ThreadSource.List",
-                "Shell.ApplyRecoveredCatalogState:1:1",
+                "Shell.UpsertProject:project-1",
                 "Shell.SelectProjectScope:project-1",
                 "Shell.SetReadyStatus",
                 "Shell.FocusPromptEditor",
@@ -731,6 +727,9 @@ public sealed class CodeAltaShellControllerTests
             IReadOnlyList<WorkThreadDescriptor> threads,
             bool pruneMissingThreads = true)
             => log.Add($"Shell.ApplyRecoveredCatalogState:{projects.Count}:{threads.Count}" + (pruneMissingThreads ? string.Empty : ":KeepMissing"));
+
+        public void UpsertProject(ProjectDescriptor project)
+            => log.Add($"Shell.UpsertProject:{project.Id}");
 
         public void SetReadyStatusForCurrentSelection()
             => log.Add("Shell.SetReadyStatus");

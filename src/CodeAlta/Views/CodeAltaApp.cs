@@ -739,6 +739,9 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         bool pruneMissingThreads = true)
         => _threadStateCoordinator.ApplyRecoveredCatalogState(projects, threads, pruneMissingThreads);
 
+    internal void UpsertProject(ProjectDescriptor project)
+        => _threadStateCoordinator.UpsertProject(project);
+
     internal void TrySchedulePendingStartupThreadRestore(CancellationToken cancellationToken)
         => _threadStateCoordinator.TrySchedulePendingStartupThreadRestore(cancellationToken);
 

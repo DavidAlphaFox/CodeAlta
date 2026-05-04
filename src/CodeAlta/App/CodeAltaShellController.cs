@@ -189,13 +189,11 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
             .ConfigureAwait(false);
 
         var project = await ResolveOpenProjectAsync(folderPath, includeHidden, cancellationToken).ConfigureAwait(false);
-        var projects = await _projectCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
-        var threads = await _recoverableThreadSource.ListRecoverableThreadsAsync(cancellationToken).ConfigureAwait(false);
 
         await UiDispatcher.InvokeAsync(
                 () =>
                 {
-                    _shell.ApplyRecoveredCatalogState(projects, threads);
+                    _shell.UpsertProject(project);
                     _shell.SelectProjectScope(project.Id);
                     _shell.SetReadyStatusForCurrentSelection();
                     _shell.FocusPromptEditor();

@@ -34,6 +34,9 @@ internal sealed class CodeAltaShellBridge : ICodeAltaShell
         bool pruneMissingThreads = true)
         => _app.ApplyRecoveredCatalogState(projects, threads, pruneMissingThreads);
 
+    public void UpsertProject(ProjectDescriptor project)
+        => _app.UpsertProject(project);
+
     public void SetReadyStatusForCurrentSelection()
         => _app.SetReadyStatusForCurrentSelection();
 

@@ -179,6 +179,13 @@ internal sealed class ShellThreadStateCoordinator
     public async Task PersistThreadLocalStateAsync(WorkThreadDescriptor thread)
         => await _viewStateCoordinator.PersistThreadLocalStateAsync(ViewState, thread);
 
+    public void UpsertProject(ProjectDescriptor project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+
+        _catalogStateCoordinator.UpsertProject(project);
+    }
+
     public void RekeyThreadIdentity(string oldThreadId, WorkThreadDescriptor thread)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(oldThreadId);

@@ -119,6 +119,17 @@ internal sealed class ShellCatalogStateCoordinator
             .ToArray();
     }
 
+    public void UpsertProject(ProjectDescriptor project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+
+        _projects = _projects
+            .Where(existing => !string.Equals(existing.Id, project.Id, StringComparison.OrdinalIgnoreCase))
+            .Append(project)
+            .OrderBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     public ProjectDescriptor? GetProjectById(string? projectId)
     {
         if (string.IsNullOrWhiteSpace(projectId))

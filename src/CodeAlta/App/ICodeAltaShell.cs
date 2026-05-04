@@ -20,6 +20,8 @@ internal interface ICodeAltaShell
         IReadOnlyList<WorkThreadDescriptor> threads,
         bool pruneMissingThreads = true);
 
+    void UpsertProject(ProjectDescriptor project);
+
     void SetReadyStatusForCurrentSelection();
 
     void HandleRuntimeEvent(WorkThreadRuntimeEvent runtimeEvent);
