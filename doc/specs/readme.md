@@ -104,6 +104,7 @@ These documents remain useful, but they should not drive the first implementatio
 - `doc/specs/agent_event_stream_unification.md`
 - `doc/specs/blueprint_mcp_server_specs.md`
 - `doc/specs/plugins_abstraction_specs.md`
+- `doc/specs/plugins_runtime_specs.md`
 
 ## 6. Historical and broad context
 
