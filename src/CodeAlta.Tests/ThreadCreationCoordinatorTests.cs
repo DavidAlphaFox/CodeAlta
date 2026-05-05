@@ -59,7 +59,7 @@ public sealed class ThreadCreationCoordinatorTests
                 OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
                 OnUserInputRequest = static (_, _) => Task.FromResult(new AgentUserInputResponse(new Dictionary<string, string>())),
             },
-            static (_, _, _, _, _) => { },
+            static (_, _, _, _) => { },
             static _ => Task.CompletedTask,
             static () => { },
             static (_, _, _) => { });

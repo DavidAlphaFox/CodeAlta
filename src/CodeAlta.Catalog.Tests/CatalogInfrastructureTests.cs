@@ -414,7 +414,6 @@ public sealed class CatalogInfrastructureTests
                 {
                     ModelId = "gpt-5.4",
                     ReasoningEffort = AgentReasoningEffort.High,
-                    AutoScroll = false,
                 },
             },
             Navigator = new NavigatorSettings
@@ -442,7 +441,6 @@ public sealed class CatalogInfrastructureTests
         Assert.AreEqual(viewState.SelectedThreadId, reloaded.SelectedThreadId);
         Assert.AreEqual("gpt-5.4", reloaded.ThreadPreferences["platform-search-review"].ModelId);
         Assert.AreEqual(AgentReasoningEffort.High, reloaded.ThreadPreferences["platform-search-review"].ReasoningEffort);
-        Assert.IsFalse(reloaded.ThreadPreferences["platform-search-review"].AutoScroll);
         Assert.AreEqual(NavigatorProjectSortMode.Date, reloaded.Navigator.SortMode);
         Assert.AreEqual(8, reloaded.Navigator.RecentThreadsPerProject);
         Assert.IsTrue(reloaded.ThreadStates["platform-search-review"].Archived);

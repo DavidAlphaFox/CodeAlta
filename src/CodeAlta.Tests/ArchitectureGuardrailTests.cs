@@ -105,7 +105,6 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsFalse(appSource.Contains("Dictionary<string, TabPage>", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_threadTabControl", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_sendPromptButton", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("_chatAutoScrollCheckBox", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_chatBackendSelect", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_chatModelSelect", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_chatReasoningSelect", StringComparison.Ordinal));

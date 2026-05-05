@@ -48,7 +48,7 @@ public sealed class ThreadCommandCoordinatorTests
             static _ => null,
             static _ => { },
             static _ => { },
-            static (_, _, _, _, _) => { },
+            static (_, _, _, _) => { },
             static (_, _) => Task.CompletedTask,
             static () => { },
             static () => { },
@@ -126,7 +126,7 @@ public sealed class ThreadCommandCoordinatorTests
                 static _ => { },
                 static _ => { },
                 static (_, _, _) => { },
-                static (_, _, _, _, _) => { }),
+                static (_, _, _, _) => { }),
             commandContext,
             queueCoordinator,
             new PromptComposerViewModel());
@@ -185,7 +185,7 @@ public sealed class ThreadCommandCoordinatorTests
             static _ => null,
             static _ => { },
             static _ => { },
-            static (_, _, _, _, _) => { },
+            static (_, _, _, _) => { },
             static (_, _) => Task.CompletedTask,
             static () => { },
             static () => { },
@@ -258,7 +258,7 @@ public sealed class ThreadCommandCoordinatorTests
                 static _ => { },
                 static _ => { },
                 static (_, _, _) => { },
-                static (_, _, _, _, _) => { }),
+                static (_, _, _, _) => { }),
             commandContext,
             queueCoordinator,
             new PromptComposerViewModel());
@@ -351,7 +351,11 @@ public sealed class ThreadCommandCoordinatorTests
         };
         var harness = await CreateSelectedThreadHarnessAsync(temp.Path, backend).ConfigureAwait(false);
         await using var _ = harness.Hub;
-        harness.Tab.ActiveRunId = new AgentRunId("active-run-1");
+        await harness.RuntimeService.SendAsync(
+                harness.Tab.Thread,
+                CreateExecutionOptions(backend.BackendId, temp.Path),
+                new AgentSendOptions { Input = new AgentInput([new AgentInputItem.Text("active")]) })
+            .ConfigureAwait(false);
         harness.ThreadInput.Text = string.Empty;
 
         await harness.Coordinator.DispatchQueuedPromptAsync(harness.Tab, PromptSubmission.TextOnly("Retry steer"), steer: true).ConfigureAwait(false);
@@ -371,7 +375,11 @@ public sealed class ThreadCommandCoordinatorTests
         };
         var harness = await CreateSelectedThreadHarnessAsync(temp.Path, backend).ConfigureAwait(false);
         await using var _ = harness.Hub;
-        harness.Tab.ActiveRunId = new AgentRunId("active-run-1");
+        await harness.RuntimeService.SendAsync(
+                harness.Tab.Thread,
+                CreateExecutionOptions(backend.BackendId, temp.Path),
+                new AgentSendOptions { Input = new AgentInput([new AgentInputItem.Text("active")]) })
+            .ConfigureAwait(false);
         harness.ThreadInput.Text = string.Empty;
 
         await harness.Coordinator.DispatchQueuedPromptAsync(harness.Tab, PromptSubmission.TextOnly("Retry later"), steer: true).ConfigureAwait(false);
@@ -447,7 +455,7 @@ public sealed class ThreadCommandCoordinatorTests
             static _ => null,
             static _ => { },
             static _ => { },
-            static (_, _, _, _, _) => { },
+            static (_, _, _, _) => { },
             static (_, _) => Task.CompletedTask,
             static () => { },
             static () => { },
@@ -512,7 +520,7 @@ public sealed class ThreadCommandCoordinatorTests
                 static _ => { },
                 static _ => { },
                 static (_, _, _) => { },
-                static (_, _, _, _, _) => { }),
+                static (_, _, _, _) => { }),
             commandContext,
             queueCoordinator,
             new PromptComposerViewModel());
@@ -522,7 +530,7 @@ public sealed class ThreadCommandCoordinatorTests
         var tab = threadSelection.EnsureThreadTab(thread);
         tab.BackendId = backend.BackendId;
 
-        return new ThreadCommandHarness(hub, coordinator, tab, threadInput);
+        return new ThreadCommandHarness(hub, runtimeService, coordinator, tab, threadInput);
     }
 
     private sealed class InlineUiDispatcher : IUiDispatcher
@@ -719,6 +727,7 @@ public sealed class ThreadCommandCoordinatorTests
 
     private sealed record ThreadCommandHarness(
         AgentHub Hub,
+        WorkThreadRuntimeService RuntimeService,
         ThreadCommandCoordinator Coordinator,
         OpenThreadState Tab,
         ChatPromptEditor ThreadInput);

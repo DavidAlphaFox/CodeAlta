@@ -217,7 +217,7 @@ internal sealed class ThreadPromptDispatchCoordinator
                 executionOptions = CopyExecutionOptions(executionOptions, augmentation);
             }
 
-            var dispatchAsSteer = steer && tab.ActiveRunId is not null;
+            var dispatchAsSteer = steer && await _runtimeService.HasActiveRunAsync(thread, cancellationToken).ConfigureAwait(false);
             _ = RecordResolvedReferenceUsageAsync(promptInput.ResolvedReferences);
             AgentRunId runId;
             if (dispatchAsSteer)
@@ -232,7 +232,6 @@ internal sealed class ThreadPromptDispatchCoordinator
                             new AgentSteerOptions
                             {
                                 Input = agentInput,
-                                ExpectedRunId = tab.ActiveRunId,
                             },
                             cancellationToken)
                         ;

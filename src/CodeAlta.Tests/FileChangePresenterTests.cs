@@ -121,8 +121,6 @@ public sealed class FileChangePresenterTests
         => new(
             new DocumentFlow(),
             new InlineUiDispatcher(),
-            static () => true,
-            static () => { },
             static _ => { },
             static () => (Rectangle?)null);
 

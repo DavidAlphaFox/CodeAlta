@@ -107,8 +107,7 @@ internal sealed class CodeAltaFrontendComposition
             callbacks.RefreshCatalogAndThreadWorkspace,
             callbacks.ResetPendingThreadTabSelection,
             callbacks.RemoveThreadTabPage,
-            callbacks.SetStatus,
-            callbacks.DispatchToUiDeferred);
+            callbacks.SetStatus);
         var threadSelectionContext = new ThreadSelectionContext(
             threadStateCoordinator,
             callbacks.EnsureThreadHistoryLoadedAsync,

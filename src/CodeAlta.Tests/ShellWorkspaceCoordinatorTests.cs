@@ -82,7 +82,7 @@ public sealed class ShellWorkspaceCoordinatorTests
             static _ => null,
             static _ => { },
             static _ => { },
-            static (_, _, _, _, _) => { },
+            static (_, _, _, _) => { },
             static (_, _) => Task.CompletedTask,
             static () => { },
             static () => { },

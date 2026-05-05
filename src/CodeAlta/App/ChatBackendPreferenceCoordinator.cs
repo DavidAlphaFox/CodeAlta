@@ -56,7 +56,6 @@ internal sealed class ChatBackendPreferenceCoordinator
         var defaults = _configStore.GetEffectiveProviderPreference(tab.BackendId.Value, threadProjectRoot);
         tab.ModelId ??= persistedPreference?.ModelId ?? defaults.Model;
         tab.ReasoningEffort ??= persistedPreference?.ReasoningEffort ?? defaults.ReasoningEffort;
-        tab.AutoScroll = persistedPreference?.AutoScroll ?? true;
 
         if (!chatBackendStates.TryGetValue(tab.BackendId.Value, out var backendState))
         {
@@ -92,14 +91,13 @@ internal sealed class ChatBackendPreferenceCoordinator
         WorkThreadViewState viewState,
         string threadId,
         string? modelId,
-        AgentReasoningEffort? reasoningEffort,
-        bool autoScroll)
+        AgentReasoningEffort? reasoningEffort)
     {
         ArgumentNullException.ThrowIfNull(viewState);
         ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
 
         var normalizedModel = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
-        if (normalizedModel is null && reasoningEffort is null && autoScroll)
+        if (normalizedModel is null && reasoningEffort is null)
         {
             viewState.ThreadPreferences.Remove(threadId);
         }
@@ -109,7 +107,6 @@ internal sealed class ChatBackendPreferenceCoordinator
             {
                 ModelId = normalizedModel,
                 ReasoningEffort = reasoningEffort,
-                AutoScroll = autoScroll,
             };
         }
 

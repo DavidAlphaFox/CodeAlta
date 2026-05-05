@@ -112,7 +112,7 @@ public sealed class ToolCallPresenterTests
     }
 
     [TestMethod]
-    public void TryHandleActivity_OnExistingToolCallScrollsTimelineBackToTail()
+    public void TryHandleActivity_OnExistingToolCallDoesNotForceTailScroll()
     {
         var flow = new DocumentFlow { FollowTail = false };
         var presenter = CreatePresenter(flow);
@@ -144,7 +144,7 @@ public sealed class ToolCallPresenterTests
             "shell_command",
             null));
 
-        Assert.IsTrue(flow.FollowTail);
+        Assert.IsFalse(flow.FollowTail);
     }
 
     private static ToolCallPresenter CreatePresenter(DocumentFlow? flow = null)
@@ -153,8 +153,6 @@ public sealed class ToolCallPresenterTests
         return new(
             flow,
             new InlineUiDispatcher(),
-            static () => true,
-            () => flow.ScrollToTailIfEnabled(autoScroll: true),
             static _ => { },
             static () => (Rectangle?)null);
     }

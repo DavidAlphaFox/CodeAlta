@@ -5,7 +5,6 @@ using CodeAlta.App;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Formatting;
 using CodeAlta.Presentation.Prompting;
-using CodeAlta.Views;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
 using XenoAtom.Terminal.UI.Geometry;
@@ -14,17 +13,8 @@ namespace CodeAlta.Presentation.Timeline;
 
 internal sealed class ThreadTimelinePresenter
 {
-    private enum DeferredTailScrollMode
-    {
-        None = 0,
-        Auto = 1,
-        Reveal = 2,
-    }
-
     private readonly IUiDispatcher _uiDispatcher;
-    private readonly Func<bool> _isAutoScrollEnabled;
     private readonly Func<Rectangle?> _getDialogBounds;
-    private readonly Action<Action>? _enqueueDeferredUiAction;
     private readonly Dictionary<string, ChatContentState> _contentStates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ChatStatusState> _activityStates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ChatStatusState> _interactionStates = new(StringComparer.Ordinal);
@@ -35,26 +25,19 @@ internal sealed class ThreadTimelinePresenter
     private OptimisticUserPromptState? _optimisticUserPrompt;
     private TruncatedHistoryState? _truncatedHistory;
     private bool _hasSeenUserPrompt;
-    private bool _deferredTailScrollQueued;
-    private DeferredTailScrollMode _deferredTailScrollMode;
     private int? _messageNavigationIndex;
     private string? _localFileRootPath;
 
     public ThreadTimelinePresenter(
         IUiDispatcher uiDispatcher,
-        Func<bool> isAutoScrollEnabled,
         Func<Rectangle?> getDialogBounds,
-        string? localFileRootPath = null,
-        Action<Action>? enqueueDeferredUiAction = null)
+        string? localFileRootPath = null)
     {
         ArgumentNullException.ThrowIfNull(uiDispatcher);
-        ArgumentNullException.ThrowIfNull(isAutoScrollEnabled);
         ArgumentNullException.ThrowIfNull(getDialogBounds);
 
         _uiDispatcher = uiDispatcher;
-        _isAutoScrollEnabled = isAutoScrollEnabled;
         _getDialogBounds = getDialogBounds;
-        _enqueueDeferredUiAction = enqueueDeferredUiAction;
         _localFileRootPath = localFileRootPath;
         Flow = UiDispatch.Invoke(
             _uiDispatcher,
@@ -68,16 +51,12 @@ internal sealed class ThreadTimelinePresenter
         ToolCalls = new ToolCallPresenter(
             Flow,
             _uiDispatcher,
-            _isAutoScrollEnabled,
-            RequestAutoScrollToTail,
             item => AppendTimelineItem(item, resetActiveToolCallGroup: false),
             getDialogBounds,
             localFileRootPath);
         FileChanges = new FileChangePresenter(
             Flow,
             _uiDispatcher,
-            _isAutoScrollEnabled,
-            RequestAutoScrollToTail,
             item => AppendTimelineItem(item, resetActiveToolCallGroup: true),
             getDialogBounds,
             localFileRootPath);
@@ -203,7 +182,6 @@ internal sealed class ThreadTimelinePresenter
                 ChatTimelineVisualFactory.GetContentHeader(delta.Kind),
                 headerSecondary);
             state.Markdown.Markdown = markdown;
-            RequestAutoScrollToTail();
         });
     }
 
@@ -293,7 +271,6 @@ internal sealed class ThreadTimelinePresenter
                 ChatTimelineVisualFactory.GetContentHeader(completed.Kind),
                 headerSecondary);
             state.Markdown.Markdown = markdown;
-            RequestAutoScrollToTail();
         });
     }
 
@@ -410,7 +387,6 @@ internal sealed class ThreadTimelinePresenter
         {
             ChatTimelineVisualFactory.ApplyTimestamp(state.TimestampText, timestamp);
             state.Markdown.Markdown = state.MarkdownValue;
-            RequestAutoScrollToTail();
         });
     }
 
@@ -504,16 +480,11 @@ internal sealed class ThreadTimelinePresenter
             () =>
             {
                 Flow.Items.AddRange(items);
-                RequestAutoScrollToTail();
             });
     }
 
     public void RevealTail()
-        => _uiDispatcher.Post(
-            () =>
-            {
-                RequestRevealTail();
-            });
+        => _uiDispatcher.Post(Flow.ScrollToTail);
 
     public void ScrollToPreviousMessage()
         => _uiDispatcher.Post(ScrollToPreviousMessageCore);
@@ -675,7 +646,6 @@ internal sealed class ThreadTimelinePresenter
         {
             ChatTimelineVisualFactory.ApplyTimestamp(stateEntry.TimestampText, timestamp);
             stateEntry.Markdown.Markdown = stateEntry.MarkdownValue;
-            RequestAutoScrollToTail();
         });
     }
 
@@ -710,7 +680,6 @@ internal sealed class ThreadTimelinePresenter
         UiDispatch.Post(_uiDispatcher, () =>
         {
             Flow.Items.Add(item);
-            RequestAutoScrollToTail();
         });
     }
 
@@ -916,7 +885,7 @@ internal sealed class ThreadTimelinePresenter
     private void ScrollToLastMessageCore()
     {
         _messageNavigationIndex = null;
-        RequestRevealTail();
+        Flow.ScrollToTail();
     }
 
     private void ScrollToMessageAnchor(int anchorIndex)
@@ -959,60 +928,6 @@ internal sealed class ThreadTimelinePresenter
         }
 
         return -1;
-    }
-
-    private void RequestAutoScrollToTail()
-    {
-        Flow.ScrollToTailIfEnabled(_isAutoScrollEnabled());
-        QueueDeferredTailScroll(DeferredTailScrollMode.Auto);
-    }
-
-    private void RequestRevealTail()
-    {
-        Flow.ScrollToTailIfFollowing();
-        QueueDeferredTailScroll(DeferredTailScrollMode.Reveal);
-    }
-
-    private void QueueDeferredTailScroll(DeferredTailScrollMode mode)
-    {
-        if (_enqueueDeferredUiAction is null)
-        {
-            return;
-        }
-
-        if (mode > _deferredTailScrollMode)
-        {
-            _deferredTailScrollMode = mode;
-        }
-
-        if (_deferredTailScrollQueued || mode == DeferredTailScrollMode.None)
-        {
-            return;
-        }
-
-        _deferredTailScrollQueued = true;
-        _enqueueDeferredUiAction(QueueDeferredTailScrollDrainOnUi);
-    }
-
-    private void QueueDeferredTailScrollDrainOnUi()
-    {
-        _uiDispatcher.Post(DrainDeferredTailScroll);
-    }
-
-    private void DrainDeferredTailScroll()
-    {
-        _deferredTailScrollQueued = false;
-        var mode = _deferredTailScrollMode;
-        _deferredTailScrollMode = DeferredTailScrollMode.None;
-        switch (mode)
-        {
-            case DeferredTailScrollMode.Auto:
-                Flow.ScrollToTailIfEnabled(_isAutoScrollEnabled());
-                break;
-            case DeferredTailScrollMode.Reveal:
-                Flow.ScrollToTailIfFollowing();
-                break;
-        }
     }
 
     private readonly record struct MessageNavigationAnchor(DocumentFlowItem Item, AgentContentKind Kind);

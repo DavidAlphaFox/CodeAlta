@@ -57,8 +57,7 @@ public sealed class ThreadWorkspaceViewTests
             static _ => { },
             static _ => { },
             new State<string?>(string.Empty),
-            new State<float>(0),
-            static () => { });
+            new State<float>(0));
 
         view.SyncChatSelectorItems(workspaceViewModel);
 
@@ -129,8 +128,7 @@ public sealed class ThreadWorkspaceViewTests
             static _ => { },
             static _ => { },
             new State<string?>(string.Empty),
-            new State<float>(0),
-            static () => { });
+            new State<float>(0));
 
         var closeTabCommand = Assert.IsInstanceOfType<Command>(
             view.ThreadInput.Commands.Single(command => string.Equals(command.Id, "CodeAlta.Thread.CloseTab", StringComparison.Ordinal)));
@@ -151,11 +149,7 @@ public sealed class ThreadWorkspaceViewTests
     public void ToggleControls_UseCheckBoxesBoundToViewModels()
     {
         var shellViewModel = new CodeAltaShellViewModel();
-        var workspaceViewModel = new ThreadWorkspaceViewModel
-        {
-            AutoScroll = false,
-            CanToggleAutoScroll = true,
-        };
+        var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel
         {
             AlwaysEnqueue = true,
@@ -189,11 +183,8 @@ public sealed class ThreadWorkspaceViewTests
             static _ => { },
             static _ => { },
             new State<string?>(string.Empty),
-            new State<float>(0),
-            static () => { });
+            new State<float>(0));
 
-        Assert.IsFalse(view.ChatAutoScrollCheckBox.IsChecked);
-        Assert.IsTrue(view.ChatAutoScrollCheckBox.IsEnabled);
         Assert.IsTrue(view.AlwaysEnqueueCheckBox.IsChecked);
         Assert.IsTrue(view.AlwaysEnqueueCheckBox.IsEnabled);
     }
@@ -229,8 +220,7 @@ public sealed class ThreadWorkspaceViewTests
             static _ => { },
             static _ => { },
             new State<string?>(string.Empty),
-            new State<float>(0),
-            static () => { });
+            new State<float>(0));
 
         Assert.IsFalse(view.ThreadCommandBar.MultiLine);
     }
@@ -293,8 +283,7 @@ public sealed class ThreadWorkspaceViewTests
             static _ => { },
             static _ => { },
             new State<string?>(string.Empty),
-            new State<float>(0),
-            static () => { });
+            new State<float>(0));
 
         using var terminalSession = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(120, 40)), new TerminalOptions { ImplicitStartInput = true }, force: true);
         var app = new TerminalApp(
@@ -364,8 +353,7 @@ public sealed class ThreadWorkspaceViewTests
             static _ => { },
             static _ => { },
             new State<string?>(string.Empty),
-            new State<float>(0),
-            static () => { });
+            new State<float>(0));
 
         using var terminalSession = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(120, 40)), new TerminalOptions { ImplicitStartInput = true }, force: true);
         var app = new TerminalApp(
@@ -427,8 +415,7 @@ public sealed class ThreadWorkspaceViewTests
             static _ => { },
             static _ => { },
             promptText,
-            new State<float>(0),
-            static () => { });
+            new State<float>(0));
 
         using var terminalSession = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(120, 40)), new TerminalOptions { ImplicitStartInput = true }, force: true);
         var app = new TerminalApp(

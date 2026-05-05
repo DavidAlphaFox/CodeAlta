@@ -14,10 +14,9 @@ internal sealed class OpenThreadRegistry
     private readonly Dictionary<string, OpenThreadState> _threadTabs = new(StringComparer.OrdinalIgnoreCase);
     private readonly Func<IUiDispatcher> _getUiDispatcher;
     private readonly Func<Rectangle?> _getTimelineBounds;
-    private readonly Action<Action> _dispatchToUiDeferred;
     private readonly Func<string, string?> _loadPromptDraft;
     private readonly Action<OpenThreadState> _applyThreadPreference;
-    private readonly Action<string, string?, AgentReasoningEffort?, bool, bool> _rememberThreadPreference;
+    private readonly Action<string, string?, AgentReasoningEffort?, bool> _rememberThreadPreference;
     private readonly Func<ProjectDescriptor?> _getSelectedProject;
     private readonly Func<string?, ProjectDescriptor?> _getProjectById;
 
@@ -26,10 +25,9 @@ internal sealed class OpenThreadRegistry
         Func<Rectangle?> getTimelineBounds,
         Func<string, string?> loadPromptDraft,
         Action<OpenThreadState> applyThreadPreference,
-        Action<string, string?, AgentReasoningEffort?, bool, bool> rememberThreadPreference,
+        Action<string, string?, AgentReasoningEffort?, bool> rememberThreadPreference,
         Func<ProjectDescriptor?> getSelectedProject,
-        Func<string?, ProjectDescriptor?> getProjectById,
-        Action<Action>? dispatchToUiDeferred = null)
+        Func<string?, ProjectDescriptor?> getProjectById)
     {
         ArgumentNullException.ThrowIfNull(getUiDispatcher);
         ArgumentNullException.ThrowIfNull(getTimelineBounds);
@@ -41,7 +39,6 @@ internal sealed class OpenThreadRegistry
 
         _getUiDispatcher = getUiDispatcher;
         _getTimelineBounds = getTimelineBounds;
-        _dispatchToUiDeferred = dispatchToUiDeferred ?? NoopDispatchToUiDeferred;
         _loadPromptDraft = loadPromptDraft;
         _applyThreadPreference = applyThreadPreference;
         _rememberThreadPreference = rememberThreadPreference;
@@ -62,21 +59,18 @@ internal sealed class OpenThreadRegistry
             return existing;
         }
 
-        OpenThreadState? state = null;
         var timeline = new ThreadTimelinePresenter(
             _getUiDispatcher(),
-            () => state!.AutoScroll,
             _getTimelineBounds,
-            ResolveThreadProjectRoot(thread),
-            _dispatchToUiDeferred);
-        state = new OpenThreadState(thread, timeline);
+            ResolveThreadProjectRoot(thread));
+        var state = new OpenThreadState(thread, timeline);
         state.BackendId = new AgentBackendId(thread.BackendId);
         state.Session.PromptDraftText = _loadPromptDraft(thread.ThreadId) ?? string.Empty;
         state.ViewModel.Title = thread.Title;
         state.StatusMessage = ShellTextFormatter.BuildReadyStatusText(thread, _getSelectedProject(), globalScopeSelected: false);
 
         _applyThreadPreference(state);
-        _rememberThreadPreference(thread.ThreadId, state.ModelId, state.ReasoningEffort, state.AutoScroll, false);
+        _rememberThreadPreference(thread.ThreadId, state.ModelId, state.ReasoningEffort, false);
 
         _threadTabs[thread.ThreadId] = state;
         return state;
@@ -147,8 +141,4 @@ internal sealed class OpenThreadRegistry
         }
     }
 
-    private static void NoopDispatchToUiDeferred(Action action)
-    {
-        _ = action;
-    }
 }

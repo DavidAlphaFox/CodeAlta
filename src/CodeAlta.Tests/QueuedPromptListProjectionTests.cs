@@ -72,7 +72,7 @@ public sealed class QueuedPromptListProjectionTests
             LastActiveAt = DateTimeOffset.UtcNow,
         };
 
-        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), () => true, static () => null);
+        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => null);
         return new OpenThreadState(thread, timeline);
     }
 

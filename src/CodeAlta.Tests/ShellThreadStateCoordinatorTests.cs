@@ -256,7 +256,6 @@ public sealed class ShellThreadStateCoordinatorTests
         {
             ModelId = "gpt-4.1",
             ReasoningEffort = AgentReasoningEffort.High,
-            AutoScroll = false,
         };
         coordinator.PendingStartupThreadRestoreId = thread.ThreadId;
         coordinator.OpenThread(thread.ThreadId);
@@ -302,7 +301,7 @@ public sealed class ShellThreadStateCoordinatorTests
             loadPromptDraft ?? (static _ => null),
             deletePromptDraft ?? (static _ => { }),
             static _ => { },
-            static (_, _, _, _, _) => { },
+            static (_, _, _, _) => { },
             static (_, _) => Task.CompletedTask,
             static () => { },
             static () => { },

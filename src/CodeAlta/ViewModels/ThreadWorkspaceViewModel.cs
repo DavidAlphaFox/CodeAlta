@@ -10,7 +10,6 @@ public sealed partial class ThreadWorkspaceViewModel
     {
         BackendStatusMarkup = string.Empty;
         ProviderSummaryMarkup = string.Empty;
-        AutoScroll = true;
         SelectedBackendIndex = -1;
         SelectedModelIndex = -1;
         SelectedReasoningIndex = -1;
@@ -34,12 +33,6 @@ public sealed partial class ThreadWorkspaceViewModel
 
     [Bindable]
     public partial bool CanSelectReasoning { get; set; }
-
-    [Bindable]
-    public partial bool CanToggleAutoScroll { get; set; }
-
-    [Bindable]
-    public partial bool AutoScroll { get; set; }
 
     [Bindable]
     public partial IReadOnlyList<ChatBackendOption> BackendOptions { get; set; }

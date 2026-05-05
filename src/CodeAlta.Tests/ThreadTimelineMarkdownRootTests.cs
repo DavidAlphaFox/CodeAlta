@@ -27,7 +27,7 @@ public sealed class ThreadTimelineMarkdownRootTests
     {
         const string initialProjectRoot = @"C:\code\CodeAlta";
         const string updatedProjectRoot = @"D:\code\CodeAlta";
-        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), () => true, static () => null, initialProjectRoot);
+        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => null, initialProjectRoot);
 
         timeline.FinalizeContent(new AgentContentCompletedEvent(
             AgentBackendIds.Codex,
@@ -74,7 +74,7 @@ public sealed class ThreadTimelineMarkdownRootTests
             static () => null,
             static _ => null,
             static _ => { },
-            static (_, _, _, _, _) => { },
+            static (_, _, _, _) => { },
             () => project,
             projectId => string.Equals(projectId, project.Id, StringComparison.OrdinalIgnoreCase) ? project : null);
         var thread = CreateThread();

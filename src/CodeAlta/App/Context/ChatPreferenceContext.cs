@@ -10,13 +10,13 @@ internal sealed class ChatPreferenceContext
     private readonly Action<ChatBackendState> _applyDraftBackendPreference;
     private readonly Action<OpenThreadState> _applyThreadPreference;
     private readonly Action<AgentBackendId, string?, AgentReasoningEffort?> _rememberGlobalBackendPreference;
-    private readonly Action<string, string?, AgentReasoningEffort?, bool, bool> _rememberThreadPreference;
+    private readonly Action<string, string?, AgentReasoningEffort?, bool> _rememberThreadPreference;
 
     public ChatPreferenceContext(
         Action<ChatBackendState> applyDraftBackendPreference,
         Action<OpenThreadState> applyThreadPreference,
         Action<AgentBackendId, string?, AgentReasoningEffort?> rememberGlobalBackendPreference,
-        Action<string, string?, AgentReasoningEffort?, bool, bool> rememberThreadPreference)
+        Action<string, string?, AgentReasoningEffort?, bool> rememberThreadPreference)
     {
         ArgumentNullException.ThrowIfNull(applyDraftBackendPreference);
         ArgumentNullException.ThrowIfNull(applyThreadPreference);
@@ -51,7 +51,6 @@ internal sealed class ChatPreferenceContext
         string threadId,
         string? modelId,
         AgentReasoningEffort? reasoningEffort,
-        bool autoScroll,
         bool persistNow)
-        => _rememberThreadPreference(threadId, modelId, reasoningEffort, autoScroll, persistNow);
+        => _rememberThreadPreference(threadId, modelId, reasoningEffort, persistNow);
 }

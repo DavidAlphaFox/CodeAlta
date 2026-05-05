@@ -350,9 +350,7 @@ internal sealed class ThreadPromptQueueCoordinator
             throw new ArgumentException("Prompt text or image attachments are required.", nameof(prompt));
         }
 
-        return tab.ActiveRunId is not null
-            ? _dispatchSteeringPromptAsync(tab, prompt, cancellationToken)
-            : _dispatchQueuedPromptAsync(tab, prompt, cancellationToken);
+        return _dispatchSteeringPromptAsync(tab, prompt, cancellationToken);
     }
 
     private bool TryGetSelectedTabWithQueue(out OpenThreadState? tab)

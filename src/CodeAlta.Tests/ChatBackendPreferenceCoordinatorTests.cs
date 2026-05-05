@@ -56,7 +56,6 @@ public sealed class ChatBackendPreferenceCoordinatorTests
                 {
                     ModelId = "glm-5.1",
                     ReasoningEffort = AgentReasoningEffort.Medium,
-                    AutoScroll = false,
                 },
             },
         };
@@ -65,7 +64,6 @@ public sealed class ChatBackendPreferenceCoordinatorTests
 
         Assert.AreEqual("glm-5.1", tab.ModelId);
         Assert.AreEqual(AgentReasoningEffort.Medium, tab.ReasoningEffort);
-        Assert.IsFalse(tab.AutoScroll);
     }
 
     private static OpenThreadState CreateOpenThreadState(string threadId, string providerKey)
@@ -83,7 +81,7 @@ public sealed class ChatBackendPreferenceCoordinatorTests
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,
         };
-        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => true, static () => null);
+        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => null);
         var tab = new OpenThreadState(thread, timeline)
         {
             BackendId = new AgentBackendId(providerKey),

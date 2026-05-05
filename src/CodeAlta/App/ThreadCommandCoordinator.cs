@@ -249,7 +249,7 @@ internal sealed class ThreadCommandCoordinator
                     title: ThreadRuntimeEventCoordinator.SummarizeContent(prompt),
                     cancellationToken: cancellationToken)
                 ;
-            _preferences.RememberThreadPreference(child.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, tab.AutoScroll, false);
+            _preferences.RememberThreadPreference(child.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, false);
 
             _ = _threadSelection.RegisterDelegatedThread(child, tab);
 

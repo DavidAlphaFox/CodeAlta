@@ -169,14 +169,14 @@ public sealed class ThreadTimelinePresenterTests
     }
 
     [TestMethod]
-    public void RenderOptimisticUserPrompt_ScrollsTimelineToTail()
+    public void RenderOptimisticUserPrompt_DoesNotForceTimelineToTail()
     {
         var presenter = CreatePresenter();
         presenter.Flow.FollowTail = false;
 
         presenter.RenderOptimisticUserPrompt("First prompt", DateTimeOffset.UtcNow);
 
-        Assert.IsTrue(presenter.Flow.FollowTail);
+        Assert.IsFalse(presenter.Flow.FollowTail);
     }
 
     [TestMethod]
@@ -238,36 +238,12 @@ public sealed class ThreadTimelinePresenterTests
     public void RevealTail_PostsThroughDispatcherBeforeChangingFollowTail()
     {
         var dispatcher = new QueueingUiDispatcher();
-        var presenter = new ThreadTimelinePresenter(dispatcher, () => true, static () => null);
+        var presenter = new ThreadTimelinePresenter(dispatcher, static () => null);
         presenter.Flow.FollowTail = false;
 
         presenter.RevealTail();
 
         Assert.IsFalse(presenter.Flow.FollowTail);
-
-        dispatcher.DrainPostedActions();
-
-        Assert.IsTrue(presenter.Flow.FollowTail);
-    }
-
-    [TestMethod]
-    public void RevealTail_DeferredDrainWaitsForNextDispatcherTurn()
-    {
-        var dispatcher = new QueueingUiDispatcher();
-        var deferredActions = new Queue<Action>();
-        var presenter = new ThreadTimelinePresenter(dispatcher, () => true, static () => null, enqueueDeferredUiAction: deferredActions.Enqueue);
-        presenter.Flow.FollowTail = false;
-
-        presenter.RevealTail();
-        dispatcher.DrainPostedActions();
-
-        Assert.IsTrue(presenter.Flow.FollowTail);
-        Assert.AreEqual(1, deferredActions.Count);
-
-        presenter.Flow.FollowTail = false;
-        deferredActions.Dequeue()();
-
-        Assert.IsFalse(presenter.Flow.FollowTail, "Deferred tail reveal should wait for a dispatcher turn so layout can settle first.");
 
         dispatcher.DrainPostedActions();
 
@@ -375,7 +351,7 @@ public sealed class ThreadTimelinePresenterTests
     }
 
     private static ThreadTimelinePresenter CreatePresenter()
-        => new(new InlineUiDispatcher(), () => true, static () => null);
+        => new(new InlineUiDispatcher(), static () => null);
 
     private static void RenderCompletedContent(
         ThreadTimelinePresenter presenter,

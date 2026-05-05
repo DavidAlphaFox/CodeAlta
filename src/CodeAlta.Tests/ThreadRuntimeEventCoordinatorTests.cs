@@ -411,7 +411,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
 
     private static OpenThreadState CreateOpenThreadState(WorkThreadDescriptor thread)
     {
-        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), () => true, static () => null);
+        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => null);
         return new OpenThreadState(thread, timeline);
     }
 

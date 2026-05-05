@@ -100,7 +100,7 @@ public sealed class ThreadPromptQueueCoordinatorTests
             static _ => null,
             static _ => { },
             static _ => { },
-            static (_, _, _, _, _) => { },
+            static (_, _, _, _) => { },
             static (_, _) => Task.CompletedTask,
             static () => { },
             static () => { },
@@ -132,7 +132,7 @@ public sealed class ThreadPromptQueueCoordinatorTests
             LastActiveAt = DateTimeOffset.UtcNow,
         };
 
-        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => true, static () => null);
+        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => null);
         return new OpenThreadState(thread, timeline);
     }
 

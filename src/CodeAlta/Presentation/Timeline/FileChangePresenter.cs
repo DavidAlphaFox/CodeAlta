@@ -21,7 +21,6 @@ internal sealed class FileChangePresenter
     private const int FileChangeDialogLogCapacity = 20000;
 
     private readonly IUiDispatcher _uiDispatcher;
-    private readonly Action _requestTailScroll;
     private readonly Action<DocumentFlowItem> _appendTimelineItem;
     private readonly Func<Rectangle?> _getDialogBounds;
     private readonly Dictionary<string, PendingFileChangeEntry> _pendingEntries = new(StringComparer.OrdinalIgnoreCase);
@@ -34,21 +33,16 @@ internal sealed class FileChangePresenter
     public FileChangePresenter(
         DocumentFlow flow,
         IUiDispatcher uiDispatcher,
-        Func<bool> isAutoScrollEnabled,
-        Action requestTailScroll,
         Action<DocumentFlowItem> appendTimelineItem,
         Func<Rectangle?> getDialogBounds,
         string? localFileRootPath = null)
     {
         ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(uiDispatcher);
-        ArgumentNullException.ThrowIfNull(isAutoScrollEnabled);
-        ArgumentNullException.ThrowIfNull(requestTailScroll);
         ArgumentNullException.ThrowIfNull(appendTimelineItem);
         ArgumentNullException.ThrowIfNull(getDialogBounds);
 
         _uiDispatcher = uiDispatcher;
-        _requestTailScroll = requestTailScroll;
         _appendTimelineItem = appendTimelineItem;
         _getDialogBounds = getDialogBounds;
         _localFileRootPath = localFileRootPath;
@@ -223,8 +217,6 @@ internal sealed class FileChangePresenter
             {
                 group.ItemsHost.Children.Add(entry.Button);
             }
-
-            _requestTailScroll();
         });
 
         _pendingEntries.Clear();

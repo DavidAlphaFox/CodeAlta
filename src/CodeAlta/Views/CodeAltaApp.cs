@@ -408,10 +408,9 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         string threadId,
         string? modelId,
         AgentReasoningEffort? reasoningEffort,
-        bool autoScroll,
         bool persistNow)
     {
-        _backendPreferences.RememberThreadPreference(_viewState, threadId, modelId, reasoningEffort, autoScroll);
+        _backendPreferences.RememberThreadPreference(_viewState, threadId, modelId, reasoningEffort);
         if (persistNow)
         {
             _ = PersistViewStateAsync();
@@ -514,8 +513,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
         => _chatSelectorCoordinator.OnModelSelectionChanged(newIndex);
     private void OnChatReasoningSelectionChanged(int newIndex)
         => _chatSelectorCoordinator.OnReasoningSelectionChanged(newIndex);
-    private void OnChatAutoScrollChanged()
-        => _chatSelectorCoordinator.OnAutoScrollChanged();
     private AgentBackendId GetPreferredBackendId()
         => _chatSelectorCoordinator.GetPreferredBackendId();
     private bool IsChatBackendReady(AgentBackendId backendId)
@@ -577,7 +574,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable
             selectedIndex => _threadTabStripCoordinator.ObserveBoundSelection(selectedIndex),
             _promptDraftUiCoordinator.PromptTextBinding,
             _shellAnimationRuntime.ThinkingPhase01,
-            OnChatAutoScrollChanged,
             imageCallbacks);
         ThreadCommandBar!.MultiLine = _commandBarMultiLine;
         _fileEditorWorkspaceCoordinator.RefreshActiveContent();

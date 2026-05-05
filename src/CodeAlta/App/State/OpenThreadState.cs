@@ -54,12 +54,6 @@ internal sealed class OpenThreadState
         set => Session.ReasoningEffort = value;
     }
 
-    public bool AutoScroll
-    {
-        get => Session.AutoScroll;
-        set => Session.AutoScroll = value;
-    }
-
     public bool HistoryLoaded
     {
         get => Session.HistoryLoaded;

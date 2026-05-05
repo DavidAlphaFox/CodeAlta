@@ -219,7 +219,7 @@ public sealed class ThreadRuntimeStateReducerTests
 
     private static OpenThreadState CreateOpenThreadState(WorkThreadDescriptor thread)
     {
-        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), () => true, static () => null);
+        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => null);
         return new OpenThreadState(thread, timeline);
     }
 

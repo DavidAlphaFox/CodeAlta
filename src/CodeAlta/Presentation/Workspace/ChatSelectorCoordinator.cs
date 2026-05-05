@@ -123,11 +123,9 @@ internal sealed class ChatSelectorCoordinator
                 _selectorState.SetBackendSelection([], -1);
                 _selectorState.SetModelSelection([], -1);
                 _selectorState.SetReasoningSelection([], -1);
-                _workspaceViewModel.AutoScroll = true;
                 _workspaceViewModel.CanSelectBackend = false;
                 _workspaceViewModel.CanSelectModel = false;
                 _workspaceViewModel.CanSelectReasoning = false;
-                _workspaceViewModel.CanToggleAutoScroll = false;
                 _syncChatSelectorItems();
                 return;
             }
@@ -155,12 +153,9 @@ internal sealed class ChatSelectorCoordinator
                 reasoningOptions.FindIndex(option => option.Effort == backendState.SelectedReasoningEffort),
                 0,
                 Math.Max(0, reasoningOptions.Count - 1)));
-            _workspaceViewModel.AutoScroll = true;
-
             _workspaceViewModel.CanSelectBackend = true;
             _workspaceViewModel.CanSelectModel = backendState.Availability == ChatBackendAvailability.Ready;
             _workspaceViewModel.CanSelectReasoning = backendState.Availability == ChatBackendAvailability.Ready;
-            _workspaceViewModel.CanToggleAutoScroll = false;
             _syncChatSelectorItems();
         }
         finally
@@ -187,11 +182,9 @@ internal sealed class ChatSelectorCoordinator
                 _selectorState.SetBackendSelection([], -1);
                 _selectorState.SetModelSelection([], -1);
                 _selectorState.SetReasoningSelection([], -1);
-                _workspaceViewModel.AutoScroll = tab.AutoScroll;
                 _workspaceViewModel.CanSelectBackend = false;
                 _workspaceViewModel.CanSelectModel = false;
                 _workspaceViewModel.CanSelectReasoning = false;
-                _workspaceViewModel.CanToggleAutoScroll = true;
                 _syncChatSelectorItems();
                 return;
             }
@@ -224,12 +217,9 @@ internal sealed class ChatSelectorCoordinator
                 reasoningOptions.FindIndex(option => option.Effort == tab.ReasoningEffort),
                 0,
                 Math.Max(0, reasoningOptions.Count - 1)));
-            _workspaceViewModel.AutoScroll = tab.AutoScroll;
-
             _workspaceViewModel.CanSelectBackend = _canSelectThreadBackend(tab.Thread, tab);
             _workspaceViewModel.CanSelectModel = backendState.Availability == ChatBackendAvailability.Ready;
             _workspaceViewModel.CanSelectReasoning = backendState.Availability == ChatBackendAvailability.Ready;
-            _workspaceViewModel.CanToggleAutoScroll = true;
             _syncChatSelectorItems();
         }
         finally
@@ -325,7 +315,7 @@ internal sealed class ChatSelectorCoordinator
         var selectedModel = ChatBackendPreferenceCoordinator.FindModel(backendState.Models, tab.ModelId);
         tab.ReasoningEffort = ChatBackendPresentation.ResolvePreferredReasoningEffort(selectedModel, preferredReasoningEffort: null);
         UpdateModelSelectorState(options, newIndex, selectedModel, tab.ReasoningEffort);
-        _preferences.RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, tab.AutoScroll, true);
+        _preferences.RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, true);
         backendState.SelectedModelId = tab.ModelId;
         backendState.SelectedReasoningEffort = tab.ReasoningEffort;
         _preferences.RememberGlobalBackendPreference(tab.BackendId, tab.ModelId, tab.ReasoningEffort);
@@ -367,33 +357,10 @@ internal sealed class ChatSelectorCoordinator
         }
 
         tab.ReasoningEffort = options[newIndex].Effort;
-        _preferences.RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, tab.AutoScroll, true);
+        _preferences.RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, true);
         backendState.SelectedModelId = tab.ModelId;
         backendState.SelectedReasoningEffort = tab.ReasoningEffort;
         _preferences.RememberGlobalBackendPreference(tab.BackendId, tab.ModelId, tab.ReasoningEffort);
-    }
-
-    public void OnAutoScrollChanged()
-    {
-        if (_selectorsRefreshing)
-        {
-            return;
-        }
-
-        var thread = _threadSelection.GetSelectedThread();
-        if (thread is null)
-        {
-            return;
-        }
-
-        var tab = _threadSelection.EnsureThreadTab(thread);
-        if (tab.AutoScroll == _workspaceViewModel.AutoScroll)
-        {
-            return;
-        }
-
-        tab.AutoScroll = _workspaceViewModel.AutoScroll;
-        _preferences.RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, tab.AutoScroll, true);
     }
 
     public AgentBackendId GetPreferredBackendId()

@@ -20,7 +20,7 @@ internal sealed class CodeAltaFrontendCallbacks
     public required Func<string, string?> LoadPromptDraft { get; init; }
     public required Action<string> DeletePromptDraft { get; init; }
     public required Action<OpenThreadState> ApplyThreadPreference { get; init; }
-    public required Action<string, string?, AgentReasoningEffort?, bool, bool> RememberThreadPreference { get; init; }
+    public required Action<string, string?, AgentReasoningEffort?, bool> RememberThreadPreference { get; init; }
     public required Func<WorkThreadDescriptor, CancellationToken, Task> EnsureThreadHistoryLoadedAsync { get; init; }
     public required Action RefreshSelectionAndThreadWorkspace { get; init; }
     public required Action RefreshCatalogAndThreadWorkspace { get; init; }

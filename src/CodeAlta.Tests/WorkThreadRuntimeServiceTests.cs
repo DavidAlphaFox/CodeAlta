@@ -50,6 +50,35 @@ public sealed class WorkThreadRuntimeServiceTests
         Assert.AreEqual("codex-session-1", thread.BackendSessionId);
     }
 
+    [TestMethod]
+    public async Task SteerAsync_UsesExistingSessionWithoutReconfiguringOnOptionChanges()
+    {
+        using var temp = TempDirectory.Create();
+        var backend = new RecordingBackend(new AgentBackendId("codex_subscription"));
+        await using var hub = await CreateHubAsync(temp.Path, backend).ConfigureAwait(false);
+        var runtimeService = CreateRuntimeService(temp.Path, hub);
+        var initialOptions = CreateExecutionOptions(backend.BackendId, temp.Path, model: "first-model");
+        var replacementOptions = CreateExecutionOptions(backend.BackendId, temp.Path, model: "second-model");
+
+        var thread = await runtimeService.CreateGlobalThreadAsync(initialOptions, title: "Started").ConfigureAwait(false);
+        thread.MarkStarted(DateTimeOffset.UtcNow);
+        await runtimeService.SendAsync(
+                thread,
+                initialOptions,
+                new AgentSendOptions { Input = new AgentInput([new AgentInputItem.Text("start")]) })
+            .ConfigureAwait(false);
+        await runtimeService.SteerAsync(
+                thread,
+                replacementOptions,
+                new AgentSteerOptions { Input = new AgentInput([new AgentInputItem.Text("steer")]) })
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(1, backend.CreateSessionCount);
+        Assert.AreEqual(0, backend.ResumeSessionCount);
+        Assert.AreEqual(1, backend.SteerCount);
+        Assert.AreEqual("codex_subscription-session-1", thread.BackendSessionId);
+    }
+
     private static async Task<AgentHub> CreateHubAsync(string rootPath, IAgentBackend backend)
     {
         var dbPath = Path.Combine(rootPath, "state", "db", "codealta.db");
@@ -105,6 +134,8 @@ public sealed class WorkThreadRuntimeServiceTests
 
         public int ResumeSessionCount { get; private set; }
 
+        public int SteerCount { get; set; }
+
         public string? LastResumedSessionId { get; private set; }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
@@ -144,6 +175,7 @@ public sealed class WorkThreadRuntimeServiceTests
     private sealed class RecordingSession : IAgentSession
     {
         private readonly RecordingBackend _backend;
+        private readonly List<Action<AgentEvent>> _subscribers = [];
 
         public RecordingSession(RecordingBackend backend, string sessionId)
         {
@@ -167,13 +199,37 @@ public sealed class WorkThreadRuntimeServiceTests
         }
 
         public IDisposable Subscribe(Action<AgentEvent> handler)
-            => DisposableAction.Instance;
+        {
+            _subscribers.Add(handler);
+            return DisposableAction.Instance;
+        }
 
         public Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default)
-            => Task.FromResult(new AgentRunId("recording-run"));
+        {
+            var runId = new AgentRunId("recording-run");
+            Publish(new AgentSessionUpdateEvent(
+                BackendId,
+                SessionId,
+                DateTimeOffset.UtcNow,
+                runId,
+                AgentSessionUpdateKind.Info,
+                "run started"));
+            return Task.FromResult(runId);
+        }
 
         public Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
-            => Task.FromResult(new AgentRunId("recording-run"));
+        {
+            _backend.SteerCount++;
+            return Task.FromResult(new AgentRunId("recording-run"));
+        }
+
+        private void Publish(AgentEvent @event)
+        {
+            foreach (var subscriber in _subscribers)
+            {
+                subscriber(@event);
+            }
+        }
 
         public Task AbortAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 

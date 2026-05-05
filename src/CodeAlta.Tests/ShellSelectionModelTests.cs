@@ -68,7 +68,7 @@ public sealed class ShellSelectionModelTests
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,
         };
-        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), () => true, static () => null);
+        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => null);
 
         var state = new OpenThreadState(thread, timeline);
 

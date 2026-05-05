@@ -476,7 +476,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         var projector = new EventProjector(
             thread.ThreadId,
             _events.Writer,
-            () => entry?.MarkTerminated());
+            @event => entry?.ObserveEvent(@event));
         var subscription = await _agentHub.SubscribeSessionEventsAsync(agentId, projector.Project, cancellationToken).ConfigureAwait(false);
 
         entry = new ThreadSessionEntry(
@@ -524,7 +524,10 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             thread.MarkStarted(DateTimeOffset.UtcNow);
         }
 
-        return await _agentHub.RunAsync(agentId, sendOptions, cancellationToken).ConfigureAwait(false);
+        var runStartedAt = DateTimeOffset.UtcNow;
+        var runId = await _agentHub.RunAsync(agentId, sendOptions, cancellationToken).ConfigureAwait(false);
+        await MarkActiveRunIfStillInFlightAsync(thread.ThreadId, runId, runStartedAt, cancellationToken).ConfigureAwait(false);
+        return runId;
     }
 
     /// <summary>
@@ -593,8 +596,30 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(steerOptions);
 
-        var agentId = await EnsureCoordinatorSessionAsync(thread, options, cancellationToken).ConfigureAwait(false);
-        return await _agentHub.SteerAsync(agentId, steerOptions, cancellationToken).ConfigureAwait(false);
+        var entry = await GetActiveCoordinatorSessionForSteeringAsync(thread, options, cancellationToken).ConfigureAwait(false);
+        return await _agentHub.SteerAsync(entry.AgentId, steerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Returns whether the thread's active coordinator session has an in-flight run.
+    /// </summary>
+    public async Task<bool> HasActiveRunAsync(WorkThreadDescriptor thread, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(thread);
+        if (string.IsNullOrWhiteSpace(thread.ThreadId))
+        {
+            return false;
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return _entries.TryGetValue(thread.ThreadId, out var entry) && entry.HasActiveRun;
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     /// <summary>
@@ -798,6 +823,71 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             }
 
             return entry;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task<ThreadSessionEntry> GetActiveCoordinatorSessionForSteeringAsync(
+        WorkThreadDescriptor thread,
+        WorkThreadExecutionOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(thread.ThreadId))
+        {
+            throw new InvalidOperationException("Cannot steer a thread without an active coordinator session.");
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_entries.TryGetValue(thread.ThreadId, out var entry) || entry.IsTerminated)
+            {
+                throw new InvalidOperationException(
+                    $"Thread '{thread.ThreadId}' does not have an active coordinator session to steer.");
+            }
+
+            if (!string.Equals(entry.BackendId.Value, options.BackendId.Value, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(entry.BackendSessionId, thread.BackendSessionId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Thread '{thread.ThreadId}' active coordinator session does not match the requested backend session.");
+            }
+
+            if (!entry.HasActiveRun)
+            {
+                throw new InvalidOperationException(
+                    $"Thread '{thread.ThreadId}' does not have an active coordinator run to steer.");
+            }
+
+            return entry;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task MarkActiveRunIfStillInFlightAsync(
+        string threadId,
+        AgentRunId runId,
+        DateTimeOffset runStartedAt,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(threadId))
+        {
+            return;
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_entries.TryGetValue(threadId, out var entry))
+            {
+                entry.MarkActiveRunIfStillInFlight(runId, runStartedAt);
+            }
         }
         finally
         {
@@ -1060,6 +1150,12 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
 
         public bool IsTerminated { get; private set; }
 
+        public AgentRunId? ActiveRunId { get; private set; }
+
+        public DateTimeOffset LastTerminalEventAt { get; private set; } = DateTimeOffset.MinValue;
+
+        public bool HasActiveRun => ActiveRunId is not null;
+
         public bool Matches(WorkThreadExecutionOptions options, string backendSessionId)
         {
             return !IsTerminated
@@ -1073,8 +1169,34 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                 && string.Equals(AdditionalDeveloperInstructions, options.AdditionalDeveloperInstructions, StringComparison.Ordinal);
         }
 
-        public void MarkTerminated()
-            => IsTerminated = true;
+        public void ObserveEvent(AgentEvent @event)
+        {
+            if (@event.RunId is { } runId)
+            {
+                ActiveRunId = runId;
+            }
+
+            if (@event is AgentErrorEvent or AgentSessionUpdateEvent { Kind: AgentSessionUpdateKind.Idle or AgentSessionUpdateKind.Shutdown })
+            {
+                ActiveRunId = null;
+                LastTerminalEventAt = @event.Timestamp;
+            }
+
+            if (@event is AgentSessionUpdateEvent { Kind: AgentSessionUpdateKind.Shutdown })
+            {
+                IsTerminated = true;
+            }
+        }
+
+        public void MarkActiveRunIfStillInFlight(AgentRunId runId, DateTimeOffset runStartedAt)
+        {
+            if (LastTerminalEventAt >= runStartedAt)
+            {
+                return;
+            }
+
+            ActiveRunId = runId;
+        }
 
         public async Task DisposeAsync(AgentHub hub)
         {
@@ -1091,23 +1213,20 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         private readonly ChannelWriter<WorkThreadRuntimeEvent> _writer;
         private readonly Dictionary<string, ContentState> _content = new(StringComparer.Ordinal);
 
-        private readonly Action _markThreadSessionTerminated;
+        private readonly Action<AgentEvent> _observeThreadSessionEvent;
 
-        public EventProjector(string threadId, ChannelWriter<WorkThreadRuntimeEvent> writer, Action markThreadSessionTerminated)
+        public EventProjector(string threadId, ChannelWriter<WorkThreadRuntimeEvent> writer, Action<AgentEvent> observeThreadSessionEvent)
         {
-            ArgumentNullException.ThrowIfNull(markThreadSessionTerminated);
+            ArgumentNullException.ThrowIfNull(observeThreadSessionEvent);
 
             _threadId = threadId;
             _writer = writer;
-            _markThreadSessionTerminated = markThreadSessionTerminated;
+            _observeThreadSessionEvent = observeThreadSessionEvent;
         }
 
         public void Project(AgentEvent @event)
         {
-            if (@event is AgentSessionUpdateEvent { Kind: AgentSessionUpdateKind.Shutdown })
-            {
-                _markThreadSessionTerminated();
-            }
+            _observeThreadSessionEvent(@event);
 
             if (TrySanitize(@event, out var sanitized) && sanitized is not null)
             {

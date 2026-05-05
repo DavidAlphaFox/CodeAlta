@@ -52,7 +52,7 @@ public sealed class ChatSelectorCoordinatorTests
             ApplyDraftBackendPreference,
             static _ => throw new NotSupportedException(),
             static (_, _, _) => { },
-            static (_, _, _, _, _) => { });
+            static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(
             static () => { },
             static () => { });
@@ -204,7 +204,7 @@ public sealed class ChatSelectorCoordinatorTests
             ApplyDraftBackendPreference,
             static _ => { },
             static (_, _, _) => { },
-            static (_, _, _, _, _) => { });
+            static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(
             static () => { },
             static () => { });
@@ -256,7 +256,7 @@ public sealed class ChatSelectorCoordinatorTests
             ApplyDraftBackendPreference,
             static _ => { },
             static (_, _, _) => { },
-            static (_, _, _, _, _) => { });
+            static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(
             static () => { },
             static () => { });
@@ -316,7 +316,7 @@ public sealed class ChatSelectorCoordinatorTests
             ApplyDraftBackendPreference,
             static _ => { },
             static (_, _, _) => { },
-            static (_, _, _, _, _) => { });
+            static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(
             static () => { },
             static () => { });
@@ -381,7 +381,7 @@ public sealed class ChatSelectorCoordinatorTests
             ApplyDraftBackendPreference,
             static _ => { },
             static (_, _, _) => { },
-            static (_, _, _, _, _) => { });
+            static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(
             static () => { },
             static () => { });
@@ -436,7 +436,7 @@ public sealed class ChatSelectorCoordinatorTests
             },
             static _ => throw new NotSupportedException(),
             static (_, _, _) => { },
-            static (_, _, _, _, _) => { });
+            static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(
             static () => { },
             static () => { });
@@ -476,7 +476,7 @@ public sealed class ChatSelectorCoordinatorTests
             ApplyDraftBackendPreference,
             static _ => throw new NotSupportedException(),
             static (_, _, _) => { },
-            static (_, _, _, _, _) => { });
+            static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(
             static () => { },
             static () => { });
@@ -519,7 +519,7 @@ public sealed class ChatSelectorCoordinatorTests
             static _ => null,
             static _ => { },
             static _ => { },
-            static (_, _, _, _, _) => { },
+            static (_, _, _, _) => { },
             static (_, _) => Task.CompletedTask,
             static () => { },
             static () => { },

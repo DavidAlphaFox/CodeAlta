@@ -126,7 +126,6 @@ public sealed class ThreadProviderSwitchCoordinatorTests
         };
         var tabState = new OpenThreadState(thread, new Presentation.Timeline.ThreadTimelinePresenter(
             new InlineUiDispatcher(),
-            static () => true,
             static () => null,
             localFileRootPath: null))
         {
@@ -278,7 +277,6 @@ public sealed class ThreadProviderSwitchCoordinatorTests
         };
         var tabState = new OpenThreadState(thread, new Presentation.Timeline.ThreadTimelinePresenter(
             new InlineUiDispatcher(),
-            static () => true,
             static () => null,
             localFileRootPath: null))
         {
@@ -401,7 +399,6 @@ public sealed class ThreadProviderSwitchCoordinatorTests
         };
         var tabState = new OpenThreadState(thread, new Presentation.Timeline.ThreadTimelinePresenter(
             new InlineUiDispatcher(),
-            static () => true,
             static () => null,
             localFileRootPath: null))
         {
@@ -476,7 +473,6 @@ public sealed class ThreadProviderSwitchCoordinatorTests
         };
         var tabState = new OpenThreadState(thread, new Presentation.Timeline.ThreadTimelinePresenter(
             new InlineUiDispatcher(),
-            static () => true,
             static () => null,
             localFileRootPath: null))
         {

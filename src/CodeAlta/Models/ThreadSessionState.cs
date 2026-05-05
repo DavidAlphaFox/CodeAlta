@@ -11,8 +11,6 @@ internal sealed class ThreadSessionState
 
     public AgentReasoningEffort? ReasoningEffort { get; set; }
 
-    public bool AutoScroll { get; set; } = true;
-
     public string PromptDraftText { get; set; } = string.Empty;
 
     public List<PromptImageAttachment> PromptImageAttachments { get; } = [];

@@ -38,14 +38,13 @@ internal sealed class ShellThreadStateCoordinator
         Func<string, string?> loadPromptDraft,
         Action<string> deletePromptDraft,
         Action<OpenThreadState> applyThreadPreference,
-        Action<string, string?, AgentReasoningEffort?, bool, bool> rememberThreadPreference,
+        Action<string, string?, AgentReasoningEffort?, bool> rememberThreadPreference,
         Func<WorkThreadDescriptor, CancellationToken, Task> ensureThreadHistoryLoadedAsync,
         Action refreshSelectionAndThreadWorkspace,
         Action refreshCatalogAndThreadWorkspace,
         Action resetPendingThreadTabSelection,
         Action<string> removeTabPage,
-        Action<string, bool, StatusTone> setStatus,
-        Action<Action>? dispatchToUiDeferred = null)
+        Action<string, bool, StatusTone> setStatus)
     {
         ArgumentNullException.ThrowIfNull(projectCatalog);
         ArgumentNullException.ThrowIfNull(threadCatalog);
@@ -72,8 +71,7 @@ internal sealed class ShellThreadStateCoordinator
             applyThreadPreference,
             rememberThreadPreference,
             GetSelectedProject,
-            GetProjectById,
-            dispatchToUiDeferred);
+            GetProjectById);
         _catalogStateCoordinator = new ShellCatalogStateCoordinator(projectCatalog, threadCatalog, _viewStateCoordinator, _openThreadRegistry);
         _isBackendReady = isBackendReady;
         _deletePromptDraft = deletePromptDraft;
@@ -330,7 +328,6 @@ internal sealed class ShellThreadStateCoordinator
         childTab.BackendId = sourceTab.BackendId;
         childTab.ModelId = sourceTab.ModelId;
         childTab.ReasoningEffort = sourceTab.ReasoningEffort;
-        childTab.AutoScroll = sourceTab.AutoScroll;
         return childTab;
     }
 

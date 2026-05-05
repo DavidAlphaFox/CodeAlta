@@ -2532,16 +2532,6 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void ScrollToTailIfFollowing_DoesNotThrowForDocumentFlow()
-    {
-        var flow = new DocumentFlow();
-
-        FlowScrollExtensions.ScrollToTailIfFollowing(flow);
-
-        Assert.IsNotNull(flow);
-    }
-
-    [TestMethod]
     public void PromptDraftCoordinator_PreservesSeparateDraftsPerThread()
     {
         var coordinator = new PromptDraftCoordinator();
