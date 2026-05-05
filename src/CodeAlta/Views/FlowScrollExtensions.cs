@@ -12,7 +12,7 @@ internal static class FlowScrollExtensions
             return;
         }
 
-        flow.ScrollToTailIfFollowing();
+        //flow.ScrollToTailIfFollowing();
     }
 
     internal static void ScrollToTailIfFollowing(this DocumentFlow flow)
@@ -21,6 +21,6 @@ internal static class FlowScrollExtensions
         // We cannot rely on FollowTail for now. DocumentFlow does not always update it
         // correctly when the tail item is mutated dynamically, so we keep the existing
         // unconditional scroll workaround until XenoAtom.Terminal.UI is fixed upstream.
-        flow.ScrollToTail();
+        //flow.ScrollToTail();
     }
 }
