@@ -1,4 +1,5 @@
 using CodeAlta.App.State;
+using CodeAlta.App;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Prompting;
@@ -8,162 +9,98 @@ namespace CodeAlta.App.Context;
 
 internal sealed class ThreadCommandContext
 {
-    private readonly IUiDispatcher _uiDispatcher;
-    private readonly Func<bool> _trySetPromptUnavailableStatus;
-    private readonly Func<string?, Task<WorkThreadDescriptor?>> _createGlobalThreadAsync;
-    private readonly Func<string?, Task<WorkThreadDescriptor?>> _createProjectThreadAsync;
-    private readonly Func<Task> _persistViewStateAsync;
-    private readonly Func<bool> _getAutoApproveEnabled;
-    private readonly Action _clearDraftInput;
-    private readonly Action _setReadyStatusForCurrentSelection;
-    private readonly Action _clearThreadInput;
-    private readonly Func<bool> _isThreadInputEmpty;
-    private readonly Action<string> _restoreThreadInput;
-    private readonly Func<IReadOnlyList<PromptImageAttachment>> _snapshotPromptImages;
-    private readonly Action<IReadOnlyList<PromptImageAttachment>> _restorePromptImages;
-    private readonly Action _refreshHeaderAndThreadWorkspace;
-    private readonly Action _refreshCatalogAndThreadWorkspace;
-    private readonly Action<string, WorkThreadDescriptor>? _rekeyThreadIdentity;
-    private readonly Action<string, bool, StatusTone> _setShellStatus;
-    private readonly Action<OpenThreadState, string, bool, StatusTone> _setThreadStatus;
-    private readonly Action<OpenThreadState, Action, string> _tryRenderInteraction;
+    private readonly IThreadLifecycleCommandPort _threadLifecyclePort;
+    private readonly IThreadCommandUiPort _uiPort;
+    private readonly IPromptSessionPort _promptSessionPort;
+    private readonly Func<PromptSessionId> _getCurrentPromptSessionId;
+    private readonly IShellStatusPort _statusPort;
 
     public ThreadCommandContext(
-        IUiDispatcher uiDispatcher,
-        Func<bool> trySetPromptUnavailableStatus,
-        Func<string?, Task<WorkThreadDescriptor?>> createGlobalThreadAsync,
-        Func<string?, Task<WorkThreadDescriptor?>> createProjectThreadAsync,
-        Func<Task> persistViewStateAsync,
-        Func<bool> getAutoApproveEnabled,
-        Action clearDraftInput,
-        Action setReadyStatusForCurrentSelection,
-        Action clearThreadInput,
-        Func<bool> isThreadInputEmpty,
-        Action<string> restoreThreadInput,
-        Func<IReadOnlyList<PromptImageAttachment>> snapshotPromptImages,
-        Action<IReadOnlyList<PromptImageAttachment>> restorePromptImages,
-        Action refreshHeaderAndThreadWorkspace,
-        Action refreshCatalogAndThreadWorkspace,
-        Action<string, bool, StatusTone> setShellStatus,
-        Action<OpenThreadState, string, bool, StatusTone> setThreadStatus,
-        Action<OpenThreadState, Action, string> tryRenderInteraction,
-        Action<string, WorkThreadDescriptor>? rekeyThreadIdentity = null)
+        IThreadLifecycleCommandPort threadLifecyclePort,
+        IThreadCommandUiPort uiPort,
+        IPromptSessionPort promptSessionPort,
+        Func<PromptSessionId> getCurrentPromptSessionId,
+        IShellStatusPort statusPort)
     {
-        ArgumentNullException.ThrowIfNull(uiDispatcher);
-        ArgumentNullException.ThrowIfNull(trySetPromptUnavailableStatus);
-        ArgumentNullException.ThrowIfNull(createGlobalThreadAsync);
-        ArgumentNullException.ThrowIfNull(createProjectThreadAsync);
-        ArgumentNullException.ThrowIfNull(persistViewStateAsync);
-        ArgumentNullException.ThrowIfNull(getAutoApproveEnabled);
-        ArgumentNullException.ThrowIfNull(clearDraftInput);
-        ArgumentNullException.ThrowIfNull(setReadyStatusForCurrentSelection);
-        ArgumentNullException.ThrowIfNull(clearThreadInput);
-        ArgumentNullException.ThrowIfNull(isThreadInputEmpty);
-        ArgumentNullException.ThrowIfNull(restoreThreadInput);
-        ArgumentNullException.ThrowIfNull(snapshotPromptImages);
-        ArgumentNullException.ThrowIfNull(restorePromptImages);
-        ArgumentNullException.ThrowIfNull(refreshHeaderAndThreadWorkspace);
-        ArgumentNullException.ThrowIfNull(refreshCatalogAndThreadWorkspace);
-        ArgumentNullException.ThrowIfNull(setShellStatus);
-        ArgumentNullException.ThrowIfNull(setThreadStatus);
-        ArgumentNullException.ThrowIfNull(tryRenderInteraction);
+        ArgumentNullException.ThrowIfNull(threadLifecyclePort);
+        ArgumentNullException.ThrowIfNull(uiPort);
+        ArgumentNullException.ThrowIfNull(promptSessionPort);
+        ArgumentNullException.ThrowIfNull(getCurrentPromptSessionId);
+        ArgumentNullException.ThrowIfNull(statusPort);
 
-        _uiDispatcher = uiDispatcher;
-        _trySetPromptUnavailableStatus = trySetPromptUnavailableStatus;
-        _createGlobalThreadAsync = createGlobalThreadAsync;
-        _createProjectThreadAsync = createProjectThreadAsync;
-        _persistViewStateAsync = persistViewStateAsync;
-        _getAutoApproveEnabled = getAutoApproveEnabled;
-        _clearDraftInput = clearDraftInput;
-        _setReadyStatusForCurrentSelection = setReadyStatusForCurrentSelection;
-        _clearThreadInput = clearThreadInput;
-        _isThreadInputEmpty = isThreadInputEmpty;
-        _restoreThreadInput = restoreThreadInput;
-        _snapshotPromptImages = snapshotPromptImages;
-        _restorePromptImages = restorePromptImages;
-        _refreshHeaderAndThreadWorkspace = refreshHeaderAndThreadWorkspace;
-        _refreshCatalogAndThreadWorkspace = refreshCatalogAndThreadWorkspace;
-        _rekeyThreadIdentity = rekeyThreadIdentity;
-        _setShellStatus = setShellStatus;
-        _setThreadStatus = setThreadStatus;
-        _tryRenderInteraction = tryRenderInteraction;
+        _threadLifecyclePort = threadLifecyclePort;
+        _uiPort = uiPort;
+        _promptSessionPort = promptSessionPort;
+        _getCurrentPromptSessionId = getCurrentPromptSessionId;
+        _statusPort = statusPort;
     }
 
     public bool TrySetPromptUnavailableStatus()
-        => UiDispatch.Invoke(_uiDispatcher, _trySetPromptUnavailableStatus);
+        => _uiPort.TrySetPromptUnavailableStatus();
 
     public Task<WorkThreadDescriptor?> CreateGlobalThreadAsync(string? title = null)
-        => _createGlobalThreadAsync(title);
+        => _threadLifecyclePort.CreateGlobalThreadAsync(title);
 
     public Task<WorkThreadDescriptor?> CreateProjectThreadAsync(string? title = null)
-        => _createProjectThreadAsync(title);
+        => _threadLifecyclePort.CreateProjectThreadAsync(title);
 
     public Task PersistViewStateAsync()
-        => _persistViewStateAsync();
+        => _threadLifecyclePort.PersistViewStateAsync();
 
     public bool GetAutoApproveEnabled()
-        => UiDispatch.Invoke(_uiDispatcher, _getAutoApproveEnabled);
+        => _uiPort.GetAutoApproveEnabled();
 
     public void ClearDraftInput()
-        => UiDispatch.Invoke(_uiDispatcher, _clearDraftInput);
+        => _uiPort.ClearDraftInput();
 
     public void SetReadyStatusForCurrentSelection()
-        => UiDispatch.Invoke(_uiDispatcher, _setReadyStatusForCurrentSelection);
+        => _uiPort.SetReadyStatusForCurrentSelection();
 
     public void ClearThreadInput()
-        => UiDispatch.Invoke(_uiDispatcher, _clearThreadInput);
+        => _promptSessionPort.ClearPrompt(GetCurrentPromptSessionId());
 
     public bool IsThreadInputEmpty()
-        => UiDispatch.Invoke(_uiDispatcher, _isThreadInputEmpty);
+        => _promptSessionPort.IsPromptEmpty(GetCurrentPromptSessionId());
 
     public void RestoreThreadInput(string prompt)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
-        UiDispatch.Invoke(_uiDispatcher, () => _restoreThreadInput(prompt));
+        _promptSessionPort.RestorePrompt(GetCurrentPromptSessionId(), PromptSubmission.Create(prompt));
     }
 
     public PromptSubmission CaptureThreadInput(string? promptText)
-        => UiDispatch.Invoke(_uiDispatcher, () => PromptSubmission.Create(promptText, _snapshotPromptImages()));
+        => _promptSessionPort.CapturePrompt(GetCurrentPromptSessionId(), promptText);
 
     public void RestoreThreadInput(PromptSubmission prompt)
     {
         ArgumentNullException.ThrowIfNull(prompt);
-        UiDispatch.Invoke(_uiDispatcher, () =>
-        {
-            _restoreThreadInput(prompt.Text);
-            _restorePromptImages(prompt.Images);
-        });
+        _promptSessionPort.RestorePrompt(GetCurrentPromptSessionId(), prompt);
     }
 
     public void RefreshHeaderAndThreadWorkspace()
-        => UiDispatch.Invoke(_uiDispatcher, _refreshHeaderAndThreadWorkspace);
+        => _uiPort.RefreshHeaderAndThreadWorkspace();
 
     public void RefreshCatalogAndThreadWorkspace()
-        => UiDispatch.Invoke(_uiDispatcher, _refreshCatalogAndThreadWorkspace);
+        => _uiPort.RefreshCatalogAndThreadWorkspace();
 
     public void RekeyThreadIdentity(string oldThreadId, WorkThreadDescriptor thread)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(oldThreadId);
         ArgumentNullException.ThrowIfNull(thread);
-        if (_rekeyThreadIdentity is null)
-        {
-            return;
-        }
-
-        UiDispatch.Invoke(_uiDispatcher, () => _rekeyThreadIdentity(oldThreadId, thread));
+        _threadLifecyclePort.RekeyThreadIdentity(oldThreadId, thread);
     }
 
     public void SetShellStatus(string message, bool showSpinner, StatusTone tone)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
-        UiDispatch.Invoke(_uiDispatcher, () => _setShellStatus(message, showSpinner, tone));
+        _statusPort.SetShellStatus(new ShellStatusUpdate(message, showSpinner, tone));
     }
 
     public void SetThreadStatus(OpenThreadState tab, string message, bool showSpinner, StatusTone tone)
     {
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
-        UiDispatch.Invoke(_uiDispatcher, () => _setThreadStatus(tab, message, showSpinner, tone));
+        _statusPort.SetThreadStatus(tab, new ThreadStatusUpdate(message, showSpinner, tone));
     }
 
     public void TryRenderInteraction(OpenThreadState tab, Action action, string context)
@@ -171,6 +108,17 @@ internal sealed class ThreadCommandContext
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentNullException.ThrowIfNull(action);
         ArgumentException.ThrowIfNullOrWhiteSpace(context);
-        UiDispatch.Invoke(_uiDispatcher, () => _tryRenderInteraction(tab, action, context));
+        _uiPort.TryRenderInteraction(tab, action, context);
+    }
+
+    private PromptSessionId GetCurrentPromptSessionId()
+    {
+        var promptSessionId = _getCurrentPromptSessionId();
+        if (promptSessionId.IsEmpty)
+        {
+            throw new InvalidOperationException("The current prompt session id cannot be empty.");
+        }
+
+        return promptSessionId;
     }
 }

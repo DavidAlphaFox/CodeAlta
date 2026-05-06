@@ -34,6 +34,7 @@ internal sealed class RuntimeEventPump : IAsyncDisposable
         _pumpTask = Task.Run(
             () => RunAsync(_pumpCts.Token),
             CancellationToken.None);
+        global::CodeAlta.CodeAltaTaskMonitor.Observe(_pumpTask, "Runtime event pump");
     }
 
     public async ValueTask DisposeAsync()

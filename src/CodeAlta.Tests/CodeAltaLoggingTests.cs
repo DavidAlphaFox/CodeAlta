@@ -30,15 +30,80 @@ public sealed class CodeAltaLoggingTests
         Assert.AreEqual(FileLogWriterFailureMode.Ignore, options.FailureMode);
     }
 
+    [TestMethod]
+    public void CrashReporter_FormatsFatalExceptionForLogFile()
+    {
+        var exception = new InvalidOperationException("dispatcher failed");
+
+        var entry = CodeAltaCrashReporter.FormatCrashLog("Unhandled exception", exception);
+
+        StringAssert.Contains(entry, "FTL CodeAlta.Crash Unhandled exception");
+        StringAssert.Contains(entry, "System.InvalidOperationException: dispatcher failed");
+    }
+
+    [TestMethod]
+    public void CrashReporter_FatalTaskException_InvokesProcessTerminator()
+    {
+        var exception = new InvalidOperationException("background failed");
+        string? source = null;
+        Exception? captured = null;
+        try
+        {
+            CodeAltaCrashReporter.SetProcessTerminatorForTesting((taskSource, taskException) =>
+            {
+                source = taskSource;
+                captured = taskException;
+            });
+
+            CodeAltaCrashReporter.ReportFatalTaskException("Unobserved task exception", exception);
+        }
+        finally
+        {
+            CodeAltaCrashReporter.SetProcessTerminatorForTesting(null);
+        }
+
+        Assert.AreEqual("Unobserved task exception", source);
+        Assert.AreSame(exception, captured);
+    }
+
+    [TestMethod]
+    public async Task TaskMonitor_FaultedTask_InvokesProcessTerminator()
+    {
+        var exception = new InvalidOperationException("background failed");
+        var task = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var terminated = new TaskCompletionSource<(string Source, Exception Exception)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        try
+        {
+            CodeAltaCrashReporter.SetProcessTerminatorForTesting((source, capturedException) =>
+                terminated.TrySetResult((source, capturedException)));
+
+            CodeAltaTaskMonitor.Observe(task.Task, "Background worker");
+            task.SetException(exception);
+
+            var result = await terminated.Task.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+            Assert.AreEqual("Background worker", result.Source);
+            var aggregate = Assert.IsInstanceOfType<AggregateException>(result.Exception);
+            Assert.AreSame(exception, aggregate.InnerExceptions.Single());
+        }
+        finally
+        {
+            CodeAltaCrashReporter.SetProcessTerminatorForTesting(null);
+        }
+    }
+
     [TestInitialize]
     public void Initialize()
     {
         LogManager.Shutdown();
+        CodeAltaCrashReporter.SetProcessTerminatorForTesting(null);
     }
 
     [TestCleanup]
     public void Cleanup()
     {
+        CodeAltaCrashReporter.SetProcessTerminatorForTesting(null);
         LogManager.Shutdown();
     }
 
@@ -54,7 +119,7 @@ public sealed class CodeAltaLoggingTests
 
         LogManager.InitializeForAsync(config);
 
-        LogManager.GetLogger("CodeAlta.ChatAgentConnection").Info("codealta-info");
+        LogManager.GetLogger("CodeAlta.AgentSessionConnection").Info("codealta-info");
         LogManager.GetLogger("External.Component").Info("external-info");
         LogManager.GetLogger("External.Component").Warn("external-warn");
         LogManager.GetLogger(CodeAltaLogging.CodexAgentLoggerName).Debug("codex-debug");
@@ -64,7 +129,7 @@ public sealed class CodeAltaLoggingTests
         CollectionAssert.AreEqual(
             new[]
             {
-                "Info|CodeAlta.ChatAgentConnection|codealta-info",
+                "Info|CodeAlta.AgentSessionConnection|codealta-info",
                 "Warn|External.Component|external-warn",
                 $"Debug|{CodeAltaLogging.CodexAgentLoggerName}|codex-debug",
             },

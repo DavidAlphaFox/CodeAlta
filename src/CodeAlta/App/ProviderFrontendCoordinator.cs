@@ -90,6 +90,14 @@ internal sealed class ProviderFrontendCoordinator
     {
         ArgumentNullException.ThrowIfNull(definition);
 
+        if (IsTemporarilyDisabledCopilotProvider(definition))
+        {
+            return new ProviderTestResult(
+                false,
+                "GitHub Copilot is temporarily disabled until the upstream Copilot SDK process cleanup issue is fixed.",
+                0);
+        }
+
         if (TryBuildActiveBackendTestResult(definition, _chatBackendStates, out var activeResult))
         {
             return activeResult;
@@ -286,6 +294,14 @@ internal sealed class ProviderFrontendCoordinator
 
         backend = createBackend();
         return true;
+    }
+
+    private static bool IsTemporarilyDisabledCopilotProvider(CodeAltaProviderDocument definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        return string.Equals(definition.ProviderKey, "copilot", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(definition.ProviderType, "copilot", StringComparison.OrdinalIgnoreCase);
     }
 
     private OpenAICodexSubscriptionLoginManager CreateCodexSubscriptionLoginManager(CodeAltaProviderDocument definition)

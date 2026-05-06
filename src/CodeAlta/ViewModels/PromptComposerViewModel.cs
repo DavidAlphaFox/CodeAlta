@@ -25,9 +25,6 @@ public sealed partial class PromptComposerViewModel
     public partial bool CanSteer { get; set; }
 
     [Bindable]
-    public partial bool CanDelegate { get; set; }
-
-    [Bindable]
     public partial bool CanAbort { get; set; }
 
     [Bindable]

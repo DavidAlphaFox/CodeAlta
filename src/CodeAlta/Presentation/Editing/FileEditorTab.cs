@@ -3,7 +3,7 @@ using CodeAlta.App;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Prompting;
 using CodeAlta.Presentation.Styling;
-using CodeAlta.Search;
+using CodeAlta.Catalog;
 using CodeAlta.Views;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI;

@@ -6,7 +6,6 @@ using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Presentation.Prompting;
 using CodeAlta.Presentation.Timeline;
-using CodeAlta.Search;
 using CodeAlta.Threading;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;

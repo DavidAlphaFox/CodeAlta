@@ -119,6 +119,24 @@ public sealed class PluginContributionAdapterServiceTests
     }
 
     [TestMethod]
+    public async Task UiOnlyContributions_AreIgnoredInHeadlessMode()
+    {
+        var (registry, active) = await ActivateAsync<ComprehensivePlugin>();
+        var adapter = new PluginContributionAdapterService(registry);
+        var headlessOptions = new PluginAdapterOperationOptions { IsHeadless = true, HasInteractiveUi = false };
+
+        var status = adapter.GetStatusItems([active], headlessOptions);
+        var visuals = adapter.CreateVisuals([active], PluginUiRegion.CommandBar, headlessOptions);
+        var (renderResults, renderDiagnostics) = await adapter.RenderAsync([active], PluginUiRegion.ToolCallRenderer, "sample", new { value = 1 }, headlessOptions);
+
+        Assert.AreEqual(0, status.Count);
+        Assert.AreEqual(0, visuals.Count);
+        Assert.AreEqual(0, renderResults.Count);
+        Assert.AreEqual(0, renderDiagnostics.Count);
+        await active.DeactivateAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [TestMethod]
     public async Task ContributionFailures_AreStoredAsRuntimeDiagnosticsAndDoNotThrow()
     {
         var registry = new PluginContributionRegistry();
@@ -136,6 +154,48 @@ public sealed class PluginContributionAdapterServiceTests
         Assert.AreEqual(1, diagnostics.GetSnapshot().Count);
         Assert.AreEqual(PluginRuntimeDiagnosticSource.Callback, commandDiagnostics[0].Source);
         await result.ActivePlugin.DeactivateAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [TestMethod]
+    public async Task AgentEventObservers_RunInPluginOrderAndContinueAfterDiagnostics()
+    {
+        AgentEventOrderPlugin.Reset();
+        FailingAgentEventPlugin.Reset();
+        var registry = new PluginContributionRegistry();
+        var activator = new PluginRuntimeActivator(registry);
+        var first = await activator.ActivateAsync(CreateDiscovered<AgentEventOrderPlugin>(), null, null, new PluginActivationOptions { HostInfo = CreateHostInfo(), ActivationGeneration = 1 });
+        var failing = await activator.ActivateAsync(CreateDiscovered<FailingAgentEventPlugin>(), null, null, new PluginActivationOptions { HostInfo = CreateHostInfo(), ActivationGeneration = 2 });
+        var last = await activator.ActivateAsync(CreateDiscovered<AgentEventOrderPlugin>(), null, null, new PluginActivationOptions { HostInfo = CreateHostInfo(), ActivationGeneration = 3 });
+        Assert.IsNotNull(first.ActivePlugin);
+        Assert.IsNotNull(failing.ActivePlugin);
+        Assert.IsNotNull(last.ActivePlugin);
+        var adapter = new PluginContributionAdapterService(registry);
+
+        var diagnostics = await adapter.ObserveAgentEventAsync(
+            [first.ActivePlugin, failing.ActivePlugin, last.ActivePlugin],
+            CreateAgentEventTemplate(first.ActivePlugin));
+
+        CollectionAssert.AreEqual(new[] { first.ActivePlugin.Descriptor.RuntimeKey, last.ActivePlugin.Descriptor.RuntimeKey }, AgentEventOrderPlugin.Calls.ToArray());
+        Assert.AreEqual(1, diagnostics.Count);
+        StringAssert.Contains(diagnostics[0].Message, "Agent-event callback failed.");
+        await first.ActivePlugin.DeactivateAsync(TimeSpan.FromSeconds(5));
+        await failing.ActivePlugin.DeactivateAsync(TimeSpan.FromSeconds(5));
+        await last.ActivePlugin.DeactivateAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [TestMethod]
+    public async Task AgentEventObservers_PropagateCancellation()
+    {
+        var (registry, active) = await ActivateAsync<CancellingAgentEventPlugin>();
+        var adapter = new PluginContributionAdapterService(registry);
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        var exception = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+            await adapter.ObserveAgentEventAsync([active], CreateAgentEventTemplate(active), cancellationToken: cancellation.Token));
+
+        Assert.IsTrue(exception.CancellationToken.IsCancellationRequested);
+        await active.DeactivateAsync(TimeSpan.FromSeconds(5));
     }
 
     [TestMethod]
@@ -412,6 +472,37 @@ public sealed class PluginContributionAdapterServiceTests
                 Handler = static (_, _) => throw new InvalidOperationException("boom"),
             };
         }
+    }
+
+    public sealed class AgentEventOrderPlugin : PluginBase
+    {
+        private static readonly List<string> ObservedCalls = [];
+
+        public static IReadOnlyList<string> Calls => ObservedCalls;
+
+        public static void Reset() => ObservedCalls.Clear();
+
+        public override ValueTask OnAgentEventAsync(PluginAgentEventContext context, CancellationToken cancellationToken = default)
+        {
+            ObservedCalls.Add(context.Plugin.RuntimeKey);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    public sealed class FailingAgentEventPlugin : PluginBase
+    {
+        public static void Reset()
+        {
+        }
+
+        public override ValueTask OnAgentEventAsync(PluginAgentEventContext context, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("observer failed");
+    }
+
+    public sealed class CancellingAgentEventPlugin : PluginBase
+    {
+        public override ValueTask OnAgentEventAsync(PluginAgentEventContext context, CancellationToken cancellationToken = default)
+            => throw new OperationCanceledException(cancellationToken);
     }
 
     private sealed class FakeBackend(AgentBackendId backendId) : IAgentBackend

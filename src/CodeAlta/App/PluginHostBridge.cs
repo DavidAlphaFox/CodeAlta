@@ -5,6 +5,7 @@ using CodeAlta.App.State;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
+using CodeAlta.Orchestration.Runtime.Plugins;
 using CodeAlta.Plugins;
 using CodeAlta.Plugins.Abstractions;
 using CodeAlta.Presentation.Prompting;
@@ -16,8 +17,8 @@ internal sealed class PluginHostBridge
 {
     private readonly PluginRuntimeManager _runtime;
     private readonly Func<ProjectDescriptor?> _getCurrentProject;
-    private readonly object _pendingPromptLock = new();
-    private readonly Dictionary<string, List<PluginSystemPromptContribution>> _pendingPromptContributionsByThread = new(StringComparer.OrdinalIgnoreCase);
+    private readonly PluginFrontendBridge _frontend;
+    private readonly PluginPromptContributionScope _promptContributionScope = new();
 
     public PluginHostBridge(PluginRuntimeManager runtime, Func<ProjectDescriptor?> getCurrentProject)
     {
@@ -25,30 +26,29 @@ internal sealed class PluginHostBridge
         ArgumentNullException.ThrowIfNull(getCurrentProject);
         _runtime = runtime;
         _getCurrentProject = getCurrentProject;
+        _frontend = new PluginFrontendBridge(runtime, getCurrentProject);
     }
 
+    public PluginFrontendBridge Frontend => _frontend;
+
     public IReadOnlyList<PluginResolvedResourceContribution> GetResources()
-        => _runtime.Adapter.GetResources(_runtime.ActivePlugins, CreateOptions(null, null));
+        => _frontend.GetResources();
 
     public IReadOnlyList<PluginCommandContribution> GetCommandContributions()
-        => _runtime.Adapter.GetContributions<PluginCommandContribution>(PluginPoint.Command, CreateOptions(null, null))
-            .Select(static registration => (PluginCommandContribution)registration.Contribution)
-            .ToArray();
+        => _frontend.GetCommandContributions();
 
     public IReadOnlyList<PluginStatusItem> GetStatusItems(PluginUiRegion region)
-        => _runtime.Adapter.GetStatusItems(_runtime.ActivePlugins, CreateOptions(null, null))
-            .Where(item => region is PluginUiRegion.ThreadStatus or PluginUiRegion.ThreadFooter || !string.IsNullOrWhiteSpace(item.Text))
-            .ToArray();
+        => _frontend.GetStatusItems(region);
 
     public IReadOnlyList<Visual> CreateVisuals(PluginUiRegion region)
-        => _runtime.Adapter.CreateVisuals(_runtime.ActivePlugins, region, CreateOptions(null, null));
+        => _frontend.CreateVisuals(region);
 
     public Task<(IReadOnlyList<PluginRenderResult> Results, IReadOnlyList<PluginRuntimeDiagnostic> Diagnostics)> RenderAsync(
         PluginUiRegion region,
         string? target,
         object? payload,
         CancellationToken cancellationToken = default)
-        => _runtime.Adapter.RenderAsync(_runtime.ActivePlugins, region, target, payload, CreateOptions(null, null), cancellationToken).AsTask();
+        => _frontend.RenderAsync(region, target, payload, cancellationToken);
 
     public async Task<PromptSubmission?> ProcessPromptSubmittingAsync(
         WorkThreadDescriptor thread,
@@ -70,7 +70,7 @@ internal sealed class PluginHostBridge
                 CreateOptions(thread, tab, isCodeAltaManagedBackend),
                 cancellationToken);
 
-        StorePendingPromptContributions(thread, result.Result.TemporaryPromptContributions);
+        _promptContributionScope.Add(CreatePromptContributionScopeKey(thread, tab), result.Result.TemporaryPromptContributions);
 
         if (result.Result.Disposition is PluginPromptDisposition.Cancel or PluginPromptDisposition.Handled)
         {
@@ -119,7 +119,7 @@ internal sealed class PluginHostBridge
             };
         }
 
-        var promptTemporaryContributions = TakePendingPromptContributions(thread);
+        var promptTemporaryContributions = _promptContributionScope.Take(CreatePromptContributionScopeKey(thread, tab));
         var temporaryPromptContributions = promptTemporaryContributions.Concat(before.Result.TemporaryPromptContributions).ToArray();
         var systemParts = await _runtime.Adapter.BuildSystemPromptPartsAsync(_runtime.ActivePlugins, PluginPromptChannel.System, supportsDirectInjection: isManaged, options, cancellationToken);
         var developerParts = await _runtime.Adapter.BuildSystemPromptPartsAsync(_runtime.ActivePlugins, PluginPromptChannel.Developer, supportsDirectInjection: isManaged, options, cancellationToken);
@@ -169,17 +169,7 @@ internal sealed class PluginHostBridge
 
     public async Task<PluginCommandResult> ExecuteCommandAsync(string name, string? arguments, CancellationToken cancellationToken = default)
     {
-        var parsedArguments = string.IsNullOrWhiteSpace(arguments)
-            ? []
-            : arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var result = await _runtime.Adapter.ExecuteCommandAsync(
-                _runtime.ActivePlugins,
-                name,
-                parsedArguments,
-                string.IsNullOrWhiteSpace(arguments) ? name : string.Concat(name, " ", arguments),
-                CreateOptions(null, null),
-                cancellationToken);
-        return result.Result;
+        return await _frontend.ExecuteCommandAsync(name, arguments, cancellationToken);
     }
 
     public async Task ObserveAgentEventAsync(WorkThreadDescriptor thread, AgentEvent @event, CancellationToken cancellationToken = default)
@@ -422,37 +412,8 @@ internal sealed class PluginHostBridge
         return new AgentInput(items);
     }
 
-    private void StorePendingPromptContributions(WorkThreadDescriptor thread, IReadOnlyList<PluginSystemPromptContribution> contributions)
-    {
-        if (contributions.Count == 0)
-        {
-            return;
-        }
-
-        lock (_pendingPromptLock)
-        {
-            if (!_pendingPromptContributionsByThread.TryGetValue(thread.ThreadId, out var pending))
-            {
-                pending = [];
-                _pendingPromptContributionsByThread[thread.ThreadId] = pending;
-            }
-
-            pending.AddRange(contributions);
-        }
-    }
-
-    private IReadOnlyList<PluginSystemPromptContribution> TakePendingPromptContributions(WorkThreadDescriptor thread)
-    {
-        lock (_pendingPromptLock)
-        {
-            if (!_pendingPromptContributionsByThread.Remove(thread.ThreadId, out var pending))
-            {
-                return [];
-            }
-
-            return pending.ToArray();
-        }
-    }
+    private static PluginPromptContributionScopeKey CreatePromptContributionScopeKey(WorkThreadDescriptor thread, OpenThreadState tab)
+        => new(thread.ThreadId, tab.ActiveRunId?.Value);
 
     private static async Task<string?> BuildPromptTextAsync(
         IEnumerable<PluginPromptPart> parts,

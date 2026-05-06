@@ -30,24 +30,30 @@ public sealed class ShellWorkspaceCoordinatorTests
         var deferredActions = new Queue<Action>();
         var focusedPromptCount = 0;
         Visual? paneContent = null;
+        var uiScheduler = new FrontendUiScheduler(new QueueingUiDispatcher(deferredActions));
         var workspaceContext = new ShellWorkspaceContext(
-            static () => AgentBackendIds.Codex,
-            static () => (false, string.Empty, StatusTone.Info),
-            static () => true,
-            content => paneContent = content,
-            threadStateCoordinator.EnsureSelectionDefaults,
-            static () => { },
-            static () => { },
-            static () => { },
-            static () => { },
-            static _ => { },
-            static _ => { },
-            static () => { },
-            static () => { },
-            action => action(),
-            deferredActions.Enqueue,
-            () => focusedPromptCount++,
-            static () => { });
+            new DelegatingShellPromptAvailabilityPort(
+                static () => AgentBackendIds.Codex,
+                static () => (false, string.Empty, StatusTone.Info)),
+            new ShellWorkspaceSurfacePort(
+                static () => true,
+                static () => null,
+                static () => null,
+                content => paneContent = content,
+                () => focusedPromptCount++,
+                static _ => { },
+                static _ => { }),
+            new DelegatingShellWorkspaceProjectionPort(
+                threadStateCoordinator.EnsureSelectionDefaults,
+                static () => { },
+                static () => { },
+                static () => { },
+                static () => { },
+                static _ => { },
+                static _ => { },
+                static () => { },
+                static () => { }),
+            uiScheduler);
         var workspace = new ShellWorkspaceCoordinator(
             new CodeAltaShellViewModel(),
             new ThreadWorkspaceViewModel(),
@@ -61,7 +67,7 @@ public sealed class ShellWorkspaceCoordinatorTests
 
         var tab = threadStateCoordinator.FindOpenThread(thread.ThreadId);
         Assert.IsNotNull(tab);
-        Assert.AreSame(tab.Timeline.Flow, paneContent);
+        Assert.IsNull(paneContent);
         Assert.AreEqual(0, focusedPromptCount);
 
         while (deferredActions.Count > 0)
@@ -137,6 +143,30 @@ public sealed class ShellWorkspaceCoordinatorTests
         {
             ArgumentNullException.ThrowIfNull(action);
             action();
+        }
+
+        public Task InvokeAsync(Action action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            action();
+            return Task.CompletedTask;
+        }
+
+        public Task<T> InvokeAsync<T>(Func<T> action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            return Task.FromResult(action());
+        }
+    }
+
+    private sealed class QueueingUiDispatcher(Queue<Action> deferredActions) : IUiDispatcher
+    {
+        public bool CheckAccess() => true;
+
+        public void Post(Action action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            deferredActions.Enqueue(action);
         }
 
         public Task InvokeAsync(Action action)

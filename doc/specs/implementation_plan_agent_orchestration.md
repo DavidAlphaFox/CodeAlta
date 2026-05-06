@@ -1,5 +1,7 @@
 # Implementation Plan: Agent Orchestration, Roles, and Context (Draft)
 
+> Historical note: This document predates the 1.0 core cleanup. Built-in persistence, semantic search, MCP services, local-model hosting, .NET intelligence, and hardcoded agent roles described here are not active 1.0 core features; they are future/plugin-oriented design notes unless reintroduced by a focused plugin or service.
+
 This document describes how we will implement the “global agent + hierarchy of agents” model, using the existing backend adapters (`CodeAlta.Agent.*`) and the built-in MCP services (tasks, artifacts, search, etc.).
 
 Related specs:

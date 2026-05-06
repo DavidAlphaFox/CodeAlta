@@ -37,6 +37,9 @@ public sealed record PluginAdapterOperationOptions
     /// <summary>Gets a value indicating whether an interactive UI is available.</summary>
     public bool HasInteractiveUi { get; init; }
 
+    /// <summary>Gets a value indicating whether the caller is running without a frontend UI.</summary>
+    public bool IsHeadless { get; init; }
+
     /// <summary>Gets configuration paths visible to backend factories.</summary>
     public IReadOnlyList<string> ConfigurationPaths { get; init; } = [];
 
@@ -661,6 +664,11 @@ public sealed class PluginContributionAdapterService
     public IReadOnlyList<PluginStatusItem> GetStatusItems(IReadOnlyList<ActivePluginInstance> activePlugins, PluginAdapterOperationOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(activePlugins);
+        if (IsHeadlessOrNonInteractive(options))
+        {
+            return [];
+        }
+
         var items = new List<PluginStatusItem>();
         foreach (var registration in GetRegistrations(PluginPoint.Ui, options))
         {
@@ -684,6 +692,11 @@ public sealed class PluginContributionAdapterService
     public IReadOnlyList<Visual> CreateVisuals(IReadOnlyList<ActivePluginInstance> activePlugins, PluginUiRegion region, PluginAdapterOperationOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(activePlugins);
+        if (IsHeadlessOrNonInteractive(options))
+        {
+            return [];
+        }
+
         var visuals = new List<Visual>();
         foreach (var registration in GetRegistrations(PluginPoint.Ui, options))
         {
@@ -714,6 +727,11 @@ public sealed class PluginContributionAdapterService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(activePlugins);
+        if (IsHeadlessOrNonInteractive(options))
+        {
+            return ([], []);
+        }
+
         var results = new List<PluginRenderResult>();
         var diagnostics = new List<PluginRuntimeDiagnostic>();
         foreach (var registration in GetRegistrations(PluginPoint.Ui, options))
@@ -783,6 +801,9 @@ public sealed class PluginContributionAdapterService
 
         return true;
     }
+
+    private static bool IsHeadlessOrNonInteractive(PluginAdapterOperationOptions? options)
+        => options is not null && (options.IsHeadless || !options.HasInteractiveUi);
 
     private static bool RendererTargetMatches(string? rendererTarget, string? requestedTarget)
         => string.IsNullOrWhiteSpace(rendererTarget) ||

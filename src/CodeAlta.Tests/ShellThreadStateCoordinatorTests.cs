@@ -54,7 +54,7 @@ public sealed class ShellThreadStateCoordinatorTests
     }
 
     [TestMethod]
-    public async Task CloseThreadAsync_LastSelectedProjectThreadFallsBackToProjectScope()
+    public async Task CloseThreadTabAsync_LastSelectedProjectThreadFallsBackToProjectScope()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
@@ -63,7 +63,7 @@ public sealed class ShellThreadStateCoordinatorTests
         coordinator.ApplyRecoveredCatalogState([project], [CreateThread("thread-1", project.Id)]);
         coordinator.OpenThread("thread-1");
 
-        await coordinator.CloseThreadAsync("thread-1").ConfigureAwait(false);
+        await coordinator.CloseThreadTabAsync("thread-1").ConfigureAwait(false);
 
         Assert.IsTrue(coordinator.DraftTabOpen);
         Assert.IsFalse(coordinator.GlobalScopeSelected);
@@ -74,7 +74,7 @@ public sealed class ShellThreadStateCoordinatorTests
     }
 
     [TestMethod]
-    public async Task CloseThreadAsync_RetainsThreadStateForReopen()
+    public async Task CloseThreadTabAsync_RetainsThreadStateForReopen()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
@@ -88,12 +88,37 @@ public sealed class ShellThreadStateCoordinatorTests
         Assert.IsNotNull(tab);
         tab.Session.PromptDraftText = "keep this draft";
 
-        await coordinator.CloseThreadAsync(thread.ThreadId).ConfigureAwait(false);
+        await coordinator.CloseThreadTabAsync(thread.ThreadId).ConfigureAwait(false);
 
         var retained = coordinator.FindOpenThread(thread.ThreadId);
         Assert.IsNotNull(retained);
         Assert.AreEqual("keep this draft", retained.Session.PromptDraftText);
         Assert.IsFalse(coordinator.ViewState.OpenThreadIds.Contains(thread.ThreadId, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
+    public async Task ClosingThreadTab_DoesNotStopThread()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var coordinator = CreateCoordinator(options);
+        var project = CreateProject("project-1", "CodeAlta");
+        var thread = CreateThread("thread-1", project.Id);
+        thread.Status = WorkThreadStatus.Active;
+        coordinator.ApplyRecoveredCatalogState([project], [thread]);
+        coordinator.OpenThread(thread.ThreadId);
+
+        await coordinator.CloseThreadTabAsync(thread.ThreadId).ConfigureAwait(false);
+
+        Assert.AreSame(thread, coordinator.FindThread(thread.ThreadId));
+        Assert.AreEqual(WorkThreadStatus.Active, thread.Status);
+        Assert.IsFalse(coordinator.ViewState.OpenThreadIds.Contains(thread.ThreadId, StringComparer.OrdinalIgnoreCase));
+
+        coordinator.OpenThread(thread.ThreadId);
+
+        Assert.IsTrue(coordinator.ViewState.OpenThreadIds.Contains(thread.ThreadId, StringComparer.OrdinalIgnoreCase));
+        Assert.IsNotNull(coordinator.FindOpenThread(thread.ThreadId));
+        Assert.AreEqual(thread.ThreadId, coordinator.SelectedThreadId);
     }
 
     [TestMethod]

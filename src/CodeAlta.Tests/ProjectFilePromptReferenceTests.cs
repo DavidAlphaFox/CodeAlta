@@ -1,6 +1,6 @@
 using CodeAlta.Agent;
 using CodeAlta.Presentation.Prompting;
-using CodeAlta.Search;
+using CodeAlta.Catalog;
 using XenoAtom.Terminal.UI.Text;
 
 namespace CodeAlta.Tests;

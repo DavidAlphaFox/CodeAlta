@@ -32,7 +32,6 @@ public sealed class PromptComposerProjectionTests
         Assert.IsFalse(projection.IsEnabled);
         Assert.IsFalse(projection.CanSend);
         Assert.IsFalse(projection.CanSteer);
-        Assert.IsFalse(projection.CanDelegate);
         Assert.IsTrue(projection.CanAbort);
         Assert.IsFalse(projection.CanCompact);
         Assert.IsFalse(projection.CanClearQueue);
@@ -74,7 +73,6 @@ public sealed class PromptComposerProjectionTests
         Assert.IsTrue(projection.IsEnabled);
         Assert.IsTrue(projection.CanSend);
         Assert.IsFalse(projection.CanSteer);
-        Assert.IsFalse(projection.CanDelegate);
         Assert.IsFalse(projection.CanAbort);
         Assert.IsFalse(projection.CanCompact);
         Assert.IsFalse(projection.CanCloseTab);

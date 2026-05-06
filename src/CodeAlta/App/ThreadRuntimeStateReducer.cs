@@ -228,6 +228,15 @@ internal sealed class ThreadRuntimeStateReducer
                     threadStatus = new ThreadRuntimeStatusUpdate(update.Message, true, StatusTone.Info);
                 }
 
+                if (update.Kind is AgentSessionUpdateKind.Info or AgentSessionUpdateKind.Warning &&
+                    !string.IsNullOrWhiteSpace(update.Message))
+                {
+                    threadStatus = new ThreadRuntimeStatusUpdate(
+                        update.Message,
+                        true,
+                        update.Kind == AgentSessionUpdateKind.Warning ? StatusTone.Warning : StatusTone.Info);
+                }
+
                 if (update.Kind == AgentSessionUpdateKind.CompactionCompleted && tab.PendingManualCompaction)
                 {
                     tab.PendingManualCompaction = false;

@@ -1,5 +1,5 @@
 using CodeAlta.Presentation.Styling;
-using CodeAlta.Search;
+using CodeAlta.Catalog;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Styling;
 

@@ -19,7 +19,7 @@ internal sealed class ShellThreadStateCoordinator
     private readonly ShellSelectionCoordinator _selectionCoordinator = new();
     private readonly Func<IUiDispatcher> _getUiDispatcher;
     private readonly ShellCatalogStateCoordinator _catalogStateCoordinator;
-    private readonly OpenThreadRegistry _openThreadRegistry;
+    private readonly OpenThreadStateStore _OpenThreadStateStore;
     private readonly ThreadViewStateCoordinator _viewStateCoordinator;
     private readonly Func<WorkThreadDescriptor, bool> _isBackendReady;
     private readonly Action<string> _deletePromptDraft;
@@ -64,7 +64,7 @@ internal sealed class ShellThreadStateCoordinator
 
         _getUiDispatcher = getUiDispatcher;
         _viewStateCoordinator = new ThreadViewStateCoordinator(threadCatalog);
-        _openThreadRegistry = new OpenThreadRegistry(
+        _OpenThreadStateStore = new OpenThreadStateStore(
             getUiDispatcher,
             getTimelineBounds,
             loadPromptDraft,
@@ -72,7 +72,7 @@ internal sealed class ShellThreadStateCoordinator
             rememberThreadPreference,
             GetSelectedProject,
             GetProjectById);
-        _catalogStateCoordinator = new ShellCatalogStateCoordinator(projectCatalog, threadCatalog, _viewStateCoordinator, _openThreadRegistry);
+        _catalogStateCoordinator = new ShellCatalogStateCoordinator(projectCatalog, threadCatalog, _viewStateCoordinator, _OpenThreadStateStore);
         _isBackendReady = isBackendReady;
         _deletePromptDraft = deletePromptDraft;
         _ensureThreadHistoryLoadedAsync = ensureThreadHistoryLoadedAsync;
@@ -195,7 +195,7 @@ internal sealed class ShellThreadStateCoordinator
             return;
         }
 
-        _openThreadRegistry.RekeyThreadTab(oldThreadId, thread);
+        _OpenThreadStateStore.RekeyThreadTab(oldThreadId, thread);
         _removeTabPage(oldThreadId);
 
         for (var index = 0; index < ViewState.OpenThreadIds.Count; index++)
@@ -311,26 +311,6 @@ internal sealed class ShellThreadStateCoordinator
         await _ensureThreadHistoryLoadedAsync(thread, CancellationToken.None);
     }
 
-    public OpenThreadState RegisterDelegatedThread(WorkThreadDescriptor child, OpenThreadState sourceTab)
-    {
-        ArgumentNullException.ThrowIfNull(child);
-        ArgumentNullException.ThrowIfNull(sourceTab);
-
-        _catalogStateCoordinator.UpsertThread(child);
-
-        if (!ViewState.OpenThreadIds.Contains(child.ThreadId, StringComparer.OrdinalIgnoreCase))
-        {
-            ViewState.OpenThreadIds.Add(child.ThreadId);
-            ViewState.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-
-        var childTab = EnsureThreadTab(child);
-        childTab.BackendId = sourceTab.BackendId;
-        childTab.ModelId = sourceTab.ModelId;
-        childTab.ReasoningEffort = sourceTab.ReasoningEffort;
-        return childTab;
-    }
-
     public void OpenThread(string threadId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
@@ -369,10 +349,10 @@ internal sealed class ShellThreadStateCoordinator
             return;
         }
 
-        await CloseThreadAsync(SelectedThreadId);
+        await CloseThreadTabAsync(SelectedThreadId);
     }
 
-    public async Task CloseThreadAsync(string threadId)
+    public async Task CloseThreadTabAsync(string threadId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
 
@@ -429,7 +409,7 @@ internal sealed class ShellThreadStateCoordinator
         var removedSelectedThread = string.Equals(SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
         ViewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
         _removeTabPage(threadId);
-        _openThreadRegistry.RemoveThreadTab(threadId);
+        _OpenThreadStateStore.RemoveThreadTab(threadId);
         _deletePromptDraft(threadId);
 
         if (string.Equals(ViewState.SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase))
@@ -461,7 +441,7 @@ internal sealed class ShellThreadStateCoordinator
         {
             ViewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
             _removeTabPage(threadId);
-            _openThreadRegistry.RemoveThreadTab(threadId);
+            _OpenThreadStateStore.RemoveThreadTab(threadId);
             _deletePromptDraft(threadId);
 
             if (string.Equals(ViewState.SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase))
@@ -488,14 +468,14 @@ internal sealed class ShellThreadStateCoordinator
     {
         ArgumentNullException.ThrowIfNull(thread);
 
-        return _openThreadRegistry.EnsureThreadTab(thread);
+        return _OpenThreadStateStore.EnsureThreadTab(thread);
     }
 
     public void ResetThreadTab(OpenThreadState tab)
-        => _openThreadRegistry.ResetThreadTab(tab);
+        => _OpenThreadStateStore.ResetThreadTab(tab);
 
     public OpenThreadState? FindOpenThread(string threadId)
-        => _openThreadRegistry.FindOpenThread(threadId);
+        => _OpenThreadStateStore.FindOpenThread(threadId);
 
     public ProjectDescriptor? GetSelectedProject()
     {

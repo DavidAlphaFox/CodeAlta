@@ -1,3 +1,4 @@
+using CodeAlta.App;
 using CodeAlta.App.Context;
 using CodeAlta.App.State;
 using CodeAlta.Catalog;
@@ -84,39 +85,68 @@ public sealed class ThreadCommandContextTests
         Assert.AreEqual("Image-1", restoredImages[0].Title);
     }
 
+    [TestMethod]
+    public void SetShellStatus_InvokesStatusCallbackOnUiDispatcher()
+    {
+        var dispatcher = new RecordingUiDispatcher();
+        var callbackRanOnUi = false;
+        var context = CreateContext(
+            dispatcher,
+            setShellStatus: (_, _, _) => callbackRanOnUi = dispatcher.CheckAccess());
+
+        context.SetShellStatus("Ready", false, StatusTone.Ready);
+
+        Assert.IsTrue(callbackRanOnUi);
+        Assert.AreEqual(1, dispatcher.InvokeActionCount);
+    }
+
     private static ThreadCommandContext CreateContext(
         IUiDispatcher dispatcher,
         Action? clearDraftInput = null,
         Func<bool>? isThreadInputEmpty = null,
         Action<string>? restoreThreadInput = null,
         Func<IReadOnlyList<PromptImageAttachment>>? snapshotPromptImages = null,
-        Action<IReadOnlyList<PromptImageAttachment>>? restorePromptImages = null)
+        Action<IReadOnlyList<PromptImageAttachment>>? restorePromptImages = null,
+        Action<string, bool, StatusTone>? setShellStatus = null)
     {
         clearDraftInput ??= static () => { };
         isThreadInputEmpty ??= static () => true;
         restoreThreadInput ??= static _ => { };
         snapshotPromptImages ??= static () => [];
         restorePromptImages ??= static _ => { };
-
-        return new ThreadCommandContext(
-            dispatcher,
-            static () => false,
-            static _ => Task.FromResult<WorkThreadDescriptor?>(null),
-            static _ => Task.FromResult<WorkThreadDescriptor?>(null),
-            static () => Task.CompletedTask,
-            static () => true,
-            clearDraftInput,
-            static () => { },
-            static () => { },
+        setShellStatus ??= static (_, _, _) => { };
+        var scheduler = new FrontendUiScheduler(dispatcher);
+        var promptSessionId = new PromptSessionId("prompt-1");
+        var promptSessionPort = new PromptSessionPort(
+            scheduler,
             isThreadInputEmpty,
+            static () => { },
             restoreThreadInput,
             snapshotPromptImages,
-            restorePromptImages,
-            static () => { },
-            static () => { },
-            static (_, _, _) => { },
-            static (_, _, _, _) => { },
-            static (_, _, _) => { });
+            restorePromptImages);
+        promptSessionPort.BindPromptSession(new PromptSessionBinding(
+            promptSessionId,
+            ProjectId.NewVersion7(),
+            new ShellThreadRef.Draft(new ThreadDraftId("draft-1")),
+            new ModelProviderId("provider-1")));
+
+        return new ThreadCommandContext(
+            new DelegatingThreadLifecycleCommandPort(
+                static _ => Task.FromResult<WorkThreadDescriptor?>(null),
+                static _ => Task.FromResult<WorkThreadDescriptor?>(null),
+                static () => Task.CompletedTask),
+            new ThreadCommandUiPort(
+                scheduler,
+                static () => false,
+                static () => true,
+                clearDraftInput,
+                static () => { },
+                static () => { },
+                static () => { },
+                static (_, _, _) => { }),
+            promptSessionPort,
+            () => promptSessionId,
+            new ShellStatusPort(scheduler, setShellStatus, static (_, _, _, _) => { }));
     }
 
     private sealed class RecordingUiDispatcher : IUiDispatcher

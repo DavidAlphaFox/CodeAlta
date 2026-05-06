@@ -95,7 +95,19 @@ Low-ceremony factories are available for common authoring tasks: `Command`, `Sta
 `PluginUi` also creates dialog requests for notifications, confirmations, input text, text editor dialogs, selections, and custom visuals.
 Command-line contributions intentionally use plain `XenoAtom.CommandLine` objects such as `Command` and `CommandGroup`, with options, arguments, validation, completion, and callbacks added through the command-line API directly instead of a CodeAlta-specific wrapper.
 
+Capabilities removed from the hardcoded 1.0 core—such as built-in MCP services, semantic or language-specific indexing, local model hosting, and multi-agent orchestration roles—should be reintroduced through focused plugins or reusable service packages rather than frontend-owned app code.
+
 Plugins should schedule long-running background work through `Services.Tasks.Run(...)` or the `PluginBase.Tasks` shortcut instead of calling `Task.Run` directly. The runtime tracks these handles, cancels them during deactivation, and can delay unload while `PluginTaskHandle.Completion` is still running.
+
+## Headless orchestration behavior
+
+Runtime-facing plugin contributions are not tied to the terminal frontend. A headless host can invoke prompt processors, `OnBeforeAgentRunAsync`, agent tools, agent-event observers, compaction hooks, resource roots, and provider factories through the same contribution registry and adapter services used by the TUI. UI-only contributions such as visuals, dialogs, renderers, and status items remain frontend responsibilities; headless hosts should ignore them or expose mode-aware no-op services through `IPluginUiService.HasInteractiveUi == false`.
+
+Plugins that need to coordinate work threads should use explicit orchestration services and request DTOs rather than selected-thread UI state. Those requests must include project scope, prompt-session identity, model-provider identity, and either a thread id or a draft id for prompt/steer/queue operations.
+
+## Terminology: model providers and backends
+
+User-facing shell and configuration docs use **Model Provider** for the selectable LLM runtime plus endpoint/model settings shown in the provider picker and management UI. The remaining `Backend` names in plugin APIs, such as `PluginAgentBackendContribution` and `IAgentBackend`, refer to low-level runtime adapter contracts that existing provider implementations and extension code still use. New frontend/shell contracts should prefer `ModelProvider` names unless they are explicitly bridging to those legacy low-level adapter types.
 
 ## Backend/provider example
 

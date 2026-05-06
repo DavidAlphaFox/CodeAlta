@@ -18,6 +18,7 @@ internal static class CodeAltaLogging
     public static bool Initialize(string homeRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(homeRoot);
+        CodeAltaCrashReporter.Register(homeRoot);
 
         if (LogManager.IsInitialized)
         {

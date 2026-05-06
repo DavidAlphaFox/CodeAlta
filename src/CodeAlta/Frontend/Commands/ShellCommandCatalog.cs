@@ -237,17 +237,6 @@ internal static class ShellCommandCatalog
             ShowInCommandPalette: false,
             SupportsTextCommand: false),
         new(
-            "CodeAlta.Thread.Delegate",
-            "Delegate",
-            "Create a delegated internal thread from the current project thread.",
-            ShellCommandHelpCategory.Thread,
-            ShellCommandScope.ThreadOnly,
-            ShellCommandAvailability.CanDelegate,
-            Gesture: new KeyGesture(TerminalKey.F7),
-            Aliases: ["delegate"],
-            ShowInCommandPalette: false,
-            SupportsTextCommand: false),
-        new(
             "CodeAlta.Thread.Abort",
             "Abort",
             "Abort the selected thread run.",

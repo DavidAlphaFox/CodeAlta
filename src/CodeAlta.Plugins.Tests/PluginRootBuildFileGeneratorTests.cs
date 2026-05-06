@@ -73,7 +73,7 @@ public sealed class PluginRootBuildFileGeneratorTests
     [TestMethod]
     public void ExtractPluginPackageVersionsReadsMarkerBlock()
     {
-        var content = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Directory.Packages.props"));
+        var content = File.ReadAllText(PluginTestPaths.DirectoryPackagesPropsPath);
 
         var versions = PluginPackageVersionProvider.ExtractPluginPackageVersions(content);
 

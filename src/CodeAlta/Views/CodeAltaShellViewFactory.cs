@@ -1,6 +1,4 @@
-using CodeAlta.App;
 using CodeAlta.Frontend.Commands;
-using CodeAlta.Plugins.Abstractions;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Commands;
@@ -21,7 +19,7 @@ internal static class CodeAltaShellViewFactory
         Action focusSidebar,
         Action focusPromptEditor,
         Func<bool> canUseCommandPalette,
-        PluginHostBridge? pluginHostBridge = null)
+        Visual? pluginFooter = null)
     {
         ArgumentNullException.ThrowIfNull(sidebar);
         ArgumentNullException.ThrowIfNull(threadWorkspace);
@@ -36,7 +34,7 @@ internal static class CodeAltaShellViewFactory
         var shellView = new CodeAltaShellView(
             sidebar,
             threadWorkspace,
-            ComposePluginFooter(threadCommandBar, pluginHostBridge),
+            pluginFooter ?? threadCommandBar,
             CodeAltaGlobalCommandConfigurator.Configure);
         shellView.Root.AddCommand(new XenoAtom.Terminal.UI.Commands.Command
         {
@@ -93,24 +91,4 @@ internal static class CodeAltaShellViewFactory
         return shellView;
     }
 
-    private static Visual ComposePluginFooter(Visual threadCommandBar, PluginHostBridge? pluginHostBridge)
-    {
-        if (pluginHostBridge is null)
-        {
-            return threadCommandBar;
-        }
-
-        var visuals = pluginHostBridge.CreateVisuals(PluginUiRegion.CommandBar)
-            .Concat(pluginHostBridge.CreateVisuals(PluginUiRegion.ThreadFooter))
-            .ToArray();
-        if (visuals.Length == 0)
-        {
-            return threadCommandBar;
-        }
-
-        return new VStack(visuals.Append(threadCommandBar).ToArray())
-        {
-            HorizontalAlignment = Align.Stretch,
-        };
-    }
 }

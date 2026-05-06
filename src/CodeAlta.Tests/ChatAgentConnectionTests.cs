@@ -1,28 +1,24 @@
 using CodeAlta.Agent;
 using CodeAlta.Orchestration;
 using CodeAlta.Orchestration.Runtime;
-using CodeAlta.Persistence;
-using CodeAlta.Services;
 
 namespace CodeAlta.Tests;
 
 [TestClass]
-public sealed class ChatAgentConnectionTests
+public sealed class AgentSessionConnectionTests
 {
     [TestMethod]
     public async Task EnsureConnectedAsync_RetriesAfterFailedStart_AndForwardsResponses()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
-        var repository = new AgentRepository(db);
 
         var backendFactory = new AgentBackendFactory();
         var backend = new FlakyBackend();
         backendFactory.Register("fakechat", () => backend);
 
-        await using var hub = new AgentHub(backendFactory, repository);
+        await using var hub = new AgentHub(backendFactory);
         var received = new List<AgentEvent>();
-        await using var connection = new ChatAgentConnection(hub, received.Add);
+        await using var connection = new AgentSessionConnection(hub, received.Add);
 
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(
                 () => connection.EnsureConnectedAsync(
@@ -66,15 +62,13 @@ public sealed class ChatAgentConnectionTests
     public async Task EnsureConnectedAsync_RecreatesSessionWhenModelOrReasoningChanges()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
-        var repository = new AgentRepository(db);
 
         var backendFactory = new AgentBackendFactory();
         var backend = new FlakyBackend(skipFirstFailure: true);
         backendFactory.Register("fakechat", () => backend);
 
-        await using var hub = new AgentHub(backendFactory, repository);
-        await using var connection = new ChatAgentConnection(hub, static _ => { });
+        await using var hub = new AgentHub(backendFactory);
+        await using var connection = new AgentSessionConnection(hub, static _ => { });
 
         var firstAgentId = await connection.EnsureConnectedAsync(
                 new AgentBackendId("fakechat"),
@@ -118,15 +112,6 @@ public sealed class ChatAgentConnectionTests
             backend.CreatedReasoningEfforts.ToArray());
         Assert.AreEqual(1, backend.DisposedSessionCount);
     }
-
-    private static async Task<CodeAltaDb> CreateDbAsync(string rootPath)
-    {
-        var dbPath = Path.Combine(rootPath, "state", "db", "codealta.db");
-        var db = new CodeAltaDb(new CodeAltaDbOptions { DatabasePath = dbPath });
-        await db.InitializeAsync().ConfigureAwait(false);
-        return db;
-    }
-
     private sealed class FlakyBackend : IAgentBackend
     {
         private int _runCounter;

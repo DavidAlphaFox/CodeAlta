@@ -170,6 +170,11 @@ internal sealed class ThreadTimelinePresenter
         }
 
         var state = GetOrCreateContentState(delta.Kind, delta.ContentId, delta.Timestamp);
+        if (TryGetDraftAttemptId(delta.Details, out var draftAttemptId))
+        {
+            state.DraftAttemptId = draftAttemptId;
+        }
+
         state.Buffer.Append(delta.Delta);
         var content = state.Buffer.ToString();
         var markdown = ChatMarkdownFormatter.FormatChatContentMarkdown(delta.Kind, content);
@@ -183,6 +188,30 @@ internal sealed class ThreadTimelinePresenter
                 headerSecondary);
             state.Markdown.Markdown = markdown;
         });
+    }
+
+    public void DiscardDraftContent(AgentSessionUpdateEvent update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+
+        if (!TryGetDiscardDraftAttemptId(update.Details, out var draftAttemptId))
+        {
+            return;
+        }
+
+        var discardedItems = new List<DocumentFlowItem>();
+        foreach (var entry in _contentStates.ToArray())
+        {
+            if (!string.Equals(entry.Value.DraftAttemptId, draftAttemptId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            _contentStates.Remove(entry.Key);
+            discardedItems.Add(entry.Value.Item);
+        }
+
+        RemoveTimelineItems(discardedItems);
     }
 
     public void RenderOptimisticUserPrompt(string prompt, DateTimeOffset timestamp)
@@ -768,6 +797,46 @@ internal sealed class ThreadTimelinePresenter
         return false;
     }
 
+    private static bool TryGetDraftAttemptId(System.Text.Json.JsonElement? details, out string attemptId)
+    {
+        attemptId = string.Empty;
+        if (details is not { ValueKind: System.Text.Json.JsonValueKind.Object } root ||
+            TryGetBooleanProperty(root, "draft", out var isDraft) && !isDraft)
+        {
+            return false;
+        }
+
+        return TryGetStringProperty(root, "attemptId", out attemptId) &&
+               !string.IsNullOrWhiteSpace(attemptId);
+    }
+
+    private static bool TryGetDiscardDraftAttemptId(System.Text.Json.JsonElement? details, out string attemptId)
+    {
+        attemptId = string.Empty;
+        if (details is not { ValueKind: System.Text.Json.JsonValueKind.Object } root ||
+            !TryGetBooleanProperty(root, "discardDraft", out var discardDraft) ||
+            !discardDraft)
+        {
+            return false;
+        }
+
+        return TryGetStringProperty(root, "draftAttemptId", out attemptId) &&
+               !string.IsNullOrWhiteSpace(attemptId);
+    }
+
+    private static bool TryGetBooleanProperty(System.Text.Json.JsonElement element, string propertyName, out bool value)
+    {
+        if (TryGetProperty(element, propertyName, out var property) &&
+            property.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False)
+        {
+            value = property.GetBoolean();
+            return true;
+        }
+
+        value = false;
+        return false;
+    }
+
     private void RemoveTimelineItems(IReadOnlyList<DocumentFlowItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -805,11 +874,14 @@ internal sealed class ThreadTimelinePresenter
         }
 
         _messageNavigationAnchors.Add(new MessageNavigationAnchor(item, kind));
-        if (Flow.FollowTail)
+        if (IsFlowFollowingTail())
         {
             _messageNavigationIndex = null;
         }
     }
+
+    private bool IsFlowFollowingTail()
+        => UiDispatch.Invoke(_uiDispatcher, static flow => flow.FollowTail, Flow);
 
     private void RemoveMessageNavigationAnchors(IReadOnlyList<DocumentFlowItem> items)
     {

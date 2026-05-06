@@ -83,14 +83,9 @@ public sealed class ShellCommandHelpTests
         var steerEntry = sections
             .SelectMany(static section => section.Entries)
             .Single(candidate => string.Equals(candidate.Label, "Steer", StringComparison.Ordinal));
-        var delegateEntry = sections
-            .SelectMany(static section => section.Entries)
-            .Single(candidate => string.Equals(candidate.Label, "Delegate", StringComparison.Ordinal));
 
         CollectionAssert.DoesNotContain(steerEntry.Bindings.ToArray(), "/steer");
-        CollectionAssert.DoesNotContain(delegateEntry.Bindings.ToArray(), "/delegate");
         CollectionAssert.Contains(steerEntry.Bindings.ToArray(), new KeyGesture(TerminalKey.F5).ToString()!);
-        CollectionAssert.Contains(delegateEntry.Bindings.ToArray(), new KeyGesture(TerminalKey.F7).ToString()!);
     }
 
     [TestMethod]

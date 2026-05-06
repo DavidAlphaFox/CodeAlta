@@ -210,6 +210,21 @@ public sealed record LocalAgentTurnDelta
     /// Gets or initializes the delta text.
     /// </summary>
     public required string Text { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the provider attempt identifier when the delta represents replaceable draft output.
+    /// </summary>
+    public string? AttemptId { get; init; }
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether this delta is live draft content that can be discarded by a retry.
+    /// </summary>
+    public bool IsDraft { get; init; } = true;
+
+    /// <summary>
+    /// Gets or initializes optional structured delta metadata.
+    /// </summary>
+    public JsonElement? Details { get; init; }
 }
 
 /// <summary>

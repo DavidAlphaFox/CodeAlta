@@ -77,12 +77,9 @@ public sealed class ShellInputRouterTests
     public void Route_KeyboardOnlyCommands_AreTreatedAsPlainPromptText()
     {
         var steerIntent = _router.Route("/steer focus on tests", steerRequested: false);
-        var delegateIntent = _router.Route("/delegate review the test failures", steerRequested: false);
 
         Assert.IsInstanceOfType<SendPromptIntent>(steerIntent);
         Assert.AreEqual("/steer focus on tests", ((SendPromptIntent)steerIntent).PromptText);
-        Assert.IsInstanceOfType<SendPromptIntent>(delegateIntent);
-        Assert.AreEqual("/delegate review the test failures", ((SendPromptIntent)delegateIntent).PromptText);
     }
 
     [TestMethod]

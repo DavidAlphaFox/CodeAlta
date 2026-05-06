@@ -1,7 +1,6 @@
 using CodeAlta.Agent;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Orchestration;
-using CodeAlta.Persistence;
 
 namespace CodeAlta.Tests;
 
@@ -12,13 +11,11 @@ public sealed class AgentHubBackendReloadTests
     public async Task UnloadBackendAsync_DisposesCachedBackendWithoutActiveSession()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
-        var repository = new AgentRepository(db);
         var backendFactory = new AgentBackendFactory();
         var backend = new ReloadableBackend();
         backendFactory.Register("reloadable", () => backend);
 
-        await using var hub = new AgentHub(backendFactory, repository);
+        await using var hub = new AgentHub(backendFactory);
 
         var models = await hub.ListModelsAsync(new AgentBackendId("reloadable")).ConfigureAwait(false);
         Assert.AreEqual(1, models.Count);
@@ -34,21 +31,12 @@ public sealed class AgentHubBackendReloadTests
     public async Task UnloadBackendAsync_ThrowsWhenBackendHasActiveSession()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
-        var repository = new AgentRepository(db);
         var backendFactory = new AgentBackendFactory();
         var backend = new ReloadableBackend();
         backendFactory.Register("reloadable", () => backend);
 
-        await using var hub = new AgentHub(backendFactory, repository);
-        var agent = await hub.RegisterAgentAsync(
-                "test",
-                new AgentScope
-                {
-                    Kind = AgentScopeKind.Global,
-                    Id = "global",
-                },
-                new AgentBackendId("reloadable"))
+        await using var hub = new AgentHub(backendFactory);
+        var agent = await hub.RegisterAgentAsync(new AgentBackendId("reloadable"))
             .ConfigureAwait(false);
         _ = await hub.StartSessionAsync(
                 agent.AgentId,
@@ -71,21 +59,12 @@ public sealed class AgentHubBackendReloadTests
     public async Task SteerAsync_DoesNotBlockBehindActiveRunGate()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
-        var repository = new AgentRepository(db);
         var backendFactory = new AgentBackendFactory();
         var backend = new BlockingSteerBackend();
         backendFactory.Register("blocking-steer", () => backend);
 
-        await using var hub = new AgentHub(backendFactory, repository);
-        var agent = await hub.RegisterAgentAsync(
-                "test",
-                new AgentScope
-                {
-                    Kind = AgentScopeKind.Global,
-                    Id = "global",
-                },
-                new AgentBackendId("blocking-steer"))
+        await using var hub = new AgentHub(backendFactory);
+        var agent = await hub.RegisterAgentAsync(new AgentBackendId("blocking-steer"))
             .ConfigureAwait(false);
         _ = await hub.StartSessionAsync(
                 agent.AgentId,
@@ -126,21 +105,12 @@ public sealed class AgentHubBackendReloadTests
     public async Task StopSessionAsync_WaitsForActiveRunBeforeDisposingSession()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
-        var repository = new AgentRepository(db);
         var backendFactory = new AgentBackendFactory();
         var backend = new BlockingSteerBackend();
         backendFactory.Register("blocking-steer", () => backend);
 
-        await using var hub = new AgentHub(backendFactory, repository);
-        var agent = await hub.RegisterAgentAsync(
-                "test",
-                new AgentScope
-                {
-                    Kind = AgentScopeKind.Global,
-                    Id = "global",
-                },
-                new AgentBackendId("blocking-steer"))
+        await using var hub = new AgentHub(backendFactory);
+        var agent = await hub.RegisterAgentAsync(new AgentBackendId("blocking-steer"))
             .ConfigureAwait(false);
         _ = await hub.StartSessionAsync(
                 agent.AgentId,
@@ -176,8 +146,6 @@ public sealed class AgentHubBackendReloadTests
     public async Task ListSessionsAsync_CachesProcessBackedBackendSessions()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
-        var repository = new AgentRepository(db);
         var backendFactory = new AgentBackendFactory();
         var backend = new CountingSessionBackend(AgentBackendIds.Codex)
         {
@@ -189,7 +157,7 @@ public sealed class AgentHubBackendReloadTests
         };
         backendFactory.Register(AgentBackendIds.Codex, () => backend);
 
-        await using var hub = new AgentHub(backendFactory, repository);
+        await using var hub = new AgentHub(backendFactory);
 
         var first = await hub.ListSessionsAsync(AgentBackendIds.Codex).ConfigureAwait(false);
         var filtered = await hub.ListSessionsAsync(
@@ -209,8 +177,6 @@ public sealed class AgentHubBackendReloadTests
     public async Task ListSessionsAsync_DoesNotCacheRegularBackendSessions()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
-        var repository = new AgentRepository(db);
         var backendFactory = new AgentBackendFactory();
         var backendId = new AgentBackendId("regular");
         var backend = new CountingSessionBackend(backendId)
@@ -219,7 +185,7 @@ public sealed class AgentHubBackendReloadTests
         };
         backendFactory.Register(backendId, () => backend);
 
-        await using var hub = new AgentHub(backendFactory, repository);
+        await using var hub = new AgentHub(backendFactory);
 
         _ = await hub.ListSessionsAsync(backendId).ConfigureAwait(false);
         _ = await hub.ListSessionsAsync(backendId).ConfigureAwait(false);
@@ -231,8 +197,6 @@ public sealed class AgentHubBackendReloadTests
     public async Task DeleteSessionAsync_InvalidatesProcessBackedSessionCache()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
-        var repository = new AgentRepository(db);
         var backendFactory = new AgentBackendFactory();
         var backend = new CountingSessionBackend(AgentBackendIds.Copilot)
         {
@@ -244,7 +208,7 @@ public sealed class AgentHubBackendReloadTests
         };
         backendFactory.Register(AgentBackendIds.Copilot, () => backend);
 
-        await using var hub = new AgentHub(backendFactory, repository);
+        await using var hub = new AgentHub(backendFactory);
 
         _ = await hub.ListSessionsAsync(AgentBackendIds.Copilot).ConfigureAwait(false);
         var deleted = await hub.DeleteSessionAsync(AgentBackendIds.Copilot, "session-a").ConfigureAwait(false);
@@ -254,14 +218,6 @@ public sealed class AgentHubBackendReloadTests
         Assert.AreEqual(2, backend.ListSessionsCount);
         Assert.AreEqual(1, afterDelete.Count);
         Assert.AreEqual("session-b", afterDelete[0].SessionId);
-    }
-
-    private static async Task<CodeAltaDb> CreateDbAsync(string rootPath)
-    {
-        var dbPath = Path.Combine(rootPath, "state", "db", "codealta.db");
-        var db = new CodeAltaDb(new CodeAltaDbOptions { DatabasePath = dbPath });
-        await db.InitializeAsync().ConfigureAwait(false);
-        return db;
     }
 
     private static AgentSessionMetadata CreateSession(

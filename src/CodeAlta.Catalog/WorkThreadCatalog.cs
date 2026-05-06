@@ -1,7 +1,7 @@
 namespace CodeAlta.Catalog;
 
 /// <summary>
-/// Stores local thread UI state and optional host-owned internal thread linkage metadata.
+/// Stores local thread UI state and legacy host-owned internal thread metadata.
 /// </summary>
 public sealed class WorkThreadCatalog
 {
@@ -28,7 +28,7 @@ public sealed class WorkThreadCatalog
     }
 
     /// <summary>
-    /// Loads all host-owned internal thread linkage records.
+    /// Loads all legacy host-owned internal thread records.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The internal thread descriptors.</returns>
@@ -57,7 +57,7 @@ public sealed class WorkThreadCatalog
     }
 
     /// <summary>
-    /// Saves a host-owned internal thread linkage record.
+    /// Saves a legacy host-owned internal thread record.
     /// </summary>
     /// <param name="thread">The internal thread descriptor.</param>
     /// <param name="cancellationToken">Cancellation token.</param>

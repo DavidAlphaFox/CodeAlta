@@ -142,19 +142,5 @@ public sealed class PluginBuildServiceTests
                 .Concat([buildResult.StandardOutput, buildResult.StandardError]));
 
     private static IReadOnlyList<PluginPackageVersion> LoadPluginPackageVersions()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var packagePath = Path.Combine(directory.FullName, "Directory.Packages.props");
-            if (File.Exists(packagePath))
-            {
-                return PluginPackageVersionProvider.ExtractPluginPackageVersionsFromFile(packagePath);
-            }
-
-            directory = directory.Parent;
-        }
-
-        return [];
-    }
+        => PluginPackageVersionProvider.ExtractPluginPackageVersionsFromFile(PluginTestPaths.DirectoryPackagesPropsPath);
 }

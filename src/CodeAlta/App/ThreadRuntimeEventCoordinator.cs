@@ -4,7 +4,6 @@ using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Presentation.Shell;
-using CodeAlta.Search;
 using CodeAlta.Views;
 using XenoAtom.Logging;
 
@@ -225,7 +224,9 @@ internal sealed class ThreadRuntimeEventCoordinator
 
             if (reduction.DrainQueuedPrompt)
             {
-                _ = _drainQueuedPromptAsync(tab, CancellationToken.None);
+                global::CodeAlta.CodeAltaTaskMonitor.Observe(
+                    _drainQueuedPromptAsync(tab, CancellationToken.None),
+                    $"Queued prompt drain for thread {tab.Thread.ThreadId}");
             }
         }
 

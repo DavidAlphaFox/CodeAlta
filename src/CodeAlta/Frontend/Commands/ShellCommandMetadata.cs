@@ -16,7 +16,6 @@ internal enum ShellCommandAvailability
     PromptEnabled,
     CanSend,
     CanSteer,
-    CanDelegate,
     CanAbort,
     CanClearQueue,
     CanCompact,

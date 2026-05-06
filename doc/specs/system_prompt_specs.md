@@ -26,7 +26,7 @@ The prompt system should provide a strong default base prompt without turning it
 
 ## 2. Terminology
 
-**Prompt resource** means a markdown/yaml/json file used by the prompt builder. V1 prompt resources are base system prompts, roles, and optional prompt template files.
+**Prompt resource** means a markdown/yaml/json file used by the prompt builder. V1 prompt resources are base system prompts, thread instructions, and optional prompt template files.
 
 **Prompt authoring doc** means shipped user-facing documentation that explains how to inspect, customize, or create prompt resources. Authoring docs are content files, but they are not prompt resources and are not stored under the prompt resource root.
 
@@ -36,7 +36,7 @@ The prompt system should provide a strong default base prompt without turning it
 
 **Base system prompt** means the selected root system prompt file. Base system prompts live under `base/` and use the `*.system-prompt.md` suffix so they are easy to find in editors.
 
-**Role** means a reusable behavioral profile used when building an acting AI session. CodeAlta should prefer the word `role` in its own UI and prompt code because `agent` is ambiguous: an agent is the running AI instance, while a role is one input to its prompt.
+**Thread instructions** means the reusable default developer guidance used when building a CodeAlta thread session. CodeAlta does not expose hardcoded agent roles as a first-class prompt concept in the 1.0 core.
 
 **Prompt template file** means an optional small YAML file that selects resource names and toggles generated prompt parts. It is not a markdown rendering template, not a user-editable prompt language, and not a resource index; it must not list every available file.
 
@@ -65,13 +65,13 @@ V1 should not duplicate resource metadata in an index file. Kind, name, and path
 | Resource | File convention | Derived resource key |
 | --- | --- | --- |
 | Base system prompt | `base/<name>.system-prompt.md` | `base/<name>` |
-| Role | `roles/<name>.role.md` | `roles/<name>` |
+| Thread instructions | `instructions/<name>.instructions.md` | `instructions/<name>` |
 
 Examples:
 
 - `base/default.system-prompt.md` is the default base resource and has key `base/default`.
-- `roles/default.role.md` is the default role resource and has key `roles/default`.
-- `roles/reviewer.role.md` is a role named `reviewer`.
+- `instructions/default.instructions.md` is the default thread-instructions resource and has key `instructions/default`.
+- `instructions/reviewer.instructions.md` is an alternate thread-instructions resource named `reviewer`.
 
 The folder implies the kind. The filename implies the name. The path is the file's actual path. Prompt markdown frontmatter should not repeat `id`, `kind`, or `path`.
 
@@ -80,7 +80,7 @@ The folder implies the kind. The filename implies the name. The path is the file
 The prompt builder may quickly rebuild the effective prompt before every user prompt. This is acceptable and desirable because prompt inputs can change between turns:
 
 - a base file changes
-- a role file changes
+- a thread-instructions file changes
 - a prompt template file changes
 - a project instruction/context file is added
 - a skill catalog changes
@@ -148,19 +148,19 @@ CodeAlta should place shipped prompt resources and related authoring docs under 
     system_prompts/
       base/
         default.system-prompt.md
-      roles/
-        default.role.md
+      instructions/
+        default.instructions.md
     docs/
       system-prompt-authoring.md
-      role-authoring.md
-        prompt-template-authoring.md
+      system-prompt-authoring.md
+      prompt-template-authoring.md
       examples/
         system_prompts/
           template.yml
           base/
             team-default.system-prompt.md
-          roles/
-            team-reviewer.role.md
+          instructions/
+            team-reviewer.instructions.md
 ```
 
 The exact executable name is platform-specific. The content root should be resolved from `AppContext.BaseDirectory` by default. Prompt resources live under `content/system_prompts/`. User-assistable documentation lives under the shared top-level `content/docs/` folder so docs are not buried inside prompt internals and can be reused by other content families later.
@@ -173,7 +173,7 @@ The source repository should mirror the output layout in the project that owns p
 src/CodeAlta.Orchestration/content/
   system_prompts/
     base/
-    roles/
+    instructions/
   docs/
 ```
 
@@ -237,13 +237,13 @@ Active V1 folders:
 | Folder | Suffix | Default target |
 | --- | --- | --- |
 | `base/` | `.system-prompt.md` | system |
-| `roles/` | `.role.md` | developer |
+| `instructions/` | `.instructions.md` | developer |
 
 Rules:
 
 - resource names are the filename without the suffix
-- resource keys are path-like, for example `base/default` or `roles/default`
-- `default` is the conventional default name for both base and role
+- resource keys are path-like, for example `base/default` or `instructions/default`
+- `default` is the conventional default name for both base and thread instructions
 - V1 has no other prompt resource folders; additional file families can be designed later with explicit selection and audit rules
 - files in unknown prompt resource folders are ignored with a warning
 - files with the wrong suffix for a known folder are ignored with a warning
@@ -332,25 +332,25 @@ Your job is to help the user complete software tasks accurately, efficiently, an
 - In the final answer, summarize what changed, where it changed, what was verified, and any remaining risk.
 ```
 
-### 5.4 Role files
+### 5.4 Thread instruction files
 
-CodeAlta-owned built-in role prompt parts should use:
-
-```text
-content/system_prompts/roles/*.role.md
-```
-
-The shipped default role should be:
+CodeAlta-owned built-in thread instruction prompt parts should use:
 
 ```text
-content/system_prompts/roles/default.role.md
+content/system_prompts/instructions/*.instructions.md
 ```
 
-Example role file:
+The shipped default thread instructions should be:
+
+```text
+content/system_prompts/instructions/default.instructions.md
+```
+
+Example thread instruction file:
 
 ```markdown
 ---
-description: Default role for a normal project thread.
+description: Default instructions for a normal project thread.
 ---
 You are the active CodeAlta project agent for this thread.
 
@@ -374,7 +374,7 @@ Recommended shape:
 # version is optional; omitted means version 1
 version: 1
 base: team-default
-role: reviewer
+instruction: reviewer
 skills: false
 project_context: false
 runtime_context: true
@@ -387,7 +387,7 @@ Template fields:
 | --- | --- | --- |
 | `version` | `1` | Optional template schema version. |
 | `base` | `default` | Names `base/<name>.system-prompt.md`. |
-| `role` | `default` | Names `roles/<name>.role.md`. |
+| `instruction` | `default` | Names `instructions/<name>.instructions.md`. |
 | `skills` | `true` | Includes available-skills and active-skills prompt parts when skill context exists. |
 | `project_context` | `true` | Includes recognized project instruction/context files. |
 | `runtime_context` | `true` | Includes generated runtime facts such as date, platform, working directory, and project roots. |
@@ -405,12 +405,12 @@ Template rules:
 
 Template precedence:
 
-1. implicit default template: `base = default`, `role = default`, and all booleans enabled
+1. implicit default template: `base = default`, `instruction = default`, and all booleans enabled
 2. user-global template file
 3. trusted project template file
 4. explicit runtime/thread template settings, when present
 
-Template layers should merge shallowly: unset fields inherit from lower precedence layers, and set fields replace earlier values. This lets a project template disable `project_context` without needing to repeat the selected base and role.
+Template layers should merge shallowly: unset fields inherit from lower precedence layers, and set fields replace earlier values. This lets a project template disable `project_context` without needing to repeat the selected base and instruction names.
 
 Resource resolution then uses the selected names and the root precedence in §6.1.
 
@@ -454,18 +454,18 @@ Override rules:
 
 This keeps users unblocked while making high-impact prompt changes auditable.
 
-### 6.3 Role overrides and additions
+### 6.3 Thread-instruction overrides and additions
 
-Role overrides use the same naming convention.
+Thread-instruction overrides use the same naming convention.
 
 Examples:
 
 ```text
-~/.alta/system_prompts/roles/default.role.md
-{projectPath}/.alta/system_prompts/roles/reviewer.role.md
+~/.alta/system_prompts/instructions/default.instructions.md
+{projectPath}/.alta/system_prompts/instructions/reviewer.instructions.md
 ```
 
-A project-local role override is lower risk than a base prompt override, but still affects model behavior and should be visible in the manifest and timeline when selected.
+A project-local thread-instruction override is lower risk than a base prompt override, but still affects model behavior and should be visible in the manifest and timeline when selected.
 
 ### 6.4 Precedence summary
 
@@ -497,7 +497,7 @@ public sealed class SystemPromptBuildRequest
     public required WorkThreadDescriptor Thread { get; init; }
     public ProjectDescriptor? Project { get; init; }
     public string? SelectedBaseName { get; init; }
-    public string? SelectedRoleName { get; init; }
+    public string? SelectedInstructionName { get; init; }
     public SystemPromptPartOptions PartOptions { get; init; } = SystemPromptPartOptions.Default;
     public IReadOnlyList<AgentToolDefinition> Tools { get; init; } = [];
 }
@@ -561,7 +561,7 @@ Recommended logical order:
 | Order | Part | Target | Source | Template toggle |
 | --- | --- | --- | --- | --- |
 | 100 | Base system prompt | system | selected `base/*.system-prompt.md` | always included |
-| 300 | Role | developer | selected `roles/*.role.md` | always included |
+| 300 | Thread Instructions | developer | selected `instructions/*.instructions.md` | always included |
 | 400 | Runtime context | developer | generated by host | `runtime_context` |
 | 500 | Tool-use guidance | developer | generated from provider capabilities and enabled tool set | `tool_guidance` |
 | 550 | Available skills | developer | generated from skill catalog | `skills` |
@@ -594,7 +594,7 @@ Your job is to help the user complete software tasks accurately, efficiently, an
 Example `DeveloperInstructions` for a project thread:
 
 ```markdown
-# Role
+# Thread Instructions
 
 You are the active CodeAlta project agent for this thread.
 
@@ -635,7 +635,7 @@ The prompt manifest is a structured build receipt for the effective prompt.
 It answers:
 
 - which prompt template files were used
-- which base and role names were selected and why
+- which base and instruction names were selected and why
 - which prompt part toggles were enabled or disabled
 - which resources were selected
 - which resources were skipped, replaced, or conflicting
@@ -657,8 +657,8 @@ The manifest is for CodeAlta, tests, logs, and UI. It is not normally sent to th
   "template": {
     "baseName": "default",
     "baseReason": "default-name",
-    "roleName": "default",
-    "roleReason": "default-name",
+    "instructionName": "default",
+    "instructionReason": "default-name",
     "partOptions": {
       "skills": true,
       "projectContext": true,
@@ -696,13 +696,13 @@ The manifest is for CodeAlta, tests, logs, and UI. It is not normally sent to th
       "replaces": "C:\\Program Files\\CodeAlta\\content\\system_prompts\\base\\default.system-prompt.md"
     },
     {
-      "key": "roles/default",
-      "kind": "role",
+      "key": "instructions/default",
+      "kind": "instruction",
       "name": "default",
       "target": "developer",
       "order": 300,
       "sourceKind": "built-in",
-      "path": "C:\\Program Files\\CodeAlta\\content\\system_prompts\\roles\\default.role.md",
+      "path": "C:\\Program Files\\CodeAlta\\content\\system_prompts\\instructions\\default.instructions.md",
       "hash": "sha256:55AA...",
       "approxTokens": 58,
       "status": "selected"
@@ -750,7 +750,7 @@ Suggested JSONL shape:
   "reason": "session_start",
   "effectivePromptHash": "sha256:8E2D...",
   "systemMessage": "You are CodeAlta...",
-  "developerInstructions": "# Role\n\nYou are the active...",
+  "developerInstructions": "# Thread Instructions\n\nYou are the active...",
   "provider": {
     "providerKey": "example-provider",
     "providerType": "example-provider-type",
@@ -769,7 +769,7 @@ Suggested JSONL shape:
   },
   "change": {
     "kind": "initial",
-    "addedParts": ["base/default", "roles/default", "thread.context"],
+    "addedParts": ["base/default", "instructions/default", "thread.context"],
     "removedParts": [],
     "changedParts": []
   }
@@ -826,7 +826,7 @@ The `Verbatim` section should present the exact logical messages, for example:
 You are CodeAlta...
 
 <!-- DeveloperInstructions -->
-# Role
+# Thread Instructions
 ...
 ```
 
@@ -859,7 +859,7 @@ Prompt inputs include:
 
 - shipped content files and versions
 - user/project override files
-- prompt template files, selected base/role names, and part toggles
+- prompt template files, selected base/instruction names, and part toggles
 - selected provider/model/capabilities
 - current working directory and project roots
 - enabled tools
@@ -882,7 +882,7 @@ Per-part hashes allow timeline change summaries such as:
 
 - `base/default replaced by user-global override`
 - `selected base changed: default -> team-default`
-- `roles/default changed`
+- `instructions/default changed`
 - `project.context added C:\repo\AGENTS.md`
 - `skills.available changed: 2 added, 1 removed`
 
@@ -908,13 +908,13 @@ When a provider does not support a separate `DeveloperInstructions` channel, sti
 
 The base system prompt is the only required system-target part in v1. It should be compact and stable. Users may override it or select a different base as described in §5.5 and §6.2.
 
-### 11.2 Roles
+### 11.2 Thread instructions
 
-Built-in role files:
+Built-in thread instruction files:
 
-- `roles/default.role.md`
+- `instructions/default.instructions.md`
 
-V1 ships only the default role. Coordinator and delegate role profiles are not part of the default prompt resources for the first improved system prompt version. They can be introduced in a future iteration after the corresponding orchestration concepts are implemented and have explicit selection, composition, and audit rules.
+V1 ships only the default thread instructions. Coordinator and delegate profiles are not part of the default prompt resources for the 1.0 core.
 
 ### 11.3 Runtime context
 
@@ -960,7 +960,7 @@ Do not inline full skill bodies in the available-skills part. Full skill content
 
 ### 11.6 Project context
 
-Project instruction/context files are included as developer-target context after host-owned base, role, runtime context, tool-use guidance, and skills context when `project_context` is enabled.
+Project instruction/context files are included as developer-target context after host-owned base, thread instructions, runtime context, tool-use guidance, and skills context when `project_context` is enabled.
 
 V1 should preserve the current local composer compatibility behavior unless there is an explicit migration. For each walked directory, CodeAlta considers these candidate relative paths:
 
@@ -1017,7 +1017,7 @@ content/docs/
 Required authoring docs:
 
 - `system-prompt-authoring.md`
-- `role-authoring.md`
+- `thread-instruction-authoring.md`
 - `prompt-template-authoring.md`
 
 Required starter examples:
@@ -1025,10 +1025,10 @@ Required starter examples:
 ```text
 content/docs/examples/system_prompts/template.yml
 content/docs/examples/system_prompts/base/team-default.system-prompt.md
-content/docs/examples/system_prompts/roles/team-reviewer.role.md
+content/docs/examples/system_prompts/instructions/team-reviewer.instructions.md
 ```
 
-When a user asks CodeAlta to create or override system prompts, roles, or prompt templates, CodeAlta can inspect these content files and help create files under:
+When a user asks CodeAlta to create or override system prompts, thread instructions, or prompt templates, CodeAlta can inspect these content files and help create files under:
 
 ```text
 ~/.alta/system_prompts/
@@ -1071,7 +1071,7 @@ Recommended warning thresholds:
 | Component | Warning threshold |
 | --- | --- |
 | Base system prompt | >1,500 approximate tokens |
-| Role | >400 approximate tokens |
+| Thread instructions | >400 approximate tokens |
 | Runtime context | >300 approximate tokens |
 | Available skills catalog | >700 approximate tokens |
 | Full composed prompt excluding activated skill bodies | >2,500 approximate tokens |
@@ -1085,7 +1085,7 @@ Timeline statistics should show:
 - part count
 - largest parts by approximate token count
 - selected base name
-- selected role name
+- selected instruction name
 - selected provider/model ids
 
 Approximate token counts are enough for UI and diagnostics. Provider-specific exact tokenization can be added later.
@@ -1096,7 +1096,7 @@ Errors:
 
 - missing shipped content root
 - missing required base system prompt file
-- missing required default role file
+- missing required default thread-instructions file
 - invalid active frontmatter
 - invalid active prompt template file
 - duplicate selected resource in the same precedence tier
@@ -1106,7 +1106,7 @@ Errors:
 Warnings:
 
 - active base comes from user/project override
-- active role comes from user/project override
+- active thread instructions come from user/project override
 - unknown frontmatter fields
 - ignored file in unknown prompt resource folder
 - ignored file with wrong suffix for known folder
@@ -1130,21 +1130,21 @@ Add tests for:
 - shipped content files are copied to output
 - content locator resolves shipped, user, and project roots
 - missing shipped base system prompt fails clearly
-- missing shipped default role fails clearly
+- missing shipped default thread instructions fails clearly
 - base override from `~/.alta/system_prompts/`
 - trusted project base override from `.alta/system_prompts/`
 - untrusted project base override is skipped with diagnostic
 - default naming convention selects `base/default.system-prompt.md`
-- default naming convention selects `roles/default.role.md`
+- default naming convention selects `instructions/default.instructions.md`
 - prompt template can select a different base name
-- prompt template can select a different role name
+- prompt template can select a different instruction name
 - prompt template can disable skills, project context, runtime context, and tool-use guidance
 - file kind is inferred from folder and suffix
 - frontmatter does not need id/kind/path
 - additional base files are ignored unless selected
 - fixed composition renders system and developer channels separately
 - deterministic part ordering
-- role loading from `*.role.md`
+- thread-instruction loading from `*.instructions.md`
 - prompt manifest includes selected, skipped, replaced, and conflicting resources
 - effective prompt hash changes when a selected file changes
 - effective prompt hash is stable when inputs are unchanged
@@ -1170,7 +1170,7 @@ Use this checklist to track implementation progress. Items should remain uncheck
 ### Slice 1: File-backed shipped content
 
 - [x] Move current built-in prompt markdown out of embedded resources.
-- [x] Add `content/system_prompts/base/default.system-prompt.md` and `content/system_prompts/roles/default.role.md`.
+- [x] Add `content/system_prompts/base/default.system-prompt.md` and `content/system_prompts/instructions/default.instructions.md`.
 - [x] Add `Content` copy rules with `PreserveNewest`.
 - [x] Add content locator and tests that resolve files from output.
 
@@ -1179,7 +1179,7 @@ Use this checklist to track implementation progress. Items should remain uncheck
 - [x] Implement prompt resource scanning by folder and suffix.
 - [x] Derive resource kind/name/key from paths.
 - [x] Implement optional `template.yml` loading.
-- [x] Implement base/role selection and prompt-part toggle precedence.
+- [x] Implement base/instruction selection and prompt-part toggle precedence.
 - [x] Reject or warn on invalid files with clear diagnostics.
 
 ### Slice 3: Composition builder and manifest
@@ -1199,7 +1199,7 @@ Use this checklist to track implementation progress. Items should remain uncheck
 
 - [x] Load `~/.alta/system_prompts/` and project `.alta/system_prompts/`.
 - [x] Support base overrides and base selection with clear diagnostics.
-- [x] Support role overrides and role selection with clear diagnostics.
+- [x] Support thread-instruction overrides and instruction selection with clear diagnostics.
 
 ### Slice 6: Provider mapping and refresh behavior
 
@@ -1227,10 +1227,10 @@ Adopt a file-backed prompt system:
 - shipped markdown lives under `content/system_prompts/` next to the executable
 - no built-in prompt text is hardcoded into the binary
 - resource kind/name/path are derived from folder and suffix conventions
-- the required shipped defaults are `base/default.system-prompt.md` and `roles/default.role.md`
+- the required shipped defaults are `base/default.system-prompt.md` and `instructions/default.instructions.md`
 - user and project `.alta/system_prompts/` roots can override and extend prompt resources
-- optional `template.yml` files select base/role names and toggle generated prompt parts without listing every available resource
-- CodeAlta-native terminology uses `roles` for prompt profile files
+- optional `template.yml` files select base/instruction names and toggle generated prompt parts without listing every available resource
+- CodeAlta-native terminology uses thread instructions instead of hardcoded agent roles for prompt profile files
 - composition uses one selected `base/*.system-prompt.md` plus deterministic ordered prompt parts
 - every effective prompt has a manifest, statistics, diagnostics, and stable hash
 - `system_prompt` events persist the verbatim prompt and manifest to JSONL

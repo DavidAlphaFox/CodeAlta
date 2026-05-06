@@ -384,6 +384,12 @@ public sealed class PluginRuntimeManager : IAsyncDisposable
                 yield return path;
             }
 
+            path = Path.Combine(directory.FullName, "src", fileName);
+            if (File.Exists(path))
+            {
+                yield return path;
+            }
+
             directory = directory.Parent;
         }
     }

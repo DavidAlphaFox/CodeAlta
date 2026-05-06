@@ -1,24 +1,30 @@
 namespace CodeAlta.App.Context;
 
+internal enum WorkspaceRefreshReason
+{
+    SelectedSessionUsageInvalidated,
+    HeaderAndThreadWorkspace,
+}
+
+internal readonly record struct WorkspaceRefreshRequest(WorkspaceRefreshReason Reason);
+
 internal sealed class WorkspaceRefreshContext
 {
-    private readonly Action _invalidateSelectedSessionUsage;
-    private readonly Action _refreshHeaderAndThreadWorkspace;
+    private readonly Action<WorkspaceRefreshRequest> _publishRefreshRequest;
 
-    public WorkspaceRefreshContext(
-        Action invalidateSelectedSessionUsage,
-        Action refreshHeaderAndThreadWorkspace)
+    public WorkspaceRefreshContext(Action<WorkspaceRefreshRequest> publishRefreshRequest)
     {
-        ArgumentNullException.ThrowIfNull(invalidateSelectedSessionUsage);
-        ArgumentNullException.ThrowIfNull(refreshHeaderAndThreadWorkspace);
+        ArgumentNullException.ThrowIfNull(publishRefreshRequest);
 
-        _invalidateSelectedSessionUsage = invalidateSelectedSessionUsage;
-        _refreshHeaderAndThreadWorkspace = refreshHeaderAndThreadWorkspace;
+        _publishRefreshRequest = publishRefreshRequest;
     }
 
     public void InvalidateSelectedSessionUsage()
-        => _invalidateSelectedSessionUsage();
+        => Publish(WorkspaceRefreshReason.SelectedSessionUsageInvalidated);
 
     public void RefreshHeaderAndThreadWorkspace()
-        => _refreshHeaderAndThreadWorkspace();
+        => Publish(WorkspaceRefreshReason.HeaderAndThreadWorkspace);
+
+    private void Publish(WorkspaceRefreshReason reason)
+        => _publishRefreshRequest(new WorkspaceRefreshRequest(reason));
 }

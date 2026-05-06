@@ -39,9 +39,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="LLamaSharp" />
-    <PackageReference Include="LLamaSharp.Backend.Cpu" />
-    <!--<PackageReference Include="LLamaSharp.Backend.Vulkan" />-->
     <PackageReference Include="MinVer">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -69,8 +66,6 @@
     <ProjectReference Include="..\CodeAlta.Agent\CodeAlta.Agent.csproj" />
     <ProjectReference Include="..\CodeAlta.CodexSdk\CodeAlta.CodexSdk.csproj" />
     <ProjectReference Include="..\CodeAlta.Orchestration\CodeAlta.Orchestration.csproj" />
-    <ProjectReference Include="..\CodeAlta.Persistence\CodeAlta.Persistence.csproj" />
-    <ProjectReference Include="..\CodeAlta.Search\CodeAlta.Search.csproj" />
     <ProjectReference Include="..\CodeAlta.Catalog\CodeAlta.Catalog.csproj" />
     <ProjectReference Include="..\CodeAlta.Plugins\CodeAlta.Plugins.csproj" />
   </ItemGroup>

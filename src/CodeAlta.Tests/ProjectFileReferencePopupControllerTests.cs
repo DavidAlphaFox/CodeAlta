@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using CodeAlta.Presentation.Prompting;
-using CodeAlta.Search;
+using CodeAlta.Catalog;
 using CodeAlta.Views;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.Backends;

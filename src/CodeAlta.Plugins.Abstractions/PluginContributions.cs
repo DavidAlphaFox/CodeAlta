@@ -32,6 +32,8 @@ public enum PluginPoint
     ToolResult,
     /// <summary>Agent event observer.</summary>
     AgentEvent,
+    /// <summary>Plugin-derived transient thread event projector.</summary>
+    ThreadEventProjection,
     /// <summary>Compaction hook.</summary>
     Compaction,
     /// <summary>UI contribution.</summary>

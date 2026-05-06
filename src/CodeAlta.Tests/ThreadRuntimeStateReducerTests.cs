@@ -172,6 +172,31 @@ public sealed class ThreadRuntimeStateReducerTests
     }
 
     [TestMethod]
+    public void ReduceAgentEvent_InfoSessionUpdateSetsBusyStatus()
+    {
+        var thread = CreateThread();
+        var tab = CreateOpenThreadState(thread);
+        var reducer = new ThreadRuntimeStateReducer();
+
+        var reduction = reducer.ReduceAgentEvent(
+            thread,
+            tab,
+            new AgentSessionUpdateEvent(
+                AgentBackendIds.OpenAIResponses,
+                "session-1",
+                DateTimeOffset.UtcNow,
+                new AgentRunId("run-1"),
+                AgentSessionUpdateKind.Info,
+                "Waiting for ChatGPT/Codex response..."),
+            isSelectedThread: true);
+
+        Assert.IsNotNull(reduction.ThreadStatus);
+        Assert.AreEqual("Waiting for ChatGPT/Codex response...", reduction.ThreadStatus.Value.Message);
+        Assert.IsTrue(reduction.ThreadStatus.Value.ShowSpinner);
+        Assert.AreEqual(StatusTone.Info, reduction.ThreadStatus.Value.Tone);
+    }
+
+    [TestMethod]
     public void ReduceRuntimeEvent_HostCompactionCompletionClearsPendingManualCompactionStatus()
     {
         var thread = CreateThread();

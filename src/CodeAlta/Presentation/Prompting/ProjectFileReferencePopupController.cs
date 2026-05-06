@@ -1,5 +1,5 @@
 using CodeAlta.Presentation.Styling;
-using CodeAlta.Search;
+using CodeAlta.Catalog;
 using XenoAtom.Terminal.UI;
 
 namespace CodeAlta.Presentation.Prompting;
@@ -182,6 +182,7 @@ internal sealed class ProjectFileReferencePopupController : IAsyncDisposable
 
         if (task.IsFaulted)
         {
+            _ = task.Exception;
             TryDispatchToHost(() => _ = CloseAsync());
             return;
         }

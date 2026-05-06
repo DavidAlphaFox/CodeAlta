@@ -87,6 +87,8 @@ namespace CodeAlta.Models
         public StringBuilder Buffer { get; } = buffer;
 
         public AgentContentKind Kind { get; } = kind;
+
+        public string? DraftAttemptId { get; set; }
     }
 
     internal sealed class PendingAssistantState(DocumentFlowItem item, MarkdownControl markdown, Markup timestampText, Markup headerText)

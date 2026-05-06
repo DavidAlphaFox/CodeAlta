@@ -15,7 +15,7 @@ internal sealed class ThreadExecutionOptionsFactory
     private readonly IReadOnlyList<AgentBackendDescriptor> _backendDescriptors;
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly ThreadSelectionContext _threadSelection;
-    private readonly ChatSelectorStateContext _selectorState;
+    private readonly ChatSelectorStateStore _selectorState;
     private readonly ThreadPermissionRequestCoordinator _permissionRequests;
     private readonly ThreadUserInputRequestCoordinator _userInputRequests;
 
@@ -24,7 +24,7 @@ internal sealed class ThreadExecutionOptionsFactory
         IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
         Dictionary<string, ChatBackendState> chatBackendStates,
         ThreadSelectionContext threadSelection,
-        ChatSelectorStateContext selectorState,
+        ChatSelectorStateStore selectorState,
         ThreadPermissionRequestCoordinator permissionRequests,
         ThreadUserInputRequestCoordinator userInputRequests)
     {
@@ -133,30 +133,6 @@ internal sealed class ThreadExecutionOptionsFactory
         };
     }
 
-    public WorkThreadExecutionOptions BuildDelegationExecutionOptions(
-        string threadId,
-        OpenThreadState tab,
-        string workingDirectory,
-        IReadOnlyList<string> projectRoots)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
-        ArgumentNullException.ThrowIfNull(tab);
-        ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
-        ArgumentNullException.ThrowIfNull(projectRoots);
-
-        return new WorkThreadExecutionOptions
-        {
-            BackendId = tab.BackendId,
-            ProviderKey = tab.BackendId.Value,
-            WorkingDirectory = workingDirectory,
-            ProjectRoots = projectRoots,
-            Model = tab.ModelId,
-            ReasoningEffort = tab.ReasoningEffort,
-            OnPermissionRequest = CreatePermissionHandler(tab.BackendId, threadId),
-            OnUserInputRequest = (request, cancellationToken) => _userInputRequests.HandleAsync(threadId, request, cancellationToken),
-        };
-    }
-
     public static string CreateTransientThreadKey(AgentBackendId backendId, string workingDirectory)
         => $"{backendId.Value}:{workingDirectory}";
 
@@ -174,7 +150,7 @@ internal sealed class ThreadExecutionOptionsFactory
         return thread.Kind switch
         {
             WorkThreadKind.GlobalThread => _catalogOptions.GlobalRoot,
-            WorkThreadKind.ProjectThread or WorkThreadKind.InternalThread when _threadSelection.GetProjectById(thread.ProjectRef) is { } project => project.ProjectPath,
+            WorkThreadKind.ProjectThread when _threadSelection.GetProjectById(thread.ProjectRef) is { } project => project.ProjectPath,
             _ => thread.WorkingDirectory,
         };
     }

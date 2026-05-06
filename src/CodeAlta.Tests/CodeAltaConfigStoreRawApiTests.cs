@@ -414,6 +414,52 @@ public sealed class CodeAltaConfigStoreRawApiTests
     }
 
     [TestMethod]
+    public void LoadGlobalProviderDefinitions_CopilotExplicitlyEnabledIsTemporarilyDisabled()
+    {
+        using var temp = TempDirectory.Create();
+        File.WriteAllText(
+            Path.Combine(temp.Path, "config.toml"),
+            """
+            [providers.copilot]
+            enabled = true
+            model = "claude-opus-4.6"
+            """);
+
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        var providers = store.LoadGlobalProviderDefinitions(includeDisabled: true)
+            .ToDictionary(static provider => provider.ProviderKey, StringComparer.OrdinalIgnoreCase);
+
+        Assert.IsFalse(providers["copilot"].Enabled);
+        Assert.AreEqual("claude-opus-4.6", providers["copilot"].Model);
+    }
+
+    [TestMethod]
+    public void SaveGlobalProviderDefinitions_CopilotEnabledIsPrunedWhileTemporarilyDisabled()
+    {
+        using var temp = TempDirectory.Create();
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+
+        store.SaveGlobalProviderDefinitions(
+        [
+            new CodeAltaProviderDocument
+            {
+                ProviderKey = "copilot",
+                Enabled = true,
+                ProviderType = "copilot",
+                Model = "claude-opus-4.6",
+            },
+        ]);
+
+        var content = File.ReadAllText(Path.Combine(temp.Path, "config.toml"));
+        Assert.IsFalse(content.Contains("enabled = true", StringComparison.Ordinal));
+
+        var providers = store.LoadGlobalProviderDefinitions(includeDisabled: true)
+            .ToDictionary(static provider => provider.ProviderKey, StringComparer.OrdinalIgnoreCase);
+        Assert.IsFalse(providers["copilot"].Enabled);
+        Assert.AreEqual("claude-opus-4.6", providers["copilot"].Model);
+    }
+
+    [TestMethod]
     public void SaveGlobalProviderDefinitions_PersistsEnabledProviders()
     {
         using var temp = TempDirectory.Create();

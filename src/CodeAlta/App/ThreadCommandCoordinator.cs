@@ -12,7 +12,6 @@ using CodeAlta.ViewModels;
 using CodeAlta.Views;
 using XenoAtom.Logging;
 using XenoAtom.Terminal.UI.Controls;
-using CodeAlta.Search;
 
 namespace CodeAlta.App;
 
@@ -22,8 +21,7 @@ internal sealed class ThreadCommandCoordinator
     private readonly IReadOnlyList<AgentBackendDescriptor> _backendDescriptors;
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly ThreadSelectionContext _threadSelection;
-    private readonly ChatSelectorStateContext _selectorState;
-    private readonly ChatPreferenceContext _preferences;
+    private readonly ChatSelectorStateStore _selectorState;
     private readonly ThreadCommandContext _commandContext;
     private readonly ThreadPromptQueueCoordinator _queueCoordinator;
     private readonly PromptComposerViewModel _promptComposerViewModel;
@@ -36,8 +34,7 @@ internal sealed class ThreadCommandCoordinator
         CatalogOptions catalogOptions,
         Dictionary<string, ChatBackendState> chatBackendStates,
         ThreadSelectionContext threadSelection,
-        ChatSelectorStateContext selectorState,
-        ChatPreferenceContext preferences,
+        ChatSelectorStateStore selectorState,
         ThreadCommandContext commandContext,
         ThreadPromptQueueCoordinator queueCoordinator,
         PromptComposerViewModel promptComposerViewModel,
@@ -52,7 +49,6 @@ internal sealed class ThreadCommandCoordinator
             chatBackendStates,
             threadSelection,
             selectorState,
-            preferences,
             commandContext,
             queueCoordinator,
             promptComposerViewModel,
@@ -67,8 +63,7 @@ internal sealed class ThreadCommandCoordinator
         IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
         Dictionary<string, ChatBackendState> chatBackendStates,
         ThreadSelectionContext threadSelection,
-        ChatSelectorStateContext selectorState,
-        ChatPreferenceContext preferences,
+        ChatSelectorStateStore selectorState,
         ThreadCommandContext commandContext,
         ThreadPromptQueueCoordinator queueCoordinator,
         PromptComposerViewModel promptComposerViewModel,
@@ -80,7 +75,6 @@ internal sealed class ThreadCommandCoordinator
         ArgumentNullException.ThrowIfNull(chatBackendStates);
         ArgumentNullException.ThrowIfNull(threadSelection);
         ArgumentNullException.ThrowIfNull(selectorState);
-        ArgumentNullException.ThrowIfNull(preferences);
         ArgumentNullException.ThrowIfNull(commandContext);
         ArgumentNullException.ThrowIfNull(queueCoordinator);
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
@@ -90,7 +84,6 @@ internal sealed class ThreadCommandCoordinator
         _chatBackendStates = chatBackendStates;
         _threadSelection = threadSelection;
         _selectorState = selectorState;
-        _preferences = preferences;
         _commandContext = commandContext;
         _queueCoordinator = queueCoordinator;
         _promptComposerViewModel = promptComposerViewModel;
@@ -105,7 +98,8 @@ internal sealed class ThreadCommandCoordinator
             commandContext,
             catalogOptions,
             projectFileSearchService ?? NullProjectFileSearchService.Instance,
-            pluginHostBridge);
+            pluginHostBridge,
+            new RuntimeWorkThreadOrchestratorAdapter(runtimeService, threadSelection.FindThread));
     }
 
     public async Task SendPromptAsync(
@@ -192,93 +186,6 @@ internal sealed class ThreadCommandCoordinator
 
     public bool IsCurrentPromptEmpty()
         => _commandContext.IsThreadInputEmpty();
-
-    public async Task DelegateThreadAsync(
-        string? promptText,
-        CancellationToken cancellationToken = default)
-    {
-        var thread = _threadSelection.GetSelectedThread();
-        if (thread is null)
-        {
-            _commandContext.SetShellStatus("Open a thread before delegating work.", false, StatusTone.Warning);
-            return;
-        }
-
-        if (!IsChatBackendReady(new AgentBackendId(thread.BackendId)))
-        {
-            _commandContext.SetReadyStatusForCurrentSelection();
-            return;
-        }
-
-        var tab = _threadSelection.EnsureThreadTab(thread);
-        var submission = _commandContext.CaptureThreadInput(promptText);
-        if (submission.Images.Count > 0)
-        {
-            _commandContext.SetShellStatus("Delegation does not support prompt images yet; remove the images before delegating internal work.", false, StatusTone.Warning);
-            return;
-        }
-
-        var prompt = submission.Text;
-        if (string.IsNullOrWhiteSpace(prompt))
-        {
-            _commandContext.SetShellStatus("Enter delegation instructions before creating an internal thread.", false, StatusTone.Warning);
-            return;
-        }
-
-        var targetProject = _threadSelection.GetProjectById(thread.ProjectRef ?? _threadSelection.GetSelectedProjectId());
-        if (targetProject is null)
-        {
-            _commandContext.SetShellStatus("Select a project before delegating internal work.", false, StatusTone.Warning);
-            return;
-        }
-
-        try
-        {
-            _commandContext.SetThreadStatus(tab, $"Delegating internal work from '{thread.Title}'...", true, StatusTone.Info);
-            var transientThreadKey = ThreadExecutionOptionsFactory.CreateTransientThreadKey(tab.BackendId, targetProject.ProjectPath);
-            var executionOptions = _promptDispatchCoordinator.BuildDelegationExecutionOptions(
-                transientThreadKey,
-                tab,
-                targetProject.ProjectPath,
-                [targetProject.ProjectPath]);
-
-            var child = await _runtimeService.CreateInternalThreadAsync(
-                    thread,
-                    targetProject,
-                    executionOptions,
-                    title: ThreadRuntimeEventCoordinator.SummarizeContent(prompt),
-                    cancellationToken: cancellationToken)
-                ;
-            _preferences.RememberThreadPreference(child.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, false);
-
-            _ = _threadSelection.RegisterDelegatedThread(child, tab);
-
-            _ = await _runtimeService.SendAsync(
-                    child,
-                    _promptDispatchCoordinator.BuildDelegationExecutionOptions(
-                        child.ThreadId,
-                        tab,
-                        targetProject.ProjectPath,
-                        [targetProject.ProjectPath]),
-                    new AgentSendOptions
-                    {
-                        Input = AgentInput.Text(
-                            $"Delegated from thread '{thread.Title}' ({thread.ThreadId}): {prompt}")
-                    },
-                    cancellationToken)
-                ;
-
-            _commandContext.ClearThreadInput();
-            _commandContext.SetThreadStatus(tab, $"Delegation started · {child.Title}", false, StatusTone.Ready);
-            await _commandContext.PersistViewStateAsync();
-            _commandContext.RefreshCatalogAndThreadWorkspace();
-        }
-        catch (Exception ex)
-        {
-            CodeAltaApp.UiLogger.Error(ex, "Failed to delegate internal thread.");
-            _commandContext.SetThreadStatus(tab, $"Failed to delegate internal thread: {ex.Message}", false, StatusTone.Error);
-        }
-    }
 
     public async Task AbortSelectedThreadAsync()
     {

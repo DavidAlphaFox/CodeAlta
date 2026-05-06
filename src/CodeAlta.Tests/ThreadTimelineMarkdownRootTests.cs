@@ -61,7 +61,7 @@ public sealed class ThreadTimelineMarkdownRootTests
     }
 
     [TestMethod]
-    public void OpenThreadRegistry_RefreshesTimelineLocalFileRootPathFromProjectMapping()
+    public void OpenThreadStateStore_RefreshesTimelineLocalFileRootPathFromProjectMapping()
     {
         var project = new ProjectDescriptor
         {
@@ -69,7 +69,7 @@ public sealed class ThreadTimelineMarkdownRootTests
             DisplayName = "CodeAlta",
             ProjectPath = @"C:\code\CodeAlta",
         };
-        var registry = new OpenThreadRegistry(
+        var registry = new OpenThreadStateStore(
             () => new InlineUiDispatcher(),
             static () => null,
             static _ => null,

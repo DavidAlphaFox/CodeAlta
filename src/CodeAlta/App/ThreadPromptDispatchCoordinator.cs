@@ -4,18 +4,18 @@ using CodeAlta.App.State;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
+using CodeAlta.Orchestration.Runtime.Prompts;
 using CodeAlta.Presentation.Prompting;
 using CodeAlta.Presentation.Shell;
 using CodeAlta.Views;
 using XenoAtom.Logging;
-using CodeAlta.Search;
 
 namespace CodeAlta.App;
 
 internal sealed class ThreadPromptDispatchCoordinator
 {
-    private const int MaxInitialThreadTitleLength = 80;
     private readonly WorkThreadRuntimeService _runtimeService;
+    private readonly IWorkThreadOrchestrator _orchestrator;
     private readonly ThreadExecutionOptionsFactory _executionOptionsFactory;
     private readonly ThreadPromptQueueCoordinator _queueCoordinator;
     private readonly ThreadCommandContext _commandContext;
@@ -30,7 +30,8 @@ internal sealed class ThreadPromptDispatchCoordinator
         ThreadCommandContext commandContext,
         CatalogOptions catalogOptions,
         IProjectFileSearchService projectFileSearchService,
-        PluginHostBridge? pluginHostBridge = null)
+        PluginHostBridge? pluginHostBridge = null,
+        IWorkThreadOrchestrator? orchestrator = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(executionOptionsFactory);
@@ -40,6 +41,7 @@ internal sealed class ThreadPromptDispatchCoordinator
         ArgumentNullException.ThrowIfNull(projectFileSearchService);
 
         _runtimeService = runtimeService;
+        _orchestrator = orchestrator ?? new RuntimeWorkThreadOrchestratorAdapter(runtimeService, thread => string.Equals(thread, "__current__", StringComparison.Ordinal) ? null : null);
         _executionOptionsFactory = executionOptionsFactory;
         _queueCoordinator = queueCoordinator;
         _commandContext = commandContext;
@@ -114,28 +116,7 @@ internal sealed class ThreadPromptDispatchCoordinator
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
 
-        var normalized = prompt
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\n', ' ')
-            .Trim();
-
-        normalized = string.Join(" ", normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries));
-        if (normalized.Length == 0)
-        {
-            return prompt.Trim();
-        }
-
-        var sentenceLength = FindFirstSentenceLength(normalized);
-        var candidate = sentenceLength > 0
-            ? normalized[..sentenceLength]
-            : normalized;
-
-        if (candidate.Length <= MaxInitialThreadTitleLength)
-        {
-            return candidate;
-        }
-
-        return candidate[..(MaxInitialThreadTitleLength - 3)].TrimEnd() + "...";
+        return WorkThreadPromptText.CreateInitialThreadTitle(prompt);
     }
 
     public static string CreateInitialThreadTitle(PromptSubmission prompt)
@@ -143,32 +124,6 @@ internal sealed class ThreadPromptDispatchCoordinator
         ArgumentNullException.ThrowIfNull(prompt);
         return CreateInitialThreadTitle(prompt.CreateFallbackTitle());
     }
-
-    private static int FindFirstSentenceLength(string content)
-    {
-        for (var i = 0; i < content.Length; i++)
-        {
-            var ch = content[i];
-            if (ch is not ('.' or '!' or '?'))
-            {
-                continue;
-            }
-
-            if (i == content.Length - 1 || char.IsWhiteSpace(content[i + 1]))
-            {
-                return i + 1;
-            }
-        }
-
-        return 0;
-    }
-
-    public WorkThreadExecutionOptions BuildDelegationExecutionOptions(
-        string threadId,
-        OpenThreadState tab,
-        string workingDirectory,
-        IReadOnlyList<string> projectRoots)
-        => _executionOptionsFactory.BuildDelegationExecutionOptions(threadId, tab, workingDirectory, projectRoots);
 
     private async Task DispatchPromptCoreAsync(
         WorkThreadDescriptor thread,
@@ -178,6 +133,7 @@ internal sealed class ThreadPromptDispatchCoordinator
         CancellationToken cancellationToken)
     {
         string? pendingSteerId = null;
+        var renderedOptimisticPrompt = false;
         try
         {
             tab.ActiveRunStartedAt ??= DateTimeOffset.UtcNow;
@@ -226,15 +182,8 @@ internal sealed class ThreadPromptDispatchCoordinator
                 var oldThreadId = thread.ThreadId;
                 try
                 {
-                    runId = await _runtimeService.SteerAsync(
-                            thread,
-                            executionOptions,
-                            new AgentSteerOptions
-                            {
-                                Input = agentInput,
-                            },
-                            cancellationToken)
-                        ;
+                    var result = await _orchestrator.SteerAsync(CreateSteerRequest(thread, executionOptions, agentInput, prompt), cancellationToken);
+                    runId = new AgentRunId(result.RunId ?? throw new InvalidOperationException("The orchestrator did not return a run id for the steered prompt."));
                 }
                 finally
                 {
@@ -243,17 +192,14 @@ internal sealed class ThreadPromptDispatchCoordinator
             }
             else
             {
+                renderedOptimisticPrompt = true;
                 tab.Timeline.RenderOptimisticUserPrompt(promptInput.NormalizedPromptText, imageReferences, DateTimeOffset.UtcNow);
 
                 var oldThreadId = thread.ThreadId;
                 try
                 {
-                    runId = await _runtimeService.SendAsync(
-                            thread,
-                            executionOptions,
-                            new AgentSendOptions { Input = agentInput },
-                            cancellationToken)
-                        ;
+                    var result = await _orchestrator.SubmitPromptAsync(CreateSubmitRequest(thread, executionOptions, agentInput, prompt), cancellationToken);
+                    runId = new AgentRunId(result.RunId ?? throw new InvalidOperationException("The orchestrator did not return a run id for the submitted prompt."));
                 }
                 finally
                 {
@@ -274,6 +220,11 @@ internal sealed class ThreadPromptDispatchCoordinator
         }
         catch (NotSupportedException ex) when (steer)
         {
+            if (renderedOptimisticPrompt)
+            {
+                tab.Timeline.RollbackOptimisticUserPrompt();
+            }
+
             if (!string.IsNullOrWhiteSpace(pendingSteerId))
             {
                 _queueCoordinator.RemovePendingSteer(tab, pendingSteerId);
@@ -293,6 +244,11 @@ internal sealed class ThreadPromptDispatchCoordinator
         }
         catch (OperationCanceledException ex)
         {
+            if (renderedOptimisticPrompt)
+            {
+                tab.Timeline.RollbackOptimisticUserPrompt();
+            }
+
             if (steer && !string.IsNullOrWhiteSpace(pendingSteerId))
             {
                 _queueCoordinator.RemovePendingSteer(tab, pendingSteerId);
@@ -309,6 +265,11 @@ internal sealed class ThreadPromptDispatchCoordinator
         }
         catch (Exception ex)
         {
+            if (renderedOptimisticPrompt)
+            {
+                tab.Timeline.RollbackOptimisticUserPrompt();
+            }
+
             if (steer && !string.IsNullOrWhiteSpace(pendingSteerId))
             {
                 _queueCoordinator.RemovePendingSteer(tab, pendingSteerId);
@@ -352,6 +313,44 @@ internal sealed class ThreadPromptDispatchCoordinator
     private static bool IsCodeAltaManagedBackend(AgentBackendId backendId)
         => !string.Equals(backendId.Value, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase) &&
            !string.Equals(backendId.Value, AgentBackendIds.Copilot.Value, StringComparison.OrdinalIgnoreCase);
+
+    private static SubmitWorkThreadPromptRequest CreateSubmitRequest(
+        WorkThreadDescriptor thread,
+        WorkThreadExecutionOptions executionOptions,
+        AgentInput input,
+        PromptSubmission prompt)
+        => new()
+        {
+            Context = CreateCommandContext(thread, executionOptions),
+            Prompt = prompt.Text,
+            PreparedInput = input,
+        };
+
+    private static SteerWorkThreadRequest CreateSteerRequest(
+        WorkThreadDescriptor thread,
+        WorkThreadExecutionOptions executionOptions,
+        AgentInput input,
+        PromptSubmission prompt)
+        => new()
+        {
+            Context = CreateCommandContext(thread, executionOptions),
+            Prompt = prompt.Text,
+            PreparedInput = input,
+        };
+
+    private static WorkThreadCommandContext CreateCommandContext(
+        WorkThreadDescriptor thread,
+        WorkThreadExecutionOptions executionOptions)
+        => new()
+        {
+            ProjectId = thread.ProjectRef ?? "legacy-global",
+            ProjectPath = executionOptions.ProjectRoots.FirstOrDefault() ?? executionOptions.WorkingDirectory ?? string.Empty,
+            PromptSessionId = thread.ThreadId,
+            ModelProviderId = executionOptions.ProviderKey ?? executionOptions.BackendId.Value,
+            ModelId = executionOptions.Model,
+            ThreadId = thread.ThreadId,
+            ExecutionOptions = executionOptions,
+        };
 
     private void RekeyThreadIfNeeded(string oldThreadId, WorkThreadDescriptor thread, OpenThreadState tab)
     {

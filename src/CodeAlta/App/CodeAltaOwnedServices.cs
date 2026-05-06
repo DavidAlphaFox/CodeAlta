@@ -8,13 +8,11 @@ using CodeAlta.Agent.ModelCatalog;
 using CodeAlta.Agent.OpenAI;
 using CodeAlta.Acp;
 using CodeAlta.Catalog;
-using CodeAlta.Catalog.Roles;
 using CodeAlta.Catalog.Skills;
 using CodeAlta.CodexSdk;
+using CodeAlta.Orchestration.Hosting;
 using CodeAlta.Orchestration.Runtime;
-using CodeAlta.Persistence;
 using CodeAlta.Plugins;
-using CodeAlta.Search;
 using XenoAtom.Logging;
 
 namespace CodeAlta.App;
@@ -24,7 +22,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
     private const string CodexPathOverrideEnvironmentVariable = "CODEALTA_CODEX_PATH";
 
     private readonly bool _ownsLogging;
-    private readonly CodeAltaDb _db;
     private readonly AgentBackendFactory _backendFactory;
     private readonly CodeAltaConfigStore _configStore;
     private readonly AcpInstalledBackendStore _installedBackendStore;
@@ -34,7 +31,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 
     private CodeAltaOwnedServices(
         bool ownsLogging,
-        CodeAltaDb db,
         AgentBackendFactory backendFactory,
         CodeAltaConfigStore configStore,
         AcpInstalledBackendStore installedBackendStore,
@@ -53,7 +49,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         IProjectFileSearchService projectFileSearchService)
     {
         _ownsLogging = ownsLogging;
-        _db = db;
         _backendFactory = backendFactory;
         _configStore = configStore;
         _installedBackendStore = installedBackendStore;
@@ -111,57 +106,9 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 
         Directory.CreateDirectory(cacheRoot);
         var codexInstallProgress = new CodexInstallProgressReporter();
-
-        var db = new CodeAltaDb(
-            new CodeAltaDbOptions
-            {
-                DatabasePath = Path.Combine(cacheRoot, "codealta.db"),
-            });
-        await db.InitializeAsync(cancellationToken).ConfigureAwait(false);
-
-        var agentRepository = new AgentRepository(db);
-        var catalogOptions = new CatalogOptions
-        {
-            GlobalRoot = homeRoot,
-        };
-        var projectCatalog = new ProjectCatalog(catalogOptions);
-        var currentProject = await projectCatalog.UpsertFromPathAsync(Environment.CurrentDirectory, cancellationToken).ConfigureAwait(false);
-
-        var pluginRuntime = prestartedPluginRuntime ?? new PluginRuntimeManager();
-        if (prestartedPluginRuntime is null)
-        {
-            var rawArguments = Environment.GetCommandLineArgs();
-            var pluginBootstrapOptions = CodeAltaCliOptions.GetPluginBootstrapOptions(rawArguments);
-            await pluginRuntime.StartAsync(
-                    new PluginRuntimeManagerOptions
-                    {
-                        GlobalRoot = homeRoot,
-                        ProjectContext = new PluginProjectContext
-                        {
-                            ProjectId = currentProject.Id,
-                            ProjectPath = currentProject.ProjectPath,
-                        },
-                        SafeMode = pluginBootstrapOptions.PluginSafeMode,
-                        IsHeadless = false,
-                        WaitForEnterAfterBuildLiveOutput = pluginBootstrapOptions.WaitForEnterAfterPluginLiveOutput,
-                        RawArguments = rawArguments,
-                    },
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
-        var pluginHostBridge = new PluginHostBridge(pluginRuntime, () => currentProject);
-
-        var threadCatalog = new WorkThreadCatalog(catalogOptions);
-        var roleProfileStore = new RoleProfileStore();
-        var skillCatalog = new SkillCatalog([
-            new ProjectCodeAltaSkillRootProvider(),
-            new ProjectCommonSkillRootProvider(),
-            new UserCodeAltaSkillRootProvider(),
-            new UserCommonSkillRootProvider(),
-            new BuiltInCodeAltaSkillRootProvider(),
-            new PluginSkillRootProvider(pluginHostBridge.GetResources),
-        ]);
-        var instructionTemplateProvider = new AgentInstructionTemplateProvider(skillCatalog, catalogOptions);
+        var rawArguments = Environment.GetCommandLineArgs();
+        var pluginBootstrapOptions = CodeAltaCliOptions.GetPluginBootstrapOptions(rawArguments);
+        var catalogOptions = new CatalogOptions { GlobalRoot = homeRoot };
         var configStore = new CodeAltaConfigStore(catalogOptions);
         var installedBackendStore = new AcpInstalledBackendStore(catalogOptions);
         var acpAgentRegistryService = new AcpAgentRegistryService(catalogOptions, installedBackendStore);
@@ -174,75 +121,35 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 
         var providerDefinitions = configStore.LoadGlobalProviderDefinitions(includeDisabled: true)
             .ToDictionary(static definition => definition.ProviderKey, StringComparer.OrdinalIgnoreCase);
-        var backendFactory = new AgentBackendFactory();
         var backendDescriptors = new List<AgentBackendDescriptor>();
         var codexPath = ResolveCodexExecutablePath(
             Environment.GetEnvironmentVariable(CodexPathOverrideEnvironmentVariable));
-        if (providerDefinitions.TryGetValue("codex", out var codexProvider) && codexProvider.Enabled != false)
-        {
-            backendFactory.RegisterCodex(
-                new CodexAgentBackendOptions
+        var sharedHost = await CodeAltaHost.CreateAsync(
+                new CodeAltaHostOptions
                 {
-                    ProcessOptions = new CodexProcessOptions
-                    {
-                        CodexPath = codexPath,
-                        LocalRootPath = cacheRoot,
-                        ReleaseTag = codexPath is null ? CodexClient.CompiledAgainstReleaseTag : null,
-                        Progress = codexPath is null ? codexInstallProgress : null,
-                    },
-                });
-            backendDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Codex, codexProvider.DisplayName ?? "Codex"));
-        }
-
-        if (providerDefinitions.TryGetValue("copilot", out var copilotProvider) && copilotProvider.Enabled != false)
-        {
-            backendFactory.RegisterCopilot(new CopilotAgentBackendOptions());
-            backendDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Copilot, copilotProvider.DisplayName ?? "GitHub Copilot"));
-        }
-
+                    GlobalRoot = homeRoot,
+                    CurrentProjectPath = Environment.CurrentDirectory,
+                    IsHeadless = false,
+                    HasInteractiveUi = true,
+                    PluginSafeMode = pluginBootstrapOptions.PluginSafeMode,
+                    RawArguments = rawArguments,
+                    WaitForEnterAfterPluginLiveOutput = pluginBootstrapOptions.WaitForEnterAfterPluginLiveOutput,
+                    PrestartedPluginRuntime = prestartedPluginRuntime,
+                    ConfigureAgentBackends = RegisterFrontendBackends,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        var backendFactory = sharedHost.BackendFactory;
+        var pluginRuntime = sharedHost.PluginRuntime;
+        var pluginHostBridge = new PluginHostBridge(pluginRuntime, () => sharedHost.CurrentProject);
         backendDescriptors.AddRange(
-            RawApiBackendRegistrar.RegisterConfiguredBackends(
-                backendFactory,
-                configStore,
-                homeRoot,
-                modelsDevCatalogService));
-        foreach (var pluginBackend in pluginRuntime.Adapter.GetAgentBackends(new PluginAdapterOperationOptions { HasInteractiveUi = true }))
-        {
-            var backendId = new AgentBackendId(pluginBackend.Name);
-            backendFactory.RegisterOrReplace(
-                backendId,
-                () => pluginRuntime.Adapter.CreateAgentBackendAsync(pluginRuntime.ActivePlugins, pluginBackend.Name, new PluginAdapterOperationOptions { HasInteractiveUi = true }, CancellationToken.None).AsTask().GetAwaiter().GetResult().Backend
-                    ?? throw new InvalidOperationException($"Plugin backend '{pluginBackend.Name}' did not create a backend instance."));
-            backendDescriptors.Add(new AgentBackendDescriptor(backendId, pluginBackend.DisplayName ?? pluginBackend.Name));
-        }
-
-        foreach (var definition in configStore.LoadEffectiveAcpBackendDefinitions(installedBackendStore.Load()))
-        {
-            if (TryCreateAcpBackendOptions(catalogOptions, definition, out var acpOptions))
-            {
-                backendFactory.RegisterAcp(acpOptions);
-                backendDescriptors.Add(new AgentBackendDescriptor(
-                    AcpAgentBackendFactoryExtensions.CreateBackendId(acpOptions.AgentId),
-                    acpOptions.DisplayName));
-            }
-        }
-
-        var agentHub = new AgentHub(backendFactory, agentRepository);
-        var runtimeService = new WorkThreadRuntimeService(
-            agentHub,
-            projectCatalog,
-            threadCatalog,
-            roleProfileStore,
-            instructionTemplateProvider,
-            catalogOptions,
-            skillCatalog);
-        var projectFileSearchService = new ProjectFileSearchService(
-            new ProjectFileSnapshotCache(),
-            new PersistentProjectFileUsageStore(new ProjectFileUsageRepository(db)));
+            pluginRuntime.Adapter.GetAgentBackends(new PluginAdapterOperationOptions { HasInteractiveUi = true })
+                .Select(static pluginBackend => new AgentBackendDescriptor(
+                    new AgentBackendId(pluginBackend.Name),
+                    pluginBackend.DisplayName ?? pluginBackend.Name)));
 
         return new CodeAltaOwnedServices(
             ownsLogging,
-            db,
             backendFactory,
             configStore,
             installedBackendStore,
@@ -250,15 +157,58 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             modelsDevCatalogService,
             pluginRuntime,
             pluginHostBridge,
-            catalogOptions,
+            sharedHost.CatalogOptions,
             backendDescriptors,
             acpAgentRegistryService,
-            projectCatalog,
-            threadCatalog,
-            skillCatalog,
-            agentHub,
-            runtimeService,
-            projectFileSearchService);
+            sharedHost.ProjectCatalog,
+            sharedHost.ThreadCatalog,
+            sharedHost.SkillCatalog,
+            sharedHost.AgentHub,
+            sharedHost.RuntimeService,
+            sharedHost.ProjectFileSearchService);
+
+        void RegisterFrontendBackends(AgentBackendFactory backendFactory)
+        {
+            if (providerDefinitions.TryGetValue("codex", out var codexProvider) && codexProvider.Enabled != false)
+            {
+                backendFactory.RegisterCodex(
+                    new CodexAgentBackendOptions
+                    {
+                        ProcessOptions = new CodexProcessOptions
+                        {
+                            CodexPath = codexPath,
+                            LocalRootPath = cacheRoot,
+                            ReleaseTag = codexPath is null ? CodexClient.CompiledAgainstReleaseTag : null,
+                            Progress = codexPath is null ? codexInstallProgress : null,
+                        },
+                    });
+                backendDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Codex, codexProvider.DisplayName ?? "Codex"));
+            }
+
+            if (providerDefinitions.TryGetValue("copilot", out var copilotProvider) && copilotProvider.Enabled != false)
+            {
+                backendFactory.RegisterCopilot(new CopilotAgentBackendOptions());
+                backendDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Copilot, copilotProvider.DisplayName ?? "GitHub Copilot"));
+            }
+
+            backendDescriptors.AddRange(
+                RawApiBackendRegistrar.RegisterConfiguredBackends(
+                    backendFactory,
+                    configStore,
+                    homeRoot,
+                    modelsDevCatalogService));
+
+            foreach (var definition in configStore.LoadEffectiveAcpBackendDefinitions(installedBackendStore.Load()))
+            {
+                if (TryCreateAcpBackendOptions(catalogOptions, definition, out var acpOptions))
+                {
+                    backendFactory.RegisterAcp(acpOptions);
+                    backendDescriptors.Add(new AgentBackendDescriptor(
+                        AcpAgentBackendFactoryExtensions.CreateBackendId(acpOptions.AgentId),
+                        acpOptions.DisplayName));
+                }
+            }
+        }
     }
 
     internal static string? ResolveCodexExecutablePath(string? configuredOverridePath)
@@ -291,8 +241,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         await PluginRuntime.DisposeAsync().ConfigureAwait(false);
         AcpAgentRegistryService.Dispose();
         await _modelsDevCatalogService.DisposeAsync().ConfigureAwait(false);
-
-        GC.KeepAlive(_db);
 
         if (_ownsLogging)
         {

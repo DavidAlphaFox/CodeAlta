@@ -3,7 +3,6 @@ using CodeAlta.Models;
 using CodeAlta.Presentation.Shell;
 using CodeAlta.Presentation.Tabs;
 using CodeAlta.Views;
-using XenoAtom.Terminal.UI;
 
 namespace CodeAlta.Tests;
 
@@ -34,21 +33,6 @@ public sealed class CodeAltaAppTabStripTests
     public void CompactTabTitle_DoesNotChangeForSelectionState()
     {
         Assert.AreEqual("Review startup", ThreadTabVisualFactory.CompactTitle("Review startup"));
-    }
-
-    [TestMethod]
-    public void CreateThreadTabPageContentPlaceholder_ReturnsHiddenDetachedVisual()
-    {
-        var first = CodeAltaApp.CreateThreadTabPageContentPlaceholder();
-        var second = CodeAltaApp.CreateThreadTabPageContentPlaceholder();
-
-        Assert.IsNotNull(first);
-        Assert.IsNotNull(second);
-        Assert.IsFalse(first.IsVisible);
-        Assert.IsFalse(second.IsVisible);
-        Assert.IsNull(first.Parent);
-        Assert.IsNull(second.Parent);
-        Assert.AreNotSame(first, second);
     }
 
     [TestMethod]

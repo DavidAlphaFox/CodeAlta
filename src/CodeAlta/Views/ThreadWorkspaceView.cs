@@ -5,7 +5,7 @@ using CodeAlta.Presentation.Chat;
 using CodeAlta.Presentation.Prompting;
 using CodeAlta.Presentation.Shell;
 using CodeAlta.Presentation.Styling;
-using CodeAlta.Search;
+using CodeAlta.Catalog;
 using CodeAlta.ViewModels;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.Graphics;
@@ -25,7 +25,6 @@ internal sealed class ThreadWorkspaceView
 {
     private Markup? _statusIconVisual;
     private readonly Dictionary<string, TabPage> _tabPages = new(StringComparer.OrdinalIgnoreCase);
-    private readonly State<int> _activeTabContentVersion = new(0);
     private readonly PromptComposerViewModel _promptComposerViewModel;
     private readonly Binding<string?> _promptTextBinding;
     private readonly Action _openHelp;
@@ -40,8 +39,9 @@ internal sealed class ThreadWorkspaceView
     private readonly Func<bool> _canPastePromptImages;
     private readonly Func<string> _getPromptImageUnsupportedMessage;
     private readonly Action<string, StatusTone> _setPromptImageStatus;
+    private readonly Dictionary<string, VSplitter> _threadTabContentSplitters = new(StringComparer.OrdinalIgnoreCase);
     private Dialog? _expandedPromptDialog;
-    private Visual? _activeTabContent;
+    private string? _activeThreadTabContentId;
 
     internal const TerminalKey ExpandPromptShortcutKey = TerminalKey.F6;
     internal static readonly KeySequence ModelProvidersShortcutSequence = ShellCommandCatalog.ModelProvidersShortcutSequence;
@@ -67,7 +67,6 @@ internal sealed class ThreadWorkspaceView
         Action<string> deleteQueuedPrompt,
         Action<string, int> updateQueuedPromptCount,
         Action<string, string> updateQueuedPromptText,
-        Action delegateThread,
         Action abortThread,
         Action compactThread,
         Action closeTab,
@@ -97,7 +96,6 @@ internal sealed class ThreadWorkspaceView
             deleteQueuedPrompt,
             updateQueuedPromptCount,
             updateQueuedPromptText,
-            delegateThread,
             abortThread,
             compactThread,
             closeTab,
@@ -131,7 +129,6 @@ internal sealed class ThreadWorkspaceView
         Action<string> deleteQueuedPrompt,
         Action<string, int> updateQueuedPromptCount,
         Action<string, string> updateQueuedPromptText,
-        Action delegateThread,
         Action abortThread,
         Action compactThread,
         Action closeTab,
@@ -163,7 +160,6 @@ internal sealed class ThreadWorkspaceView
             deleteQueuedPrompt,
             updateQueuedPromptCount,
             updateQueuedPromptText,
-            delegateThread,
             abortThread,
             compactThread,
             closeTab,
@@ -196,7 +192,6 @@ internal sealed class ThreadWorkspaceView
         Action<string> deleteQueuedPrompt,
         Action<string, int> updateQueuedPromptCount,
         Action<string, string> updateQueuedPromptText,
-        Action delegateThread,
         Action abortThread,
         Action compactThread,
         Action closeTab,
@@ -228,7 +223,6 @@ internal sealed class ThreadWorkspaceView
             deleteQueuedPrompt,
             updateQueuedPromptCount,
             updateQueuedPromptText,
-            delegateThread,
             abortThread,
             compactThread,
             closeTab,
@@ -263,7 +257,6 @@ internal sealed class ThreadWorkspaceView
         Action<string> deleteQueuedPrompt,
         Action<string, int> updateQueuedPromptCount,
         Action<string, string> updateQueuedPromptText,
-        Action delegateThread,
         Action abortThread,
         Action compactThread,
         Action closeTab,
@@ -296,7 +289,6 @@ internal sealed class ThreadWorkspaceView
         ArgumentNullException.ThrowIfNull(deleteQueuedPrompt);
         ArgumentNullException.ThrowIfNull(updateQueuedPromptCount);
         ArgumentNullException.ThrowIfNull(updateQueuedPromptText);
-        ArgumentNullException.ThrowIfNull(delegateThread);
         ArgumentNullException.ThrowIfNull(abortThread);
         ArgumentNullException.ThrowIfNull(compactThread);
         ArgumentNullException.ThrowIfNull(closeTab);
@@ -414,15 +406,16 @@ internal sealed class ThreadWorkspaceView
             MaxWidth = 2,
         };
 
+        var statusText = new TextBlock
+            {
+                Wrap = true,
+                IsSelectable = false,
+            }.Text(() => shellViewModel.StatusText)
+            .Style(() => StatusVisualFormatter.BuildStatusTextStyle(shellViewModel.StatusText, shellViewModel.StatusBusy, shellViewModel.StatusTone, thinkingAnimationPhase01.Value));
         var statusLineLeft = new HStack(
             [
                 statusPrefix,
-                new TextBlock
-                    {
-                        Wrap = true,
-                        IsSelectable = false,
-                    }.Text(() => shellViewModel.StatusText)
-                    .Style(() => StatusVisualFormatter.BuildStatusTextStyle(shellViewModel.StatusText, shellViewModel.StatusBusy, shellViewModel.StatusTone, thinkingAnimationPhase01.Value)),
+                statusText,
             ])
             {
                 Spacing = 1,
@@ -489,33 +482,16 @@ internal sealed class ThreadWorkspaceView
             VerticalAlignment = Align.Stretch,
         };
 
-        ThreadBodySplitter = new VSplitter(new TextBlock("Open or create a thread to start working."), ThreadBottomPanel)
-        {
-            Ratio = 0.75,
-            MinFirst = 6,
-            MinSecond = 7,
-        };
-        _activeTabContent = ThreadBodySplitter;
-
-        var activeTabContentHost = new ComputedVisual(
-            () =>
-            {
-                _ = _activeTabContentVersion.Value;
-                return _activeTabContent ?? ThreadBodySplitter;
-            });
-
         var threadPaneLayout = new Grid
             {
                 HorizontalAlignment = Align.Stretch,
                 VerticalAlignment = Align.Stretch,
             }
             .Rows(
-                new RowDefinition { Height = GridLength.Auto },
                 new RowDefinition { Height = GridLength.Star(1) })
             .Columns(
                 new ColumnDefinition { Width = GridLength.Star(1) });
         threadPaneLayout.Cell(ThreadTabControl.Stretch(), 0, 0);
-        threadPaneLayout.Cell(activeTabContentHost.Stretch(), 1, 0);
 
         ThreadPaneLayout = threadPaneLayout;
         Root = ThreadPaneLayout;
@@ -533,8 +509,6 @@ internal sealed class ThreadWorkspaceView
     public Visual ThreadPaneLayout { get; }
 
     public Visual ThreadBottomPanel { get; }
-
-    public VSplitter ThreadBodySplitter { get; }
 
     public ChatPromptEditor ThreadInput { get; }
 
@@ -572,19 +546,81 @@ internal sealed class ThreadWorkspaceView
     public bool RemoveTabPage(string tabId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tabId);
-        return _tabPages.Remove(tabId);
+        var removed = _tabPages.Remove(tabId);
+        if (_threadTabContentSplitters.Remove(tabId, out var splitter) &&
+            string.Equals(_activeThreadTabContentId, tabId, StringComparison.OrdinalIgnoreCase))
+        {
+            if (ReferenceEquals(splitter.Second, ThreadBottomPanel))
+            {
+                splitter.Second = null;
+            }
+
+            _activeThreadTabContentId = null;
+        }
+
+        return removed;
     }
 
-    public void SetActiveTabContent(Visual content)
+    public Visual CreateThreadTabContent(string tabId, Visual primaryContent)
     {
-        ArgumentNullException.ThrowIfNull(content);
-        if (ReferenceEquals(_activeTabContent, content))
+        ArgumentException.ThrowIfNullOrWhiteSpace(tabId);
+        ArgumentNullException.ThrowIfNull(primaryContent);
+
+        if (_threadTabContentSplitters.TryGetValue(tabId, out var existing))
+        {
+            return existing;
+        }
+
+        if (primaryContent.Parent is VSplitter existingParent && ReferenceEquals(existingParent.First, primaryContent))
+        {
+            _threadTabContentSplitters[tabId] = existingParent;
+            return existingParent;
+        }
+
+        var splitter = new VSplitter
+        {
+            First = primaryContent,
+            Ratio = 0.75,
+            MinFirst = 6,
+            MinSecond = 7,
+        };
+        _threadTabContentSplitters[tabId] = splitter;
+        return splitter;
+    }
+
+    public void ActivateThreadTabContent(string? tabId)
+    {
+        if (string.Equals(_activeThreadTabContentId, tabId, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        _activeTabContent = content;
-        _activeTabContentVersion.Value++;
+        if (!string.IsNullOrWhiteSpace(_activeThreadTabContentId) &&
+            _threadTabContentSplitters.TryGetValue(_activeThreadTabContentId, out var previous) &&
+            ReferenceEquals(previous.Second, ThreadBottomPanel))
+        {
+            previous.Second = null;
+        }
+
+        _activeThreadTabContentId = null;
+        if (string.IsNullOrWhiteSpace(tabId))
+        {
+            return;
+        }
+
+        if (!_threadTabContentSplitters.TryGetValue(tabId, out var current))
+        {
+            if (!_tabPages.TryGetValue(tabId, out var page) || page.Content is not VSplitter splitter)
+            {
+                return;
+            }
+
+            current = splitter;
+            _threadTabContentSplitters[tabId] = current;
+        }
+
+        current.Second = ThreadBottomPanel;
+        _activeThreadTabContentId = tabId;
     }
 
     public void OpenExpandedPromptDialog()

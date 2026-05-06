@@ -19,7 +19,7 @@ internal static class ThreadScopePresentation
                 => $"{project.DisplayName} · {project.ProjectPath}",
             WorkThreadKind.InternalThread when projects.FirstOrDefault(project => string.Equals(project.Id, thread.ProjectRef, StringComparison.OrdinalIgnoreCase)) is { } internalProject
                 => $"Internal · {internalProject.DisplayName}",
-            WorkThreadKind.InternalThread => "Internal delegated thread",
+            WorkThreadKind.InternalThread => "Internal thread",
             _ => thread.WorkingDirectory,
         };
     }

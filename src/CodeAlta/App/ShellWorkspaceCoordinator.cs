@@ -93,7 +93,7 @@ internal sealed class ShellWorkspaceCoordinator
             () =>
             {
                 _workspaceContext.VerifyBindableAccess();
-                _shellViewModel.ProviderSessionLoadStatusText = message?.Trim() ?? string.Empty;
+                ShellViewModelProjection.ApplyProviderSessionLoadStatus(_shellViewModel, message);
             });
     }
 
@@ -105,10 +105,9 @@ internal sealed class ShellWorkspaceCoordinator
             () =>
             {
                 _workspaceContext.VerifyBindableAccess();
-                _shellViewModel.StatusText = message;
-                _shellViewModel.StatusBusy = showSpinner;
-                _shellViewModel.StatusTone = tone;
-                _shellViewModel.StatusIconMarkup = iconMarkup ?? StatusVisualFormatter.BuildStatusIconMarkup(tone);
+                ShellViewModelProjection.ApplyStatus(
+                    _shellViewModel,
+                    new ShellStatusSnapshot(message, showSpinner, tone, iconMarkup));
             });
     }
 
@@ -305,10 +304,6 @@ internal sealed class ShellWorkspaceCoordinator
             _workspaceContext.RefreshChatSelectorsForDraftScope();
             _workspaceContext.SyncPromptDraftText(session: null);
             _workspaceContext.UpdatePromptAvailabilityUi();
-            _workspaceContext.SetThreadPaneContent(WelcomePaneFactory.Build(
-                _threadSelection.GetSelectedProject(),
-                _threadSelection.IsGlobalDraftSelected(),
-                _welcomeAnimationPhase01));
             SetReadyStatusForCurrentSelection();
             return;
         }
@@ -321,10 +316,6 @@ internal sealed class ShellWorkspaceCoordinator
             _workspaceContext.RefreshChatSelectorsForDraftScope();
             _workspaceContext.SyncPromptDraftText(session: null);
             _workspaceContext.UpdatePromptAvailabilityUi();
-            _workspaceContext.SetThreadPaneContent(WelcomePaneFactory.Build(
-                _threadSelection.GetSelectedProject(),
-                _threadSelection.IsGlobalDraftSelected(),
-                _welcomeAnimationPhase01));
             SetReadyStatusForCurrentSelection();
             return;
         }
@@ -334,7 +325,6 @@ internal sealed class ShellWorkspaceCoordinator
         _workspaceContext.RefreshChatSelectorsForThread(tab);
         _workspaceContext.SyncPromptDraftText(tab.Session);
         _workspaceContext.UpdatePromptAvailabilityUi();
-        _workspaceContext.SetThreadPaneContent(tab.Timeline.Flow);
         if (!string.Equals(_displayedThreadId, selectedThread.ThreadId, StringComparison.OrdinalIgnoreCase))
         {
             _displayedThreadId = selectedThread.ThreadId;

@@ -6,9 +6,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="XenoAtom.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\CodeAlta.Agent\CodeAlta.Agent.csproj" />
-    <ProjectReference Include="..\CodeAlta.Persistence\CodeAlta.Persistence.csproj" />
     <ProjectReference Include="..\CodeAlta.Catalog\CodeAlta.Catalog.csproj" />
+    <ProjectReference Include="..\CodeAlta.Plugins\CodeAlta.Plugins.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,5 +27,4 @@
              CopyToPublishDirectory="PreserveNewest"
              TargetPath="content\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
-
 </Project>

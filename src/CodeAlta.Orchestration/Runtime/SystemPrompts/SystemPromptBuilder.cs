@@ -13,7 +13,7 @@ namespace CodeAlta.Orchestration.Runtime.SystemPrompts;
 public sealed class SystemPromptBuilder
 {
     private const string DefaultName = "default";
-    private static readonly string[] KnownTopLevelEntries = ["base", "roles", "template.yml"];
+    private static readonly string[] KnownTopLevelEntries = ["base", "instructions", "template.yml"];
     private readonly ISystemPromptContentLocator _contentLocator;
 
     /// <summary>
@@ -51,16 +51,16 @@ public sealed class SystemPromptBuilder
 
         var template = ResolveTemplate(roots, request, diagnostics);
         var baseResolution = ResolveResource(roots, "base", ".system-prompt.md", template.BaseName, diagnostics);
-        var roleResolution = ResolveResource(roots, "roles", ".role.md", template.RoleName, diagnostics);
+        var instructionResolution = ResolveResource(roots, "instructions", ".instructions.md", template.InstructionName, diagnostics);
 
         if (baseResolution.Selected is null)
         {
             throw new InvalidOperationException($"Missing required base system prompt 'base/{template.BaseName}.system-prompt.md'.");
         }
 
-        if (roleResolution.Selected is null)
+        if (instructionResolution.Selected is null)
         {
-            throw new InvalidOperationException($"Missing required role prompt 'roles/{template.RoleName}.role.md'.");
+            throw new InvalidOperationException($"Missing required thread instructions 'instructions/{template.InstructionName}.instructions.md'.");
         }
 
         var parts = new List<SystemPromptManifestPart>();
@@ -72,10 +72,10 @@ public sealed class SystemPromptBuilder
         }
 
         var developerParts = new List<RenderedPromptPart>();
-        AddDeveloperPart(developerParts, parts, CreateResourcePart(roleResolution.Selected, "role", template.RoleName, "developer", 300, "selected", roleResolution.ReplacedPath), "Role", roleResolution.Selected.Body);
-        foreach (var skipped in roleResolution.Skipped)
+        AddDeveloperPart(developerParts, parts, CreateResourcePart(instructionResolution.Selected, "instruction", template.InstructionName, "developer", 300, "selected", instructionResolution.ReplacedPath), "Thread Instructions", instructionResolution.Selected.Body);
+        foreach (var skipped in instructionResolution.Skipped)
         {
-            parts.Add(CreateResourcePart(skipped.Resource, "role", template.RoleName, "developer", 300, skipped.Status, null));
+            parts.Add(CreateResourcePart(skipped.Resource, "instruction", template.InstructionName, "developer", 300, skipped.Status, null));
         }
 
         if (template.PartOptions.RuntimeContext)
@@ -159,11 +159,11 @@ public sealed class SystemPromptBuilder
             throw new InvalidOperationException($"Required shipped base system prompt '{basePath}' was not found.");
         }
 
-        var rolePath = Path.Combine(roots.ShippedPromptRoot, "roles", "default.role.md");
-        if (!File.Exists(rolePath))
+        var instructionPath = Path.Combine(roots.ShippedPromptRoot, "instructions", "default.instructions.md");
+        if (!File.Exists(instructionPath))
         {
-            diagnostics.Add(SystemPromptDiagnostic.Error("missing_shipped_role", $"Required shipped default role '{rolePath}' was not found.", rolePath));
-            throw new InvalidOperationException($"Required shipped default role '{rolePath}' was not found.");
+            diagnostics.Add(SystemPromptDiagnostic.Error("missing_shipped_instructions", $"Required shipped default thread instructions '{instructionPath}' were not found.", instructionPath));
+            throw new InvalidOperationException($"Required shipped default thread instructions '{instructionPath}' were not found.");
         }
     }
 
@@ -174,7 +174,7 @@ public sealed class SystemPromptBuilder
             foreach (var directory in Directory.EnumerateDirectories(root.Path))
             {
                 var name = Path.GetFileName(directory);
-                if (!string.Equals(name, "base", StringComparison.OrdinalIgnoreCase) && !string.Equals(name, "roles", StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(name, "base", StringComparison.OrdinalIgnoreCase) && !string.Equals(name, "instructions", StringComparison.OrdinalIgnoreCase))
                 {
                     diagnostics.Add(SystemPromptDiagnostic.Warning("ignored_unknown_prompt_folder", $"Ignoring unknown prompt resource folder '{directory}'.", directory));
                 }
@@ -194,7 +194,7 @@ public sealed class SystemPromptBuilder
             }
 
             WarnWrongSuffix(root.Path, "base", ".system-prompt.md", diagnostics);
-            WarnWrongSuffix(root.Path, "roles", ".role.md", diagnostics);
+            WarnWrongSuffix(root.Path, "instructions", ".instructions.md", diagnostics);
         }
     }
 
@@ -236,8 +236,8 @@ public sealed class SystemPromptBuilder
             result = new SystemPromptResolvedTemplate(
                 parsed.BaseName ?? result.BaseName,
                 parsed.BaseName is null ? result.BaseReason : $"template:{templateSource.SourceKind}",
-                parsed.RoleName ?? result.RoleName,
-                parsed.RoleName is null ? result.RoleReason : $"template:{templateSource.SourceKind}",
+                parsed.InstructionName ?? result.InstructionName,
+                parsed.InstructionName is null ? result.InstructionReason : $"template:{templateSource.SourceKind}",
                 parsed.Options.MergeOver(result.PartOptions),
                 files);
         }
@@ -247,9 +247,9 @@ public sealed class SystemPromptBuilder
             result = result with { BaseName = request.SelectedBaseName.Trim(), BaseReason = "runtime" };
         }
 
-        if (!string.IsNullOrWhiteSpace(request.SelectedRoleName))
+        if (!string.IsNullOrWhiteSpace(request.SelectedInstructionName))
         {
-            result = result with { RoleName = request.SelectedRoleName.Trim(), RoleReason = "runtime" };
+            result = result with { InstructionName = request.SelectedInstructionName.Trim(), InstructionReason = "runtime" };
         }
 
         result = result with { PartOptions = request.PartOptionsOverride?.MergeOver(result.PartOptions) ?? result.PartOptions };
@@ -285,7 +285,7 @@ public sealed class SystemPromptBuilder
 
                     break;
                 case "base":
-                case "role":
+                case "instruction":
                     break;
                 case "skills":
                     options = options with { Skills = ParseBool(values[key], key, path, diagnostics, ref hasErrors) };
@@ -307,7 +307,7 @@ public sealed class SystemPromptBuilder
 
         return new ParsedTemplate(
             NormalizeName(values.GetValueOrDefault("base")),
-            NormalizeName(values.GetValueOrDefault("role")),
+            NormalizeName(values.GetValueOrDefault("instruction")),
             options,
             hasErrors);
     }
@@ -446,7 +446,7 @@ public sealed class SystemPromptBuilder
 
     private static SystemPromptManifestPart CreateResourcePart(PromptResource resource, string kind, string name, string target, int order, string status, string? replaces)
         => new(
-            Key: $"{(kind == "base" ? "base" : "roles")}/{name}",
+            Key: $"{(kind == "base" ? "base" : "instructions")}/{name}",
             Kind: kind,
             Name: name,
             Target: target,
@@ -721,15 +721,15 @@ public sealed class SystemPromptBuilder
     private sealed record ResourceResolution(PromptResource? Selected, string? ReplacedPath, IReadOnlyList<SkippedResource> Skipped);
     private sealed record SkippedResource(PromptResource Resource, string Status);
     private sealed record RenderedPromptPart(string Key, string Markdown);
-    private sealed record ParsedTemplate(string? BaseName, string? RoleName, PartialSystemPromptPartOptions Options, bool HasErrors)
+    private sealed record ParsedTemplate(string? BaseName, string? InstructionName, PartialSystemPromptPartOptions Options, bool HasErrors)
     {
         public static ParsedTemplate Error { get; } = new(null, null, PartialSystemPromptPartOptions.Empty, true);
     }
 
-    private sealed record SystemPromptResolvedTemplate(string BaseName, string BaseReason, string RoleName, string RoleReason, SystemPromptPartOptions PartOptions, IReadOnlyList<SystemPromptTemplateFileManifest> TemplateFiles)
+    private sealed record SystemPromptResolvedTemplate(string BaseName, string BaseReason, string InstructionName, string InstructionReason, SystemPromptPartOptions PartOptions, IReadOnlyList<SystemPromptTemplateFileManifest> TemplateFiles)
     {
         public SystemPromptTemplateManifest ToManifest()
-            => new(BaseName, BaseReason, RoleName, RoleReason, PartOptions, TemplateFiles);
+            => new(BaseName, BaseReason, InstructionName, InstructionReason, PartOptions, TemplateFiles);
     }
 }
 
@@ -759,8 +759,8 @@ public sealed class SystemPromptBuildRequest
     /// <summary>Gets an optional selected base name override.</summary>
     public string? SelectedBaseName { get; init; }
 
-    /// <summary>Gets an optional selected role name override.</summary>
-    public string? SelectedRoleName { get; init; }
+    /// <summary>Gets an optional selected thread instruction name override.</summary>
+    public string? SelectedInstructionName { get; init; }
 
     /// <summary>Gets optional prompt part overrides.</summary>
     public PartialSystemPromptPartOptions? PartOptionsOverride { get; init; }
@@ -864,8 +864,8 @@ public sealed record SystemPromptManifest(
 public sealed record SystemPromptTemplateManifest(
     string BaseName,
     string BaseReason,
-    string RoleName,
-    string RoleReason,
+    string InstructionName,
+    string InstructionReason,
     SystemPromptPartOptions PartOptions,
     IReadOnlyList<SystemPromptTemplateFileManifest> TemplateFiles);
 

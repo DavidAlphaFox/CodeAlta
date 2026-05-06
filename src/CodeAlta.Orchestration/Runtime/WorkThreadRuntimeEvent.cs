@@ -20,7 +20,7 @@ public sealed record WorkThreadAgentEvent(
     : WorkThreadRuntimeEvent(ThreadId, Event.Timestamp);
 
 /// <summary>
-/// Represents a host-generated thread event such as a handoff.
+/// Represents a host-generated thread event.
 /// </summary>
 /// <param name="ThreadId">The owning thread id.</param>
 /// <param name="Timestamp">The event timestamp.</param>
@@ -31,4 +31,16 @@ public sealed record WorkThreadHostEvent(
     DateTimeOffset Timestamp,
     AgentSessionUpdateKind Kind,
     string Message)
+    : WorkThreadRuntimeEvent(ThreadId, Timestamp);
+
+/// <summary>
+/// Wraps a host lifecycle event for a specific thread.
+/// </summary>
+/// <param name="ThreadId">The owning thread id.</param>
+/// <param name="Timestamp">The event timestamp.</param>
+/// <param name="Event">The lifecycle event.</param>
+public sealed record WorkThreadLifecycleRuntimeEvent(
+    string ThreadId,
+    DateTimeOffset Timestamp,
+    WorkThreadLifecycleEvent Event)
     : WorkThreadRuntimeEvent(ThreadId, Timestamp);

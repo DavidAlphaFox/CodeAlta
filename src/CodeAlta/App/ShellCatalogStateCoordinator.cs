@@ -9,7 +9,7 @@ internal sealed class ShellCatalogStateCoordinator
     private readonly ProjectCatalog _projectCatalog;
     private readonly WorkThreadCatalog _threadCatalog;
     private readonly ThreadViewStateCoordinator _viewStateCoordinator;
-    private readonly OpenThreadRegistry _openThreadRegistry;
+    private readonly OpenThreadStateStore _OpenThreadStateStore;
     private IReadOnlyList<ProjectDescriptor> _projects = [];
     private IReadOnlyList<WorkThreadDescriptor> _threads = [];
 
@@ -17,17 +17,17 @@ internal sealed class ShellCatalogStateCoordinator
         ProjectCatalog projectCatalog,
         WorkThreadCatalog threadCatalog,
         ThreadViewStateCoordinator viewStateCoordinator,
-        OpenThreadRegistry openThreadRegistry)
+        OpenThreadStateStore OpenThreadStateStore)
     {
         ArgumentNullException.ThrowIfNull(projectCatalog);
         ArgumentNullException.ThrowIfNull(threadCatalog);
         ArgumentNullException.ThrowIfNull(viewStateCoordinator);
-        ArgumentNullException.ThrowIfNull(openThreadRegistry);
+        ArgumentNullException.ThrowIfNull(OpenThreadStateStore);
 
         _projectCatalog = projectCatalog;
         _threadCatalog = threadCatalog;
         _viewStateCoordinator = viewStateCoordinator;
-        _openThreadRegistry = openThreadRegistry;
+        _OpenThreadStateStore = OpenThreadStateStore;
     }
 
     public IReadOnlyList<ProjectDescriptor> Projects => _projects;
@@ -66,7 +66,7 @@ internal sealed class ShellCatalogStateCoordinator
         _threads = _viewStateCoordinator.ApplyThreadLocalState(threads, viewState);
         if (pruneMissingThreads)
         {
-            _openThreadRegistry.PruneRetainedThreadState(_threads);
+            _OpenThreadStateStore.PruneRetainedThreadState(_threads);
         }
         viewState.Selection ??= WorkThreadSelectionState.GlobalDraft();
 

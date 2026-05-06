@@ -44,7 +44,7 @@ public sealed class WorkThreadDescriptor
     public string? ProjectRef { get; set; }
 
     /// <summary>
-    /// Gets or sets the parent thread identifier for delegated child work.
+    /// Gets or sets the legacy parent thread identifier for internal thread metadata.
     /// </summary>
     [JsonPropertyName("parent_thread_id")]
     public string? ParentThreadId { get; set; }

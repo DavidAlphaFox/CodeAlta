@@ -3,7 +3,7 @@ using System.Reflection;
 using CodeAlta.Frontend.Commands;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Chat;
-using CodeAlta.Search;
+using CodeAlta.Catalog;
 using CodeAlta.ViewModels;
 using CodeAlta.Views;
 using XenoAtom.Terminal;
@@ -18,6 +18,80 @@ namespace CodeAlta.Tests;
 [TestClass]
 public sealed class ThreadWorkspaceViewTests
 {
+    [TestMethod]
+    public void ActivateThreadTabContent_MovesSharedBottomPanelBetweenStableTabContents()
+    {
+        var view = CreateThreadWorkspaceView();
+        var firstContent = (VSplitter)view.CreateThreadTabContent("thread-1", new TextBlock("First"));
+        var secondContent = (VSplitter)view.CreateThreadTabContent("thread-2", new TextBlock("Second"));
+
+        view.ActivateThreadTabContent("thread-1");
+
+        Assert.AreSame(view.ThreadBottomPanel, firstContent.Second);
+        Assert.AreSame(firstContent, view.ThreadBottomPanel.Parent);
+
+        view.ActivateThreadTabContent("thread-2");
+
+        Assert.IsNull(firstContent.Second);
+        Assert.AreSame(view.ThreadBottomPanel, secondContent.Second);
+        Assert.AreSame(secondContent, view.ThreadBottomPanel.Parent);
+    }
+
+    [TestMethod]
+    public void CreateThreadTabContent_ReusesExistingSplitterForAttachedPrimaryContent()
+    {
+        var view = CreateThreadWorkspaceView();
+        var primary = new TextBlock("Thread");
+        var firstContent = view.CreateThreadTabContent("thread-1", primary);
+
+        view.RemoveTabPage("thread-1");
+        var recoveredContent = view.CreateThreadTabContent("thread-1", primary);
+
+        Assert.AreSame(firstContent, recoveredContent);
+        Assert.AreSame(firstContent, primary.Parent);
+    }
+
+    [TestMethod]
+    public void CreateThreadTabContent_IsIdempotentForRememberedTabContent()
+    {
+        var view = CreateThreadWorkspaceView();
+        var primary = new TextBlock("Thread");
+        var firstContent = view.CreateThreadTabContent("thread-1", primary);
+
+        var repeatedContent = view.CreateThreadTabContent("thread-1", primary);
+
+        Assert.AreSame(firstContent, repeatedContent);
+        Assert.AreSame(firstContent, primary.Parent);
+    }
+
+    [TestMethod]
+    public void ActivateThreadTabContent_RecoversRememberedSplitterAfterContentCacheWasCleared()
+    {
+        var view = CreateThreadWorkspaceView();
+        var content = (VSplitter)view.CreateThreadTabContent("thread-1", new TextBlock("Thread"));
+
+        view.RemoveTabPage("thread-1");
+        view.RememberTabPage("thread-1", new TabPage(new TextBlock("Thread header"), content));
+        view.ActivateThreadTabContent("thread-1");
+
+        Assert.AreSame(view.ThreadBottomPanel, content.Second);
+        Assert.AreSame(content, view.ThreadBottomPanel.Parent);
+    }
+
+    [TestMethod]
+    public void StatusBar_TextRegionsUseDynamicTextBindings()
+    {
+        var view = CreateThreadWorkspaceView();
+
+        var bottomPanel = Assert.IsInstanceOfType<DockLayout>(view.ThreadBottomPanel);
+        var topStack = Assert.IsInstanceOfType<VStack>(bottomPanel.Top);
+        var statusLine = Assert.IsInstanceOfType<StatusBar>(topStack.Children[2]);
+        var leftStatus = Assert.IsInstanceOfType<HStack>(statusLine.LeftText);
+
+        Assert.IsInstanceOfType<TextBlock>(leftStatus.Children[1]);
+        Assert.IsInstanceOfType<TextBlock>(statusLine.RightText);
+    }
+
     [TestMethod]
     public void SyncChatSelectorItems_ReplacesSelectItems()
     {
@@ -48,7 +122,6 @@ public sealed class ThreadWorkspaceViewTests
             static _ => { },
             static (_, _) => { },
             static (_, _) => { },
-            static () => { },
             static () => { },
             static () => { },
             static () => { },
@@ -122,7 +195,6 @@ public sealed class ThreadWorkspaceViewTests
             static () => { },
             static () => { },
             static () => { },
-            static () => { },
             static _ => { },
             static _ => { },
             static _ => { },
@@ -177,7 +249,6 @@ public sealed class ThreadWorkspaceViewTests
             static () => { },
             static () => { },
             static () => { },
-            static () => { },
             static _ => { },
             static _ => { },
             static _ => { },
@@ -211,7 +282,6 @@ public sealed class ThreadWorkspaceViewTests
             static _ => { },
             static (_, _) => { },
             static (_, _) => { },
-            static () => { },
             static () => { },
             static () => { },
             static () => { },
@@ -274,7 +344,6 @@ public sealed class ThreadWorkspaceViewTests
             static _ => { },
             static (_, _) => { },
             static (_, _) => { },
-            static () => { },
             static () => { },
             static () => { },
             static () => { },
@@ -347,7 +416,6 @@ public sealed class ThreadWorkspaceViewTests
             static () => { },
             static () => { },
             static () => { },
-            static () => { },
             static _ => { },
             static _ => { },
             static _ => { },
@@ -409,7 +477,6 @@ public sealed class ThreadWorkspaceViewTests
             static () => { },
             static () => { },
             static () => { },
-            static () => { },
             static _ => { },
             static _ => { },
             static _ => { },
@@ -464,6 +531,36 @@ public sealed class ThreadWorkspaceViewTests
         Assert.IsNotNull(field);
         return Assert.IsInstanceOfType<T>(field.GetValue(instance));
     }
+
+    private static ThreadWorkspaceView CreateThreadWorkspaceView()
+        => new(
+            new CodeAltaShellViewModel(),
+            new ThreadWorkspaceViewModel(),
+            new PromptComposerViewModel(),
+            [],
+            static () => new TextBlock(string.Empty),
+            static () => { },
+            static _ => { },
+            static () => { },
+            static () => { },
+            static _ => { },
+            static () => { },
+            static () => { },
+            static () => { },
+            static _ => { },
+            static _ => { },
+            static _ => { },
+            static (_, _) => { },
+            static (_, _) => { },
+            static () => { },
+            static () => { },
+            static () => { },
+            static _ => { },
+            static _ => { },
+            static _ => { },
+            static _ => { },
+            new State<string?>(string.Empty),
+            new State<float>(0));
 
     private static object? GetPrivateMemberValue(object instance, string fieldName)
     {

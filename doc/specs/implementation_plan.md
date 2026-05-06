@@ -1,5 +1,7 @@
 # Implementation Plan: CodeAlta MVP Core Experience
 
+> Historical note: This document predates the 1.0 core cleanup. Built-in persistence, semantic search, MCP services, local-model hosting, .NET intelligence, and hardcoded agent roles described here are not active 1.0 core features; they are future/plugin-oriented design notes unless reintroduced by a focused plugin or service.
+
 This document is the current implementation entry point for CodeAlta.
 
 It defines a **project-first MVP** aimed at feeling close to a raw Copilot/Codex CLI while adding CodeAlta-owned structure where it materially improves usability.

@@ -1,5 +1,4 @@
 using CodeAlta.Catalog;
-using CodeAlta.Catalog.Roles;
 using CodeAlta.Catalog.Skills;
 using CodeAlta.Orchestration.Runtime.SystemPrompts;
 using System.Text;
@@ -35,7 +34,6 @@ public sealed class AgentInstructionTemplateProvider
     /// </summary>
     /// <param name="thread">The active work thread.</param>
     /// <param name="project">The owning project, if any.</param>
-    /// <param name="profile">The profile providing backend and role-specific defaults.</param>
     /// <returns>
     /// An instruction bundle containing no overrides so backend defaults remain active
     /// while orchestration-specific prompting is disabled.
@@ -43,12 +41,10 @@ public sealed class AgentInstructionTemplateProvider
     public AgentInstructionBundle BuildCoordinatorInstructions(
         WorkThreadDescriptor thread,
         ProjectDescriptor? project,
-        RoleProfile profile)
+        string? model = null)
     {
         ArgumentNullException.ThrowIfNull(thread);
-        ArgumentNullException.ThrowIfNull(profile);
-
-        var bundle = BuildPromptBundle(thread, project, profile);
+        var bundle = BuildPromptBundle(thread, project, model);
         return new AgentInstructionBundle
         {
             SystemMessage = bundle.SystemMessage,
@@ -62,7 +58,6 @@ public sealed class AgentInstructionTemplateProvider
     /// </summary>
     /// <param name="thread">The active work thread.</param>
     /// <param name="project">The owning project, if any.</param>
-    /// <param name="profile">The profile providing backend and role-specific defaults.</param>
     /// <returns>
     /// An instruction bundle containing no overrides so backend defaults remain active
     /// while orchestration-specific prompting is disabled.
@@ -70,12 +65,10 @@ public sealed class AgentInstructionTemplateProvider
     public AgentInstructionBundle BuildGeneralInstructions(
         WorkThreadDescriptor thread,
         ProjectDescriptor? project,
-        RoleProfile profile)
+        string? model = null)
     {
         ArgumentNullException.ThrowIfNull(thread);
-        ArgumentNullException.ThrowIfNull(profile);
-
-        var bundle = BuildPromptBundle(thread, project, profile);
+        var bundle = BuildPromptBundle(thread, project, model);
         return new AgentInstructionBundle
         {
             SystemMessage = bundle.SystemMessage,
@@ -87,7 +80,7 @@ public sealed class AgentInstructionTemplateProvider
     private SystemPromptBundle BuildPromptBundle(
         WorkThreadDescriptor thread,
         ProjectDescriptor? project,
-        RoleProfile profile)
+        string? model = null)
     {
         var projectRoots = string.IsNullOrWhiteSpace(project?.ProjectPath)
             ? Array.Empty<string>()
@@ -97,23 +90,21 @@ public sealed class AgentInstructionTemplateProvider
             ProviderKey = thread.ResolvedProviderKey,
             ProviderType = thread.BackendId,
             ProtocolFamily = thread.BackendId,
-            Model = profile.DefaultModel,
+            Model = model,
             Thread = thread,
             Project = project,
             WorkingDirectory = thread.WorkingDirectory,
             ProjectRoots = projectRoots,
-            AvailableSkillsMarkdown = BuildSkillsDeveloperInstructions(thread, project, profile),
+            AvailableSkillsMarkdown = BuildSkillsDeveloperInstructions(thread, project),
         });
     }
 
     private string? BuildSkillsDeveloperInstructions(
         WorkThreadDescriptor thread,
         ProjectDescriptor? project,
-        RoleProfile profile)
+        string? model = null)
     {
         ArgumentNullException.ThrowIfNull(thread);
-        ArgumentNullException.ThrowIfNull(profile);
-
         if (_skillCatalog is null || _catalogOptions is null)
         {
             return null;
@@ -135,19 +126,14 @@ public sealed class AgentInstructionTemplateProvider
         {
             return null;
         }
-
-        var preferredSkills = new HashSet<string>(
-            profile.Skills
-                .Where(static skill => !string.IsNullOrWhiteSpace(skill))
-                .Select(static skill => skill.Trim()),
-            StringComparer.OrdinalIgnoreCase);
+        var preferredSkills = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var builder = new StringBuilder();
         builder.AppendLine("Filesystem skills are available for this session.");
         builder.AppendLine("Activate a skill only when it clearly matches the current task.");
         if (preferredSkills.Count > 0)
         {
-            builder.AppendLine("Role-associated skills are marked as preferred hints, not mandatory prompt preloads.");
+            builder.AppendLine("");
         }
 
         builder.AppendLine("When a skill is activated, relative paths inside that skill resolve against the skill root.");

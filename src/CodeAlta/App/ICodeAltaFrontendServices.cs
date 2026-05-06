@@ -1,0 +1,66 @@
+using CodeAlta.Agent;
+using CodeAlta.App.State;
+using CodeAlta.Catalog;
+using CodeAlta.Models;
+using CodeAlta.Presentation.Prompting;
+using CodeAlta.Threading;
+using XenoAtom.Terminal.UI;
+using XenoAtom.Terminal.UI.Geometry;
+
+namespace CodeAlta.App;
+
+internal interface ICodeAltaFrontendServices
+{
+    void AssignUiDispatcher(IUiDispatcher dispatcher);
+    void ApplyPendingSidebarSelection();
+    IUiDispatcher GetUiDispatcher();
+    Rectangle? GetThreadPaneBounds();
+    bool IsChatBackendReady(AgentBackendId backendId);
+    string? LoadPromptDraft(string threadId);
+    void DeletePromptDraft(string threadId);
+    void ApplyThreadPreference(OpenThreadState thread);
+    void RememberThreadPreference(string threadId, string? modelId, AgentReasoningEffort? reasoningEffort, bool persistNow);
+    Task EnsureThreadHistoryLoadedAsync(WorkThreadDescriptor thread, CancellationToken cancellationToken);
+    void RefreshSelectionAndThreadWorkspace();
+    void RefreshCatalogAndThreadWorkspace();
+    void ResetPendingThreadTabSelection();
+    void RemoveThreadTabPage(string threadId);
+    void SetStatus(string message, bool showSpinner, StatusTone tone);
+    void SetProviderSessionLoadStatus(string? message);
+    bool IsSelectedThread(string threadId);
+    void ApplyDraftBackendPreference(ChatBackendState backendState);
+    void RememberGlobalBackendPreference(AgentBackendId backendId, string? modelId, AgentReasoningEffort? reasoningEffort);
+    void InvalidateSelectedSessionUsage();
+    void RefreshHeaderAndThreadWorkspace();
+    void RekeyThreadIdentity(string oldThreadId, WorkThreadDescriptor thread);
+    bool HasWorkspaceSurface();
+    void EnsureSelectionDefaults();
+    void RefreshSidebarProjection();
+    void SyncSidebarSelectionToCurrentState();
+    void RefreshChatSelectorsForDraftScope();
+    void RefreshChatSelectorsForThread(OpenThreadState thread);
+    void SyncChatSelectorItems();
+    void SyncPromptText(ThreadSessionState? session);
+    void UpdatePromptAvailabilityUi();
+    void UpdatePromptImageAttachmentsUi();
+    void SyncThreadTabControl();
+    void DispatchToUi(Action action);
+    void DispatchToUiDeferred(Action action);
+    void FocusPromptTarget();
+    void VerifyBindableAccess();
+    bool GetAutoApproveEnabled();
+    void RefreshShellChrome();
+    void SetThreadStatus(OpenThreadState thread, string message, bool showSpinner, StatusTone tone);
+    void ClearThreadStatus(OpenThreadState thread);
+    bool TrySetPromptUnavailableStatus();
+    void SetReadyStatusForCurrentSelection();
+    void ClearDraftPromptText();
+    void ClearPromptText();
+    bool IsPromptTextEmpty();
+    void RestorePromptText(string prompt);
+    IReadOnlyList<PromptImageAttachment> SnapshotPromptImages();
+    void RestorePromptImages(IReadOnlyList<PromptImageAttachment> images);
+    Task PersistViewStateAsync();
+    Task RegisterCreatedThreadAsync(WorkThreadDescriptor thread);
+    Visual? GetPromptFocusTarget();
+}

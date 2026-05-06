@@ -126,9 +126,6 @@ internal sealed class ShellInputCoordinator
     public Task SubmitCurrentPromptAsync(bool steer, CancellationToken cancellationToken = default)
         => HandleInputAsync(_getPromptText(), steer, cancellationToken);
 
-    public Task SubmitCurrentDelegationAsync(CancellationToken cancellationToken = default)
-        => ExecuteIntentAsync(new DelegateThreadIntent(_getPromptText()?.Trim() ?? string.Empty), cancellationToken);
-
     public Task AbortSelectedThreadAsync(CancellationToken cancellationToken = default)
         => ExecuteIntentAsync(new AbortThreadIntent(), cancellationToken);
 
@@ -175,10 +172,6 @@ internal sealed class ShellInputCoordinator
 
             case SteerPromptIntent steerIntent:
                 await _threadCommandCoordinator.SendPromptAsync(steerIntent.PromptText, steer: true, cancellationToken);
-                return;
-
-            case DelegateThreadIntent delegateIntent:
-                await _threadCommandCoordinator.DelegateThreadAsync(delegateIntent.PromptText, cancellationToken);
                 return;
 
             case AbortThreadIntent:

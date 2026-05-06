@@ -4,6 +4,4 @@ internal enum ShellSurface
 {
     DraftWorkspace,
     ThreadWorkspace,
-    AgentWorkspace,
-    FleetWorkspace,
 }

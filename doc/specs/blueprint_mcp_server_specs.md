@@ -1,5 +1,7 @@
 # Blueprint: Built-in MCP Server (Draft)
 
+> Historical note: This document predates the 1.0 core cleanup. Built-in persistence, semantic search, MCP services, local-model hosting, .NET intelligence, and hardcoded agent roles described here are not active 1.0 core features; they are future/plugin-oriented design notes unless reintroduced by a focused plugin or service.
+
 Last updated: **2026-02-28**
 
 Historical note: references here to workspace-scoped services are obsolete. The active MCP model is project-first, with only `global` and `project` scopes.

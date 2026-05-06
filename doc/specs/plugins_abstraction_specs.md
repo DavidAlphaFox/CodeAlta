@@ -1,7 +1,7 @@
 # CodeAlta Plugin Abstractions Specification
 
 Status: **Draft**
-Last updated: **2026-05-02**
+Last updated: **2026-05-05**
 Audience: implementers of `CodeAlta.Plugins.Abstractions`, future `CodeAlta.Plugins`, CodeAlta UI/orchestration/runtime surfaces, and plugin authors.
 
 Primary inputs:
@@ -966,6 +966,26 @@ public virtual ValueTask OnAgentEventAsync(
 
 Observation callbacks should not mutate event history directly. If a future plugin point allows event transformation, it should be a separate explicit contribution with strict ordering and diagnostics.
 
+Implemented runtime slices expose this as a headless orchestration service rather than a frontend-owned bridge:
+
+- `PluginOrchestrationBridge` adapts active `PluginContributions` to orchestration without referencing `src/CodeAlta` UI types.
+- `WorkThreadPluginEventObserver` dispatches normalized `AgentEvent` values to plugins with project/thread/run scope and preserves deterministic plugin order.
+- Observer failures are attributed through `PluginDiagnosticSink` and do not stop subsequent observers.
+
+Plugins that want to affect UI from observed events should emit separate derived projections instead of mutating canonical event history.
+
+### 11.7.1 Derived thread event projection
+
+Plugins can project transient, plugin-owned timeline/status details from normalized agent events without appending to persisted user/agent transcript history.
+
+The implemented abstraction is `PluginThreadEventProjection`, returned from `PluginAgentEventObserver` callbacks. Runtime behavior:
+
+- projections carry the plugin id, event id, project/thread/run scope, message, timestamp, optional severity, and optional details payload;
+- `WorkThreadPluginDerivedEventProjector` maps projections to `PluginDerivedThreadEvent` orchestration events;
+- replayed agent events and live agent events use the same projector path so renderers see parity between restored and newly observed derived events;
+- projection failures are diagnosed and isolated per plugin;
+- derived events are transient UI/runtime projections, not canonical transcript entries.
+
 ### 11.8 Tool call/result interception
 
 Plugins may need to enforce policy, add audit, or normalize results around tool calls.
@@ -1095,6 +1115,14 @@ Rules:
 - A `Func<Visual>`/factory is preferred for dynamic visuals that may need to rebuild.
 - The plugin may own the internal state of its visual, but it should not retain host parent controls after unmount.
 - UI contributions must tolerate headless/no-UI mode. Runtime should either skip them or expose no-op services.
+
+Plugin-owned tabs are implemented through `PluginShellTabService`, a frontend adapter over `IShellTabService`:
+
+- plugin tabs use stable ids derived from plugin id and surface key;
+- plugin-owned view models are stored in `TabPage.Data`/`ShellTabDescriptor.ViewModel`, while `TabPage.Content` remains a stable visual root owned by the shell projection;
+- opening an already-open plugin surface returns the existing tab instead of replacing content or view-model ownership;
+- close callbacks receive a `ShellTabCloseReason` so plugins can distinguish user close, plugin unload, and shell shutdown cleanup;
+- headless mode is a no-op and ignores UI-only tab contributions.
 
 ### 11.11 UI services
 

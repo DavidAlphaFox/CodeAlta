@@ -140,6 +140,39 @@ public sealed class ThreadTimelinePresenterTests
     }
 
     [TestMethod]
+    public void DiscardDraftContent_RemovesMatchingDraftTimelineItem()
+    {
+        var presenter = CreatePresenter();
+        var timestamp = DateTimeOffset.UtcNow;
+        var delta = new AgentContentDeltaEvent(
+            AgentBackendIds.Codex,
+            "session-1",
+            timestamp,
+            null,
+            AgentContentKind.Assistant,
+            "assistant-1",
+            null,
+            "Partial draft",
+            CreateJsonDetails("""{"attemptId":"run-1:1","draft":true}"""));
+        var update = new AgentSessionUpdateEvent(
+            AgentBackendIds.Codex,
+            "session-1",
+            timestamp.AddSeconds(1),
+            null,
+            AgentSessionUpdateKind.Reconnecting,
+            "Reconnecting to ChatGPT/Codex... 1/5",
+            Details: CreateJsonDetails("""{"provider":"codex_subscription","discardDraft":true,"draftAttemptId":"run-1:1"}"""));
+
+        presenter.AppendContent(delta);
+
+        Assert.AreEqual(1, presenter.Flow.Items.Count);
+
+        presenter.DiscardDraftContent(update);
+
+        Assert.AreEqual(0, presenter.Flow.Items.Count);
+    }
+
+    [TestMethod]
     public void OptimisticUserPrompt_PreventsDuplicateTimelineItemsWhenEchoArrives()
     {
         var presenter = CreatePresenter();
@@ -169,6 +202,23 @@ public sealed class ThreadTimelinePresenterTests
     }
 
     [TestMethod]
+    public void RollbackOptimisticUserPrompt_BeforeFailureLeavesOnlyFailureTimelineItem()
+    {
+        var presenter = CreatePresenter();
+
+        presenter.RenderOptimisticUserPrompt("First prompt", DateTimeOffset.UtcNow);
+        presenter.RollbackOptimisticUserPrompt();
+        presenter.RenderFailure("Failed to send prompt: test failure");
+
+        Assert.AreEqual(1, presenter.Flow.Items.Count);
+        var document = Assert.IsInstanceOfType<FlowDocument>(presenter.Flow.Items[0].Content);
+        var block = Assert.IsInstanceOfType<VisualDocumentFlowBlock>(document.GetBlock(0));
+        var group = Assert.IsInstanceOfType<Group>(block.CreateVisual());
+        var markdown = group.EnumerateVisualsDepthFirst().OfType<MarkdownControl>().Single();
+        Assert.AreEqual("Failed to send prompt: test failure", markdown.Markdown);
+    }
+
+    [TestMethod]
     public void RenderOptimisticUserPrompt_DoesNotForceTimelineToTail()
     {
         var presenter = CreatePresenter();
@@ -177,6 +227,18 @@ public sealed class ThreadTimelinePresenterTests
         presenter.RenderOptimisticUserPrompt("First prompt", DateTimeOffset.UtcNow);
 
         Assert.IsFalse(presenter.Flow.FollowTail);
+    }
+
+    [TestMethod]
+    public void RenderOptimisticUserPrompt_ChecksFollowTailThroughDispatcher()
+    {
+        var dispatcher = new MarshallingUiDispatcher();
+        var presenter = new ThreadTimelinePresenter(dispatcher, static () => null);
+        var invocationsAfterConstruction = dispatcher.InvokeCount;
+
+        presenter.RenderOptimisticUserPrompt("First prompt", DateTimeOffset.UtcNow);
+
+        Assert.IsTrue(dispatcher.InvokeCount > invocationsAfterConstruction);
     }
 
     [TestMethod]
@@ -353,6 +415,12 @@ public sealed class ThreadTimelinePresenterTests
     private static ThreadTimelinePresenter CreatePresenter()
         => new(new InlineUiDispatcher(), static () => null);
 
+    private static System.Text.Json.JsonElement CreateJsonDetails(string json)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
     private static void RenderCompletedContent(
         ThreadTimelinePresenter presenter,
         AgentContentKind kind,
@@ -425,6 +493,34 @@ public sealed class ThreadTimelinePresenterTests
             {
                 _postedActions.Dequeue()();
             }
+        }
+    }
+
+    private sealed class MarshallingUiDispatcher : IUiDispatcher
+    {
+        public int InvokeCount { get; private set; }
+
+        public bool CheckAccess()
+            => false;
+
+        public void Post(Action action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+        }
+
+        public Task InvokeAsync(Action action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            InvokeCount++;
+            action();
+            return Task.CompletedTask;
+        }
+
+        public Task<T> InvokeAsync<T>(Func<T> action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            InvokeCount++;
+            return Task.FromResult(action());
         }
     }
 }

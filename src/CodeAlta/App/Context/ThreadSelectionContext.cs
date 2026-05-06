@@ -37,9 +37,6 @@ internal sealed class ThreadSelectionContext
     public OpenThreadState EnsureThreadTab(WorkThreadDescriptor thread)
         => _threadStateCoordinator.EnsureThreadTab(thread);
 
-    public OpenThreadState RegisterDelegatedThread(WorkThreadDescriptor child, OpenThreadState sourceTab)
-        => _threadStateCoordinator.RegisterDelegatedThread(child, sourceTab);
-
     public OpenThreadState? FindOpenThread(string threadId)
         => _threadStateCoordinator.FindOpenThread(threadId);
 

@@ -163,6 +163,8 @@ public sealed class CodeAltaShellControllerTests
 
         CollectionAssert.Contains(log, "Shell.ApplyRecoveredCatalogState:1:2:KeepMissing");
         CollectionAssert.Contains(log, "Shell.ApplyRecoveredCatalogState:1:2");
+        Assert.IsTrue(shell.ProviderSessionLoadStatuses.Count > 0);
+        Assert.AreEqual(null, shell.ProviderSessionLoadStatuses.LastOrDefault());
     }
 
     [TestMethod]
@@ -206,6 +208,8 @@ public sealed class CodeAltaShellControllerTests
         await initializationTask.ConfigureAwait(false);
 
         CollectionAssert.Contains(log, "ThreadSource.List:slow");
+        Assert.IsTrue(shell.ProviderSessionLoadStatuses.Count > 0);
+        Assert.AreEqual(null, shell.ProviderSessionLoadStatuses.LastOrDefault());
     }
 
     [TestMethod]
@@ -693,6 +697,8 @@ public sealed class CodeAltaShellControllerTests
 
         public WorkThreadRuntimeEvent? LastRuntimeEvent { get; private set; }
 
+        public List<string?> ProviderSessionLoadStatuses { get; } = [];
+
         public TaskCompletionSource<bool>? InitializeChatBackendsCompletion { get; init; }
 
         public Task InitializeChatBackendsAsync(CancellationToken cancellationToken)
@@ -720,6 +726,7 @@ public sealed class CodeAltaShellControllerTests
 
         public void SetProviderSessionLoadStatus(string? message)
         {
+            ProviderSessionLoadStatuses.Add(message);
         }
 
         public void ApplyRecoveredCatalogState(

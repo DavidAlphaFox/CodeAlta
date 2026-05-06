@@ -1,6 +1,6 @@
 using CodeAlta.Models;
 using CodeAlta.Presentation.Prompting;
-using CodeAlta.Search;
+using CodeAlta.Catalog;
 using XenoAtom.Terminal.UI;
 
 namespace CodeAlta.Presentation.Editing;

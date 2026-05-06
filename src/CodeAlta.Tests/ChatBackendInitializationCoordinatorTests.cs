@@ -2,7 +2,6 @@ using CodeAlta.Agent;
 using CodeAlta.App;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
-using CodeAlta.Persistence;
 
 namespace CodeAlta.Tests;
 
@@ -13,7 +12,6 @@ public sealed class ChatBackendInitializationCoordinatorTests
     public async Task InitializeAsync_SkipsLoadedCodexBackend()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
         var backendFactory = new AgentBackendFactory();
         var backend = new CountingBackend(AgentBackendIds.Codex);
         var factoryCreateCount = 0;
@@ -25,7 +23,7 @@ public sealed class ChatBackendInitializationCoordinatorTests
                 return backend;
             });
 
-        await using var hub = new AgentHub(backendFactory, new AgentRepository(db));
+        await using var hub = new AgentHub(backendFactory);
         var state = new ChatBackendState(AgentBackendIds.Codex, "Codex")
         {
             Availability = ChatBackendAvailability.Ready,
@@ -54,13 +52,12 @@ public sealed class ChatBackendInitializationCoordinatorTests
     public async Task InitializeAsync_RefreshesLoadedNonProcessBackedBackend()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
         var backendId = new AgentBackendId("openai");
         var backendFactory = new AgentBackendFactory();
         var backend = new CountingBackend(backendId);
         backendFactory.Register(backendId, () => backend);
 
-        await using var hub = new AgentHub(backendFactory, new AgentRepository(db));
+        await using var hub = new AgentHub(backendFactory);
         var state = new ChatBackendState(backendId, "OpenAI")
         {
             Availability = ChatBackendAvailability.Ready,
@@ -88,12 +85,11 @@ public sealed class ChatBackendInitializationCoordinatorTests
     public async Task RefreshBackendAsync_EnablesSessionLoadingBeforeUiStateIsApplied()
     {
         using var temp = TempDirectory.Create();
-        var db = await CreateDbAsync(temp.Path).ConfigureAwait(false);
         var backendId = new AgentBackendId("codex_subscription");
         var backendFactory = new AgentBackendFactory();
         backendFactory.Register(backendId, () => new CountingBackend(backendId));
 
-        await using var hub = new AgentHub(backendFactory, new AgentRepository(db));
+        await using var hub = new AgentHub(backendFactory);
         var state = new ChatBackendState(backendId, "ChatGPT");
         var queuedUiActions = new Queue<Action>();
         var sessionLoadingUpdates = new List<(AgentBackendId BackendId, bool Enabled)>();
@@ -121,6 +117,42 @@ public sealed class ChatBackendInitializationCoordinatorTests
         }
 
         Assert.AreEqual(ChatBackendAvailability.Ready, state.Availability);
+    }
+
+    [TestMethod]
+    public async Task InitializeAsync_DropsStaleQueuedProviderInitializationStatus()
+    {
+        var backendId = new AgentBackendId("openai");
+        var backendFactory = new AgentBackendFactory();
+        backendFactory.Register(backendId, () => new CountingBackend(backendId));
+
+        await using var hub = new AgentHub(backendFactory);
+        var state = new ChatBackendState(backendId, "OpenAI");
+        var queuedUiActions = new List<Action>();
+        var providerStatuses = new List<string?>();
+        var coordinator = new ChatBackendInitializationCoordinator(
+            hub,
+            [new AgentBackendDescriptor(backendId, "OpenAI")],
+            new Dictionary<string, ChatBackendState>(StringComparer.OrdinalIgnoreCase)
+            {
+                [backendId.Value] = state,
+            },
+            action => queuedUiActions.Add(action),
+            static () => { },
+            setProviderInitializationStatus: providerStatuses.Add);
+
+        await coordinator.InitializeAsync(CancellationToken.None).ConfigureAwait(false);
+
+        foreach (var action in queuedUiActions.AsEnumerable().Reverse())
+        {
+            action();
+        }
+
+        Assert.IsTrue(providerStatuses.Count > 0);
+        Assert.IsNull(providerStatuses.Last());
+        Assert.IsFalse(
+            providerStatuses.SkipWhile(static status => status is not null).Skip(1).Any(static status => status is not null),
+            "Older queued provider-loading statuses must not overwrite the final cleared status.");
     }
 
     [TestMethod]
@@ -155,15 +187,6 @@ public sealed class ChatBackendInitializationCoordinatorTests
             states,
             static action => action(),
             static () => { });
-
-    private static async Task<CodeAltaDb> CreateDbAsync(string rootPath)
-    {
-        var dbPath = Path.Combine(rootPath, "state", "db", "codealta.db");
-        var db = new CodeAltaDb(new CodeAltaDbOptions { DatabasePath = dbPath });
-        await db.InitializeAsync().ConfigureAwait(false);
-        return db;
-    }
-
     private sealed class CountingBackend(AgentBackendId backendId) : IAgentBackend
     {
         public AgentBackendId BackendId { get; } = backendId;

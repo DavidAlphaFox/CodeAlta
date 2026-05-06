@@ -14,7 +14,6 @@ Current infrastructure-first progress includes project catalog and checkout prim
 - `CodeAlta.Catalog`: project descriptors, machine override profiles, catalog loading.
 - Scope resolution (`global`, `project`) into concrete checkout and `.alta` roots.
 - Checkout planning (`clone` vs `update`) without network side effects.
-- `CodeAlta.Persistence`: SQLite migrations, task/artifact/agent repositories, and markdown artifact store.
 - `CodeAlta.Plugins`: foundational plugin runtime services for source package discovery, generated plugin-root build files, explicit enablement, structured build/load, contribution ownership, lifecycle helpers, and change monitoring.
 
 ## Project Catalog Layout
@@ -28,75 +27,14 @@ Global repository layout (implemented reader support):
 The catalog model uses UUID v7 strings for project `id` values, validates slugs
 using `^[a-z0-9][a-z0-9\\-_.]{1,63}$`, and keeps a separate project `name` for checkout directories.
 
-## Persistence Model
+## Catalog and Orchestration
 
-The persistence layer currently provides:
+Current infrastructure includes:
 
-- SQLite schema bootstrap with `schema_version` migration tracking.
-- Durable tables for `tasks`, `task_events`, `artifacts`, `artifact_links`, `agents`, and `agent_sessions`.
-- Search foundation tables: `documents`, `documents_fts` (FTS5), and `document_embeddings`.
-- Markdown artifact read/write with YAML frontmatter (`ArtifactStore`) and plain-text extraction for indexing.
-
-## Indexing and Search
-
-Current search infrastructure (`CodeAlta.Search`) includes:
-
-- `IndexingQueue` + `Indexer` for background-capable indexing jobs.
-- `DocumentIndexStore` to upsert documents, maintain FTS rows, and persist embeddings.
-- `SearchService` with:
-  - FTS query mode
-  - hybrid mode (FTS prefilter + vector rerank).
-- A deterministic local `HashEmbedder` for tests and offline indexing.
-- `LlamaSharpEmbedder` for local GGUF-based embeddings when a model path is configured.
-
-## In-process MCP Server
-
-Current MCP infrastructure (`CodeAlta.Mcp`) includes:
-
-- `CodeAltaMcpServerFactory` for building stream-transport MCP servers from internal services.
-- `InProcessMcpConnection` for in-memory client/server transport wiring used by tests and internal callers.
-- MCP tool sets:
-  - `codealta.tasks.*` for durable task CRUD, notes, and markdown exports.
-  - `codealta.artifacts.*` for markdown artifact write/read/list/link operations.
-  - `codealta.search.*` for indexing, hybrid query, and queue status.
-  - `codealta.projects.*` for project listing/getting/scope resolution.
-  - `codealta.agents.*` for agent registry register/update/list operations.
-- MSTest coverage for:
-  - in-process tool discovery (`ListTools`)
-  - task create/get roundtrip
-  - indexed search query returning artifact-backed sources.
-
-## Agent Orchestration
-
-Current orchestration infrastructure (`CodeAlta.Orchestration`) includes:
-
-- Identity and scope primitives for orchestrated agents (`AgentIdentity`, `AgentScope`, `AgentScopeKind`).
-- `RoleProfileStore` for parsing role markdown from frontmatter-based and Copilot-style role files.
-- `ContextPackBuilder` with provider composition and strict character-budget enforcement.
-- `PlannerService` for durable plan creation:
-  - root + child task creation in SQLite
-  - persisted `plan.output` markdown artifacts.
-- `BuilderService` for task completion and persisted `builder.verification` artifacts.
-- `AgentHub` runtime for backend-agnostic agent registration, session lifecycle, and run event emission.
-
-## .NET First-class Services
-
-Current `.NET` infrastructure (`CodeAlta.DotNet`) includes:
-
-- `DotNetWorkspaceService` for discovering `.sln`/`.slnx` and project files (`.csproj`, `.fsproj`, `.vbproj`).
-- `SymbolIndexService` using Roslyn syntax trees to index:
-  - namespaces
-  - types
-  - members (methods, properties, fields) with file line ranges.
-- `DotNetContextProvider` for compact symbol/file snippets with stable source links (`file://...#Lx`).
-- `DotNetDiagnosticsService` for `dotnet build` execution with persisted diagnostics artifacts and search indexing.
-- `DotNetIndexService` for refreshing project-graph and symbol knowledge artifacts and indexing them.
-- Fixture-backed MSTest coverage for:
-  - tiny solution discovery
-  - symbol lookup path/range validation
-  - symbol context source-link generation
-  - refresh-index and diagnostics artifact persistence.
-
+- `CodeAlta.Catalog`: project descriptors, machine override profiles, catalog loading, checkout planning, filesystem skill discovery, and in-memory project file usage tracking.
+- Scope resolution (`global`, `project`) into concrete checkout and `.alta` roots.
+- `CodeAlta.Orchestration`: lightweight thread/session runtime primitives and file-backed default thread instruction composition.
+- `CodeAlta.Plugins`: foundational plugin runtime services for source package discovery, generated plugin-root build files, explicit enablement, structured build/load, contribution ownership, lifecycle helpers, and change monitoring.
 ## Terminal Shell
 
 The `CodeAlta` executable now runs as an interactive terminal shell instead of a playground script. Internally, the shell is organized around an explicit controller, UI dispatcher, focused views, and presenter seams rather than one monolithic host bucket.
@@ -114,9 +52,9 @@ Only one `alta` application instance can run on a machine at a time via `~/.alta
 
 Current terminal shell capabilities:
 
-- Chat (global agent) operations:
+- Chat (global and project thread) operations:
   - Chat screen powered by `PromptEditor` (input) and `DocumentFlow` + `MarkdownControl` (rendered conversation history).
-  - Automatically probes and initializes both Copilot and Codex backends. Codex is pinned to the SDK-generated release tag and is downloaded on demand into `~/.alta/cache/bin/codex/<tag>/` when missing.
+  - Automatically probes and initializes enabled provider backends. Codex is pinned to the SDK-generated release tag and is downloaded on demand into `~/.alta/cache/bin/codex/<tag>/` when missing. The built-in Copilot backend is temporarily forced disabled until the upstream `GitHub.Copilot.SDK` process cleanup issue is fixed.
   - Codex backend sessions default to `danger-full-access` (no sandbox) in CodeAlta so prompts can inspect sibling projects outside the current working directory without first switching the session root.
   - Provider, model, and reasoning-effort selectors are shown under the prompt, while the footer now shows a compact provider summary button with enabled-provider and error counts.
   - In a thread tab, `F3` / `F4` jump to previous / next user or assistant messages, while `Ctrl+F3` jumps to the first message and `Ctrl+F4` returns to the bottom of the latest message. The same actions are available as `/msg_prev`, `/msg_next`, `/msg_first`, and `/msg_last`.
@@ -142,7 +80,6 @@ Current terminal shell capabilities:
   - Idle local-runtime threads can now switch providers directly from the provider selector. CodeAlta rebinds the local session onto the newly selected raw-API runtime and preserves the replayable thread history; Codex and Copilot threads remain locked to their original provider because their hidden runtime instructions and compaction state cannot be reconstructed safely.
   - A compact button now sits beside the provider/model/reasoning selectors. Press `F11` or click it to trigger a manual session compaction when the selected thread has already started and is currently idle; if the reopened thread's provider session had already shut down, CodeAlta now resumes it again before compacting. Manual compaction keeps a dedicated status line and emits visible started/completed notices in the timeline even when the backend does not emit its own compaction events.
   - The footer usage indicator stays compact as `ctx --`, `ctx N tok`, or `ctx NN%`, while the usage popup is split into Summary, Usage breakdown, Limits and quotas, and Backend-specific details with explicit source/scope metadata.
-  - Copilot sessions are started with `codealta.*` MCP tools bridged into the backend via `McpToolBridge` (tool calls execute against the in-process MCP server, with MCP tool ids normalized to Copilot-compatible function names).
   - CodeAlta now auto-approves provider permission requests and auto-resolves `ask_user` prompts by preferring continue/inspect-style choices (or a neutral fallback for freeform prompts).
   - Sequential Codex/Copilot tool activity is grouped into compact "Tool Calls" timeline cards so verbose command/tool logs stay out of the main document flow; each chip shows a live status icon, inferred tool/command label, compact context, and an expandable `LogControl` detail dialog with full output, wrapping toggle, and compact execution stats.
   - When a run finishes, CodeAlta emits a separate compact "Modified Files" recap card that aggregates all files changed during that run, shows per-file and total `+/-` line counts, and opens an inline diff viewer for each file when diff data is available from the backend.
@@ -150,16 +87,6 @@ Current terminal shell capabilities:
 - Project operations:
   - list discovered projects
   - resolve global/project scopes.
-- Task operations:
-  - list tasks
-  - create tasks.
-- Search operations:
-  - run hybrid search queries over indexed artifacts/documents.
-- .NET operations:
-  - refresh `.NET` project/symbol index artifacts
-  - run `dotnet build` diagnostics with persisted artifacts.
-- MCP operations:
-  - in-process MCP health check by listing registered `codealta.*` tools.
 
 ## Provider Configuration
 
@@ -177,7 +104,7 @@ Built-in providers use reserved keys:
 - `providers.codex` → `type = "codex"`
 - `providers.copilot` → `type = "copilot"`
 
-Both reserved providers are present in the model providers dialog even when they are not explicitly configured in `config.toml`. They now default to disabled so a first-time user must explicitly opt into Codex, Copilot, or another provider before starting a thread.
+Both reserved providers are present in the model providers dialog even when they are not explicitly configured in `config.toml`. They now default to disabled so a first-time user must explicitly opt into Codex or another provider before starting a thread. Copilot remains visible for existing preferences, but CodeAlta currently keeps it disabled regardless of `config.toml` until the upstream `GitHub.Copilot.SDK` process cleanup issue is fixed.
 
 Additional local providers can target raw provider SDKs such as:
 
@@ -218,6 +145,7 @@ default_provider = "openai_responses"
 model = "gpt-5.4"
 reasoning_effort = "high"
 
+# Temporarily kept disabled even if enabled = true is present.
 [providers.copilot]
 model = "claude-opus-4.6"
 reasoning_effort = "high"

@@ -96,21 +96,7 @@ public sealed class PluginRuntimeSampleTests
                 .Concat([buildResult.StandardOutput, buildResult.StandardError]));
 
     private static IReadOnlyList<PluginPackageVersion> LoadPluginPackageVersions()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var packagePath = Path.Combine(directory.FullName, "Directory.Packages.props");
-            if (File.Exists(packagePath))
-            {
-                return PluginPackageVersionProvider.ExtractPluginPackageVersionsFromFile(packagePath);
-            }
-
-            directory = directory.Parent;
-        }
-
-        return [];
-    }
+        => PluginPackageVersionProvider.ExtractPluginPackageVersionsFromFile(PluginTestPaths.DirectoryPackagesPropsPath);
 
     private static void CopySample(string sampleName, string destination)
     {
@@ -126,16 +112,10 @@ public sealed class PluginRuntimeSampleTests
 
     private static string GetSampleRoot()
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
+        var sampleRoot = PluginTestPaths.PluginRuntimeSampleRoot;
+        if (Directory.Exists(sampleRoot))
         {
-            var sampleRoot = Path.Combine(directory.FullName, "CodeAlta.Catalog", "BuiltinSkills", "codealta-plugin-runtime", "samples");
-            if (Directory.Exists(sampleRoot))
-            {
-                return sampleRoot;
-            }
-
-            directory = directory.Parent;
+            return sampleRoot;
         }
 
         throw new DirectoryNotFoundException("Could not find built-in plugin runtime sample folders.");

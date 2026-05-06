@@ -976,6 +976,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         LocalAgentTurnDelta delta,
         CancellationToken cancellationToken)
     {
+        var details = CreateStreamingDeltaDetails(delta);
         var @event = new AgentContentDeltaEvent(
             BackendId,
             SessionId,
@@ -984,7 +985,8 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             delta.Kind,
             delta.ContentId,
             null,
-            delta.Text);
+            delta.Text,
+            details);
         await AppendEventsAsync([@event], LocalAgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
     }
 
@@ -995,6 +997,11 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
     {
         ArgumentNullException.ThrowIfNull(update);
 
+        if (TryGetDiscardDraftAttemptId(update.Details, out var discardedAttemptId))
+        {
+            RemoveTransientDraftDeltas(discardedAttemptId);
+        }
+
         var @event = new AgentSessionUpdateEvent(
             BackendId,
             SessionId,
@@ -1004,6 +1011,113 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             update.Message,
             update.Details);
         await AppendEventsAsync([@event], LocalAgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static JsonElement? CreateStreamingDeltaDetails(LocalAgentTurnDelta delta)
+    {
+        if (delta.Details is not null &&
+            string.IsNullOrWhiteSpace(delta.AttemptId) &&
+            delta.IsDraft)
+        {
+            return delta.Details;
+        }
+
+        if (delta.Details is null &&
+            string.IsNullOrWhiteSpace(delta.AttemptId) &&
+            delta.IsDraft)
+        {
+            return null;
+        }
+
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            if (delta.Details is { ValueKind: JsonValueKind.Object } details)
+            {
+                foreach (var property in details.EnumerateObject())
+                {
+                    property.WriteTo(writer);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(delta.AttemptId))
+            {
+                writer.WriteString("attemptId", delta.AttemptId);
+            }
+
+            writer.WriteBoolean("draft", delta.IsDraft);
+            writer.WriteEndObject();
+        }
+
+        return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
+    }
+
+    private void RemoveTransientDraftDeltas(string attemptId)
+    {
+        for (var index = _history.Count - 1; index >= 0; index--)
+        {
+            if (_history[index] is AgentContentDeltaEvent delta &&
+                TryGetDraftAttemptId(delta.Details, out var deltaAttemptId) &&
+                string.Equals(deltaAttemptId, attemptId, StringComparison.Ordinal))
+            {
+                _history.RemoveAt(index);
+            }
+        }
+    }
+
+    private static bool TryGetDiscardDraftAttemptId(JsonElement? details, out string attemptId)
+    {
+        attemptId = string.Empty;
+        if (details is not { ValueKind: JsonValueKind.Object } root ||
+            !TryGetBooleanProperty(root, "discardDraft", out var discardDraft) ||
+            !discardDraft)
+        {
+            return false;
+        }
+
+        return TryGetStringProperty(root, "draftAttemptId", out attemptId) &&
+               !string.IsNullOrWhiteSpace(attemptId);
+    }
+
+    private static bool TryGetDraftAttemptId(JsonElement? details, out string attemptId)
+    {
+        attemptId = string.Empty;
+        if (details is not { ValueKind: JsonValueKind.Object } root ||
+            TryGetBooleanProperty(root, "draft", out var isDraft) && !isDraft)
+        {
+            return false;
+        }
+
+        return TryGetStringProperty(root, "attemptId", out attemptId) &&
+               !string.IsNullOrWhiteSpace(attemptId);
+    }
+
+    private static bool TryGetStringProperty(JsonElement element, string propertyName, out string value)
+    {
+        if (element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.String &&
+            !string.IsNullOrWhiteSpace(property.GetString()))
+        {
+            value = property.GetString()!;
+            return true;
+        }
+
+        value = string.Empty;
+        return false;
+    }
+
+    private static bool TryGetBooleanProperty(JsonElement element, string propertyName, out bool value)
+    {
+        if (element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            value = property.GetBoolean();
+            return true;
+        }
+
+        value = false;
+        return false;
     }
 
     private async Task AppendSystemPromptEventIfChangedAsync(

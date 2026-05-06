@@ -1,5 +1,5 @@
 using CodeAlta.Agent;
-using CodeAlta.Search;
+using CodeAlta.Catalog;
 
 namespace CodeAlta.Presentation.Prompting;
 

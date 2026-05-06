@@ -44,18 +44,13 @@ public sealed class ChatSelectorCoordinatorTests
             DefaultReasoningEffort: AgentReasoningEffort.Low,
             SupportedReasoningEfforts: [AgentReasoningEffort.Low]));
 
-        var selectorState = new ChatSelectorStateContext(
-            workspaceViewModel,
-            static () => new InlineUiDispatcher(),
-            static () => { });
-        var preferences = new ChatPreferenceContext(
+        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new FrontendUiScheduler(new InlineUiDispatcher()));
+        var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftBackendPreference,
             static _ => throw new NotSupportedException(),
             static (_, _, _) => { },
             static (_, _, _, _) => { });
-        var workspaceRefresh = new WorkspaceRefreshContext(
-            static () => { },
-            static () => { });
+        var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var threadSelection = CreateThreadSelectionContext();
         var syncCallCount = 0;
         var coordinator = new ChatSelectorCoordinator(
@@ -196,18 +191,13 @@ public sealed class ChatSelectorCoordinatorTests
         backendStates["openai"].Availability = ChatBackendAvailability.Ready;
         backendStates["anthropic"].Availability = ChatBackendAvailability.Ready;
 
-        var selectorState = new ChatSelectorStateContext(
-            workspaceViewModel,
-            static () => new InlineUiDispatcher(),
-            static () => { });
-        var preferences = new ChatPreferenceContext(
+        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new FrontendUiScheduler(new InlineUiDispatcher()));
+        var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftBackendPreference,
             static _ => { },
             static (_, _, _) => { },
             static (_, _, _, _) => { });
-        var workspaceRefresh = new WorkspaceRefreshContext(
-            static () => { },
-            static () => { });
+        var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var coordinator = new ChatSelectorCoordinator(
             backendDescriptors,
             workspaceViewModel,
@@ -248,18 +238,13 @@ public sealed class ChatSelectorCoordinatorTests
         backendStates["openai"].Availability = ChatBackendAvailability.Ready;
         backendStates["anthropic"].Availability = ChatBackendAvailability.Ready;
 
-        var selectorState = new ChatSelectorStateContext(
-            workspaceViewModel,
-            static () => new InlineUiDispatcher(),
-            static () => { });
-        var preferences = new ChatPreferenceContext(
+        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new FrontendUiScheduler(new InlineUiDispatcher()));
+        var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftBackendPreference,
             static _ => { },
             static (_, _, _) => { },
             static (_, _, _, _) => { });
-        var workspaceRefresh = new WorkspaceRefreshContext(
-            static () => { },
-            static () => { });
+        var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var coordinator = new ChatSelectorCoordinator(
             backendDescriptors,
             workspaceViewModel,
@@ -308,18 +293,13 @@ public sealed class ChatSelectorCoordinatorTests
         backendStates["openai"].Availability = ChatBackendAvailability.Ready;
         backendStates["anthropic"].Availability = ChatBackendAvailability.Ready;
 
-        var selectorState = new ChatSelectorStateContext(
-            workspaceViewModel,
-            static () => new InlineUiDispatcher(),
-            static () => { });
-        var preferences = new ChatPreferenceContext(
+        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new FrontendUiScheduler(new InlineUiDispatcher()));
+        var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftBackendPreference,
             static _ => { },
             static (_, _, _) => { },
             static (_, _, _, _) => { });
-        var workspaceRefresh = new WorkspaceRefreshContext(
-            static () => { },
-            static () => { });
+        var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var switchCallCount = 0;
         var refreshedSelectionCount = 0;
         var coordinator = new ChatSelectorCoordinator(
@@ -373,18 +353,13 @@ public sealed class ChatSelectorCoordinatorTests
         backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4", DisplayName: "GPT-5.4"));
         backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4-mini", DisplayName: "GPT-5.4 Mini"));
 
-        var selectorState = new ChatSelectorStateContext(
-            workspaceViewModel,
-            static () => new InlineUiDispatcher(),
-            static () => { });
-        var preferences = new ChatPreferenceContext(
+        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new FrontendUiScheduler(new InlineUiDispatcher()));
+        var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftBackendPreference,
             static _ => { },
             static (_, _, _) => { },
             static (_, _, _, _) => { });
-        var workspaceRefresh = new WorkspaceRefreshContext(
-            static () => { },
-            static () => { });
+        var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var coordinator = new ChatSelectorCoordinator(
             backendDescriptors,
             workspaceViewModel,
@@ -420,12 +395,9 @@ public sealed class ChatSelectorCoordinatorTests
         backendState.Models.Add(new AgentModelInfo("gpt-5.4", DisplayName: "GPT-5.4"));
         backendState.Models.Add(new AgentModelInfo("gpt-5.4-mini", DisplayName: "GPT-5.4 Mini"));
 
-        var selectorState = new ChatSelectorStateContext(
-            workspaceViewModel,
-            static () => new InlineUiDispatcher(),
-            static () => { });
+        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new FrontendUiScheduler(new InlineUiDispatcher()));
         var draftPreferenceApplyCount = 0;
-        var preferences = new ChatPreferenceContext(
+        var preferences = new FrontendModelProviderPreferencePort(
             state =>
             {
                 draftPreferenceApplyCount++;
@@ -437,9 +409,7 @@ public sealed class ChatSelectorCoordinatorTests
             static _ => throw new NotSupportedException(),
             static (_, _, _) => { },
             static (_, _, _, _) => { });
-        var workspaceRefresh = new WorkspaceRefreshContext(
-            static () => { },
-            static () => { });
+        var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var coordinator = new ChatSelectorCoordinator(
             backendDescriptors,
             workspaceViewModel,
@@ -468,18 +438,13 @@ public sealed class ChatSelectorCoordinatorTests
         Func<string?, string?> getEffectiveDefaultProviderKey,
         Func<IReadOnlyList<string>>? getConfiguredProviderKeys = null)
     {
-        var selectorState = new ChatSelectorStateContext(
-            workspaceViewModel,
-            static () => new InlineUiDispatcher(),
-            static () => { });
-        var preferences = new ChatPreferenceContext(
+        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new FrontendUiScheduler(new InlineUiDispatcher()));
+        var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftBackendPreference,
             static _ => throw new NotSupportedException(),
             static (_, _, _) => { },
             static (_, _, _, _) => { });
-        var workspaceRefresh = new WorkspaceRefreshContext(
-            static () => { },
-            static () => { });
+        var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var threadSelection = CreateThreadSelectionContext();
         return new ChatSelectorCoordinator(
             backendDescriptors,
@@ -625,3 +590,4 @@ public sealed class ChatSelectorCoordinatorTests
         }
     }
 }
+

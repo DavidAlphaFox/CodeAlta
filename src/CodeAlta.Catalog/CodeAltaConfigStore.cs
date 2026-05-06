@@ -28,6 +28,7 @@ public sealed class CodeAltaConfigStore
 {
     private const string CodexProviderKey = "codex";
     private const string CopilotProviderKey = "copilot";
+    private const bool IsCopilotTemporarilyDisabled = true;
     private const string CodexSubscriptionProviderType = "openai-codex-subscription";
     private const string CodexSubscriptionDefaultDisplayName = "Codex (ChatGPT subscription)";
     private const string CodexSubscriptionDefaultApiUrl = "https://chatgpt.com/backend-api/codex";
@@ -712,6 +713,7 @@ public sealed class CodeAltaConfigStore
         definition.Profile = NormalizeProfile(definition.Profile);
         definition.ModelOverrides = NormalizeModelOverrides(definition.ModelOverrides);
         definition.Compaction = NormalizeCompaction(definition.Compaction);
+        ApplyTemporaryProviderDisable(definition);
         CompleteAndValidateProviderDefinition(CloneProviderDefinition(definition));
         PruneProviderDefaults(definition);
         return definition;
@@ -912,6 +914,7 @@ public sealed class CodeAltaConfigStore
         definition.ProviderType = NormalizeProviderType(definition.ProviderKey, definition.ProviderType)
             ?? throw new InvalidOperationException(
                 $"providers.{definition.ProviderKey} type must be one of: codex, copilot, openai-chat, openai-responses, openai-codex-subscription, anthropic, google-genai, vertex-ai.");
+        ApplyTemporaryProviderDisable(definition);
         definition.Compaction = NormalizeAndCompleteCompactionSettings(definition.Compaction, DefaultCompaction);
         ApplyReservedProviderDefaults(definition);
         ApplyCodexSubscriptionDefaults(definition);
@@ -1162,6 +1165,21 @@ public sealed class CodeAltaConfigStore
         => IsReservedProviderKey(providerKey)
             ? false
             : CodeAltaProviderDocument.DefaultEnabled;
+
+    private static void ApplyTemporaryProviderDisable(CodeAltaProviderDocument definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        // GitHub.Copilot.SDK 0.3.0 can leave an unobserved stderr-pump task that
+        // fails after the process is disposed. Keep the provider disabled until
+        // https://github.com/github/copilot-sdk/pull/1136 or equivalent ships.
+        if (IsCopilotTemporarilyDisabled &&
+            (string.Equals(definition.ProviderKey, CopilotProviderKey, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(definition.ProviderType, CopilotProviderKey, StringComparison.Ordinal)))
+        {
+            definition.Enabled = false;
+        }
+    }
 
     private static void ApplyReservedProviderDefaults(CodeAltaProviderDocument definition)
     {

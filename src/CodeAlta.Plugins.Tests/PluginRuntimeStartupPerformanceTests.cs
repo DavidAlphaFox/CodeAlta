@@ -81,22 +81,10 @@ enabled = true
 
     private static string FindSampleDirectory(string name)
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
+        var candidate = Path.Combine(PluginTestPaths.PluginRuntimeSampleRoot, name);
+        if (Directory.Exists(candidate))
         {
-            var candidate = Path.Combine(directory.FullName, "src", "CodeAlta.Catalog", "BuiltinSkills", "codealta-plugin-runtime", "samples", name);
-            if (Directory.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            candidate = Path.Combine(directory.FullName, "CodeAlta.Catalog", "BuiltinSkills", "codealta-plugin-runtime", "samples", name);
-            if (Directory.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
+            return candidate;
         }
 
         throw new DirectoryNotFoundException($"Could not find sample plugin '{name}'.");

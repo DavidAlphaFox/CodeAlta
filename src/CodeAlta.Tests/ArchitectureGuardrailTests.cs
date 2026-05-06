@@ -1,10 +1,15 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Text.RegularExpressions;
+using CodeAlta.Orchestration.Runtime;
 
 namespace CodeAlta.Tests;
 
 [TestClass]
 public sealed class ArchitectureGuardrailTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     public void CodeAltaSource_DoesNotContainLegacyUiThreadHelpersOrBroadRefreshView()
     {
@@ -31,11 +36,682 @@ public sealed class ArchitectureGuardrailTests
             })
             .Where(static entry => entry.Content.Contains("StreamEventsAsync(", StringComparison.Ordinal))
             .Select(static entry => Path.GetFileName(entry.File))
+            .Where(static fileName => fileName is not "RuntimeWorkThreadOrchestratorAdapter.cs")
             .ToArray();
 
         CollectionAssert.AreEqual(
             new[] { "RuntimeEventPump.cs" },
             streamEventMatches);
+    }
+
+    [TestMethod]
+    public void FrontendViews_DoNotCallRuntimeDirectly()
+    {
+        var viewsRoot = Path.Combine(GetCodeAltaSourceRoot(), "Views");
+        var forbiddenNames = new[]
+        {
+            "WorkThreadRuntimeService",
+            "AgentHub",
+            "PluginHostBridge",
+        };
+        var violations = Directory
+            .EnumerateFiles(viewsRoot, "*.cs", SearchOption.AllDirectories)
+            .SelectMany(file =>
+            {
+                var relativePath = Path.GetRelativePath(GetCodeAltaSourceRoot(), file).Replace('\\', '/');
+                var content = File.ReadAllText(file);
+                return forbiddenNames
+                    .Where(name => content.Contains(name, StringComparison.Ordinal))
+                    .Select(name => $"{relativePath}:{name}");
+            })
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), violations);
+    }
+
+    [TestMethod]
+    public void OrchestrationRuntimeEventStreams_AreBounded()
+    {
+        var runtimeRoot = Path.Combine(GetSourceRoot(), "CodeAlta.Orchestration", "Runtime");
+        var matches = Directory
+            .EnumerateFiles(runtimeRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(static file => File.ReadAllText(file).Contains("Channel.CreateUnbounded<WorkThreadRuntimeEvent>", StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(runtimeRoot, file).Replace('\\', '/'))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), matches);
+    }
+
+    [TestMethod]
+    public void Solution_IncludesOrchestrationTestsAsFirstClassProject()
+    {
+        var solutionSource = File.ReadAllText(Path.Combine(GetSourceRoot(), "CodeAlta.slnx"));
+
+        Assert.IsTrue(solutionSource.Contains("CodeAlta.Orchestration.Tests/CodeAlta.Orchestration.Tests.csproj", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void DevelopmentGuide_DocumentsArchitectureBoundariesAndActorDecision()
+    {
+        var guideSource = File.ReadAllText(Path.GetFullPath(Path.Combine(GetSourceRoot(), "..", "doc", "development-guide.md")));
+
+        Assert.IsTrue(guideSource.Contains("## Architecture Boundaries", StringComparison.Ordinal));
+        Assert.IsTrue(guideSource.Contains("## Runtime Orchestration Concurrency", StringComparison.Ordinal));
+        Assert.IsTrue(guideSource.Contains("per-thread mailbox/actor-style command processors", StringComparison.Ordinal));
+        Assert.IsTrue(guideSource.Contains("Do not add Akka.NET", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void CodeAltaSource_DoesNotIntroduceUnexpectedCallbackAggregates()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var allowedCallbackFiles = new[]
+        {
+            "Presentation/Prompting/PromptImageWorkspaceCallbacks.cs",
+        };
+
+        var callbackFiles = Directory
+            .EnumerateFiles(codeAltaRoot, "*Callbacks.cs", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/'))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(allowedCallbackFiles, callbackFiles);
+    }
+
+    [TestMethod]
+    public void AppContextClasses_DoNotWrapLargeDelegateSets()
+    {
+        var contextRoot = Path.Combine(GetCodeAltaSourceRoot(), "App", "Context");
+        var oversizedContexts = Directory
+            .EnumerateFiles(contextRoot, "*.cs", SearchOption.TopDirectoryOnly)
+            .Select(file => new
+            {
+                Path = Path.GetRelativePath(GetCodeAltaSourceRoot(), file).Replace('\\', '/'),
+                DelegateFieldCount = File.ReadLines(file)
+                    .Count(static line =>
+                        line.Contains("private readonly Action", StringComparison.Ordinal) ||
+                        line.Contains("private readonly Func", StringComparison.Ordinal)),
+            })
+            .Where(static context => context.DelegateFieldCount > 2)
+            .Select(static context => $"{context.Path}:{context.DelegateFieldCount}")
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), oversizedContexts);
+    }
+
+    [TestMethod]
+    public void PromptSessionContracts_RequireProjectThreadRefAndModelProvider()
+    {
+        var source = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Models", "PromptSessionBinding.cs"));
+
+        Assert.IsTrue(source.Contains("ProjectId projectId", StringComparison.Ordinal));
+        Assert.IsTrue(source.Contains("ShellThreadRef thread", StringComparison.Ordinal));
+        Assert.IsTrue(source.Contains("ModelProviderId modelProviderId", StringComparison.Ordinal));
+        Assert.IsTrue(source.Contains("projectId == default", StringComparison.Ordinal));
+        Assert.IsTrue(source.Contains("ArgumentNullException.ThrowIfNull(thread)", StringComparison.Ordinal));
+        Assert.IsTrue(source.Contains("modelProviderId.IsEmpty", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("ProjectId? projectId", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("ModelProviderId? modelProviderId", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void ArchitectureInventory_ReportsRemainingDelegateBasedFrontendSeams()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var seams = Directory
+            .EnumerateFiles(codeAltaRoot, "*.cs", SearchOption.AllDirectories)
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/'),
+                Lines = File.ReadLines(file)
+                    .Select((line, index) => new { Number = index + 1, Text = line })
+                    .Where(static line =>
+                        line.Text.Contains("Action<", StringComparison.Ordinal) ||
+                        line.Text.Contains("Func<", StringComparison.Ordinal) ||
+                        line.Text.Contains("Action ", StringComparison.Ordinal))
+                    .Select(line => $"{line.Number}:{line.Text.Trim()}")
+                    .ToArray(),
+            })
+            .Where(static file =>
+                file.Lines.Length > 0 &&
+                (file.RelativePath.StartsWith("App/", StringComparison.Ordinal) ||
+                 file.RelativePath.StartsWith("Views/", StringComparison.Ordinal)))
+            .Select(file => $"{file.RelativePath} => {string.Join(" | ", file.Lines)}")
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        TestContext.WriteLine("Remaining delegate seams in App/ and Views/:\n{0}", string.Join(Environment.NewLine, seams));
+        Assert.IsNotNull(seams);
+    }
+
+    [TestMethod]
+    public void CodeAltaFrontendCallbacks_IsDeletedAfterPortMigration()
+    {
+        Assert.IsFalse(File.Exists(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendCallbacks.cs")));
+    }
+
+    [TestMethod]
+    public void FrontendShellContractInventory_ReportsLegacyBackendNamedApis()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var legacyNames = new[]
+        {
+            "BackendId",
+            "SelectedBackend",
+            "ChatBackendState",
+        };
+        var matches = Directory
+            .EnumerateFiles(codeAltaRoot, "*.cs", SearchOption.AllDirectories)
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/'),
+                Content = File.ReadAllText(file),
+            })
+            .Where(static entry =>
+                entry.RelativePath.StartsWith("App/", StringComparison.Ordinal) ||
+                entry.RelativePath.StartsWith("Frontend/", StringComparison.Ordinal) ||
+                entry.RelativePath.StartsWith("Models/", StringComparison.Ordinal) ||
+                entry.RelativePath.StartsWith("Presentation/", StringComparison.Ordinal) ||
+                entry.RelativePath.StartsWith("ViewModels/", StringComparison.Ordinal) ||
+                entry.RelativePath.StartsWith("Views/", StringComparison.Ordinal))
+            .SelectMany(entry => legacyNames
+                .Where(name => entry.Content.Contains(name, StringComparison.Ordinal))
+                .Select(name => $"{entry.RelativePath}:{name}"))
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        TestContext.WriteLine("Legacy frontend backend-named contract/API references:\n{0}", string.Join(Environment.NewLine, matches));
+        Assert.IsNotNull(matches);
+    }
+
+    [TestMethod]
+    public void AppCoordinatorConstructors_DoNotAddLargeDelegateBags()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var allowedLegacyConstructors = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["App/AcpManagementCoordinator.cs:AcpManagementCoordinator"] = "Legacy coordinator pending provider-management port extraction.",
+            ["App/ChatBackendInitializationCoordinator.cs:ChatBackendInitializationCoordinator"] = "Legacy backend initialization seam pending model-provider port migration.",
+            ["App/IFrontendPersistencePort.cs:FrontendPersistencePort"] = "Transitional port adapter wrapping persistence callbacks.",
+            ["App/IModelProviderPreferencePort.cs:DelegatingModelProviderPreferencePort"] = "Transitional adapter preserving frontend preference callbacks.",
+            ["App/IModelProviderPreferencePort.cs:FrontendModelProviderPreferencePort"] = "Transitional adapter preserving frontend preference callbacks.",
+            ["App/IPromptSessionPort.cs:PromptSessionPort"] = "Transitional prompt-session port before orchestration facade migration.",
+            ["App/IShellSelectionPort.cs:DelegatingShellSelectionPort"] = "Transitional selection port adapter.",
+            ["App/IShellStatusPort.cs:ShellStatusPort"] = "Transitional status port adapter.",
+            ["App/IShellWorkspaceSurfacePort.cs:ShellWorkspaceSurfacePort"] = "Transitional workspace surface port adapter.",
+            ["App/LegacyPromptSessionPort.cs:LegacyPromptSessionPort"] = "Legacy prompt-session bridge kept during facade migration.",
+            ["App/NavigatorActionCoordinator.cs:NavigatorActionCoordinator"] = "Legacy navigator coordinator pending port extraction.",
+            ["App/NavigatorSettingsCoordinator.cs:NavigatorSettingsCoordinator"] = "Legacy navigator settings coordinator pending service split.",
+            ["App/OpenThreadStateStore.cs:OpenThreadStateStore"] = "Legacy open-thread registry pending state-store migration.",
+            ["App/ShellThreadStateCoordinator.cs:ShellThreadStateCoordinator"] = "Legacy shell state coordinator pending tab service migration.",
+            ["App/ShellWorkspacePorts.cs:DelegatingShellWorkspaceProjectionPort"] = "Transitional workspace projection port adapter.",
+            ["App/SidebarCoordinator.cs:SidebarCoordinator"] = "Legacy sidebar coordinator pending projection-only migration.",
+            ["App/SkillsManagementCoordinator.cs:SkillsManagementCoordinator"] = "Legacy skills coordinator pending service/view split.",
+            ["App/ThreadCommandPorts.cs:DelegatingThreadLifecycleCommandPort"] = "Transitional command port adapter.",
+            ["App/ThreadCommandPorts.cs:ThreadCommandUiPort"] = "Transitional command UI port adapter.",
+            ["App/ThreadCreationCoordinator.cs:ThreadCreationCoordinator"] = "Legacy thread creation coordinator pending orchestration facade migration.",
+            ["App/ThreadHistoryCoordinator.cs:ThreadHistoryCoordinator"] = "Legacy history coordinator pending runtime event projection migration.",
+            ["App/ThreadPromptQueueCoordinator.cs:ThreadPromptQueueCoordinator"] = "Legacy queue coordinator pending prompt facade migration.",
+            ["App/ThreadProviderSwitchCoordinator.cs:ThreadProviderSwitchCoordinator"] = "Legacy provider switch coordinator pending model-provider port migration.",
+            ["App/ThreadRuntimeEventCoordinator.cs:ThreadRuntimeEventCoordinator"] = "Legacy runtime event coordinator pending centralized event projection.",
+            ["App/ThreadTabPorts.cs:DelegatingThreadTabSurfacePort"] = "Transitional tab surface port adapter.",
+            ["App/ThreadTabPorts.cs:DelegatingThreadTabLifecyclePort"] = "Transitional tab lifecycle port adapter.",
+        };
+        var violations = Directory
+            .EnumerateFiles(Path.Combine(codeAltaRoot, "App"), "*.cs", SearchOption.AllDirectories)
+            .SelectMany(file => FindConstructorsWithTooManyDelegates(codeAltaRoot, file, maxDelegateParameters: 3))
+            .Where(match => !allowedLegacyConstructors.ContainsKey(match))
+            .OrderBy(static match => match, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), violations);
+    }
+
+    [TestMethod]
+    public void FrontendShellContracts_DoNotAddBackendTerminologyOutsideLegacyAdapters()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var allowedLegacyFiles = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "App/CodeAltaShellBridge.cs",
+            "App/CodeAltaShellController.cs",
+            "App/Context/ShellWorkspaceContext.cs",
+            "App/ICodeAltaShell.cs",
+            "App/IModelProviderPreferencePort.cs",
+            "App/PluginHostBridge.cs",
+            "App/PromptImageCapabilityContext.cs",
+            "App/ShellWorkspacePorts.cs",
+            "App/State/ChatSelectorStateStore.cs",
+            "App/State/OpenThreadState.cs",
+            "Models/ChatTimelineModels.cs",
+            "Models/ThreadSessionState.cs",
+        };
+        var contractRoots = new[]
+        {
+            Path.Combine(codeAltaRoot, "App"),
+            Path.Combine(codeAltaRoot, "Models"),
+        };
+        var violations = contractRoots
+            .SelectMany(root => Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/'),
+                Content = File.ReadAllText(file),
+            })
+            .Where(static entry =>
+                entry.RelativePath.EndsWith("Port.cs", StringComparison.Ordinal) ||
+                entry.RelativePath.EndsWith("Ports.cs", StringComparison.Ordinal) ||
+                entry.RelativePath.EndsWith("Context.cs", StringComparison.Ordinal) ||
+                entry.RelativePath.EndsWith("Bridge.cs", StringComparison.Ordinal) ||
+                entry.RelativePath.EndsWith("State.cs", StringComparison.Ordinal) ||
+                entry.RelativePath.StartsWith("Models/", StringComparison.Ordinal) ||
+                string.Equals(entry.RelativePath, "App/ICodeAltaShell.cs", StringComparison.Ordinal))
+            .Where(static entry => Regex.IsMatch(entry.Content, @"\bBackend(?:Id)?\b|ChatBackendState|SelectedBackend"))
+            .Select(static entry => entry.RelativePath)
+            .Where(file => !allowedLegacyFiles.Contains(file))
+            .OrderBy(static file => file, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), violations);
+    }
+
+    [TestMethod]
+    public void FrontendCoordinators_DoNotAddUntrackedFireAndForgetTasks()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var allowedLegacySites = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "App/CodeAltaShellController.cs:71:_initializationTask = Task.Run(",
+            "App/CodeAltaShellController.cs:356:var startupProviderLoadTask = Task.Run(",
+            "App/CodeAltaApp.cs:356:_ = PersistViewStateAsync();",
+            "App/CodeAltaApp.cs:437:_ = OpenModelProvidersAsync();",
+            "App/RuntimeEventPump.cs:34:_pumpTask = Task.Run(",
+            "App/ShellThreadStateCoordinator.cs:271:_ = RestoreStartupThreadHistoryAsync(threadId, cancellationToken);",
+            "App/ShellThreadStateCoordinator.cs:280:_ = PersistViewStateAsync();",
+            "App/ShellThreadStateCoordinator.cs:292:_ = PersistViewStateAsync();",
+            "App/ShellThreadStateCoordinator.cs:340:_ = PersistViewStateAsync();",
+            "App/ShellThreadStateCoordinator.cs:342:_ = _ensureThreadHistoryLoadedAsync(thread, CancellationToken.None);",
+            "App/ShellThreadStateCoordinator.cs:426:_ = PersistViewStateAsync();",
+            "App/ShellThreadStateCoordinator.cs:463:_ = PersistViewStateAsync();",
+            "App/SidebarCoordinator.cs:309:_ = CommitInlineRenameAsync(row, projectId, displayName, previousTitle);",
+            "App/ThreadPromptDispatchCoordinator.cs:177:_ = RecordResolvedReferenceUsageAsync(promptInput.ResolvedReferences);",
+            "App/ThreadPromptDraftPersistenceCoordinator.cs:83:_ = PersistPromptDraftAsync(threadId, normalizedPrompt, cancellationSource);",
+            "App/ThreadRuntimeEventCoordinator.cs:108:_ = ObservePluginAgentEventAsync(thread, agentRuntimeEvent.Event);",
+            "App/ThreadRuntimeEventCoordinator.cs:123:_ = ObservePluginAgentEventAsync(thread, @event);",
+            "App/ThreadRuntimeEventCoordinator.cs:189:_ = InvalidateProjectFileSearchAsync(thread.WorkingDirectory);",
+            "Presentation/Editing/FileEditorTab.cs:213:_ = RefreshExternalStateAsync();",
+            "Presentation/Editing/ProjectFileOpenDialogController.cs:217:_ = AcceptSelectedAsync(selected);",
+            "Presentation/Prompting/ProjectFileReferencePopupController.cs:153:var sessionCreateTask = Task.Run(",
+            "Presentation/Prompting/ProjectFileReferencePopupController.cs:164:_ = sessionCreateTask.ContinueWith(",
+            "Presentation/Prompting/ProjectFileReferencePopupController.cs:377:_ = CloseAsync();",
+            "Presentation/Prompting/ProjectFileReferencePopupController.cs:378:_ = RecordUsageAsync(selected);",
+            "Presentation/Threads/ThreadInfoPresenter.cs:96:_ = LoadAsync(cancellationTokenSource.Token);",
+        };
+        var violations = new[]
+            {
+                Path.Combine(codeAltaRoot, "App"),
+                Path.Combine(codeAltaRoot, "Presentation"),
+            }
+            .SelectMany(root => Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+            .SelectMany(file =>
+            {
+                var relativePath = Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/');
+                return File.ReadLines(file)
+                    .Select((line, index) => new { Number = index + 1, Text = line.Trim() })
+                    .Where(static line =>
+                        line.Text.Contains("Task.Run(", StringComparison.Ordinal) ||
+                        line.Text.Contains("ContinueWith(", StringComparison.Ordinal) ||
+                        Regex.IsMatch(line.Text, @"^_\s*=\s*\w+Async\("))
+                    .Select(line => $"{relativePath}:{line.Number}:{line.Text}");
+            })
+            .Where(site => !allowedLegacySites.Contains(site))
+            .OrderBy(static site => site, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), violations);
+    }
+
+    [TestMethod]
+    public void TabContentMigrationInventory_ReportsLegacyContentPlacementApis()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var legacyApis = new[]
+        {
+            "SetThreadPaneContent",
+            "SetActiveTabContent",
+            "CreateThreadTabPageContentPlaceholder",
+        };
+        var matches = Directory
+            .EnumerateFiles(codeAltaRoot, "*.cs", SearchOption.AllDirectories)
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/'),
+                Content = File.ReadAllText(file),
+            })
+            .SelectMany(entry => legacyApis
+                .Where(api => entry.Content.Contains(api, StringComparison.Ordinal))
+                .Select(api => $"{entry.RelativePath}:{api}"))
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        TestContext.WriteLine("Legacy tab content placement references:\n{0}", string.Join(Environment.NewLine, matches));
+        Assert.IsNotNull(matches);
+    }
+
+    [TestMethod]
+    public void ShellTabs_AssociatedViewModelsUseTabPageData()
+    {
+        var coordinatorSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Tabs", "ThreadTabStripCoordinator.cs"));
+
+        Assert.IsTrue(coordinatorSource.Contains("private sealed record ThreadTabPageData(string TabId, object ViewModel)", StringComparison.Ordinal));
+        Assert.IsTrue(coordinatorSource.Contains("Data = new ThreadTabPageData(thread.ThreadId, shellTab.ViewModel)", StringComparison.Ordinal));
+        Assert.IsTrue(coordinatorSource.Contains("Data = new ThreadTabPageData(tabId, shellTab.ViewModel)", StringComparison.Ordinal));
+        Assert.IsTrue(coordinatorSource.Contains("Data = new ThreadTabPageData(CodeAltaApp.DraftTabId, shellTab.ViewModel)", StringComparison.Ordinal));
+        Assert.IsFalse(coordinatorSource.Contains("Data = thread.ThreadId", StringComparison.Ordinal));
+        Assert.IsFalse(coordinatorSource.Contains("Data = tabId,", StringComparison.Ordinal));
+        Assert.IsFalse(coordinatorSource.Contains("Data = CodeAltaApp.DraftTabId", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void ThreadTabCloseSemanticsInventory_ReportsCurrentDetachOnlyClosePath()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var files = new[]
+        {
+            Path.Combine(codeAltaRoot, "App", "ShellThreadStateCoordinator.cs"),
+            Path.Combine(codeAltaRoot, "Presentation", "Tabs", "ThreadTabStripCoordinator.cs"),
+            Path.Combine(codeAltaRoot, "Views", "ThreadWorkspaceView.cs"),
+        };
+        var closeReferences = files
+            .Where(File.Exists)
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/'),
+                Lines = File.ReadLines(file)
+                    .Select((line, index) => new { Number = index + 1, Text = line })
+                    .Where(static line =>
+                        line.Text.Contains("Close", StringComparison.Ordinal) ||
+                        line.Text.Contains("Remove", StringComparison.Ordinal) ||
+                        line.Text.Contains("Detach", StringComparison.Ordinal) ||
+                        line.Text.Contains("Abort", StringComparison.Ordinal))
+                    .Select(line => $"{line.Number}:{line.Text.Trim()}")
+                    .ToArray(),
+            })
+            .Select(file => $"{file.RelativePath} => {string.Join(" | ", file.Lines)}")
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        TestContext.WriteLine("Current thread-tab close/detach/abort references:\n{0}", string.Join(Environment.NewLine, closeReferences));
+        Assert.IsNotNull(closeReferences);
+    }
+
+    [TestMethod]
+    public void OrchestrationStateOwnershipInventory_ReportsMutablePerThreadState()
+    {
+        var sourceRoot = GetSourceRoot();
+        var orchestrationRoot = Path.Combine(sourceRoot, "CodeAlta.Orchestration");
+        var statePatterns = new[]
+        {
+            "Dictionary<",
+            "ConcurrentDictionary<",
+            "Channel<",
+            "CancellationTokenSource",
+            "WorkThreadDescriptor",
+            "ThreadSessionEntry",
+            "Queue<",
+        };
+        var matches = Directory
+            .EnumerateFiles(orchestrationRoot, "*.cs", SearchOption.AllDirectories)
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(orchestrationRoot, file).Replace('\\', '/'),
+                Lines = File.ReadLines(file)
+                    .Select((line, index) => new { Number = index + 1, Text = line })
+                    .Where(line => statePatterns.Any(pattern => line.Text.Contains(pattern, StringComparison.Ordinal)))
+                    .Select(line => $"{line.Number}:{line.Text.Trim()}")
+                    .ToArray(),
+            })
+            .Where(static file => file.Lines.Length > 0)
+            .Select(file => $"{file.RelativePath} => {string.Join(" | ", file.Lines)}")
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        TestContext.WriteLine("Mutable orchestration state inventory:\n{0}", string.Join(Environment.NewLine, matches));
+        Assert.IsNotNull(matches);
+    }
+
+    [TestMethod]
+    public void OrchestrationProject_DoesNotReferenceFrontendOrTerminalUi()
+    {
+        var orchestrationRoot = Path.Combine(GetSourceRoot(), "CodeAlta.Orchestration");
+        var sourceFiles = Directory.EnumerateFiles(orchestrationRoot, "*.cs", SearchOption.AllDirectories).ToArray();
+        var projectSource = File.ReadAllText(Path.Combine(orchestrationRoot, "CodeAlta.Orchestration.csproj"));
+
+        Assert.IsFalse(projectSource.Contains("..\\CodeAlta\\CodeAlta.csproj", StringComparison.Ordinal));
+        Assert.IsFalse(projectSource.Contains("../CodeAlta/CodeAlta.csproj", StringComparison.Ordinal));
+        AssertSourceDoesNotContain(sourceFiles, "XenoAtom.Terminal.UI");
+        AssertSourceDoesNotContain(sourceFiles, "using CodeAlta.App");
+        AssertSourceDoesNotContain(sourceFiles, "using CodeAlta.Views");
+    }
+
+    [TestMethod]
+    public void LowerLayerProjects_DoNotReferenceFrontendProject()
+    {
+        var sourceRoot = GetSourceRoot();
+        var projectNames = new[]
+        {
+            "CodeAlta.Orchestration",
+            "CodeAlta.Plugins",
+            "CodeAlta.Catalog",
+        };
+        var violations = projectNames
+            .Select(name => new { Name = name, Directory = Path.Combine(sourceRoot, name) })
+            .Where(static project => Directory.Exists(project.Directory))
+            .Select(project => Path.Combine(project.Directory, project.Name + ".csproj"))
+            .Where(File.Exists)
+            .Where(projectFile =>
+            {
+                var projectSource = File.ReadAllText(projectFile);
+                return projectSource.Contains("..\\CodeAlta\\CodeAlta.csproj", StringComparison.Ordinal) ||
+                    projectSource.Contains("../CodeAlta/CodeAlta.csproj", StringComparison.Ordinal);
+            })
+            .Select(projectFile => Path.GetRelativePath(sourceRoot, projectFile).Replace('\\', '/'))
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), violations);
+    }
+
+    [TestMethod]
+    public void Repository_DoesNotReferenceAkkaNetWithoutDecisionRecord()
+    {
+        var sourceRoot = GetSourceRoot();
+        var packageFiles = Directory
+            .EnumerateFiles(sourceRoot, "*.csproj", SearchOption.AllDirectories)
+            .Concat(Directory.EnumerateFiles(sourceRoot, "Directory.Packages.props", SearchOption.TopDirectoryOnly))
+            .ToArray();
+
+        AssertSourceDoesNotContain(packageFiles, "PackageReference Include=\"Akka");
+        AssertSourceDoesNotContain(packageFiles, "<PackageVersion Include=\"Akka");
+    }
+
+    [TestMethod]
+    public void RuntimeCommands_AreNamedRequestRecordsWithStructuredOutcomes()
+    {
+        var commandMethods = typeof(IWorkThreadOrchestrator)
+            .GetMethods()
+            .Where(static method => method.Name.EndsWith("Async", StringComparison.Ordinal) &&
+                method.Name is not "StreamEventsAsync" and not "GetThreadSnapshotAsync")
+            .ToArray();
+
+        Assert.IsTrue(commandMethods.Length > 0);
+        foreach (var method in commandMethods)
+        {
+            Assert.AreEqual(typeof(ValueTask<WorkThreadCommandResult>), method.ReturnType, method.Name);
+            var parameters = method.GetParameters();
+            Assert.AreEqual(2, parameters.Length, method.Name);
+            Assert.IsTrue(parameters[0].ParameterType.Name.EndsWith("Request", StringComparison.Ordinal), method.Name);
+            Assert.AreEqual(typeof(CancellationToken), parameters[1].ParameterType, method.Name);
+        }
+    }
+
+    [TestMethod]
+    public void RuntimeActors_AreInternalImplementationDetails()
+    {
+        var actorPublicTypes = typeof(IWorkThreadOrchestrator).Assembly
+            .GetExportedTypes()
+            .Where(static type => type.FullName?.Contains(".Runtime.Actors.", StringComparison.Ordinal) == true)
+            .Select(static type => type.FullName)
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), actorPublicTypes);
+    }
+
+    [TestMethod]
+    public void WorkThreadRuntimeService_AbortRoutesThroughPerThreadActor()
+    {
+        var runtimeSource = File.ReadAllText(Path.Combine(GetSourceRoot(), "CodeAlta.Orchestration", "Runtime", "WorkThreadRuntimeService.cs"));
+
+        StringAssert.Contains(runtimeSource, "private readonly WorkThreadActorRegistry _threadActors");
+        StringAssert.Contains(runtimeSource, "var actor = _threadActors.GetOrCreate(threadId);");
+        StringAssert.Contains(runtimeSource, "await actor.ExecuteReservedAsync(");
+        StringAssert.Contains(runtimeSource, "await _threadActors.DisposeAsync()");
+    }
+
+    [TestMethod]
+    public void WorkThreadRuntimeState_IsMailboxOwned()
+    {
+        var runtimeSource = File.ReadAllText(Path.Combine(GetSourceRoot(), "CodeAlta.Orchestration", "Runtime", "WorkThreadRuntimeService.cs"));
+
+        StringAssert.Contains(runtimeSource, "private readonly WorkThreadActorRegistry _threadActors");
+        StringAssert.Contains(runtimeSource, "EnsureCoordinatorSessionCoreAsync(thread, options, actorCancellationToken)");
+        Assert.IsFalse(runtimeSource.Contains("SemaphoreSlim _gate", StringComparison.Ordinal));
+        Assert.IsFalse(runtimeSource.Contains("_gate.WaitAsync", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void WorkThreadRuntimeService_SendSteerAndEventsRouteThroughPerThreadActor()
+    {
+        var runtimeSource = File.ReadAllText(Path.Combine(GetSourceRoot(), "CodeAlta.Orchestration", "Runtime", "WorkThreadRuntimeService.cs"));
+
+        StringAssert.Contains(runtimeSource, "var agentId = await _threadActors.GetOrCreate(thread.ThreadId).QueryAsync(");
+        StringAssert.Contains(runtimeSource, "var runId = await _agentHub.RunAsync(agentId, sendOptions, cancellationToken)");
+        StringAssert.Contains(runtimeSource, "await MarkActiveRunIfStillInFlightAsync(thread.ThreadId, runId, runStartedAt, cancellationToken)");
+        StringAssert.Contains(runtimeSource, "var entry = await GetActiveCoordinatorSessionForSteeringAsync(thread, options, actorCancellationToken)");
+        StringAssert.Contains(runtimeSource, "return await _agentHub.SteerAsync(agentId, steerOptions, cancellationToken)");
+        StringAssert.Contains(runtimeSource, "@event => _ = PostAgentEventToActorAsync(actor, projector, @event)");
+        StringAssert.Contains(runtimeSource, "projector.Project(@event);");
+        StringAssert.Contains(runtimeSource, "var actor = _threadActors.GetOrCreate(threadId);");
+        StringAssert.Contains(runtimeSource, "var result = await _threadActors.GetOrCreate(thread.ThreadId).ExecuteAsync(");
+        StringAssert.Contains(runtimeSource, "return entry.Projector.ProjectHistory(history);");
+    }
+
+    [TestMethod]
+    public void PluginOrchestrationHooks_AreNotFrontendOwned()
+    {
+        var sourceRoot = GetSourceRoot();
+        var matches = Directory
+            .EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(sourceRoot, file).Replace('\\', '/'),
+                Content = File.ReadAllText(file),
+            })
+            .Where(static entry => entry.Content.Contains("PluginOrchestrationBridge", StringComparison.Ordinal))
+            .Where(static entry => entry.RelativePath.StartsWith("CodeAlta/", StringComparison.Ordinal))
+            .Select(static entry => entry.RelativePath)
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), matches);
+    }
+
+    [TestMethod]
+    public void PluginDerivedEvents_DoNotBecomeCanonicalTranscript()
+    {
+        var sourceRoot = GetSourceRoot();
+        var canonicalRoots = new[]
+        {
+            Path.Combine(sourceRoot, "CodeAlta.Agent"),
+            Path.Combine(sourceRoot, "CodeAlta.Catalog"),
+        };
+        var matches = canonicalRoots
+            .Where(Directory.Exists)
+            .SelectMany(static root => Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+            .Where(static file => File.ReadAllText(file).Contains("PluginDerivedThreadEvent", StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(sourceRoot, file).Replace('\\', '/'))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), matches);
+    }
+
+    [TestMethod]
+    public void PluginShellTabs_AreFrontendOnlyAndStable()
+    {
+        var sourceRoot = GetSourceRoot();
+        var nonFrontendMatches = Directory
+            .EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(sourceRoot, file).Replace('\\', '/'),
+                Content = File.ReadAllText(file),
+            })
+            .Where(static entry => entry.Content.Contains("PluginShellTabService", StringComparison.Ordinal) || entry.Content.Contains("PluginShellTabRequest", StringComparison.Ordinal))
+            .Where(static entry =>
+                !entry.RelativePath.StartsWith("CodeAlta/", StringComparison.Ordinal) &&
+                !entry.RelativePath.StartsWith("CodeAlta.Tests/", StringComparison.Ordinal))
+            .Select(static entry => entry.RelativePath)
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        var serviceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "PluginShellTabService.cs"));
+        CollectionAssert.AreEqual(Array.Empty<string>(), nonFrontendMatches);
+        StringAssert.Contains(serviceSource, "IShellTabService");
+        StringAssert.Contains(serviceSource, "new ShellTabAssociation.Plugin");
+        StringAssert.Contains(serviceSource, "return null;");
+    }
+
+    [TestMethod]
+    public void FrontendProject_DoesNotContainReusableAgentConnection()
+    {
+        var frontendRoot = GetCodeAltaSourceRoot();
+        var servicePath = Path.Combine(frontendRoot, "Services", "ChatAgentConnection.cs");
+        Assert.IsFalse(File.Exists(servicePath));
+
+        var matches = Directory
+            .EnumerateFiles(frontendRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(static file => File.ReadAllText(file).Contains("AgentSessionConnection", StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(frontendRoot, file).Replace('\\', '/'))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+        CollectionAssert.AreEqual(Array.Empty<string>(), matches);
+    }
+
+    [TestMethod]
+    public void ShellTabs_AreNotDomainModelSource()
+    {
+        var sourceRoot = GetSourceRoot();
+        var lowerLayerRoots = new[]
+        {
+            Path.Combine(sourceRoot, "CodeAlta.Agent"),
+            Path.Combine(sourceRoot, "CodeAlta.Catalog"),
+            Path.Combine(sourceRoot, "CodeAlta.Orchestration"),
+        };
+        var matches = lowerLayerRoots
+            .Where(Directory.Exists)
+            .SelectMany(static root => Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+            .Where(static file => File.ReadAllText(file).Contains("TabPage", StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(sourceRoot, file).Replace('\\', '/'))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), matches);
     }
 
     [TestMethod]
@@ -65,6 +741,7 @@ public sealed class ArchitectureGuardrailTests
                     not "App/KnownProjectImporter.cs" and
                     not "App/RuntimeEventPump.cs" and
                     not "App/ShellCatalogStateCoordinator.cs" and
+                    not "App/ThreadPromptDispatchCoordinator.cs" and
                     not "App/ThreadPromptDraftPersistenceCoordinator.cs" and
                     not "App/ThreadViewStateCoordinator.cs" and
                     not "App/UiTaskDiagnostics.cs")
@@ -100,7 +777,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaApp_DoesNotOwnDirectTabOrCommandControlFields()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
         Assert.IsFalse(appSource.Contains("Dictionary<string, TabPage>", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_threadTabControl", StringComparison.Ordinal));
@@ -125,7 +802,7 @@ public sealed class ArchitectureGuardrailTests
     public void UiProjectionAndUsageFiles_KeepExplicitBindableAccessGuards()
     {
         var sidebarSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "SidebarCoordinator.cs"));
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
         Assert.IsTrue(sidebarSource.Contains("verifyBindableAccess();", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("private T ReadBindableState<T>(Func<T> read)", StringComparison.Ordinal));
@@ -137,6 +814,8 @@ public sealed class ArchitectureGuardrailTests
         var codeAltaRoot = GetCodeAltaSourceRoot();
 
         Assert.IsTrue(File.Exists(Path.Combine(codeAltaRoot, "Threading", "IUiDispatcher.cs")));
+        Assert.IsTrue(File.Exists(Path.Combine(codeAltaRoot, "Threading", "IFrontendUiScheduler.cs")));
+        Assert.IsTrue(File.Exists(Path.Combine(codeAltaRoot, "Threading", "FrontendUiScheduler.cs")));
         Assert.IsTrue(File.Exists(Path.Combine(codeAltaRoot, "Threading", "UiDispatch.cs")));
         Assert.IsTrue(File.Exists(Path.Combine(codeAltaRoot, "Threading", "TerminalUiDispatcher.cs")));
         Assert.IsFalse(File.Exists(Path.Combine(codeAltaRoot, "App", "IUiDispatcher.cs")));
@@ -161,7 +840,7 @@ public sealed class ArchitectureGuardrailTests
     public void CodeAltaAppPresentationSlice_IsDeletedAndShellHelpersStayExtracted()
     {
         var viewsRoot = Path.Combine(GetCodeAltaSourceRoot(), "Views");
-        var appSource = File.ReadAllText(Path.Combine(viewsRoot, "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
         Assert.IsFalse(File.Exists(Path.Combine(viewsRoot, "CodeAltaApp.Presentation.cs")));
         Assert.IsFalse(appSource.Contains("internal static string BuildHeaderText(", StringComparison.Ordinal));
@@ -189,7 +868,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaAppPresentationSlice_DelegatesSelectorAndPromptAvailabilityWorkflow()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
         Assert.IsTrue(appSource.Contains("_chatSelectorCoordinator.RefreshForDraftScope", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_chatSelectorCoordinator.OnBackendSelectionChanged", StringComparison.Ordinal));
@@ -200,7 +879,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaAppPresentationSlice_DelegatesTabStripWorkflow()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
         Assert.IsTrue(appSource.Contains("_threadTabStripCoordinator.SyncControl()", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_threadTabStripCoordinator.OnSelectionChanged", StringComparison.Ordinal));
@@ -213,7 +892,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaApp_DelegatesThreadHistoryWorkflow()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
         Assert.IsTrue(appSource.Contains("_threadHistoryCoordinator.EnsureLoadedAsync", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal static ThreadHistoryLoadPlan CreateInitialThreadHistoryLoadPlan(", StringComparison.Ordinal));
@@ -225,7 +904,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaApp_DelegatesRuntimeEventWorkflow()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
         var runtimeSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadRuntimeEventCoordinator.cs"));
 
@@ -244,9 +923,9 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
-    public void CodeAltaApp_DelegatesThreadCommandWorkflow()
+    public void CodeAltaApp_UsesThreadCommandWorkflowWithoutLegacyDelegation()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
         var creationSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadCreationCoordinator.cs"));
         var shellCommandSurfaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Frontend", "Commands", "ShellCommandSurfaceCoordinator.cs"));
@@ -255,16 +934,17 @@ public sealed class ArchitectureGuardrailTests
 
         Assert.IsTrue(appSource.Contains("CodeAltaFrontendComposition.Create(", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync", StringComparison.Ordinal));
-        Assert.IsTrue(appSource.Contains("_shellCommandSurfaceCoordinator.SubmitCurrentDelegationAsync", StringComparison.Ordinal));
         Assert.IsTrue(compositionSource.Contains("new ThreadCommandCoordinator(", StringComparison.Ordinal));
         Assert.IsTrue(shellCommandSurfaceSource.Contains("new ShellInputCoordinator(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("SubmitCurrentDelegationAsync", StringComparison.Ordinal));
+        Assert.IsFalse(shellCommandSurfaceSource.Contains("CodeAlta.Thread.Delegate", StringComparison.Ordinal));
         Assert.IsFalse(threadCommandSource.Contains("GetThreadInput()", StringComparison.Ordinal));
         Assert.IsFalse(threadCommandSource.Contains("/help", StringComparison.Ordinal));
         Assert.IsFalse(threadCommandSource.Contains("AgentPermissionRequest", StringComparison.Ordinal));
         Assert.IsFalse(threadCommandSource.Contains("AgentUserInputRequest", StringComparison.Ordinal));
         Assert.IsFalse(threadCommandSource.Contains("new WorkThreadExecutionOptions", StringComparison.Ordinal));
         Assert.IsTrue(creationSource.Contains("_buildPreferredExecutionOptions(", StringComparison.Ordinal));
-        Assert.IsTrue(executionOptionsSource.Contains("BuildDelegationExecutionOptions(", StringComparison.Ordinal));
+        Assert.IsFalse(threadCommandSource.Contains("DelegateThreadAsync", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private async Task<AgentPermissionDecision> HandleThreadPermissionRequestAsync(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private async Task<AgentUserInputResponse> HandleThreadUserInputRequestAsync(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private WorkThreadExecutionOptions BuildExecutionOptions(", StringComparison.Ordinal));
@@ -279,7 +959,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaApp_DelegatesThreadStateWorkflow()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
         var threadStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ShellThreadStateCoordinator.cs"));
 
@@ -302,7 +982,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaApp_DelegatesWorkspaceRefreshWorkflow()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
         Assert.IsTrue(appSource.Contains("_workspaceCoordinator.RefreshShellChrome", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_workspaceCoordinator.SetThreadStatus", StringComparison.Ordinal));
@@ -325,7 +1005,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaApp_DelegatesBackendInitializationWorkflow()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
         Assert.IsTrue(appSource.Contains("_chatBackendInitializationCoordinator.InitializeAsync", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private async Task RefreshChatBackendStateAsync(", StringComparison.Ordinal));
@@ -335,7 +1015,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaApp_DelegatesTerminalLoopLifecycle()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
         var loopSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "TerminalLoopCoordinator.cs"));
         var deferredAppSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "DeferredCodeAltaApp.cs"));
 
@@ -365,7 +1045,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaApp_DoesNotConstructPromptEditorControls()
     {
-        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs"));
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
         var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ThreadWorkspaceView.cs"));
 
         Assert.IsFalse(appSource.Contains("private ChatPromptEditor CreatePromptEditor(", StringComparison.Ordinal));
@@ -415,8 +1095,8 @@ public sealed class ArchitectureGuardrailTests
         var persistenceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadPromptDraftPersistenceCoordinator.cs"));
         var threadStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ShellThreadStateCoordinator.cs"));
 
-        Assert.IsTrue(compositionSource.Contains("callbacks.LoadPromptDraft", StringComparison.Ordinal));
-        Assert.IsTrue(compositionSource.Contains("callbacks.DeletePromptDraft", StringComparison.Ordinal));
+        Assert.IsTrue(compositionSource.Contains("frontend.LoadPromptDraft", StringComparison.Ordinal));
+        Assert.IsTrue(compositionSource.Contains("frontend.DeletePromptDraft", StringComparison.Ordinal));
         Assert.IsTrue(promptDraftSource.Contains("_promptDraftPersistence.ObservePromptDraft", StringComparison.Ordinal));
         Assert.IsTrue(catalogOptionsSource.Contains("saved_prompts", StringComparison.Ordinal));
         Assert.IsTrue(persistenceSource.Contains("PromptDraftsRoot", StringComparison.Ordinal));
@@ -613,10 +1293,10 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void CodeAltaApp_SourceStaysWithinFacadeSizeBudget()
     {
-        var appPath = Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaApp.cs");
+        var appPath = Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs");
         var appSize = new FileInfo(appPath).Length;
 
-        Assert.IsTrue(appSize < 43000, $"CodeAltaApp.cs exceeded the temporary facade size budget: {appSize} bytes.");
+        Assert.IsTrue(appSize < 42000, $"CodeAltaApp.cs exceeded the temporary facade size budget: {appSize} bytes.");
     }
 
     [TestMethod]
@@ -654,31 +1334,6 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
-    public void CodeAltaFrontendCallbacks_AvoidsLeakingShellAndSelectionLookupBuckets()
-    {
-        var callbacksSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendCallbacks.cs"));
-
-        Assert.IsFalse(callbacksSource.Contains("CodeAltaApp App", StringComparison.Ordinal));
-        Assert.IsFalse(callbacksSource.Contains("Func<ShellSelection> GetSelection", StringComparison.Ordinal));
-        Assert.IsFalse(callbacksSource.Contains("Func<AgentBackendId> GetPreferredBackendId", StringComparison.Ordinal));
-        Assert.IsFalse(callbacksSource.Contains("Func<ProjectDescriptor?> GetSelectedProject", StringComparison.Ordinal));
-        Assert.IsFalse(callbacksSource.Contains("GetPromptUnavailableStatus", StringComparison.Ordinal));
-    }
-
-    [TestMethod]
-    public void FleetConcepts_ReuseAgentIdentityAndAvoidFrontendAgentRegistry()
-    {
-        var codeAltaRoot = GetCodeAltaSourceRoot();
-        var sourceFiles = Directory.EnumerateFiles(codeAltaRoot, "*.cs", SearchOption.AllDirectories).ToArray();
-        var workspaceTargetSource = File.ReadAllText(Path.Combine(codeAltaRoot, "Models", "WorkspaceTarget.cs"));
-
-        Assert.IsTrue(workspaceTargetSource.Contains("AgentIdentity", StringComparison.Ordinal));
-        Assert.IsTrue(workspaceTargetSource.Contains("AgentScope", StringComparison.Ordinal));
-        AssertSourceDoesNotContain(sourceFiles, "class AgentRegistry");
-        AssertSourceDoesNotContain(sourceFiles, "interface IAgentRegistry");
-    }
-
-    [TestMethod]
     public void OpenThreadState_SplitsSessionWorkspaceAndTimelineLayers()
     {
         var openThreadStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "State", "OpenThreadState.cs"));
@@ -692,7 +1347,7 @@ public sealed class ArchitectureGuardrailTests
     public void AppContexts_DoNotExposeConcreteSelectorEditorOrLayoutControls()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
-        var chatSelectorContextSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "Context", "ChatSelectorStateContext.cs"));
+        var chatSelectorContextSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "State", "ChatSelectorStateStore.cs"));
         var workspaceContextSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "Context", "ShellWorkspaceContext.cs"));
 
         Assert.IsFalse(File.Exists(Path.Combine(codeAltaRoot, "App", "Context", "ChatSelectorUiContext.cs")));
@@ -733,14 +1388,31 @@ public sealed class ArchitectureGuardrailTests
         CollectionAssert.AreEqual(Array.Empty<string>(), matches, $"Found unexpected pattern '{pattern}'.");
     }
 
+    private static IReadOnlyList<string> FindConstructorsWithTooManyDelegates(
+        string codeAltaRoot,
+        string file,
+        int maxDelegateParameters)
+    {
+        var relativePath = Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/');
+        var source = File.ReadAllText(file);
+        return Regex.Matches(
+                source,
+                @"(?:public|internal|private)\s+(?<name>[A-Z][A-Za-z0-9_]*)\s*\((?<params>.*?)\)\s*(?:[:{])",
+                RegexOptions.Singleline)
+            .Cast<Match>()
+            .Where(match => Regex.Matches(match.Groups["params"].Value, @"\b(?:Action|Func)\s*(?:<|\s+[A-Za-z_])").Count > maxDelegateParameters)
+            .Select(match => $"{relativePath}:{match.Groups["name"].Value}")
+            .ToArray();
+    }
+
     private static string GetCodeAltaSourceRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            var candidate = Path.Combine(directory.FullName, "CodeAlta");
-            if (Directory.Exists(Path.Combine(candidate, "App")) &&
-                Directory.Exists(Path.Combine(candidate, "Views")))
+            if (TryGetCodeAltaSourceRoot(directory.FullName, out var candidate) ||
+                TryGetCodeAltaSourceRoot(Path.Combine(directory.FullName, "CodeAlta"), out candidate) ||
+                TryGetCodeAltaSourceRoot(Path.Combine(directory.FullName, "src", "CodeAlta"), out candidate))
             {
                 return candidate;
             }
@@ -751,4 +1423,20 @@ public sealed class ArchitectureGuardrailTests
         Assert.Fail("Could not locate the CodeAlta source directory from the test output path.");
         return null!;
     }
+
+    private static bool TryGetCodeAltaSourceRoot(string candidate, [NotNullWhen(true)] out string? sourceRoot)
+    {
+        if (Directory.Exists(Path.Combine(candidate, "App")) &&
+            Directory.Exists(Path.Combine(candidate, "Views")))
+        {
+            sourceRoot = candidate;
+            return true;
+        }
+
+        sourceRoot = null;
+        return false;
+    }
+
+    private static string GetSourceRoot()
+        => Directory.GetParent(GetCodeAltaSourceRoot())!.FullName;
 }

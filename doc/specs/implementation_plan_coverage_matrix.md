@@ -1,5 +1,7 @@
 # Spec Coverage Matrix: `doc/specs/implementation_plan.md`
 
+> Historical note: This document predates the 1.0 core cleanup. Built-in persistence, semantic search, MCP services, local-model hosting, .NET intelligence, and hardcoded agent roles described here are not active 1.0 core features; they are future/plugin-oriented design notes unless reintroduced by a focused plugin or service.
+
 As of: 2026-02-28  
 Code state: `1ac8e192927a21c1ecf8c2b1b3bb0fbccba6689f`
 

@@ -32,6 +32,8 @@ All tests must pass and docs must be updated before submitting.
 - Follow existing patterns and naming; prefer clarity over cleverness.
 - New/changed behavior requires tests; bug fix = regression test first, then fix.
 - All public APIs require XML docs (avoid CS1591) and should document thrown exceptions.
+- Keep frontend, orchestration, plugin, catalog, and hosting boundaries aligned with `doc/development-guide.md`; reusable runtime orchestration should not move into the TUI project.
+- Runtime thread/session state should use explicit command/event contracts and single-writer mailbox/actor-style ownership where practical; do not add Akka.NET or another actor framework without a documented spike/decision.
 
 ## C# Conventions (Project Defaults)
 

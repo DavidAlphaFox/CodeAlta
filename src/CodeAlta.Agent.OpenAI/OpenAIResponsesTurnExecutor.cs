@@ -23,6 +23,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
     private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.Agent.OpenAI");
     private static readonly ResponseReasoningEffortLevel XHighReasoningEffortLevel = new("xhigh");
     private static readonly TimeSpan CodexBaseRetryDelay = TimeSpan.FromMilliseconds(250);
+    internal static TimeSpan CodexPendingStatusDelay { get; set; } = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan DefaultWebSocketIdleTimeout = TimeSpan.FromMinutes(5);
     private static readonly Random SharedRandom = Random.Shared;
     private const string WebSocketErrorCodeDataKey = "OpenAI.WebSocketErrorCode";
@@ -92,9 +93,15 @@ internal sealed class OpenAIResponsesTurnExecutor(
             // defaults to five reconnect attempts (six total attempts including the original).
             var retryBudget = provider.CodexSubscription is null ? 1 : 6;
             var refreshedCredentialAfterUnauthorized = false;
+            var activatedHttpFallbackAfterWebSocketRetries = false;
             for (var attempt = 1; ; attempt++)
             {
-                var emittedUpdate = false;
+                var attemptState = new CodexStreamAttemptState(
+                    Attempt: attempt,
+                    DraftAttemptId: CreateDraftAttemptId(request, attempt));
+                var initialTransport = ResolveInitialTransport(request);
+                using var pendingStatusCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                var pendingStatusTask = Task.CompletedTask;
                 try
                 {
                     var turnState = GetCodexTurnState(request);
@@ -102,6 +109,12 @@ internal sealed class OpenAIResponsesTurnExecutor(
                         request,
                         onSessionUpdate,
                         cancellationToken).ConfigureAwait(false);
+                    pendingStatusTask = PublishCodexPendingStatusAsync(
+                        request,
+                        initialTransport,
+                        attempt,
+                        onSessionUpdate,
+                        pendingStatusCts.Token);
                     var client = OpenAIProviderSdkFactory.CreateResponsesClient(
                         provider,
                         new OpenAIResponsesClientFactoryContext(
@@ -114,7 +127,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
                     LogCodexDiagnostic("request", request, attempt);
                     WriteCodexConsoleDiagnostic(
                         provider,
-                        $"request attempt={attempt} session={request.SessionId} run={request.RunId.Value} transport={ResolveInitialTransport(request)} fullPayload={FormatCodexConsolePayload(SerializeModel(fullOptions))}");
+                        $"request attempt={attempt} session={request.SessionId} run={request.RunId.Value} transport={initialTransport} fullPayload={FormatCodexConsolePayload(SerializeModel(fullOptions))}");
                     ResponseResult? completedResponse = null;
                     ResponseResult? latestResponse = null;
                     var streamedOutputItems = new SortedDictionary<int, ResponseItem>();
@@ -142,50 +155,60 @@ internal sealed class OpenAIResponsesTurnExecutor(
                                     latestResponse = inProgress.Response;
                                     break;
                                 case StreamingResponseOutputTextDeltaUpdate outputTextDelta when !string.IsNullOrEmpty(outputTextDelta.Delta):
-                                    emittedUpdate = true;
+                                    attemptState.EmittedAssistantDelta = true;
                                     await onUpdate(
                                         new LocalAgentTurnDelta
                                         {
                                             Kind = AgentContentKind.Assistant,
                                             ContentId = outputTextDelta.ItemId,
                                             Text = outputTextDelta.Delta,
+                                            AttemptId = attemptState.DraftAttemptId,
                                         },
                                         cancellationToken).ConfigureAwait(false);
                                     break;
                                 case StreamingResponseRefusalDeltaUpdate refusalDelta when !string.IsNullOrEmpty(refusalDelta.Delta):
-                                    emittedUpdate = true;
+                                    attemptState.EmittedAssistantDelta = true;
                                     await onUpdate(
                                         new LocalAgentTurnDelta
                                         {
                                             Kind = AgentContentKind.Assistant,
                                             ContentId = refusalDelta.ItemId,
                                             Text = refusalDelta.Delta,
+                                            AttemptId = attemptState.DraftAttemptId,
                                         },
                                         cancellationToken).ConfigureAwait(false);
                                     break;
                                 case StreamingResponseReasoningSummaryTextDeltaUpdate reasoningSummaryDelta when !string.IsNullOrEmpty(reasoningSummaryDelta.Delta):
-                                    emittedUpdate = true;
+                                    attemptState.EmittedReasoningDelta = true;
                                     await onUpdate(
                                         new LocalAgentTurnDelta
                                         {
                                             Kind = AgentContentKind.Reasoning,
                                             ContentId = reasoningSummaryDelta.ItemId,
                                             Text = reasoningSummaryDelta.Delta,
+                                            AttemptId = attemptState.DraftAttemptId,
                                         },
                                         cancellationToken).ConfigureAwait(false);
                                     break;
                                 case StreamingResponseReasoningTextDeltaUpdate reasoningTextDelta when !string.IsNullOrEmpty(reasoningTextDelta.Delta):
-                                    emittedUpdate = true;
+                                    attemptState.EmittedReasoningDelta = true;
                                     await onUpdate(
                                         new LocalAgentTurnDelta
                                         {
                                             Kind = AgentContentKind.Reasoning,
                                             ContentId = reasoningTextDelta.ItemId,
                                             Text = reasoningTextDelta.Delta,
+                                            AttemptId = attemptState.DraftAttemptId,
                                         },
                                         cancellationToken).ConfigureAwait(false);
                                     break;
                                 case StreamingResponseOutputItemDoneUpdate outputItemDone when outputItemDone.Item is not null:
+                                    attemptState.ObservedOutputItemDone = true;
+                                    if (IsToolCallResponseItem(outputItemDone.Item))
+                                    {
+                                        attemptState.ObservedToolCallItem = true;
+                                    }
+
                                     streamedOutputItems[outputItemDone.OutputIndex] = outputItemDone.Item;
                                     break;
                                 case StreamingResponseIncompleteUpdate incomplete:
@@ -195,7 +218,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
                                 case StreamingResponseFailedUpdate failed:
                                     throw CreateResponseFailureException(failed.Response, "failed");
                                 case StreamingResponseErrorUpdate error:
-                                    throw CreateTurnExecutionException(CreateStreamErrorException(error));
+                                    throw CreateStreamErrorException(error);
                                 case StreamingResponseCompletedUpdate completed:
                                     latestResponse = completed.Response;
                                     completedResponse = completed.Response;
@@ -204,12 +227,11 @@ internal sealed class OpenAIResponsesTurnExecutor(
                         }
                     }
 
-                    var initialTransport = ResolveInitialTransport(request);
                     try
                     {
                         await ProcessStreamAsync(initialTransport).ConfigureAwait(false);
                     }
-                    catch (Exception ex) when (ShouldFallbackFromWebSocket(provider, initialTransport, emittedUpdate, ex))
+                    catch (Exception ex) when (ShouldFallbackFromWebSocket(provider, initialTransport, attemptState, ex))
                     {
                         MarkWebSocketHttpFallback(request.SessionId);
                         ResetWebSocketSession(request.SessionId);
@@ -220,7 +242,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
                         latestResponse = null;
                         streamedOutputItems.Clear();
                         sideChannelEvents.Clear();
-                        emittedUpdate = false;
+                        attemptState.ResetAfterTransportFallback();
                         await ProcessStreamAsync(OpenAIResponsesTransport.Http).ConfigureAwait(false);
                     }
 
@@ -243,13 +265,13 @@ internal sealed class OpenAIResponsesTurnExecutor(
                         throw CreateResponseFailureException(completedResponse, "failed");
                     }
 
-                    if (completedResponse.Status is ResponseStatus.Incomplete &&
-                        completedResponse.OutputItems.Count == 0)
+                    if (completedResponse.Status is ResponseStatus.Incomplete)
                     {
-                        throw CreateTurnExecutionException(CreateResponseFailureException(completedResponse, "incomplete"));
+                        throw CreateResponseFailureException(completedResponse, "incomplete");
                     }
 
                     var (assistantMessage, assistantPartContentIds) = MapAssistantMessage(completedResponse);
+                    attemptState.CommittedFinalContent = true;
                     UpdateLiveContinuation(request, fullOptions, completedResponse, assistantMessage);
                     WriteCodexConsoleDiagnostic(
                         provider,
@@ -268,7 +290,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
                 catch (Exception ex) when (ShouldRefreshCodexSubscriptionCredential(
                     provider,
                     ex,
-                    emittedUpdate,
+                    attemptState.HasEmittedVisibleDelta,
                     refreshedCredentialAfterUnauthorized))
                 {
                     ClearLiveContinuation(request.SessionId);
@@ -293,15 +315,47 @@ internal sealed class OpenAIResponsesTurnExecutor(
                             refreshException);
                     }
                 }
+                catch (Exception ex) when (ShouldSwitchToHttpFallbackAfterWebSocketRetryExhaustion(
+                    provider,
+                    initialTransport,
+                    attemptState,
+                    ex,
+                    attempt,
+                    retryBudget,
+                    activatedHttpFallbackAfterWebSocketRetries,
+                    out var fallbackDelay))
+                {
+                    ClearLiveContinuation(request.SessionId);
+                    MarkWebSocketHttpFallback(request.SessionId);
+                    ResetWebSocketSession(request.SessionId);
+                    activatedHttpFallbackAfterWebSocketRetries = true;
+                    LogCodexDiagnostic(
+                        "websocket-http-fallback",
+                        request,
+                        attempt,
+                        httpStatus: GetHttpStatusCode(ex),
+                        errorType: ex.GetType().Name);
+                    await onSessionUpdate(
+                            CreateCodexReconnectSessionUpdate(request, attemptState, attempt, retryBudget, ex, initialTransport),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    await Task.Delay(fallbackDelay, cancellationToken).ConfigureAwait(false);
+                    attempt = 0;
+                }
                 catch (Exception ex) when (ShouldRetryCodexSubscriptionRequest(
                     provider,
                     ex,
-                    emittedUpdate,
+                    attemptState,
                     attempt,
                     retryBudget,
                     out var delay))
                 {
                     ClearLiveContinuation(request.SessionId);
+                    if (initialTransport == OpenAIResponsesTransport.WebSocket)
+                    {
+                        ResetWebSocketSession(request.SessionId);
+                    }
+
                     LogCodexDiagnostic(
                         "retry",
                         request,
@@ -309,10 +363,14 @@ internal sealed class OpenAIResponsesTurnExecutor(
                         httpStatus: GetHttpStatusCode(ex),
                         errorType: ex.GetType().Name);
                     await onSessionUpdate(
-                            CreateCodexReconnectSessionUpdate(attempt, retryBudget),
+                            CreateCodexReconnectSessionUpdate(request, attemptState, attempt, retryBudget, ex, initialTransport),
                             cancellationToken)
                         .ConfigureAwait(false);
                     await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    await StopCodexPendingStatusAsync(pendingStatusCts, pendingStatusTask).ConfigureAwait(false);
                 }
             }
         }
@@ -357,6 +415,39 @@ internal sealed class OpenAIResponsesTurnExecutor(
             : transport;
     }
 
+    private async Task PublishCodexPendingStatusAsync(
+        LocalAgentTurnRequest request,
+        OpenAIResponsesTransport transport,
+        int attempt,
+        Func<LocalAgentTurnSessionUpdate, CancellationToken, ValueTask> onSessionUpdate,
+        CancellationToken cancellationToken)
+    {
+        if (provider.CodexSubscription is null)
+        {
+            return;
+        }
+
+        await Task.Delay(CodexPendingStatusDelay, cancellationToken).ConfigureAwait(false);
+        await onSessionUpdate(
+                CreateCodexPendingSessionUpdate(request, transport, attempt),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task StopCodexPendingStatusAsync(
+        CancellationTokenSource pendingStatusCts,
+        Task pendingStatusTask)
+    {
+        pendingStatusCts.Cancel();
+        try
+        {
+            await pendingStatusTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
     private static OpenAIResponsesTransport ResolveConfiguredInitialTransport(OpenAIProviderOptions provider)
     {
         if (provider.CodexSubscription is not { } codexOptions)
@@ -373,12 +464,12 @@ internal sealed class OpenAIResponsesTurnExecutor(
     private static bool ShouldFallbackFromWebSocket(
         OpenAIProviderOptions provider,
         OpenAIResponsesTransport transport,
-        bool emittedUpdate,
+        CodexStreamAttemptState attemptState,
         Exception exception)
     {
         if (provider.CodexSubscription is null ||
             transport != OpenAIResponsesTransport.WebSocket ||
-            emittedUpdate ||
+            attemptState.HasObservedDraftOrOutput ||
             exception is OperationCanceledException && !IsTransportAbortedOperationCanceled(exception))
         {
             return false;
@@ -399,7 +490,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
             return statusCode == HttpStatusCode.UpgradeRequired;
         }
 
-        return true;
+        return false;
     }
 
     private async IAsyncEnumerable<StreamingResponseUpdate> CreateResponseStreamingAsync(
@@ -1771,7 +1862,12 @@ internal sealed class OpenAIResponsesTurnExecutor(
             message = $"{errorCode}: {message}";
         }
 
-        return new InvalidOperationException(message);
+        var code = response.Error is null ? null : response.Error.Code.ToString();
+        return new OpenAIResponsesStreamErrorException(
+            message,
+            string.IsNullOrWhiteSpace(code) ? null : code,
+            param: null,
+            retryAfter: TryParseRetryDelayFromMessage(message, out var retryDelay) ? retryDelay : null);
     }
 
     private static Exception CreateStreamErrorException(StreamingResponseErrorUpdate error)
@@ -1792,7 +1888,11 @@ internal sealed class OpenAIResponsesTurnExecutor(
             message = $"{message} (param: {error.Param})";
         }
 
-        return new InvalidOperationException(message);
+        return new OpenAIResponsesStreamErrorException(
+            message,
+            string.IsNullOrWhiteSpace(error.Code) ? null : error.Code,
+            string.IsNullOrWhiteSpace(error.Param) ? null : error.Param,
+            TryParseRetryDelayFromMessage(message, out var retryDelay) ? retryDelay : null);
     }
 
     private static LocalAgentTurnExecutionException CreateTurnExecutionException(Exception ex)
@@ -1865,14 +1965,14 @@ internal sealed class OpenAIResponsesTurnExecutor(
     private static bool ShouldRetryCodexSubscriptionRequest(
         OpenAIProviderOptions provider,
         Exception exception,
-        bool emittedUpdate,
+        CodexStreamAttemptState attemptState,
         int attempt,
         int retryBudget,
         out TimeSpan delay)
     {
         delay = TimeSpan.Zero;
         if (provider.CodexSubscription is null ||
-            emittedUpdate ||
+            !attemptState.CanRetrySafely ||
             attempt >= retryBudget ||
             exception is LocalAgentTurnExecutionException ||
             exception is OperationCanceledException && !IsTransportAbortedOperationCanceled(exception))
@@ -1889,7 +1989,40 @@ internal sealed class OpenAIResponsesTurnExecutor(
         return false;
     }
 
-    private static LocalAgentTurnSessionUpdate CreateCodexReconnectSessionUpdate(int retryAttempt, int retryBudget)
+    private static bool ShouldSwitchToHttpFallbackAfterWebSocketRetryExhaustion(
+        OpenAIProviderOptions provider,
+        OpenAIResponsesTransport transport,
+        CodexStreamAttemptState attemptState,
+        Exception exception,
+        int attempt,
+        int retryBudget,
+        bool alreadyActivatedFallback,
+        out TimeSpan delay)
+    {
+        delay = TimeSpan.Zero;
+        if (provider.CodexSubscription is null ||
+            transport != OpenAIResponsesTransport.WebSocket ||
+            alreadyActivatedFallback ||
+            attempt < retryBudget ||
+            !attemptState.CanRetrySafely ||
+            exception is LocalAgentTurnExecutionException ||
+            exception is OperationCanceledException && !IsTransportAbortedOperationCanceled(exception) ||
+            !IsRetryableCodexSubscriptionException(exception))
+        {
+            return false;
+        }
+
+        delay = GetRetryAfterDelay(exception) ?? GetExponentialBackoffDelay(attempt);
+        return true;
+    }
+
+    private static LocalAgentTurnSessionUpdate CreateCodexReconnectSessionUpdate(
+        LocalAgentTurnRequest request,
+        CodexStreamAttemptState attemptState,
+        int retryAttempt,
+        int retryBudget,
+        Exception exception,
+        OpenAIResponsesTransport transport)
     {
         var maxRetries = Math.Max(retryBudget - 1, 1);
         var retryText = retryAttempt.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -1898,6 +2031,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
         {
             Kind = AgentSessionUpdateKind.Reconnecting,
             Message = $"Reconnecting to ChatGPT/Codex... {retryText}/{maxRetriesText}",
+            Details = CreateCodexReconnectDetails(request, attemptState, retryAttempt, retryBudget, exception, transport),
         };
     }
 
@@ -1911,6 +2045,109 @@ internal sealed class OpenAIResponsesTurnExecutor(
             Kind = AgentSessionUpdateKind.Warning,
             Message = $"Waiting for CodeAlta's local ChatGPT/Codex concurrency guard: {maxConcurrentRequestsText} active request(s) for this ChatGPT account are already running. Codex CLI and pi-mono do not impose an equivalent account-wide limiter. To allow more parallel sessions, set max_concurrent_requests to a higher value under [providers.{providerKey}] in config.toml.",
         };
+    }
+
+    private static LocalAgentTurnSessionUpdate CreateCodexPendingSessionUpdate(
+        LocalAgentTurnRequest request,
+        OpenAIResponsesTransport transport,
+        int attempt)
+    {
+        var transportText = transport == OpenAIResponsesTransport.WebSocket
+            ? " via WebSocket"
+            : string.Empty;
+        return new LocalAgentTurnSessionUpdate
+        {
+            Kind = AgentSessionUpdateKind.Info,
+            Message = $"Waiting for ChatGPT/Codex response{transportText}...",
+            Details = CreateCodexPendingDetails(request, transport, attempt),
+        };
+    }
+
+    private static JsonElement CreateCodexReconnectDetails(
+        LocalAgentTurnRequest request,
+        CodexStreamAttemptState attemptState,
+        int retryAttempt,
+        int retryBudget,
+        Exception exception,
+        OpenAIResponsesTransport transport)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("provider", "codex_subscription");
+            writer.WriteString("transport", transport.ToString().ToLowerInvariant());
+            writer.WriteNumber("attempt", retryAttempt);
+            writer.WriteNumber("nextAttempt", retryAttempt + 1);
+            writer.WriteNumber("maxRetries", Math.Max(retryBudget - 1, 1));
+            writer.WriteString("runId", request.RunId.Value);
+            writer.WriteString("draftAttemptId", attemptState.DraftAttemptId);
+            writer.WriteBoolean("discardDraft", attemptState.HasEmittedVisibleDelta);
+            writer.WriteString("reason", GetRetryReason(exception));
+            if (TryGetResponsesErrorCode(exception, out var errorCode))
+            {
+                writer.WriteString("errorCode", errorCode);
+            }
+            else
+            {
+                writer.WriteNull("errorCode");
+            }
+
+            writer.WriteBoolean("assistantDelta", attemptState.EmittedAssistantDelta);
+            writer.WriteBoolean("reasoningDelta", attemptState.EmittedReasoningDelta);
+            writer.WriteBoolean("observedOutputItemDone", attemptState.ObservedOutputItemDone);
+            writer.WriteBoolean("observedToolCallItem", attemptState.ObservedToolCallItem);
+            writer.WriteEndObject();
+        }
+
+        return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
+    }
+
+    private static JsonElement CreateCodexPendingDetails(
+        LocalAgentTurnRequest request,
+        OpenAIResponsesTransport transport,
+        int attempt)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("provider", "codex_subscription");
+            writer.WriteString("transport", transport.ToString().ToLowerInvariant());
+            writer.WriteNumber("attempt", attempt);
+            writer.WriteString("runId", request.RunId.Value);
+            writer.WriteEndObject();
+        }
+
+        return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
+    }
+
+    private static string CreateDraftAttemptId(LocalAgentTurnRequest request, int attempt)
+        => $"{request.RunId.Value}:{attempt.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+
+    private static string GetRetryReason(Exception exception)
+    {
+        if (IsWebSocketConnectionLimitReached(exception))
+        {
+            return "websocket_connection_limit_reached";
+        }
+
+        if (IsPrematureResponseEnded(exception))
+        {
+            return "stream_closed_before_terminal";
+        }
+
+        if (IsWebSocketReceiveIdleTimeout(exception))
+        {
+            return "stream_idle_timeout";
+        }
+
+        if (TryGetResponsesErrorCode(exception, out var errorCode))
+        {
+            return errorCode;
+        }
+
+        return "retryable_stream_error";
     }
 
     private static bool IsPrematureResponseEnded(Exception exception)
@@ -2000,6 +2237,11 @@ internal sealed class OpenAIResponsesTurnExecutor(
             return false;
         }
 
+        if (exception is OpenAIResponsesStreamErrorException streamError)
+        {
+            return IsRetryableResponsesStreamError(streamError);
+        }
+
         var statusCode = GetHttpStatusCode(exception);
         var retryableResponseFailure = ContainsRetryableCodexSubscriptionFailureSignal(
             GetCodexSubscriptionErrorDetail(exception));
@@ -2008,6 +2250,53 @@ internal sealed class OpenAIResponsesTurnExecutor(
             statusCode is null && exception is HttpRequestException ||
             statusCode is System.Net.HttpStatusCode.TooManyRequests ||
             statusCode >= System.Net.HttpStatusCode.InternalServerError;
+    }
+
+    private static bool IsRetryableResponsesStreamError(OpenAIResponsesStreamErrorException exception)
+    {
+        if (IsFatalResponsesStreamErrorCode(exception.Code) ||
+            ContainsNonRetryableCodexSubscriptionLimitSignal(exception.Message))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(exception.Code))
+        {
+            return true;
+        }
+
+        var normalized = exception.Code.ToLowerInvariant();
+        if (normalized is "rate_limit_exceeded"
+            or "server_error"
+            or "service_unavailable"
+            or "upstream_error"
+            or "server_overloaded"
+            or "server_is_overloaded"
+            or "slow_down"
+            or WebSocketConnectionLimitReachedCode)
+        {
+            return true;
+        }
+
+        return !ContainsNonRetryableCodexSubscriptionLimitSignal(exception.Code) &&
+               (ContainsRetryableCodexSubscriptionFailureSignal(exception.Message) ||
+                !IsFatalResponsesStreamErrorCode(exception.Code));
+    }
+
+    private static bool IsFatalResponsesStreamErrorCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return false;
+        }
+
+        var normalized = code.ToLowerInvariant();
+        return normalized is "context_length_exceeded"
+            or "insufficient_quota"
+            or "usage_not_included"
+            or "usage_limit_reached"
+            or "invalid_prompt"
+            or "cyber_policy";
     }
 
     private static bool IsWebSocketReceiveIdleTimeout(Exception exception)
@@ -2214,6 +2503,12 @@ internal sealed class OpenAIResponsesTurnExecutor(
 
     private static bool IsWebSocketConnectionLimitReached(Exception exception)
     {
+        if (exception is OpenAIResponsesStreamErrorException streamError &&
+            string.Equals(streamError.Code, WebSocketConnectionLimitReachedCode, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
         if (exception.Data.Contains(WebSocketErrorCodeDataKey) &&
             exception.Data[WebSocketErrorCodeDataKey] is string code &&
             string.Equals(code, WebSocketConnectionLimitReachedCode, StringComparison.Ordinal))
@@ -2235,8 +2530,39 @@ internal sealed class OpenAIResponsesTurnExecutor(
         return exception.InnerException is not null && IsWrappedWebSocketError(exception.InnerException);
     }
 
+    private static bool TryGetResponsesErrorCode(Exception exception, out string code)
+    {
+        if (exception is OpenAIResponsesStreamErrorException streamError &&
+            !string.IsNullOrWhiteSpace(streamError.Code))
+        {
+            code = streamError.Code;
+            return true;
+        }
+
+        if (exception.Data.Contains(WebSocketErrorCodeDataKey) &&
+            exception.Data[WebSocketErrorCodeDataKey] is string webSocketCode &&
+            !string.IsNullOrWhiteSpace(webSocketCode))
+        {
+            code = webSocketCode;
+            return true;
+        }
+
+        if (exception.InnerException is not null)
+        {
+            return TryGetResponsesErrorCode(exception.InnerException, out code);
+        }
+
+        code = string.Empty;
+        return false;
+    }
+
     private static TimeSpan? GetRetryAfterDelay(Exception exception)
     {
+        if (exception is OpenAIResponsesStreamErrorException { RetryAfter: { } retryAfter })
+        {
+            return retryAfter;
+        }
+
         foreach (var key in new[] { "Retry-After", "retry-after", "RetryAfter" })
         {
             if (!exception.Data.Contains(key))
@@ -2267,9 +2593,9 @@ internal sealed class OpenAIResponsesTurnExecutor(
         {
             foreach (var key in new[] { "Retry-After", "retry-after", "RetryAfter" })
             {
-                if (response.Headers.TryGetValue(key, out var retryAfter) &&
-                    retryAfter is not null &&
-                    TryParseRetryAfter(retryAfter, out var delay))
+                if (response.Headers.TryGetValue(key, out var retryAfterHeader) &&
+                    retryAfterHeader is not null &&
+                    TryParseRetryAfter(retryAfterHeader, out var delay))
                 {
                     return delay;
                 }
@@ -2309,6 +2635,36 @@ internal sealed class OpenAIResponsesTurnExecutor(
         return false;
     }
 
+    private static bool TryParseRetryDelayFromMessage(string? message, out TimeSpan delay)
+    {
+        delay = TimeSpan.Zero;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var match = Regex.Match(
+            message,
+            @"try\s+again\s+in\s+(?<value>\d+(?:\.\d+)?)\s*(?<unit>ms|milliseconds?|s|sec(?:onds?)?)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (!match.Success ||
+            !double.TryParse(
+                match.Groups["value"].Value,
+                System.Globalization.NumberStyles.AllowDecimalPoint,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var value) ||
+            value < 0)
+        {
+            return false;
+        }
+
+        var unit = match.Groups["unit"].Value;
+        delay = unit.StartsWith("m", StringComparison.OrdinalIgnoreCase)
+            ? TimeSpan.FromMilliseconds(value)
+            : TimeSpan.FromSeconds(value);
+        return true;
+    }
+
     private static TimeSpan GetExponentialBackoffDelay(int attempt)
     {
         var exponent = Math.Max(attempt - 1, 0);
@@ -2324,6 +2680,61 @@ internal sealed class OpenAIResponsesTurnExecutor(
             message.Contains("too many tokens", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("prompt is too long", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("context window", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsToolCallResponseItem(ResponseItem item)
+        => item is FunctionCallResponseItem;
+
+    private sealed class OpenAIResponsesStreamErrorException(
+        string message,
+        string? code,
+        string? param,
+        TimeSpan? retryAfter) : InvalidOperationException(message)
+    {
+        public string? Code { get; } = code;
+
+        public string? Param { get; } = param;
+
+        public TimeSpan? RetryAfter { get; } = retryAfter;
+    }
+
+    private sealed record CodexStreamAttemptState(int Attempt, string DraftAttemptId)
+    {
+        public bool EmittedAssistantDelta { get; set; }
+
+        public bool EmittedReasoningDelta { get; set; }
+
+        public bool ObservedOutputItemDone { get; set; }
+
+        public bool ObservedToolCallItem { get; set; }
+
+        public bool DispatchedToolSideEffect { get; set; }
+
+        public bool CommittedFinalContent { get; set; }
+
+        public bool HasEmittedVisibleDelta => EmittedAssistantDelta || EmittedReasoningDelta;
+
+        public bool HasObservedDraftOrOutput =>
+            HasEmittedVisibleDelta ||
+            ObservedOutputItemDone ||
+            ObservedToolCallItem ||
+            DispatchedToolSideEffect ||
+            CommittedFinalContent;
+
+        public bool CanRetrySafely =>
+            !CommittedFinalContent &&
+            !DispatchedToolSideEffect &&
+            !ObservedToolCallItem;
+
+        public void ResetAfterTransportFallback()
+        {
+            EmittedAssistantDelta = false;
+            EmittedReasoningDelta = false;
+            ObservedOutputItemDone = false;
+            ObservedToolCallItem = false;
+            DispatchedToolSideEffect = false;
+            CommittedFinalContent = false;
+        }
+    }
 
     private enum OpenAIResponsesTransport
     {

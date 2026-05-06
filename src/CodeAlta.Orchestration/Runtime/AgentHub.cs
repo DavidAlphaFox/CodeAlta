@@ -1,6 +1,4 @@
-using System.Threading.Channels;
 using CodeAlta.Agent;
-using CodeAlta.Persistence;
 
 namespace CodeAlta.Orchestration.Runtime;
 
@@ -10,13 +8,12 @@ namespace CodeAlta.Orchestration.Runtime;
 public sealed class AgentHub : IAsyncDisposable
 {
     private readonly AgentBackendFactory _backendFactory;
-    private readonly AgentRepository _agentRepository;
     private readonly Dictionary<AgentId, AgentIdentity> _agents = new();
     private readonly Dictionary<AgentId, SessionEntry> _sessions = new();
     private readonly Dictionary<string, IAgentBackend> _backends = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Task<IAgentBackend>> _backendInitializationTasks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IReadOnlyList<AgentSessionMetadata>> _sessionMetadataCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Channel<OrchestrationEvent> _events = Channel.CreateUnbounded<OrchestrationEvent>();
+    private readonly BoundedRuntimeEventStream<OrchestrationEvent> _events = new();
     private readonly SemaphoreSlim _gate = new(initialCount: 1, maxCount: 1);
     private bool _disposed;
 
@@ -24,17 +21,14 @@ public sealed class AgentHub : IAsyncDisposable
     /// Initializes a new instance of the <see cref="AgentHub"/> class.
     /// </summary>
     /// <param name="backendFactory">Agent backend factory.</param>
-    /// <param name="agentRepository">Agent repository.</param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="backendFactory"/> or <paramref name="agentRepository"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="backendFactory"/> is <see langword="null"/>.
     /// </exception>
-    public AgentHub(AgentBackendFactory backendFactory, AgentRepository agentRepository)
+    public AgentHub(AgentBackendFactory backendFactory)
     {
         ArgumentNullException.ThrowIfNull(backendFactory);
-        ArgumentNullException.ThrowIfNull(agentRepository);
 
         _backendFactory = backendFactory;
-        _agentRepository = agentRepository;
     }
 
     /// <summary>
@@ -44,49 +38,24 @@ public sealed class AgentHub : IAsyncDisposable
     /// <returns>Orchestration events.</returns>
     public IAsyncEnumerable<OrchestrationEvent> StreamEventsAsync(CancellationToken cancellationToken = default)
     {
-        return _events.Reader.ReadAllAsync(cancellationToken);
+        return _events.ReadAllAsync(cancellationToken);
     }
 
     /// <summary>
-    /// Registers an agent identity and persists it.
+    /// Registers a backend session owner in memory.
     /// </summary>
-    /// <param name="roleId">Role id.</param>
-    /// <param name="scope">Scope.</param>
     /// <param name="backendId">Backend id.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The registered identity.</returns>
     public async Task<AgentIdentity> RegisterAgentAsync(
-        string roleId,
-        AgentScope scope,
         AgentBackendId backendId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(roleId))
-        {
-            throw new ArgumentException("Role id is required.", nameof(roleId));
-        }
-
-        ArgumentNullException.ThrowIfNull(scope);
-
         var identity = new AgentIdentity
         {
             AgentId = AgentId.NewVersion7(),
-            RoleId = roleId.Trim(),
-            Scope = scope,
             BackendId = backendId,
         };
-
-        await _agentRepository.UpsertAgentAsync(
-            new AgentRecord
-            {
-                AgentId = identity.AgentId,
-                Role = identity.RoleId,
-                ScopeKind = scope.Kind.ToString().ToLowerInvariant(),
-                ScopeId = scope.Id,
-                BackendId = identity.BackendId.Value,
-                CreatedAt = DateTimeOffset.UtcNow,
-            },
-            cancellationToken).ConfigureAwait(false);
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -157,17 +126,6 @@ public sealed class AgentHub : IAsyncDisposable
             await previousEntry.DisposeAsync().ConfigureAwait(false);
         }
 
-        await _agentRepository.UpsertSessionAsync(
-            new AgentSessionRecord
-            {
-                SessionId = session.SessionId,
-                AgentId = agentId,
-                BackendSessionId = session.SessionId,
-                CreatedAt = DateTimeOffset.UtcNow,
-                LastUsedAt = DateTimeOffset.UtcNow,
-            },
-            cancellationToken).ConfigureAwait(false);
-
         return session.SessionId;
     }
 
@@ -228,18 +186,6 @@ public sealed class AgentHub : IAsyncDisposable
         {
             await previousEntry.DisposeAsync().ConfigureAwait(false);
         }
-
-        await _agentRepository.UpsertSessionAsync(
-                new AgentSessionRecord
-                {
-                    SessionId = session.SessionId,
-                    AgentId = agentId,
-                    BackendSessionId = session.SessionId,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    LastUsedAt = DateTimeOffset.UtcNow,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
 
         return session.SessionId;
     }
@@ -445,25 +391,13 @@ public sealed class AgentHub : IAsyncDisposable
             runGateHeld = true;
 
             var runId = await entry.Session.SendAsync(options, cancellationToken).ConfigureAwait(false);
-            _events.Writer.TryWrite(new RunStartedEvent(DateTimeOffset.UtcNow, agentId, runId));
-            _events.Writer.TryWrite(new RunCompletedEvent(DateTimeOffset.UtcNow, agentId, runId));
-
-            await _agentRepository.UpsertSessionAsync(
-                new AgentSessionRecord
-                {
-                    SessionId = entry.Session.SessionId,
-                    AgentId = agentId,
-                    BackendSessionId = entry.Session.SessionId,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    LastUsedAt = DateTimeOffset.UtcNow,
-                },
-                cancellationToken).ConfigureAwait(false);
-
+            _events.TryPublish(new RunStartedEvent(DateTimeOffset.UtcNow, agentId, runId));
+            _events.TryPublish(new RunCompletedEvent(DateTimeOffset.UtcNow, agentId, runId));
             return runId;
         }
         catch (Exception ex)
         {
-            _events.Writer.TryWrite(new RunFailedEvent(DateTimeOffset.UtcNow, agentId, ex.Message));
+            _events.TryPublish(new RunFailedEvent(DateTimeOffset.UtcNow, agentId, ex.Message));
             throw;
         }
         finally
@@ -497,13 +431,13 @@ public sealed class AgentHub : IAsyncDisposable
         try
         {
             var runId = await entry.Session.SteerAsync(options, cancellationToken).ConfigureAwait(false);
-            _events.Writer.TryWrite(new RunStartedEvent(DateTimeOffset.UtcNow, agentId, runId));
-            _events.Writer.TryWrite(new RunCompletedEvent(DateTimeOffset.UtcNow, agentId, runId));
+            _events.TryPublish(new RunStartedEvent(DateTimeOffset.UtcNow, agentId, runId));
+            _events.TryPublish(new RunCompletedEvent(DateTimeOffset.UtcNow, agentId, runId));
             return runId;
         }
         catch (Exception ex)
         {
-            _events.Writer.TryWrite(new RunFailedEvent(DateTimeOffset.UtcNow, agentId, ex.Message));
+            _events.TryPublish(new RunFailedEvent(DateTimeOffset.UtcNow, agentId, ex.Message));
             throw;
         }
         finally
@@ -650,7 +584,7 @@ public sealed class AgentHub : IAsyncDisposable
         }
 
         _disposed = true;
-        _events.Writer.TryComplete();
+        _events.Complete();
 
         foreach (var session in _sessions.Values)
         {
@@ -694,7 +628,7 @@ public sealed class AgentHub : IAsyncDisposable
 
             if (!_backendInitializationTasks.TryGetValue(key, out initializationTask!))
             {
-                initializationTask = CreateAndStartBackendAsync(backendId, key, cancellationToken);
+                initializationTask = CreateAndStartBackendAsync(backendId, key, CancellationToken.None);
                 _backendInitializationTasks[key] = initializationTask;
             }
         }
@@ -703,7 +637,7 @@ public sealed class AgentHub : IAsyncDisposable
             _gate.Release();
         }
 
-        return await initializationTask.ConfigureAwait(false);
+        return await initializationTask.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<IAgentBackend> CreateAndStartBackendAsync(

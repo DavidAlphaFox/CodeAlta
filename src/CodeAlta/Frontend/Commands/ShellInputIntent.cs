@@ -56,6 +56,4 @@ internal sealed record ClearQueueIntent : ShellInputIntent;
 
 internal sealed record QueueStatusIntent : ShellInputIntent;
 
-internal sealed record DelegateThreadIntent(string PromptText) : ShellInputIntent;
-
 internal sealed record UnknownTextCommandIntent(string CommandName, string? Arguments = null) : ShellInputIntent;

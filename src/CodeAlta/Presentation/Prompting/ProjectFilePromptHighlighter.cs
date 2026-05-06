@@ -1,4 +1,5 @@
 using System.Text;
+using CodeAlta.Catalog;
 using XenoAtom.Terminal.UI.Styling;
 using XenoAtom.Terminal.UI.Text;
 using XenoAtom.Ansi;

@@ -16,7 +16,7 @@ public enum WorkThreadKind
     ProjectThread,
 
     /// <summary>
-    /// A host-owned delegated child thread.
+    /// A legacy host-owned internal thread record.
     /// </summary>
     InternalThread,
 }

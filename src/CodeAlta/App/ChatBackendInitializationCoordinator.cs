@@ -19,6 +19,7 @@ internal sealed class ChatBackendInitializationCoordinator
     private readonly CodexInstallProgressReporter? _codexInstallProgress;
     private readonly Action<string?>? _setProviderInitializationStatus;
     private readonly Action<AgentBackendId, bool>? _setBackendSessionLoadingEnabled;
+    private long _providerInitializationStatusVersion;
 
     public ChatBackendInitializationCoordinator(
         AgentHub agentHub,
@@ -246,7 +247,15 @@ internal sealed class ChatBackendInitializationCoordinator
                 progress.CompletedProviderCount,
                 progress.TotalProviderCount,
                 progress.InitializingProviderDisplayNames);
-        _dispatchToUi(() => _setProviderInitializationStatus(status));
+        var version = Interlocked.Increment(ref _providerInitializationStatusVersion);
+        _dispatchToUi(
+            () =>
+            {
+                if (version == Volatile.Read(ref _providerInitializationStatusVersion))
+                {
+                    _setProviderInitializationStatus(status);
+                }
+            });
     }
 
     private static string BuildProgressBar(int completed, int total)

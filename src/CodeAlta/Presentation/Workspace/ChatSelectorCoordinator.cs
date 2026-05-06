@@ -18,9 +18,9 @@ internal sealed class ChatSelectorCoordinator
     private readonly ThreadWorkspaceViewModel _workspaceViewModel;
     private readonly PromptComposerViewModel _promptComposerViewModel;
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
-    private readonly ChatSelectorStateContext _selectorState;
+    private readonly ChatSelectorStateStore _selectorState;
     private readonly ThreadSelectionContext _threadSelection;
-    private readonly ChatPreferenceContext _preferences;
+    private readonly IModelProviderPreferencePort _preferences;
     private readonly WorkspaceRefreshContext _workspaceRefresh;
     private readonly Func<string?, string?> _getEffectiveDefaultProviderKey;
     private readonly Action _syncChatSelectorItems;
@@ -34,9 +34,9 @@ internal sealed class ChatSelectorCoordinator
         ThreadWorkspaceViewModel workspaceViewModel,
         PromptComposerViewModel promptComposerViewModel,
         Dictionary<string, ChatBackendState> chatBackendStates,
-        ChatSelectorStateContext selectorState,
+        ChatSelectorStateStore selectorState,
         ThreadSelectionContext threadSelection,
-        ChatPreferenceContext preferences,
+        IModelProviderPreferencePort preferences,
         WorkspaceRefreshContext workspaceRefresh,
         Func<string?, string?> getEffectiveDefaultProviderKey,
         Action syncChatSelectorItems,
@@ -69,9 +69,9 @@ internal sealed class ChatSelectorCoordinator
         ThreadWorkspaceViewModel workspaceViewModel,
         PromptComposerViewModel promptComposerViewModel,
         Dictionary<string, ChatBackendState> chatBackendStates,
-        ChatSelectorStateContext selectorState,
+        ChatSelectorStateStore selectorState,
         ThreadSelectionContext threadSelection,
-        ChatPreferenceContext preferences,
+        IModelProviderPreferencePort preferences,
         WorkspaceRefreshContext workspaceRefresh,
         Func<string?, string?> getEffectiveDefaultProviderKey,
         Action syncChatSelectorItems,
@@ -135,7 +135,7 @@ internal sealed class ChatSelectorCoordinator
             _selectorState.SetBackendSelection(backendOptions, backendIndex);
 
             var backendState = _chatBackendStates[backendOptions[backendIndex].BackendId.Value];
-            _preferences.ApplyDraftBackendPreference(backendState);
+            _preferences.ApplyDraftModelProviderState(backendState);
             var modelOptions = ChatBackendPresentation.BuildModelOptions(backendState);
             _selectorState.SetModelSelection(
                 modelOptions,
@@ -197,7 +197,7 @@ internal sealed class ChatSelectorCoordinator
                 Math.Max(0, backendOptions.Count - 1)));
 
             var backendState = _chatBackendStates[tab.BackendId.Value];
-            _preferences.ApplyThreadPreference(tab);
+            _preferences.ApplyThreadModelProviderState(tab);
 
             var modelOptions = ChatBackendPresentation.BuildModelOptions(backendState);
             _selectorState.SetModelSelection(
@@ -298,7 +298,7 @@ internal sealed class ChatSelectorCoordinator
             var preferredModel = ChatBackendPreferenceCoordinator.FindModel(draftBackendState.Models, draftBackendState.SelectedModelId);
             draftBackendState.SelectedReasoningEffort = ChatBackendPresentation.ResolvePreferredReasoningEffort(preferredModel, preferredReasoningEffort: null);
             UpdateModelSelectorState(draftOptions, newIndex, preferredModel, draftBackendState.SelectedReasoningEffort);
-            _preferences.RememberGlobalBackendPreference(backendId, draftBackendState.SelectedModelId, draftBackendState.SelectedReasoningEffort);
+            _preferences.RememberGlobalPreference(CreatePreference(backendId, draftBackendState.SelectedModelId, draftBackendState.SelectedReasoningEffort));
             _workspaceRefresh.InvalidateSelectedSessionUsage();
             return;
         }
@@ -315,10 +315,10 @@ internal sealed class ChatSelectorCoordinator
         var selectedModel = ChatBackendPreferenceCoordinator.FindModel(backendState.Models, tab.ModelId);
         tab.ReasoningEffort = ChatBackendPresentation.ResolvePreferredReasoningEffort(selectedModel, preferredReasoningEffort: null);
         UpdateModelSelectorState(options, newIndex, selectedModel, tab.ReasoningEffort);
-        _preferences.RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, true);
+        _preferences.RememberThreadPreference(tab.Thread.ThreadId, CreatePreference(tab.BackendId, tab.ModelId, tab.ReasoningEffort), true);
         backendState.SelectedModelId = tab.ModelId;
         backendState.SelectedReasoningEffort = tab.ReasoningEffort;
-        _preferences.RememberGlobalBackendPreference(tab.BackendId, tab.ModelId, tab.ReasoningEffort);
+        _preferences.RememberGlobalPreference(CreatePreference(tab.BackendId, tab.ModelId, tab.ReasoningEffort));
         _workspaceRefresh.RefreshHeaderAndThreadWorkspace();
     }
 
@@ -342,7 +342,7 @@ internal sealed class ChatSelectorCoordinator
             }
 
             draftBackendState.SelectedReasoningEffort = draftOptions[newIndex].Effort;
-            _preferences.RememberGlobalBackendPreference(backendId, draftBackendState.SelectedModelId, draftBackendState.SelectedReasoningEffort);
+            _preferences.RememberGlobalPreference(CreatePreference(backendId, draftBackendState.SelectedModelId, draftBackendState.SelectedReasoningEffort));
             _workspaceRefresh.InvalidateSelectedSessionUsage();
             return;
         }
@@ -357,10 +357,10 @@ internal sealed class ChatSelectorCoordinator
         }
 
         tab.ReasoningEffort = options[newIndex].Effort;
-        _preferences.RememberThreadPreference(tab.Thread.ThreadId, tab.ModelId, tab.ReasoningEffort, true);
+        _preferences.RememberThreadPreference(tab.Thread.ThreadId, CreatePreference(tab.BackendId, tab.ModelId, tab.ReasoningEffort), true);
         backendState.SelectedModelId = tab.ModelId;
         backendState.SelectedReasoningEffort = tab.ReasoningEffort;
-        _preferences.RememberGlobalBackendPreference(tab.BackendId, tab.ModelId, tab.ReasoningEffort);
+        _preferences.RememberGlobalPreference(CreatePreference(tab.BackendId, tab.ModelId, tab.ReasoningEffort));
     }
 
     public AgentBackendId GetPreferredBackendId()
@@ -425,7 +425,6 @@ internal sealed class ChatSelectorCoordinator
         _promptComposerViewModel.IsEnabled = projection.IsEnabled;
         _promptComposerViewModel.CanSend = projection.CanSend;
         _promptComposerViewModel.CanSteer = projection.CanSteer;
-        _promptComposerViewModel.CanDelegate = projection.CanDelegate;
         _promptComposerViewModel.CanAbort = projection.CanAbort;
         _promptComposerViewModel.CanCompact = projection.CanCompact;
         _promptComposerViewModel.CanCloseTab = projection.CanCloseTab;
@@ -550,6 +549,12 @@ internal sealed class ChatSelectorCoordinator
     {
         return _backendDescriptors.FirstOrDefault()?.BackendId ?? AgentBackendIds.Codex;
     }
+
+    private static ModelProviderPreference CreatePreference(
+        AgentBackendId modelProviderId,
+        string? modelId,
+        AgentReasoningEffort? reasoningEffort)
+        => new(new ModelProviderId(modelProviderId.Value), modelId, reasoningEffort);
 
     private IReadOnlyList<string>? GetConfiguredProviderKeys()
         => _getConfiguredProviderKeys?.Invoke();

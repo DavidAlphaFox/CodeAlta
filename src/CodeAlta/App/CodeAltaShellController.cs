@@ -22,6 +22,7 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
     private readonly ConcurrentQueue<WorkThreadRuntimeEvent> _pendingRuntimeEvents = new();
     private IUiDispatcher? _uiDispatcher;
     private int _runtimeEventDrainScheduled;
+    private long _providerSessionLoadStatusVersion;
     private CancellationTokenSource? _initializationCts;
     private Task? _initializationTask;
 
@@ -70,6 +71,7 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
         _initializationTask = Task.Run(
             () => RunInitializationAsync(_initializationCts.Token),
             CancellationToken.None);
+        global::CodeAlta.CodeAltaTaskMonitor.Observe(_initializationTask, "Shell initialization");
     }
 
     public async Task ReloadCatalogAsync(CancellationToken cancellationToken)
@@ -403,9 +405,10 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
                     () =>
                     {
                         _shell.ApplyRecoveredCatalogState(projects, threads);
-                        _shell.SetProviderSessionLoadStatus(null);
                         _shell.TrySchedulePendingStartupThreadRestore(CancellationToken.None);
                     })
+                .ConfigureAwait(false);
+            await SetProviderSessionLoadStatusAsync(null)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -413,7 +416,7 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            await UiDispatcher.InvokeAsync(() => _shell.SetProviderSessionLoadStatus(null)).ConfigureAwait(false);
+            await SetProviderSessionLoadStatusAsync(null).ConfigureAwait(false);
             if (LogManager.IsInitialized && CodeAltaApp.UiLogger.IsEnabled(LogLevel.Error))
             {
                 CodeAltaApp.UiLogger.Error(ex, "Failed to refresh backend startup state.");
@@ -486,9 +489,10 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
                     () =>
                     {
                         _shell.ApplyRecoveredCatalogState(projects, threads);
-                        _shell.SetProviderSessionLoadStatus(null);
                         _shell.TrySchedulePendingStartupThreadRestore(CancellationToken.None);
                     })
+                .ConfigureAwait(false);
+            await SetProviderSessionLoadStatusAsync(null)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -496,7 +500,7 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            await UiDispatcher.InvokeAsync(() => _shell.SetProviderSessionLoadStatus(null)).ConfigureAwait(false);
+            await SetProviderSessionLoadStatusAsync(null).ConfigureAwait(false);
             if (LogManager.IsInitialized && CodeAltaApp.UiLogger.IsEnabled(LogLevel.Error))
             {
                 CodeAltaApp.UiLogger.Error(ex, "Failed to refresh backend startup state.");
@@ -623,13 +627,39 @@ internal sealed class CodeAltaShellController : IAsyncDisposable
     private void ReportProviderSessionLoadProgress(ProviderSessionLoadProgress progress)
     {
         var status = FormatProviderSessionLoadStatus(progress);
-        _ = UiDispatcher.InvokeAsync(() => _shell.SetProviderSessionLoadStatus(status));
+        QueueProviderSessionLoadStatus(status);
     }
 
     private void ReportStartupProviderLoadProgress(ProviderSessionLoadProgress progress)
     {
         var status = FormatStartupProviderLoadStatus(progress);
-        _ = UiDispatcher.InvokeAsync(() => _shell.SetProviderSessionLoadStatus(status));
+        QueueProviderSessionLoadStatus(status);
+    }
+
+    private void QueueProviderSessionLoadStatus(string? status)
+    {
+        var version = Interlocked.Increment(ref _providerSessionLoadStatusVersion);
+        _ = UiDispatcher.InvokeAsync(
+            () =>
+            {
+                if (version == Volatile.Read(ref _providerSessionLoadStatusVersion))
+                {
+                    _shell.SetProviderSessionLoadStatus(status);
+                }
+            });
+    }
+
+    private Task SetProviderSessionLoadStatusAsync(string? status)
+    {
+        var version = Interlocked.Increment(ref _providerSessionLoadStatusVersion);
+        return UiDispatcher.InvokeAsync(
+            () =>
+            {
+                if (version == Volatile.Read(ref _providerSessionLoadStatusVersion))
+                {
+                    _shell.SetProviderSessionLoadStatus(status);
+                }
+            });
     }
 
     internal static string? FormatStartupProviderLoadStatus(ProviderSessionLoadProgress progress)

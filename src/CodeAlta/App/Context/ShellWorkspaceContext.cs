@@ -1,146 +1,89 @@
 using CodeAlta.App.State;
 using CodeAlta.Agent;
 using CodeAlta.Models;
+using CodeAlta.Threading;
 using XenoAtom.Terminal.UI;
 
 namespace CodeAlta.App.Context;
 
 internal sealed class ShellWorkspaceContext
 {
-    private readonly Func<AgentBackendId> _getPreferredBackendId;
-    private readonly Func<(bool HasStatus, string Message, StatusTone Tone)> _getPromptUnavailableStatus;
-    private readonly Func<bool> _hasWorkspaceSurface;
-    private readonly Action<Visual> _setThreadPaneContent;
-    private readonly Action _ensureSelectionDefaults;
-    private readonly Action _refreshSidebarProjection;
-    private readonly Action _syncSidebarSelectionToCurrentState;
-    private readonly Action _refreshQueuedPromptList;
-    private readonly Action _refreshChatSelectorsForDraftScope;
-    private readonly Action<OpenThreadState> _refreshChatSelectorsForThread;
-    private readonly Action<ThreadSessionState?> _syncPromptDraftText;
-    private readonly Action _updatePromptAvailabilityUi;
-    private readonly Action _syncThreadTabControl;
-    private readonly Action<Action> _dispatchToUi;
-    private readonly Action<Action> _dispatchToUiDeferred;
-    private readonly Action _focusPromptTarget;
-    private readonly Action _verifyBindableAccess;
+    private readonly IShellPromptAvailabilityPort _promptAvailability;
+    private readonly IShellWorkspaceSurfacePort _surface;
+    private readonly IShellWorkspaceProjectionPort _projection;
+    private readonly IFrontendUiScheduler _uiScheduler;
 
     public ShellWorkspaceContext(
-        Func<AgentBackendId> getPreferredBackendId,
-        Func<(bool HasStatus, string Message, StatusTone Tone)> getPromptUnavailableStatus,
-        Func<bool> hasWorkspaceSurface,
-        Action<Visual> setThreadPaneContent,
-        Action ensureSelectionDefaults,
-        Action refreshSidebarProjection,
-        Action syncSidebarSelectionToCurrentState,
-        Action refreshQueuedPromptList,
-        Action refreshChatSelectorsForDraftScope,
-        Action<OpenThreadState> refreshChatSelectorsForThread,
-        Action<ThreadSessionState?> syncPromptDraftText,
-        Action updatePromptAvailabilityUi,
-        Action syncThreadTabControl,
-        Action<Action> dispatchToUi,
-        Action<Action> dispatchToUiDeferred,
-        Action focusPromptTarget,
-        Action verifyBindableAccess)
+        IShellPromptAvailabilityPort promptAvailability,
+        IShellWorkspaceSurfacePort surface,
+        IShellWorkspaceProjectionPort projection,
+        IFrontendUiScheduler uiScheduler)
     {
-        ArgumentNullException.ThrowIfNull(getPreferredBackendId);
-        ArgumentNullException.ThrowIfNull(getPromptUnavailableStatus);
-        ArgumentNullException.ThrowIfNull(hasWorkspaceSurface);
-        ArgumentNullException.ThrowIfNull(setThreadPaneContent);
-        ArgumentNullException.ThrowIfNull(ensureSelectionDefaults);
-        ArgumentNullException.ThrowIfNull(refreshSidebarProjection);
-        ArgumentNullException.ThrowIfNull(syncSidebarSelectionToCurrentState);
-        ArgumentNullException.ThrowIfNull(refreshQueuedPromptList);
-        ArgumentNullException.ThrowIfNull(refreshChatSelectorsForDraftScope);
-        ArgumentNullException.ThrowIfNull(refreshChatSelectorsForThread);
-        ArgumentNullException.ThrowIfNull(syncPromptDraftText);
-        ArgumentNullException.ThrowIfNull(updatePromptAvailabilityUi);
-        ArgumentNullException.ThrowIfNull(syncThreadTabControl);
-        ArgumentNullException.ThrowIfNull(dispatchToUi);
-        ArgumentNullException.ThrowIfNull(dispatchToUiDeferred);
-        ArgumentNullException.ThrowIfNull(focusPromptTarget);
-        ArgumentNullException.ThrowIfNull(verifyBindableAccess);
+        ArgumentNullException.ThrowIfNull(promptAvailability);
+        ArgumentNullException.ThrowIfNull(surface);
+        ArgumentNullException.ThrowIfNull(projection);
+        ArgumentNullException.ThrowIfNull(uiScheduler);
 
-        _getPreferredBackendId = getPreferredBackendId;
-        _getPromptUnavailableStatus = getPromptUnavailableStatus;
-        _hasWorkspaceSurface = hasWorkspaceSurface;
-        _setThreadPaneContent = setThreadPaneContent;
-        _ensureSelectionDefaults = ensureSelectionDefaults;
-        _refreshSidebarProjection = refreshSidebarProjection;
-        _syncSidebarSelectionToCurrentState = syncSidebarSelectionToCurrentState;
-        _refreshQueuedPromptList = refreshQueuedPromptList;
-        _refreshChatSelectorsForDraftScope = refreshChatSelectorsForDraftScope;
-        _refreshChatSelectorsForThread = refreshChatSelectorsForThread;
-        _syncPromptDraftText = syncPromptDraftText;
-        _updatePromptAvailabilityUi = updatePromptAvailabilityUi;
-        _syncThreadTabControl = syncThreadTabControl;
-        _dispatchToUi = dispatchToUi;
-        _dispatchToUiDeferred = dispatchToUiDeferred;
-        _focusPromptTarget = focusPromptTarget;
-        _verifyBindableAccess = verifyBindableAccess;
+        _promptAvailability = promptAvailability;
+        _surface = surface;
+        _projection = projection;
+        _uiScheduler = uiScheduler;
     }
 
     public AgentBackendId GetPreferredBackendId()
-        => _getPreferredBackendId();
+        => _promptAvailability.GetPreferredModelProviderId();
 
     public (bool HasStatus, string Message, StatusTone Tone) GetPromptUnavailableStatus()
-        => _getPromptUnavailableStatus();
+        => _promptAvailability.GetPromptUnavailableStatus();
 
     public bool HasWorkspaceSurface()
-        => _hasWorkspaceSurface();
-
-    public void SetThreadPaneContent(Visual content)
-    {
-        ArgumentNullException.ThrowIfNull(content);
-        _setThreadPaneContent(content);
-    }
+        => _surface.HasWorkspaceSurface;
 
     public void EnsureSelectionDefaults()
-        => _ensureSelectionDefaults();
+        => _projection.EnsureSelectionDefaults();
 
     public void RefreshSidebarProjection()
-        => _refreshSidebarProjection();
+        => _projection.RefreshSidebarProjection();
 
     public void SyncSidebarSelectionToCurrentState()
-        => _syncSidebarSelectionToCurrentState();
+        => _projection.SyncSidebarSelectionToCurrentState();
 
     public void RefreshQueuedPromptList()
-        => _refreshQueuedPromptList();
+        => _projection.RefreshQueuedPromptList();
 
     public void RefreshChatSelectorsForDraftScope()
-        => _refreshChatSelectorsForDraftScope();
+        => _projection.RefreshChatSelectorsForDraftScope();
 
     public void RefreshChatSelectorsForThread(OpenThreadState tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        _refreshChatSelectorsForThread(tab);
+        _projection.RefreshChatSelectorsForThread(tab);
     }
 
     public void SyncPromptDraftText(ThreadSessionState? session)
-        => _syncPromptDraftText(session);
+        => _projection.SyncPromptDraftText(session);
 
     public void UpdatePromptAvailabilityUi()
-        => _updatePromptAvailabilityUi();
+        => _projection.UpdatePromptAvailabilityUi();
 
     public void SyncThreadTabControl()
-        => _syncThreadTabControl();
+        => _projection.SyncThreadTabControl();
 
     public void DispatchToUi(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
-        _dispatchToUi(action);
+        _uiScheduler.Post(action);
     }
 
     public void DispatchToUiDeferred(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
-        _dispatchToUiDeferred(action);
+        _uiScheduler.PostDeferred(action);
     }
 
     public void FocusPromptTarget()
-        => _focusPromptTarget();
+        => _surface.FocusPromptTarget();
 
     public void VerifyBindableAccess()
-        => _verifyBindableAccess();
+        => _uiScheduler.VerifyAccess();
 }

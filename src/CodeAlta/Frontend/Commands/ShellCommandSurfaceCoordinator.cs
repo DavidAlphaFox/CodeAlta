@@ -185,27 +185,26 @@ internal sealed class ShellCommandSurfaceCoordinator
     {
         var bindings = new List<ThreadWorkspaceCommandBinding>
         {
-            CreateCommandBinding("CodeAlta.Shell.Help", () => ObserveUiTask(ShowHelpAsync(), "show help")),
-            CreateCommandBinding("CodeAlta.Project.OpenFolder", () => ObserveUiTask(ShowOpenFolderDialogAsync(), "open a project")),
-            CreateCommandBinding("CodeAlta.Providers.Manage", () => ObserveUiTask(OpenModelProvidersAsync(), "open model providers")),
-            CreateCommandBinding("CodeAlta.File.Edit", () => ObserveUiTask(OpenFileEditorAsync(), "open a file")),
-            CreateCommandBinding("CodeAlta.Skills.Manage", () => ObserveUiTask(OpenSkillsAsync(), "open skills")),
-            CreateCommandBinding("CodeAlta.Plugins.Manage", () => ObserveUiTask(OpenPluginsAsync(), "open plugins")),
+            CreateCommandBinding("CodeAlta.Shell.Help", () => ObserveUiTask(() => ShowHelpAsync(), "show help")),
+            CreateCommandBinding("CodeAlta.Project.OpenFolder", () => ObserveUiTask(() => ShowOpenFolderDialogAsync(), "open a project")),
+            CreateCommandBinding("CodeAlta.Providers.Manage", () => ObserveUiTask(OpenModelProvidersAsync, "open model providers")),
+            CreateCommandBinding("CodeAlta.File.Edit", () => ObserveUiTask(OpenFileEditorAsync, "open a file")),
+            CreateCommandBinding("CodeAlta.Skills.Manage", () => ObserveUiTask(OpenSkillsAsync, "open skills")),
+            CreateCommandBinding("CodeAlta.Plugins.Manage", () => ObserveUiTask(OpenPluginsAsync, "open plugins")),
             CreateCommandBinding("CodeAlta.Thread.SessionUsage", _openSessionUsage),
             CreateCommandBinding("CodeAlta.Thread.Info", _openThreadInfo),
             CreateCommandBinding("CodeAlta.Thread.ExpandPrompt", _openExpandedPromptEditor),
-            CreateCommandBinding("CodeAlta.Thread.Steer", () => ObserveUiTask(_shellInputCoordinator.SubmitCurrentPromptAsync(steer: true), "steer the current thread")),
-            CreateCommandBinding("CodeAlta.Thread.Delegate", () => ObserveUiTask(_shellInputCoordinator.SubmitCurrentDelegationAsync(), "delegate internal work")),
-            CreateCommandBinding("CodeAlta.Thread.Abort", () => ObserveUiTask(_shellInputCoordinator.AbortSelectedThreadAsync(), "abort the selected thread")),
-            CreateCommandBinding("CodeAlta.Thread.ClearQueue", () => ObserveUiTask(_threadCommandCoordinator.ClearSelectedThreadQueueAsync(), "clear the thread queue")),
-            CreateCommandBinding("CodeAlta.Thread.Compact", () => ObserveUiTask(_shellInputCoordinator.CompactSelectedThreadAsync(), "compact the selected thread")),
-            CreateCommandBinding("CodeAlta.Thread.CloseTab", () => ObserveUiTask(_shellInputCoordinator.CloseCurrentTabAsync(), "close the current tab")),
-            CreateCommandBinding("CodeAlta.Thread.TabLeft", () => ObserveUiTask(SelectTabLeftAsync(), "select the tab to the left")),
-            CreateCommandBinding("CodeAlta.Thread.TabRight", () => ObserveUiTask(SelectTabRightAsync(), "select the tab to the right")),
-            CreateCommandBinding("CodeAlta.Thread.MessagePrevious", () => ObserveUiTask(ScrollToPreviousMessageAsync(), "scroll to the previous message")),
-            CreateCommandBinding("CodeAlta.Thread.MessageNext", () => ObserveUiTask(ScrollToNextMessageAsync(), "scroll to the next message")),
-            CreateCommandBinding("CodeAlta.Thread.MessageFirst", () => ObserveUiTask(ScrollToFirstMessageAsync(), "scroll to the first message")),
-            CreateCommandBinding("CodeAlta.Thread.MessageLast", () => ObserveUiTask(ScrollToLastMessageAsync(), "scroll to the last message")),
+            CreateCommandBinding("CodeAlta.Thread.Steer", () => ObserveUiTask(() => _shellInputCoordinator.SubmitCurrentPromptAsync(steer: true), "steer the current thread")),
+            CreateCommandBinding("CodeAlta.Thread.Abort", () => ObserveUiTask(() => _shellInputCoordinator.AbortSelectedThreadAsync(), "abort the selected thread")),
+            CreateCommandBinding("CodeAlta.Thread.ClearQueue", () => ObserveUiTask(_threadCommandCoordinator.ClearSelectedThreadQueueAsync, "clear the thread queue")),
+            CreateCommandBinding("CodeAlta.Thread.Compact", () => ObserveUiTask(() => _shellInputCoordinator.CompactSelectedThreadAsync(), "compact the selected thread")),
+            CreateCommandBinding("CodeAlta.Thread.CloseTab", () => ObserveUiTask(() => _shellInputCoordinator.CloseCurrentTabAsync(), "close the current tab")),
+            CreateCommandBinding("CodeAlta.Thread.TabLeft", () => ObserveUiTask(SelectTabLeftAsync, "select the tab to the left")),
+            CreateCommandBinding("CodeAlta.Thread.TabRight", () => ObserveUiTask(SelectTabRightAsync, "select the tab to the right")),
+            CreateCommandBinding("CodeAlta.Thread.MessagePrevious", () => ObserveUiTask(ScrollToPreviousMessageAsync, "scroll to the previous message")),
+            CreateCommandBinding("CodeAlta.Thread.MessageNext", () => ObserveUiTask(ScrollToNextMessageAsync, "scroll to the next message")),
+            CreateCommandBinding("CodeAlta.Thread.MessageFirst", () => ObserveUiTask(ScrollToFirstMessageAsync, "scroll to the first message")),
+            CreateCommandBinding("CodeAlta.Thread.MessageLast", () => ObserveUiTask(ScrollToLastMessageAsync, "scroll to the last message")),
         };
         AddPluginCommandBindings(bindings);
         return bindings;
@@ -216,9 +215,6 @@ internal sealed class ShellCommandSurfaceCoordinator
 
     public Task SubmitCurrentPromptAsync(bool steer, CancellationToken cancellationToken = default)
         => _shellInputCoordinator.SubmitCurrentPromptAsync(steer, cancellationToken);
-
-    public Task SubmitCurrentDelegationAsync(CancellationToken cancellationToken = default)
-        => _shellInputCoordinator.SubmitCurrentDelegationAsync(cancellationToken);
 
     public Task AbortSelectedThreadAsync(CancellationToken cancellationToken = default)
         => _shellInputCoordinator.AbortSelectedThreadAsync(cancellationToken);
@@ -307,7 +303,7 @@ internal sealed class ShellCommandSurfaceCoordinator
             var metadata = CreatePluginCommandMetadata(contribution);
             bindings.Add(new ThreadWorkspaceCommandBinding(
                 metadata,
-                () => ObserveUiTask(ExecutePluginCommandAsync(contribution.Name, null, CancellationToken.None), $"run plugin command {contribution.Name}"),
+                () => ObserveUiTask(() => ExecutePluginCommandAsync(contribution.Name, null, CancellationToken.None), $"run plugin command {contribution.Name}"),
                 () => CanExecutePluginCommand(contribution.Availability)));
         }
     }
@@ -405,7 +401,6 @@ internal sealed class ShellCommandSurfaceCoordinator
             ShellCommandAvailability.PromptEnabled => _promptComposerViewModel.IsEnabled,
             ShellCommandAvailability.CanSend => _promptComposerViewModel.CanSend,
             ShellCommandAvailability.CanSteer => _promptComposerViewModel.CanSteer,
-            ShellCommandAvailability.CanDelegate => _promptComposerViewModel.CanDelegate,
             ShellCommandAvailability.CanAbort => _promptComposerViewModel.CanAbort,
             ShellCommandAvailability.CanClearQueue => _promptComposerViewModel.CanClearQueue,
             ShellCommandAvailability.CanCompact => _promptComposerViewModel.CanCompact,
@@ -415,8 +410,8 @@ internal sealed class ShellCommandSurfaceCoordinator
         };
     }
 
-    private void ObserveUiTask(Task task, string operation)
-        => _ = UiTaskDiagnostics.ObserveAsync(task, operation, _setStatus);
+    private void ObserveUiTask(Func<Task> taskFactory, string operation)
+        => _ = UiTaskDiagnostics.ObserveAsync(taskFactory, operation, _setStatus);
 
     private Task ExecuteHelpAsync(string? filterText, CancellationToken cancellationToken)
     {

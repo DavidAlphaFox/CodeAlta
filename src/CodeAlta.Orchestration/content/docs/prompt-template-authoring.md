@@ -1,11 +1,11 @@
 # Prompt Template Authoring
 
-A prompt template is an optional `template.yml` file that selects base/role names and toggles generated prompt parts.
+A prompt template is an optional `template.yml` file that selects base/instruction names and toggles generated prompt parts.
 
 ```yaml
 version: 1
 base: default
-role: default
+instruction: default
 skills: true
 project_context: true
 runtime_context: true

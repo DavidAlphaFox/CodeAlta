@@ -181,6 +181,7 @@ internal sealed class ThreadRuntimeTimelineRenderer
 
             case AgentSessionUpdateEvent update:
                 tab.Timeline.FileChanges.ObserveSessionUpdate(update);
+                tab.Timeline.DiscardDraftContent(update);
                 if (update.Kind == AgentSessionUpdateKind.Idle || !ChatMarkdownFormatter.ShouldDisplaySessionUpdate(update))
                 {
                     break;

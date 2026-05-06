@@ -45,11 +45,20 @@ public sealed class ProgramThreadGuardTests
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            var candidate = Path.Combine(directory.FullName, "CodeAlta");
-            if (Directory.Exists(Path.Combine(candidate, "App")) &&
-                Directory.Exists(Path.Combine(candidate, "Views")))
+            var candidates = new[]
             {
-                return candidate;
+                directory.FullName,
+                Path.Combine(directory.FullName, "CodeAlta"),
+                Path.Combine(directory.FullName, "src", "CodeAlta"),
+            };
+
+            foreach (var candidate in candidates)
+            {
+                if (Directory.Exists(Path.Combine(candidate, "App")) &&
+                    Directory.Exists(Path.Combine(candidate, "Views")))
+                {
+                    return candidate;
+                }
             }
 
             directory = directory.Parent;

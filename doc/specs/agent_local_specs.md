@@ -1,5 +1,7 @@
 # Local Agent Runtime Specification
 
+> Historical note: This document predates the 1.0 core cleanup. Built-in persistence, semantic search, MCP services, local-model hosting, .NET intelligence, and hardcoded agent roles described here are not active 1.0 core features; they are future/plugin-oriented design notes unless reintroduced by a focused plugin or service.
+
 Status: **Draft**  
 Last updated: **2026-04-06**
 
