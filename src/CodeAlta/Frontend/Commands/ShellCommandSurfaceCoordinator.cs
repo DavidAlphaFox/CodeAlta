@@ -257,18 +257,6 @@ internal sealed class ShellCommandSurfaceCoordinator
             placeholder: "CodeAlta or C:\\code\\SomeFolder")
             .Show();
 
-    private Task ScrollToMessageAsync(ThreadMessageScrollTarget target)
-    {
-        return target switch
-        {
-            ThreadMessageScrollTarget.Previous => _scrollToPreviousMessageAsync(),
-            ThreadMessageScrollTarget.Next => _scrollToNextMessageAsync(),
-            ThreadMessageScrollTarget.First => _scrollToFirstMessageAsync(),
-            ThreadMessageScrollTarget.Last => _scrollToLastMessageAsync(),
-            _ => throw new ArgumentOutOfRangeException(nameof(target), target, "Unknown thread message scroll target."),
-        };
-    }
-
     private ShellCommandRegistry CreateCommandRegistry()
     {
         var registry = new ShellCommandRegistry();
@@ -292,60 +280,33 @@ internal sealed class ShellCommandSurfaceCoordinator
         registry.RegisterFactory("CodeAlta.Thread.MessageFirst", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.First));
         registry.RegisterFactory("CodeAlta.Thread.MessageLast", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Last));
 
-        registry.Register<SubmitPromptCommand>((command, cancellationToken) => ToValueTask(_threadCommandCoordinator.SendPromptAsync(command.Text, command.Steer, cancellationToken)));
-        registry.Register<AbortSelectedThreadCommand>((_, _) => ToValueTask(_threadCommandCoordinator.AbortSelectedThreadAsync()));
-        registry.Register<CompactSelectedThreadCommand>((_, _) => ToValueTask(_threadCommandCoordinator.CompactSelectedThreadAsync()));
-        registry.Register<CloseCurrentTabCommand>((_, _) => ToValueTask(_closeCurrentTabAsync()));
-        registry.Register<SelectRelativeTabCommand>((command, _) => ToValueTask(command.Offset < 0 ? _selectTabLeftAsync() : _selectTabRightAsync()));
-        registry.Register<ScrollSelectedThreadMessageCommand>((command, _) => ToValueTask(ScrollToMessageAsync(command.Target)));
-        registry.Register<ShowQueueStatusCommand>((_, _) => ToValueTask(ShowSelectedThreadQueueStatusAsync()));
-        registry.Register<OpenHelpCommand>((command, _) => ToValueTask(ShowShellHelpAsync(command.FilterText)));
-        registry.Register<OpenCommandPaletteCommand>((_, _) =>
-        {
-            ShowCommandPalette();
-            return ValueTask.CompletedTask;
-        });
-        registry.Register<ExitAppCommand>((_, _) =>
-        {
-            _getHelpFocusTarget()?.App?.Stop();
-            return ValueTask.CompletedTask;
-        });
-        registry.Register<OpenFolderCommand>((command, _) =>
-        {
-            ShowOpenFolderDialogCore(command.InitialPath);
-            return ValueTask.CompletedTask;
-        });
-        registry.Register<OpenModelProvidersCommand>((_, _) => ToValueTask(_openModelProvidersAsync()));
-        registry.Register<OpenFileEditorCommand>((_, _) => ToValueTask(_openFileEditorAsync()));
-        registry.Register<OpenSkillsCommand>((_, _) => ToValueTask(_openSkillsAsync()));
-        registry.Register<OpenPluginsCommand>((_, _) => ToValueTask(_openPluginsAsync()));
-        registry.Register<FocusSidebarCommand>((_, _) =>
-        {
-            _focusSidebar();
-            return ValueTask.CompletedTask;
-        });
-        registry.Register<FocusPromptCommand>((_, _) =>
-        {
-            _focusPrompt();
-            return ValueTask.CompletedTask;
-        });
-        registry.Register<OpenSessionUsageCommand>((_, _) =>
-        {
-            _openSessionUsage();
-            return ValueTask.CompletedTask;
-        });
-        registry.Register<OpenThreadInfoCommand>((_, _) =>
-        {
-            _openThreadInfo();
-            return ValueTask.CompletedTask;
-        });
-        registry.Register<OpenExpandedPromptCommand>((_, _) =>
-        {
-            _openExpandedPromptEditor();
-            return ValueTask.CompletedTask;
-        });
-        registry.Register<ClearSelectedThreadQueueCommand>((_, _) => ToValueTask(_threadCommandCoordinator.ClearSelectedThreadQueueAsync()));
-        registry.Register<ExecutePluginTextCommand>((command, cancellationToken) => ToValueTask(ExecutePluginTextCommandAsync(command.CommandName, command.Arguments, cancellationToken)));
+        PromptCommandHandlers.Register(registry, _threadCommandCoordinator);
+        ThreadCommandHandlers.Register(registry, _threadCommandCoordinator, _getSelectedThread, _ensureThreadTab, _setStatus);
+        NavigationCommandHandlers.Register(
+            registry,
+            _focusSidebar,
+            _focusPrompt,
+            _selectTabLeftAsync,
+            _selectTabRightAsync,
+            _scrollToPreviousMessageAsync,
+            _scrollToNextMessageAsync,
+            _scrollToFirstMessageAsync,
+            _scrollToLastMessageAsync);
+        DialogCommandHandlers.Register(
+            registry,
+            ShowShellHelpAsync,
+            ShowCommandPalette,
+            () => _getHelpFocusTarget()?.App?.Stop(),
+            ShowOpenFolderDialogCore,
+            _openModelProvidersAsync,
+            _openFileEditorAsync,
+            _openSkillsAsync,
+            _openPluginsAsync,
+            _openSessionUsage,
+            _openThreadInfo,
+            _openExpandedPromptEditor);
+        TabCommandHandlers.Register(registry, _closeCurrentTabAsync);
+        PluginCommandHandlers.Register(registry, _pluginHostBridge, _threadCommandCoordinator, _statusService, _setStatus);
         return registry;
     }
 
@@ -384,12 +345,6 @@ internal sealed class ShellCommandSurfaceCoordinator
 
     private async Task DispatchShellCommandAsync(ShellCommand command, CancellationToken cancellationToken = default)
         => await _shellCommandDispatcher.DispatchAsync(command, cancellationToken);
-
-    private static ValueTask ToValueTask(Task task)
-    {
-        ArgumentNullException.ThrowIfNull(task);
-        return new ValueTask(task);
-    }
 
     private void AddPluginCommandBindings(List<ThreadWorkspaceCommandBinding> bindings)
     {
@@ -493,30 +448,6 @@ internal sealed class ShellCommandSurfaceCoordinator
         }
     }
 
-    private async Task ExecutePluginTextCommandAsync(string name, string? arguments, CancellationToken cancellationToken)
-    {
-        if (_pluginHostBridge is not null)
-        {
-            var result = await _pluginHostBridge.ExecuteCommandAsync(name, arguments, cancellationToken);
-            if (result.Disposition != PluginCommandDisposition.NotHandled)
-            {
-                if (!string.IsNullOrWhiteSpace(result.UserMessage))
-                {
-                    _setStatus(result.UserMessage, false, StatusTone.Info);
-                }
-
-                if (!string.IsNullOrWhiteSpace(result.PromptText))
-                {
-                    await _threadCommandCoordinator.SendPromptAsync(result.PromptText, steer: false, cancellationToken);
-                }
-
-                return;
-            }
-        }
-
-        _statusService.SetStatus(BuildUnknownCommandStatus(name), tone: StatusTone.Warning);
-    }
-
     internal static string BuildUnknownCommandStatus(string commandName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commandName);
@@ -543,89 +474,11 @@ internal sealed class ShellCommandSurfaceCoordinator
     private void ObserveUiTask(Func<Task> taskFactory, string operation)
         => _ = UiTaskDiagnostics.ObserveAsync(taskFactory, operation, _setStatus);
 
-    private Task ExecuteHelpAsync(string? filterText, CancellationToken cancellationToken)
-    {
-        _ = cancellationToken;
-        return ShowShellHelpAsync(filterText);
-    }
-
     private Task ShowShellHelpAsync(string? filterText = null)
     {
         _helpDialog ??= new ShellHelpDialog(_getHelpBounds, _getHelpFocusTarget);
         return _helpDialog.ShowAsync(filterText);
     }
-
-    private Task ShowSelectedThreadQueueStatusAsync()
-    {
-        if (_getSelectedThread() is not { } thread)
-        {
-            _setStatus("Open a thread before inspecting its queue.", false, StatusTone.Warning);
-            return Task.CompletedTask;
-        }
-
-        var tab = _ensureThreadTab(thread);
-        var queuedCount = tab.QueuedPrompts.Count;
-        var tone = queuedCount == 0
-            ? StatusTone.Ready
-            : tab.StatusBusy ? StatusTone.Info : StatusTone.Warning;
-        var message = queuedCount == 0
-            ? $"Queue empty · {thread.Title}"
-            : $"{queuedCount} queued prompt(s) waiting in '{thread.Title}'.";
-
-        _setStatus(message, false, tone);
-        return Task.CompletedTask;
-    }
-
-    private Task ShowSelectedSessionUsageAsync()
-    {
-        _openSessionUsage();
-        return Task.CompletedTask;
-    }
-
-    private Task FocusSidebarAsync()
-    {
-        _focusSidebar();
-        return Task.CompletedTask;
-    }
-
-    private Task FocusPromptAsync()
-    {
-        _focusPrompt();
-        return Task.CompletedTask;
-    }
-
-    private Task ShowSelectedThreadInfoAsync()
-    {
-        _openThreadInfo();
-        return Task.CompletedTask;
-    }
-
-    private Task ShowExpandedPromptEditorAsync()
-    {
-        _openExpandedPromptEditor();
-        return Task.CompletedTask;
-    }
-
-    private Task SelectTabLeftAsync()
-        => _selectTabLeftAsync();
-
-    private Task SelectTabRightAsync()
-        => _selectTabRightAsync();
-
-    private Task ScrollToPreviousMessageAsync()
-        => _scrollToPreviousMessageAsync();
-
-    private Task ScrollToNextMessageAsync()
-        => _scrollToNextMessageAsync();
-
-    private Task ScrollToFirstMessageAsync()
-        => _scrollToFirstMessageAsync();
-
-    private Task ScrollToLastMessageAsync()
-        => _scrollToLastMessageAsync();
-
-    private Task ClearSelectedThreadQueueAsync()
-        => _threadCommandCoordinator.ClearSelectedThreadQueueAsync();
 
     internal static CommandPaletteStyle ResolveCommandPalettePopupStyle(Visual? focusElement)
     {
