@@ -3,7 +3,7 @@ namespace CodeAlta.App.State;
 /// <summary>
 /// UI-thread-owned immutable state store for shell frontend projections.
 /// </summary>
-internal sealed class ShellFrontendStateStore
+internal class ShellStateStore
 {
     private readonly int _ownerThreadId = Environment.CurrentManagedThreadId;
     private ShellFrontendStateSnapshot _snapshot = ShellFrontendStateSnapshot.Empty;
@@ -42,6 +42,11 @@ internal sealed class ShellFrontendStateStore
         }
     }
 }
+
+/// <summary>
+/// Compatibility name for the frontend shell state store while callers migrate to <see cref="ShellStateStore"/>.
+/// </summary>
+internal sealed class ShellFrontendStateStore : ShellStateStore;
 
 /// <summary>
 /// Immutable shell frontend state snapshot.

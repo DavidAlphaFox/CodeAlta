@@ -10,7 +10,7 @@ public sealed class ShellFrontendStateStoreTests
     [TestMethod]
     public void Mutate_PublishesImmutableSnapshots()
     {
-        var store = new ShellFrontendStateStore();
+        var store = new ShellStateStore();
         var first = store.Snapshot;
 
         var updated = store.Mutate(snapshot => snapshot
@@ -49,9 +49,17 @@ public sealed class ShellFrontendStateStoreTests
     [TestMethod]
     public async Task Snapshot_RejectsAccessFromNonOwnerThread()
     {
-        var store = new ShellFrontendStateStore();
+        var store = new ShellStateStore();
 
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => Task.Run(() => _ = store.Snapshot));
+    }
+
+    [TestMethod]
+    public void ShellFrontendStateStore_RemainsCompatibilityAlias()
+    {
+        var store = new ShellFrontendStateStore();
+
+        Assert.IsInstanceOfType<ShellStateStore>(store);
     }
 
     [TestMethod]
