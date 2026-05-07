@@ -292,10 +292,11 @@ internal sealed class ShellThreadStateCoordinator
         _refreshSelectionAndThreadWorkspace();
     }
 
-    public void SelectProjectScope(string projectId)
+    public SelectionChangeResult SelectProjectScope(string projectId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
+        var previousSelection = Selection;
         _resetPendingThreadTabSelection();
         _selectionCoordinator.SelectProjectScope(projectId, Projects);
         ViewState.SelectedThreadId = null;
@@ -303,6 +304,9 @@ internal sealed class ShellThreadStateCoordinator
         _ = PersistViewStateAsync();
         SyncStateStore();
         _refreshSelectionAndThreadWorkspace();
+        return Selection == previousSelection
+            ? SelectionChangeResult.Unchanged
+            : SelectionChangeResult.Changed;
     }
 
     public void EnsureSelectionDefaults()
@@ -326,7 +330,7 @@ internal sealed class ShellThreadStateCoordinator
         await _ensureThreadHistoryLoadedAsync(thread, CancellationToken.None);
     }
 
-    public void OpenThread(string threadId)
+    public OpenThreadResult OpenThread(string threadId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
 
@@ -334,12 +338,13 @@ internal sealed class ShellThreadStateCoordinator
         if (thread is null)
         {
             _setStatus($"Thread '{threadId}' was not found.", false, StatusTone.Warning);
-            return;
+            return OpenThreadResult.NotFound;
         }
 
+        var alreadyOpen = ViewState.OpenThreadIds.Contains(threadId, StringComparer.OrdinalIgnoreCase);
         _resetPendingThreadTabSelection();
         EnsureThreadTab(thread);
-        if (!ViewState.OpenThreadIds.Contains(threadId, StringComparer.OrdinalIgnoreCase))
+        if (!alreadyOpen)
         {
             ViewState.OpenThreadIds.Add(threadId);
         }
@@ -356,22 +361,26 @@ internal sealed class ShellThreadStateCoordinator
         SyncStateStore();
         _refreshSelectionAndThreadWorkspace();
         _ = _ensureThreadHistoryLoadedAsync(thread, CancellationToken.None);
+        return alreadyOpen
+            ? OpenThreadResult.AlreadyOpen
+            : OpenThreadResult.Opened;
     }
 
-    public async Task CloseSelectedThreadAsync()
+    public async Task<TabCloseResult> CloseSelectedThreadAsync()
     {
         if (string.IsNullOrWhiteSpace(SelectedThreadId))
         {
-            return;
+            return TabCloseResult.NotOpen;
         }
 
-        await CloseThreadTabAsync(SelectedThreadId);
+        return await CloseThreadTabAsync(SelectedThreadId);
     }
 
-    public async Task CloseThreadTabAsync(string threadId)
+    public async Task<TabCloseResult> CloseThreadTabAsync(string threadId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
 
+        var wasOpen = ViewState.OpenThreadIds.Contains(threadId, StringComparer.OrdinalIgnoreCase);
         _resetPendingThreadTabSelection();
         var removedSelectedThread = string.Equals(SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
         var removedThread = FindThread(threadId);
@@ -388,6 +397,9 @@ internal sealed class ShellThreadStateCoordinator
         await PersistViewStateAsync();
         SyncStateStore();
         _refreshSelectionAndThreadWorkspace();
+        return wasOpen
+            ? TabCloseResult.Closed
+            : TabCloseResult.NotOpen;
     }
 
     public async Task RemoveDeletedThreadArtifactsAsync(IReadOnlyList<string> threadIds)

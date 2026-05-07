@@ -64,8 +64,9 @@ public sealed class ShellThreadStateCoordinatorTests
         coordinator.ApplyRecoveredCatalogState([project], [CreateThread("thread-1", project.Id)]);
         coordinator.OpenThread("thread-1");
 
-        await coordinator.CloseThreadTabAsync("thread-1").ConfigureAwait(false);
+        var closeResult = await coordinator.CloseThreadTabAsync("thread-1").ConfigureAwait(false);
 
+        Assert.AreEqual(TabCloseResult.Closed, closeResult);
         Assert.IsTrue(coordinator.DraftTabOpen);
         Assert.IsFalse(coordinator.GlobalScopeSelected);
         Assert.AreEqual(project.Id, coordinator.SelectedProjectId);
@@ -89,8 +90,9 @@ public sealed class ShellThreadStateCoordinatorTests
         Assert.IsNotNull(tab);
         tab.Session.PromptDraftText = "keep this draft";
 
-        await coordinator.CloseThreadTabAsync(thread.ThreadId).ConfigureAwait(false);
+        var closeResult = await coordinator.CloseThreadTabAsync(thread.ThreadId).ConfigureAwait(false);
 
+        Assert.AreEqual(TabCloseResult.Closed, closeResult);
         var retained = coordinator.FindOpenThread(thread.ThreadId);
         Assert.IsNotNull(retained);
         Assert.AreEqual("keep this draft", retained.Session.PromptDraftText);
@@ -109,8 +111,9 @@ public sealed class ShellThreadStateCoordinatorTests
         coordinator.ApplyRecoveredCatalogState([project], [thread]);
         coordinator.OpenThread(thread.ThreadId);
 
-        await coordinator.CloseThreadTabAsync(thread.ThreadId).ConfigureAwait(false);
+        var closeResult = await coordinator.CloseThreadTabAsync(thread.ThreadId).ConfigureAwait(false);
 
+        Assert.AreEqual(TabCloseResult.Closed, closeResult);
         Assert.AreSame(thread, coordinator.FindThread(thread.ThreadId));
         Assert.AreEqual(WorkThreadStatus.Active, thread.Status);
         Assert.IsFalse(coordinator.ViewState.OpenThreadIds.Contains(thread.ThreadId, StringComparer.OrdinalIgnoreCase));
@@ -138,6 +141,37 @@ public sealed class ShellThreadStateCoordinatorTests
     }
 
     [TestMethod]
+    public void OpenThread_ReturnsTypedLifecycleResult()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var coordinator = CreateCoordinator(options);
+        var project = CreateProject("project-1", "CodeAlta");
+        var thread = CreateThread("thread-1", project.Id);
+        coordinator.ApplyRecoveredCatalogState([project], [thread]);
+
+        var opened = coordinator.OpenThread(thread.ThreadId);
+        var alreadyOpen = coordinator.OpenThread(thread.ThreadId);
+        var missing = coordinator.OpenThread("missing-thread");
+
+        Assert.AreEqual(OpenThreadResult.Opened, opened);
+        Assert.AreEqual(OpenThreadResult.AlreadyOpen, alreadyOpen);
+        Assert.AreEqual(OpenThreadResult.NotFound, missing);
+    }
+
+    [TestMethod]
+    public async Task CloseThreadTabAsync_ReturnsNotOpenForMissingOpenTab()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var coordinator = CreateCoordinator(options);
+
+        var result = await coordinator.CloseThreadTabAsync("thread-1").ConfigureAwait(false);
+
+        Assert.AreEqual(TabCloseResult.NotOpen, result);
+    }
+
+    [TestMethod]
     public void RemoveDeletedProject_SelectedProjectScopeFallsBackToGlobal()
     {
         using var temp = TempDirectory.Create();
@@ -154,6 +188,22 @@ public sealed class ShellThreadStateCoordinatorTests
         Assert.IsNull(coordinator.SelectedThreadId);
         Assert.AreEqual(ShellSurface.DraftWorkspace, coordinator.Selection.Surface);
         Assert.IsInstanceOfType<WorkspaceTarget.Draft>(coordinator.Selection.Target);
+    }
+
+    [TestMethod]
+    public void SelectProjectScope_ReturnsTypedSelectionChangeResult()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var coordinator = CreateCoordinator(options);
+        var project = CreateProject("project-1", "CodeAlta");
+        coordinator.ApplyRecoveredCatalogState([project], []);
+
+        var changed = coordinator.SelectProjectScope(project.Id);
+        var unchanged = coordinator.SelectProjectScope(project.Id);
+
+        Assert.AreEqual(SelectionChangeResult.Changed, changed);
+        Assert.AreEqual(SelectionChangeResult.Unchanged, unchanged);
     }
 
     [TestMethod]
