@@ -5,21 +5,20 @@ using CodeAlta.ViewModels;
 using CodeAlta.Views;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
+using FloatState = XenoAtom.Terminal.UI.State<float>;
+using IntState = XenoAtom.Terminal.UI.State<int>;
 
 namespace CodeAlta.App;
 
 internal sealed class ShellWorkspaceCoordinator
 {
     private readonly CodeAltaShellViewModel _shellViewModel;
-    private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel;
-    private readonly ThreadSelectionContext _threadSelection;
     private readonly ShellWorkspaceContext _workspaceContext;
-    private readonly State<float> _welcomeAnimationPhase01;
-    private readonly State<int> _viewRefreshState = new(0);
-    private readonly State<int> _usageRefreshState = new(0);
+    private readonly IntState _viewRefreshState = new(0);
+    private readonly IntState _usageRefreshState = new(0);
     private readonly ShellStatusProjectionController _statusProjection;
     private readonly SessionUsageProjectionController _sessionUsageProjection;
-    private string? _displayedThreadId;
+    private readonly WorkspaceProjectionController _workspaceProjection;
 
     public ShellWorkspaceCoordinator(
         CodeAltaShellViewModel shellViewModel,
@@ -28,7 +27,7 @@ internal sealed class ShellWorkspaceCoordinator
         Dictionary<string, ChatBackendState> chatBackendStates,
         ThreadSelectionContext threadSelection,
         ShellWorkspaceContext workspaceContext,
-        State<float> welcomeAnimationPhase01)
+        FloatState welcomeAnimationPhase01)
     {
         ArgumentNullException.ThrowIfNull(shellViewModel);
         ArgumentNullException.ThrowIfNull(threadWorkspaceViewModel);
@@ -39,39 +38,29 @@ internal sealed class ShellWorkspaceCoordinator
         ArgumentNullException.ThrowIfNull(welcomeAnimationPhase01);
 
         _shellViewModel = shellViewModel;
-        _threadWorkspaceViewModel = threadWorkspaceViewModel;
-        _threadSelection = threadSelection;
         _workspaceContext = workspaceContext;
-        _welcomeAnimationPhase01 = welcomeAnimationPhase01;
         _statusProjection = new ShellStatusProjectionController(shellViewModel, threadSelection, workspaceContext, _viewRefreshState);
         _sessionUsageProjection = new SessionUsageProjectionController(sessionUsageViewModel, chatBackendStates, threadSelection, workspaceContext, _usageRefreshState);
+        _workspaceProjection = new WorkspaceProjectionController(threadWorkspaceViewModel, threadSelection, workspaceContext, _viewRefreshState, _statusProjection, _sessionUsageProjection);
     }
 
     public ComputedVisual CreateComputedVisual(Func<Visual> build)
-    {
-        ArgumentNullException.ThrowIfNull(build);
-        return new ComputedVisual(
-            () =>
-            {
-                var _ = _viewRefreshState.Value;
-                return build();
-            });
-    }
+        => _workspaceProjection.CreateComputedVisual(build);
 
     public ComputedVisual CreateUsageComputedVisual(Func<Visual> build)
         => _sessionUsageProjection.CreateComputedVisual(build);
 
     public void RefreshShellChrome()
-        => _workspaceContext.DispatchToUi(RefreshShellChromeCore);
+        => _workspaceProjection.RefreshShellChrome();
 
     public void RefreshCatalogAndThreadWorkspace()
-        => _workspaceContext.DispatchToUi(RefreshCatalogAndThreadWorkspaceCore);
+        => _workspaceProjection.RefreshCatalogAndThreadWorkspace();
 
     public void RefreshHeaderAndThreadWorkspace()
-        => _workspaceContext.DispatchToUi(RefreshHeaderAndThreadWorkspaceCore);
+        => _workspaceProjection.RefreshHeaderAndThreadWorkspace();
 
     public void RefreshSelectionAndThreadWorkspace()
-        => _workspaceContext.DispatchToUi(RefreshSelectionAndThreadWorkspaceCore);
+        => _workspaceProjection.RefreshSelectionAndThreadWorkspace();
 
     public void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
         => _statusProjection.SetStatus(message, showSpinner, tone);
@@ -97,7 +86,7 @@ internal sealed class ShellWorkspaceCoordinator
         => _sessionUsageProjection.InvalidateSelectedSessionUsage();
 
     public void InvalidateThreadChrome()
-        => _workspaceContext.DispatchToUi(() => _viewRefreshState.Value++);
+        => _workspaceProjection.InvalidateThreadChrome();
 
     public void RefreshRunningStatusElapsed(DateTimeOffset now)
         => _statusProjection.RefreshRunningStatusElapsed(now);
@@ -107,88 +96,5 @@ internal sealed class ShellWorkspaceCoordinator
 
     public void SetShellInitialized(bool isInitialized)
         => _workspaceContext.DispatchToUi(() => _shellViewModel.IsInitialized = isInitialized);
-
-    private void RefreshHeaderAndThreadWorkspaceCore()
-    {
-        _workspaceContext.VerifyBindableAccess();
-        _workspaceContext.EnsureSelectionDefaults();
-        RefreshThreadWorkspaceCore();
-    }
-
-    private void RefreshShellChromeCore()
-    {
-        _workspaceContext.VerifyBindableAccess();
-        _workspaceContext.EnsureSelectionDefaults();
-        _workspaceContext.RefreshSidebarProjection();
-    }
-
-    private void RefreshCatalogAndThreadWorkspaceCore()
-    {
-        RefreshShellChromeCore();
-        RefreshThreadWorkspaceCore();
-    }
-
-    private void RefreshSelectionAndThreadWorkspaceCore()
-    {
-        _workspaceContext.VerifyBindableAccess();
-        _workspaceContext.EnsureSelectionDefaults();
-        _workspaceContext.RefreshSidebarProjection();
-        RefreshThreadWorkspaceCore();
-    }
-
-    private void RefreshThreadWorkspaceCore()
-    {
-        _sessionUsageProjection.Refresh();
-        _threadWorkspaceViewModel.CanShowThreadInfo = _threadSelection.GetSelectedThread() is not null;
-        _viewRefreshState.Value++;
-        RefreshThreadPaneContent();
-    }
-
-    private void RefreshThreadPaneContent()
-    {
-        if (!_workspaceContext.HasWorkspaceSurface())
-        {
-            return;
-        }
-
-        _workspaceContext.SyncThreadTabControl();
-
-        if (_threadSelection.Selection.Target is not WorkspaceTarget.Thread)
-        {
-            _displayedThreadId = null;
-            _workspaceContext.RefreshQueuedPromptList();
-            _workspaceContext.RefreshChatSelectorsForDraftScope();
-            _workspaceContext.SyncPromptDraftText(session: null);
-            _workspaceContext.UpdatePromptAvailabilityUi();
-            SetReadyStatusForCurrentSelection();
-            return;
-        }
-
-        var selectedThread = _threadSelection.GetSelectedThread();
-        if (selectedThread is null)
-        {
-            _displayedThreadId = null;
-            _workspaceContext.RefreshQueuedPromptList();
-            _workspaceContext.RefreshChatSelectorsForDraftScope();
-            _workspaceContext.SyncPromptDraftText(session: null);
-            _workspaceContext.UpdatePromptAvailabilityUi();
-            SetReadyStatusForCurrentSelection();
-            return;
-        }
-
-        var tab = _threadSelection.EnsureThreadTab(selectedThread);
-        _workspaceContext.RefreshQueuedPromptList();
-        _workspaceContext.RefreshChatSelectorsForThread(tab);
-        _workspaceContext.SyncPromptDraftText(tab.Session);
-        _workspaceContext.UpdatePromptAvailabilityUi();
-        if (!string.Equals(_displayedThreadId, selectedThread.ThreadId, StringComparison.OrdinalIgnoreCase))
-        {
-            _displayedThreadId = selectedThread.ThreadId;
-            _workspaceContext.DispatchToUiDeferred(tab.Timeline.RevealTail);
-            _workspaceContext.DispatchToUiDeferred(_workspaceContext.FocusPromptTarget);
-        }
-
-        SetReadyStatusForCurrentSelection();
-    }
 
 }

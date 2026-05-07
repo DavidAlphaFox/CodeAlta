@@ -1016,7 +1016,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void ShellWorkspaceCoordinator_RefreshSelectionRebuildsSidebarProjection()
     {
-        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ShellWorkspaceCoordinator.cs"));
+        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "WorkspaceProjectionController.cs"));
 
         Assert.IsTrue(workspaceSource.Contains("_workspaceContext.RefreshSidebarProjection();", StringComparison.Ordinal));
         Assert.IsFalse(workspaceSource.Contains("_workspaceContext.SyncSidebarSelectionToCurrentState();", StringComparison.Ordinal));
@@ -1275,7 +1275,7 @@ public sealed class ArchitectureGuardrailTests
     public void SidebarStateIndicators_KeepTreeIconsAndRefreshOnDraftOrRunChanges()
     {
         var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
-        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ShellWorkspaceCoordinator.cs"));
+        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "WorkspaceProjectionController.cs"));
         var sidebarViewSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "SidebarView.cs"));
 
         Assert.IsTrue(compositionSource.Contains("new PromptDraftUiCoordinator(", StringComparison.Ordinal));
