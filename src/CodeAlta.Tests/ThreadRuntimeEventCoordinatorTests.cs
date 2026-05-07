@@ -1,5 +1,6 @@
 using CodeAlta.Agent;
 using CodeAlta.App;
+using CodeAlta.App.Events;
 using CodeAlta.App.State;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
@@ -375,11 +376,39 @@ public sealed class ThreadRuntimeEventCoordinatorTests
         Assert.AreEqual(ProjectFileInvalidationReason.FileSystemWrite, searchService.Invalidations[0].Reason);
     }
 
+    [TestMethod]
+    public void ApplyRuntimeEvent_PublishesTypedProjectionEvents()
+    {
+        var thread = CreateThread();
+        var tab = CreateOpenThreadState(thread);
+        var dispatcher = new InlineUiDispatcher();
+        var publisher = new FrontendEventPublisher(dispatcher);
+        var events = new List<ShellFrontendEvent>();
+        publisher.Subscribe(events.Add);
+        var coordinator = CreateCoordinator(thread, tab, frontendEvents: publisher);
+
+        coordinator.ApplyRuntimeEvent(new WorkThreadAgentEvent(
+            thread.ThreadId,
+            new AgentContentCompletedEvent(
+                AgentBackendIds.Copilot,
+                "session-1",
+                DateTimeOffset.UtcNow,
+                null,
+                AgentContentKind.Assistant,
+                "assistant-1",
+                null,
+                "Done")));
+
+        Assert.IsTrue(events.OfType<RuntimeTimelineChangedEvent>().Any(@event => @event.ThreadId == thread.ThreadId));
+        Assert.IsTrue(events.OfType<ShellChromeChangedEvent>().Any());
+    }
+
     private static ThreadRuntimeEventCoordinator CreateCoordinator(
         WorkThreadDescriptor thread,
         OpenThreadState tab,
         Action? refreshQueuedPromptList = null,
-        IProjectFileSearchService? projectFileSearchService = null)
+        IProjectFileSearchService? projectFileSearchService = null,
+        FrontendEventPublisher? frontendEvents = null)
     {
         return new ThreadRuntimeEventCoordinator(
             findThread: id => id == thread.ThreadId ? thread : null,
@@ -387,7 +416,6 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             getAutoApproveEnabled: static () => false,
             isSelectedThread: id => id == thread.ThreadId,
             invalidateSelectedSessionUsage: static () => { },
-            refreshShellChrome: static () => { },
             setShellStatus: static (_, _, _) => { },
             setThreadStatus: static (state, message, busy, tone) =>
             {
@@ -405,7 +433,8 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             },
             refreshQueuedPromptList: refreshQueuedPromptList ?? (() => { }),
             drainQueuedPromptAsync: static (_, _) => Task.CompletedTask,
-            projectFileSearchService: projectFileSearchService ?? NullProjectFileSearchService.Instance);
+            projectFileSearchService: projectFileSearchService ?? NullProjectFileSearchService.Instance,
+            frontendEvents: frontendEvents);
     }
 
     private static OpenThreadState CreateOpenThreadState(WorkThreadDescriptor thread)

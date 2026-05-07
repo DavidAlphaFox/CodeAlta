@@ -1,4 +1,5 @@
 using CodeAlta.App.State;
+using CodeAlta.App.Events;
 using CodeAlta.Agent;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
@@ -15,7 +16,6 @@ internal sealed class ThreadRuntimeEventCoordinator
     private readonly Func<string, OpenThreadState?> _findOpenThread;
     private readonly Func<string, bool> _isSelectedThread;
     private readonly Action _invalidateSelectedSessionUsage;
-    private readonly Action _refreshShellChrome;
     private readonly Action<string, bool, StatusTone> _setShellStatus;
     private readonly Action<OpenThreadState, string, bool, StatusTone> _setThreadStatus;
     private readonly Action<OpenThreadState> _clearThreadStatus;
@@ -23,6 +23,7 @@ internal sealed class ThreadRuntimeEventCoordinator
     private readonly Func<OpenThreadState, CancellationToken, Task> _drainQueuedPromptAsync;
     private readonly IProjectFileSearchService _projectFileSearchService;
     private readonly PluginHostBridge? _pluginHostBridge;
+    private readonly FrontendEventPublisher? _frontendEvents;
     private readonly ThreadRuntimeStateReducer _stateReducer;
     private readonly ThreadRuntimeTimelineRenderer _timelineRenderer;
 
@@ -32,21 +33,20 @@ internal sealed class ThreadRuntimeEventCoordinator
         Func<bool> getAutoApproveEnabled,
         Func<string, bool> isSelectedThread,
         Action invalidateSelectedSessionUsage,
-        Action refreshShellChrome,
         Action<string, bool, StatusTone> setShellStatus,
         Action<OpenThreadState, string, bool, StatusTone> setThreadStatus,
         Action<OpenThreadState> clearThreadStatus,
         Action refreshQueuedPromptList,
         Func<OpenThreadState, CancellationToken, Task> drainQueuedPromptAsync,
         IProjectFileSearchService projectFileSearchService,
-        PluginHostBridge? pluginHostBridge = null)
+        PluginHostBridge? pluginHostBridge = null,
+        FrontendEventPublisher? frontendEvents = null)
     {
         ArgumentNullException.ThrowIfNull(findThread);
         ArgumentNullException.ThrowIfNull(findOpenThread);
         ArgumentNullException.ThrowIfNull(getAutoApproveEnabled);
         ArgumentNullException.ThrowIfNull(isSelectedThread);
         ArgumentNullException.ThrowIfNull(invalidateSelectedSessionUsage);
-        ArgumentNullException.ThrowIfNull(refreshShellChrome);
         ArgumentNullException.ThrowIfNull(setShellStatus);
         ArgumentNullException.ThrowIfNull(setThreadStatus);
         ArgumentNullException.ThrowIfNull(clearThreadStatus);
@@ -58,7 +58,6 @@ internal sealed class ThreadRuntimeEventCoordinator
         _findOpenThread = findOpenThread;
         _isSelectedThread = isSelectedThread;
         _invalidateSelectedSessionUsage = invalidateSelectedSessionUsage;
-        _refreshShellChrome = refreshShellChrome;
         _setShellStatus = setShellStatus;
         _setThreadStatus = setThreadStatus;
         _clearThreadStatus = clearThreadStatus;
@@ -66,6 +65,7 @@ internal sealed class ThreadRuntimeEventCoordinator
         _drainQueuedPromptAsync = drainQueuedPromptAsync;
         _projectFileSearchService = projectFileSearchService;
         _pluginHostBridge = pluginHostBridge;
+        _frontendEvents = frontendEvents;
         _stateReducer = new ThreadRuntimeStateReducer();
         _timelineRenderer = new ThreadRuntimeTimelineRenderer(getAutoApproveEnabled);
     }
@@ -94,10 +94,12 @@ internal sealed class ThreadRuntimeEventCoordinator
                 case WorkThreadAgentEvent agentEvent:
                     tab.HistoryEvents?.Add(agentEvent.Event);
                     TryRenderInteraction(tab, () => _timelineRenderer.RenderAgentEvent(tab, agentEvent.Event), "agent event");
+                    _frontendEvents?.Publish(new RuntimeTimelineChangedEvent(thread.ThreadId));
                     break;
 
                 case WorkThreadHostEvent hostEvent:
                     TryRenderInteraction(tab, () => _timelineRenderer.RenderHostEvent(tab, hostEvent), "host event");
+                    _frontendEvents?.Publish(new RuntimeTimelineChangedEvent(thread.ThreadId));
                     break;
             }
         }
@@ -119,6 +121,7 @@ internal sealed class ThreadRuntimeEventCoordinator
 
         var reduction = _stateReducer.ReduceAgentEvent(thread, tab, @event, _isSelectedThread(thread.ThreadId));
         TryRenderInteraction(tab, () => _timelineRenderer.RenderAgentEvent(tab, @event), "agent event");
+        _frontendEvents?.Publish(new RuntimeTimelineChangedEvent(thread.ThreadId));
         InvalidateProjectFileSearchIfNeeded(thread, @event);
         _ = ObservePluginAgentEventAsync(thread, @event);
         ApplyReduction(tab, reduction);
@@ -215,11 +218,13 @@ internal sealed class ThreadRuntimeEventCoordinator
             if (reduction.ClearThreadStatus)
             {
                 _clearThreadStatus(tab);
+                _frontendEvents?.Publish(new ThreadStatusChangedEvent(tab.Thread.ThreadId));
             }
 
             if (reduction.ThreadStatus is { } status)
             {
                 _setThreadStatus(tab, status.Message, status.ShowSpinner, status.Tone);
+                _frontendEvents?.Publish(new ThreadStatusChangedEvent(tab.Thread.ThreadId));
             }
 
             if (reduction.DrainQueuedPrompt)
@@ -242,7 +247,7 @@ internal sealed class ThreadRuntimeEventCoordinator
 
         if (reduction.RefreshShellChrome)
         {
-            _refreshShellChrome();
+            _frontendEvents?.Publish(new ShellChromeChangedEvent());
         }
     }
 }

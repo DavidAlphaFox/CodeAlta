@@ -259,14 +259,14 @@ internal sealed class CodeAltaFrontendComposition
             frontend.GetAutoApproveEnabled,
             frontend.IsSelectedThread,
             frontend.InvalidateSelectedSessionUsage,
-            frontend.RefreshShellChrome,
             frontend.SetStatus,
             frontend.SetThreadStatus,
             frontend.ClearThreadStatus,
             () => threadPromptQueueCoordinator!.RefreshSelectedThreadQueueUi(),
             (tab, cancellationToken) => threadCommandCoordinator!.DrainQueuedPromptAsync(tab, cancellationToken),
             projectFileSearchService,
-            pluginHostBridge);
+            pluginHostBridge,
+            frontendEvents);
         var threadCreationCoordinator = new ThreadCreationCoordinator(
             runtimeService,
             catalogOptions,
