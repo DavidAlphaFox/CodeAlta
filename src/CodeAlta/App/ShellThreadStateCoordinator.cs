@@ -4,7 +4,6 @@ using CodeAlta.Agent;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Shell;
-using CodeAlta.Views;
 using XenoAtom.Terminal.UI.Geometry;
 
 namespace CodeAlta.App;
