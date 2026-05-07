@@ -50,6 +50,18 @@ public sealed class ShellCommandDispatcherTests
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () => await dispatcher.DispatchAsync(new OpenHelpCommand()).AsTask());
     }
 
+    [TestMethod]
+    public void TryCreateCommand_UsesRegisteredCommandFactory()
+    {
+        var registry = new ShellCommandRegistry();
+        registry.RegisterFactory("CodeAlta.Shell.FocusPrompt", static () => new FocusPromptCommand());
+
+        var created = registry.TryCreateCommand("CodeAlta.Shell.FocusPrompt", out var command);
+
+        Assert.IsTrue(created);
+        Assert.IsInstanceOfType<FocusPromptCommand>(command);
+    }
+
     private sealed class CapturingUiDispatcher : IUiDispatcher
     {
         private readonly bool _hasAccess;

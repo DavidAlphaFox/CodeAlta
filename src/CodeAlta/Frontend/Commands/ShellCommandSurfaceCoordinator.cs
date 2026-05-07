@@ -58,6 +58,7 @@ internal sealed class ShellCommandSurfaceCoordinator
     private readonly Func<Task> _scrollToNextMessageAsync;
     private readonly Func<Task> _scrollToFirstMessageAsync;
     private readonly Func<Task> _scrollToLastMessageAsync;
+    private readonly ShellCommandRegistry _shellCommandRegistry;
     private readonly IShellCommandDispatcher _shellCommandDispatcher;
     private readonly ShellInputCoordinator _shellInputCoordinator;
     private readonly PluginHostBridge? _pluginHostBridge;
@@ -153,7 +154,8 @@ internal sealed class ShellCommandSurfaceCoordinator
         _scrollToFirstMessageAsync = scrollToFirstMessageAsync;
         _scrollToLastMessageAsync = scrollToLastMessageAsync;
         _pluginHostBridge = pluginHostBridge;
-        _shellCommandDispatcher = CreateCommandDispatcher();
+        _shellCommandRegistry = CreateCommandRegistry();
+        _shellCommandDispatcher = new ShellCommandDispatcher(_shellCommandRegistry);
         _shellInputCoordinator = new ShellInputCoordinator(
             new ShellInputRouter(),
             getPromptText,
@@ -165,26 +167,26 @@ internal sealed class ShellCommandSurfaceCoordinator
     {
         var bindings = new List<ThreadWorkspaceCommandBinding>
         {
-            CreateCommandBinding("CodeAlta.Shell.Help", new OpenHelpCommand()),
-            CreateCommandBinding("CodeAlta.Project.OpenFolder", new OpenFolderCommand()),
-            CreateCommandBinding("CodeAlta.Providers.Manage", new OpenModelProvidersCommand()),
-            CreateCommandBinding("CodeAlta.File.Edit", new OpenFileEditorCommand()),
-            CreateCommandBinding("CodeAlta.Skills.Manage", new OpenSkillsCommand()),
-            CreateCommandBinding("CodeAlta.Plugins.Manage", new OpenPluginsCommand()),
-            CreateCommandBinding("CodeAlta.Thread.SessionUsage", new OpenSessionUsageCommand()),
-            CreateCommandBinding("CodeAlta.Thread.Info", new OpenThreadInfoCommand()),
-            CreateCommandBinding("CodeAlta.Thread.ExpandPrompt", new OpenExpandedPromptCommand()),
+            CreateRegisteredCommandBinding("CodeAlta.Shell.Help"),
+            CreateRegisteredCommandBinding("CodeAlta.Project.OpenFolder"),
+            CreateRegisteredCommandBinding("CodeAlta.Providers.Manage"),
+            CreateRegisteredCommandBinding("CodeAlta.File.Edit"),
+            CreateRegisteredCommandBinding("CodeAlta.Skills.Manage"),
+            CreateRegisteredCommandBinding("CodeAlta.Plugins.Manage"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.SessionUsage"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.Info"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.ExpandPrompt"),
             CreateCommandBinding("CodeAlta.Thread.Steer", () => ObserveUiTask(() => _shellInputCoordinator.SubmitCurrentPromptAsync(steer: true), "steer the current thread")),
-            CreateCommandBinding("CodeAlta.Thread.Abort", new AbortSelectedThreadCommand()),
-            CreateCommandBinding("CodeAlta.Thread.ClearQueue", new ClearSelectedThreadQueueCommand()),
-            CreateCommandBinding("CodeAlta.Thread.Compact", new CompactSelectedThreadCommand()),
-            CreateCommandBinding("CodeAlta.Thread.CloseTab", new CloseCurrentTabCommand()),
-            CreateCommandBinding("CodeAlta.Thread.TabLeft", new SelectRelativeTabCommand(-1)),
-            CreateCommandBinding("CodeAlta.Thread.TabRight", new SelectRelativeTabCommand(1)),
-            CreateCommandBinding("CodeAlta.Thread.MessagePrevious", new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Previous)),
-            CreateCommandBinding("CodeAlta.Thread.MessageNext", new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Next)),
-            CreateCommandBinding("CodeAlta.Thread.MessageFirst", new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.First)),
-            CreateCommandBinding("CodeAlta.Thread.MessageLast", new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Last)),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.Abort"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.ClearQueue"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.Compact"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.CloseTab"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.TabLeft"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.TabRight"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.MessagePrevious"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.MessageNext"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.MessageFirst"),
+            CreateRegisteredCommandBinding("CodeAlta.Thread.MessageLast"),
         };
         AddPluginCommandBindings(bindings);
         return bindings;
@@ -265,9 +267,29 @@ internal sealed class ShellCommandSurfaceCoordinator
         };
     }
 
-    private ShellCommandDispatcher CreateCommandDispatcher()
+    private ShellCommandRegistry CreateCommandRegistry()
     {
         var registry = new ShellCommandRegistry();
+        registry.RegisterFactory("CodeAlta.Shell.Help", static () => new OpenHelpCommand());
+        registry.RegisterFactory("CodeAlta.Project.OpenFolder", static () => new OpenFolderCommand());
+        registry.RegisterFactory("CodeAlta.Providers.Manage", static () => new OpenModelProvidersCommand());
+        registry.RegisterFactory("CodeAlta.File.Edit", static () => new OpenFileEditorCommand());
+        registry.RegisterFactory("CodeAlta.Skills.Manage", static () => new OpenSkillsCommand());
+        registry.RegisterFactory("CodeAlta.Plugins.Manage", static () => new OpenPluginsCommand());
+        registry.RegisterFactory("CodeAlta.Thread.SessionUsage", static () => new OpenSessionUsageCommand());
+        registry.RegisterFactory("CodeAlta.Thread.Info", static () => new OpenThreadInfoCommand());
+        registry.RegisterFactory("CodeAlta.Thread.ExpandPrompt", static () => new OpenExpandedPromptCommand());
+        registry.RegisterFactory("CodeAlta.Thread.Abort", static () => new AbortSelectedThreadCommand());
+        registry.RegisterFactory("CodeAlta.Thread.ClearQueue", static () => new ClearSelectedThreadQueueCommand());
+        registry.RegisterFactory("CodeAlta.Thread.Compact", static () => new CompactSelectedThreadCommand());
+        registry.RegisterFactory("CodeAlta.Thread.CloseTab", static () => new CloseCurrentTabCommand());
+        registry.RegisterFactory("CodeAlta.Thread.TabLeft", static () => new SelectRelativeTabCommand(-1));
+        registry.RegisterFactory("CodeAlta.Thread.TabRight", static () => new SelectRelativeTabCommand(1));
+        registry.RegisterFactory("CodeAlta.Thread.MessagePrevious", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Previous));
+        registry.RegisterFactory("CodeAlta.Thread.MessageNext", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Next));
+        registry.RegisterFactory("CodeAlta.Thread.MessageFirst", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.First));
+        registry.RegisterFactory("CodeAlta.Thread.MessageLast", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Last));
+
         registry.Register<SubmitPromptCommand>((command, cancellationToken) => ToValueTask(_threadCommandCoordinator.SendPromptAsync(command.Text, command.Steer, cancellationToken)));
         registry.Register<AbortSelectedThreadCommand>((_, _) => ToValueTask(_threadCommandCoordinator.AbortSelectedThreadAsync()));
         registry.Register<CompactSelectedThreadCommand>((_, _) => ToValueTask(_threadCommandCoordinator.CompactSelectedThreadAsync()));
@@ -322,7 +344,7 @@ internal sealed class ShellCommandSurfaceCoordinator
         });
         registry.Register<ClearSelectedThreadQueueCommand>((_, _) => ToValueTask(_threadCommandCoordinator.ClearSelectedThreadQueueAsync()));
         registry.Register<ExecutePluginTextCommand>((command, cancellationToken) => ToValueTask(ExecutePluginTextCommandAsync(command.CommandName, command.Arguments, cancellationToken)));
-        return new ShellCommandDispatcher(registry);
+        return registry;
     }
 
     private ThreadWorkspaceCommandBinding CreateCommandBinding(string commandId, Action execute)
@@ -345,6 +367,17 @@ internal sealed class ShellCommandSurfaceCoordinator
         return CreateCommandBinding(
             commandId,
             () => ObserveUiTask(() => DispatchShellCommandAsync(command), $"run command {commandId}"));
+    }
+
+    private ThreadWorkspaceCommandBinding CreateRegisteredCommandBinding(string commandId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commandId);
+        if (!_shellCommandRegistry.TryCreateCommand(commandId, out var command))
+        {
+            throw new InvalidOperationException($"No shell command factory is registered for {commandId}.");
+        }
+
+        return CreateCommandBinding(commandId, command);
     }
 
     private async Task DispatchShellCommandAsync(ShellCommand command, CancellationToken cancellationToken = default)
