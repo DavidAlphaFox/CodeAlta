@@ -1,10 +1,6 @@
 using CodeAlta.App.State;
-using CodeAlta.Agent;
 using CodeAlta.App.Context;
-using CodeAlta.Catalog;
 using CodeAlta.Models;
-using CodeAlta.Presentation.Shell;
-using CodeAlta.Presentation.Sidebar;
 using CodeAlta.ViewModels;
 using CodeAlta.Views;
 using XenoAtom.Terminal.UI;
@@ -16,13 +12,13 @@ internal sealed class ShellWorkspaceCoordinator
 {
     private readonly CodeAltaShellViewModel _shellViewModel;
     private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel;
-    private readonly SessionUsageViewModel _sessionUsageViewModel;
-    private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly ThreadSelectionContext _threadSelection;
     private readonly ShellWorkspaceContext _workspaceContext;
     private readonly State<float> _welcomeAnimationPhase01;
     private readonly State<int> _viewRefreshState = new(0);
     private readonly State<int> _usageRefreshState = new(0);
+    private readonly ShellStatusProjectionController _statusProjection;
+    private readonly SessionUsageProjectionController _sessionUsageProjection;
     private string? _displayedThreadId;
 
     public ShellWorkspaceCoordinator(
@@ -44,11 +40,11 @@ internal sealed class ShellWorkspaceCoordinator
 
         _shellViewModel = shellViewModel;
         _threadWorkspaceViewModel = threadWorkspaceViewModel;
-        _sessionUsageViewModel = sessionUsageViewModel;
-        _chatBackendStates = chatBackendStates;
         _threadSelection = threadSelection;
         _workspaceContext = workspaceContext;
         _welcomeAnimationPhase01 = welcomeAnimationPhase01;
+        _statusProjection = new ShellStatusProjectionController(shellViewModel, threadSelection, workspaceContext, _viewRefreshState);
+        _sessionUsageProjection = new SessionUsageProjectionController(sessionUsageViewModel, chatBackendStates, threadSelection, workspaceContext, _usageRefreshState);
     }
 
     public ComputedVisual CreateComputedVisual(Func<Visual> build)
@@ -63,15 +59,7 @@ internal sealed class ShellWorkspaceCoordinator
     }
 
     public ComputedVisual CreateUsageComputedVisual(Func<Visual> build)
-    {
-        ArgumentNullException.ThrowIfNull(build);
-        return new ComputedVisual(
-            () =>
-            {
-                var _ = _usageRefreshState.Value;
-                return build();
-            });
-    }
+        => _sessionUsageProjection.CreateComputedVisual(build);
 
     public void RefreshShellChrome()
         => _workspaceContext.DispatchToUi(RefreshShellChromeCore);
@@ -86,31 +74,13 @@ internal sealed class ShellWorkspaceCoordinator
         => _workspaceContext.DispatchToUi(RefreshSelectionAndThreadWorkspaceCore);
 
     public void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
-        => SetStatus(message, showSpinner, tone, iconMarkup: null);
+        => _statusProjection.SetStatus(message, showSpinner, tone);
 
     public void SetProviderSessionLoadStatus(string? message)
-    {
-        _workspaceContext.DispatchToUi(
-            () =>
-            {
-                _workspaceContext.VerifyBindableAccess();
-                ShellViewModelProjection.ApplyProviderSessionLoadStatus(_shellViewModel, message);
-            });
-    }
+        => _statusProjection.SetProviderSessionLoadStatus(message);
 
     public void SetStatus(string message, bool showSpinner, StatusTone tone, string? iconMarkup)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(message);
-
-        _workspaceContext.DispatchToUi(
-            () =>
-            {
-                _workspaceContext.VerifyBindableAccess();
-                ShellViewModelProjection.ApplyStatus(
-                    _shellViewModel,
-                    new ShellStatusSnapshot(message, showSpinner, tone, iconMarkup));
-            });
-    }
+        => _statusProjection.SetStatus(message, showSpinner, tone, iconMarkup);
 
     public void SetThreadStatus(
         OpenThreadState tab,
@@ -118,136 +88,22 @@ internal sealed class ShellWorkspaceCoordinator
         bool showSpinner = false,
         StatusTone tone = StatusTone.Info,
         bool hasCustomStatus = true)
-    {
-        ArgumentNullException.ThrowIfNull(tab);
-        ArgumentException.ThrowIfNullOrWhiteSpace(message);
-
-        _workspaceContext.DispatchToUi(
-            () =>
-            {
-                _workspaceContext.VerifyBindableAccess();
-                var changed =
-                    !string.Equals(tab.StatusMessage, message, StringComparison.Ordinal) ||
-                    tab.StatusBusy != showSpinner ||
-                    tab.StatusTone != tone ||
-                    tab.HasCustomStatus != hasCustomStatus;
-
-                tab.StatusMessage = message;
-                tab.StatusBusy = showSpinner;
-                tab.StatusTone = tone;
-                tab.HasCustomStatus = hasCustomStatus;
-
-                if (_threadSelection.IsSelectedThread(tab.Thread.ThreadId))
-                {
-                    _workspaceContext.UpdatePromptAvailabilityUi();
-                    SetReadyStatusForCurrentSelection();
-                }
-
-                if (changed)
-                {
-                    _workspaceContext.RefreshSidebarProjection();
-                    _viewRefreshState.Value++;
-                }
-            });
-    }
+        => _statusProjection.SetThreadStatus(tab, message, showSpinner, tone, hasCustomStatus);
 
     public void ClearThreadStatus(OpenThreadState tab)
-    {
-        ArgumentNullException.ThrowIfNull(tab);
-        SetThreadStatus(
-            tab,
-            ShellTextFormatter.BuildReadyStatusText(tab.Thread, _threadSelection.GetSelectedProject(), globalScopeSelected: false),
-            tone: StatusTone.Ready,
-            hasCustomStatus: false);
-    }
+        => _statusProjection.ClearThreadStatus(tab);
 
     public void InvalidateSelectedSessionUsage()
-    {
-        _workspaceContext.DispatchToUiDeferred(
-            () =>
-            {
-                SyncSelectedSessionUsageViewModel();
-                _usageRefreshState.Value++;
-            });
-    }
+        => _sessionUsageProjection.InvalidateSelectedSessionUsage();
 
     public void InvalidateThreadChrome()
         => _workspaceContext.DispatchToUi(() => _viewRefreshState.Value++);
 
     public void RefreshRunningStatusElapsed(DateTimeOffset now)
-    {
-        _workspaceContext.DispatchToUi(
-            () =>
-            {
-                _workspaceContext.VerifyBindableAccess();
-                var selectedThread = _threadSelection.GetSelectedThread();
-                if (selectedThread is null)
-                {
-                    return;
-                }
-
-                var selectedTab = _threadSelection.EnsureThreadTab(selectedThread);
-                if (!selectedTab.HasCustomStatus ||
-                    !selectedTab.StatusBusy ||
-                    selectedTab.ActiveRunStartedAt is not { } startedAt ||
-                    !StatusVisualFormatter.IsThinkingStatusText(selectedTab.StatusMessage))
-                {
-                    return;
-                }
-
-                var elapsed = now - startedAt;
-                if (elapsed < TimeSpan.Zero)
-                {
-                    elapsed = TimeSpan.Zero;
-                }
-
-                var message = StatusVisualFormatter.BuildThinkingStatusText(elapsed);
-                if (string.Equals(selectedTab.StatusMessage, message, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                selectedTab.StatusMessage = message;
-                _shellViewModel.StatusText = message;
-                _workspaceContext.RefreshSidebarProjection();
-                _viewRefreshState.Value++;
-            });
-    }
+        => _statusProjection.RefreshRunningStatusElapsed(now);
 
     public void SetReadyStatusForCurrentSelection()
-    {
-        var selection = _threadSelection.Selection;
-        var selectedThread = selection.Target is WorkspaceTarget.Thread ? _threadSelection.GetSelectedThread() : null;
-        var readyMessage = ShellTextFormatter.BuildReadyStatusText(
-            selectedThread,
-            _threadSelection.GetSelectedProject(),
-            selection.Target is WorkspaceTarget.Draft { IsGlobal: true });
-        var promptUnavailable = _workspaceContext.GetPromptUnavailableStatus();
-        if (selectedThread is not null)
-        {
-            var selectedTab = _threadSelection.EnsureThreadTab(selectedThread);
-            var snapshot = SelectionStatusResolver.Resolve(
-                readyMessage,
-                selectedTab.HasCustomStatus,
-                selectedTab.ViewModel.StatusMessage,
-                selectedTab.ViewModel.StatusBusy,
-                selectedTab.ViewModel.StatusTone,
-                selectedTab.HasPromptDraft,
-                promptUnavailable.HasStatus,
-                promptUnavailable.Message,
-                promptUnavailable.Tone);
-            SetStatus(snapshot.Message, snapshot.Busy, snapshot.Tone, snapshot.IconMarkup);
-            return;
-        }
-
-        if (promptUnavailable.HasStatus)
-        {
-            SetStatus(promptUnavailable.Message, tone: promptUnavailable.Tone);
-            return;
-        }
-
-        SetStatus(readyMessage, tone: StatusTone.Ready);
-    }
+        => _statusProjection.SetReadyStatusForCurrentSelection();
 
     public void SetShellInitialized(bool isInitialized)
         => _workspaceContext.DispatchToUi(() => _shellViewModel.IsInitialized = isInitialized);
@@ -282,10 +138,9 @@ internal sealed class ShellWorkspaceCoordinator
 
     private void RefreshThreadWorkspaceCore()
     {
-        SyncSelectedSessionUsageViewModel();
+        _sessionUsageProjection.Refresh();
         _threadWorkspaceViewModel.CanShowThreadInfo = _threadSelection.GetSelectedThread() is not null;
         _viewRefreshState.Value++;
-        _usageRefreshState.Value++;
         RefreshThreadPaneContent();
     }
 
@@ -336,32 +191,4 @@ internal sealed class ShellWorkspaceCoordinator
         SetReadyStatusForCurrentSelection();
     }
 
-    private void SyncSelectedSessionUsageViewModel()
-    {
-        _workspaceContext.VerifyBindableAccess();
-        if (_threadSelection.Selection.Target is WorkspaceTarget.Thread)
-        {
-            var selectedThread = _threadSelection.GetSelectedThread();
-            if (selectedThread is null)
-            {
-                return;
-            }
-
-            var tab = _threadSelection.EnsureThreadTab(selectedThread);
-            _chatBackendStates.TryGetValue(tab.BackendId.Value, out var backendState);
-            _sessionUsageViewModel.Usage = tab.Usage;
-            _sessionUsageViewModel.BackendName = ResolveBackendDisplayName(tab.BackendId, backendState);
-            _sessionUsageViewModel.ModelName = tab.ModelId ?? backendState?.SelectedModelId;
-            return;
-        }
-
-        var backendId = _workspaceContext.GetPreferredBackendId();
-        _chatBackendStates.TryGetValue(backendId.Value, out var draftBackendState);
-        _sessionUsageViewModel.Usage = null;
-        _sessionUsageViewModel.BackendName = ResolveBackendDisplayName(backendId, draftBackendState);
-        _sessionUsageViewModel.ModelName = draftBackendState?.SelectedModelId;
-    }
-
-    private static string ResolveBackendDisplayName(AgentBackendId backendId, ChatBackendState? backendState)
-        => SidebarThreadPresentation.ResolveProviderDisplayName(backendId.Value, backendState?.DisplayName);
 }
