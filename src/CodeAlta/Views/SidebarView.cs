@@ -23,11 +23,7 @@ internal sealed class SidebarView
 
     private readonly Dictionary<SidebarSelectionTarget, TreeNode> _nodesByTarget = new();
     private readonly Dictionary<string, SidebarNodeHeaderView> _headersByNodeId = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Action<string> _deleteThread;
-    private readonly Action<string> _deleteProject;
-    private readonly Action<string> _openProjectThreads;
-    private readonly Action<string> _openProjectDetails;
-    private readonly Action _openFolder;
+    private readonly ISidebarRowCommandDispatcher _rowCommandDispatcher;
     private readonly Action<SidebarNodeViewModel> _submitInlineRename;
     private readonly Action<SidebarNodeViewModel> _cancelInlineRename;
 
@@ -39,11 +35,7 @@ internal sealed class SidebarView
         Action beginInlineRenameSelectedProject,
         Action<SidebarNodeViewModel> submitInlineRename,
         Action<SidebarNodeViewModel> cancelInlineRename,
-        Action<string> deleteThread,
-        Action<string> deleteProject,
-        Action<string> openProjectThreads,
-        Action<string> openProjectDetails,
-        Action openFolder,
+        ISidebarRowCommandDispatcher rowCommandDispatcher,
         Action<SidebarSelectionTarget?> onSelectedTargetChanged,
         Action? openLogs = null)
     {
@@ -54,18 +46,10 @@ internal sealed class SidebarView
         ArgumentNullException.ThrowIfNull(beginInlineRenameSelectedProject);
         ArgumentNullException.ThrowIfNull(submitInlineRename);
         ArgumentNullException.ThrowIfNull(cancelInlineRename);
-        ArgumentNullException.ThrowIfNull(deleteThread);
-        ArgumentNullException.ThrowIfNull(deleteProject);
-        ArgumentNullException.ThrowIfNull(openProjectThreads);
-        ArgumentNullException.ThrowIfNull(openProjectDetails);
-        ArgumentNullException.ThrowIfNull(openFolder);
+        ArgumentNullException.ThrowIfNull(rowCommandDispatcher);
         ArgumentNullException.ThrowIfNull(onSelectedTargetChanged);
 
-        _deleteThread = deleteThread;
-        _deleteProject = deleteProject;
-        _openProjectThreads = openProjectThreads;
-        _openProjectDetails = openProjectDetails;
-        _openFolder = openFolder;
+        _rowCommandDispatcher = rowCommandDispatcher;
         _submitInlineRename = submitInlineRename;
         _cancelInlineRename = cancelInlineRename;
 
@@ -315,17 +299,17 @@ internal sealed class SidebarView
         return actionKind switch
         {
             SidebarRowActionKind.DeleteThread when target?.ThreadId is { } threadId
-                => () => _deleteThread(threadId),
+                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.DeleteThread(threadId)),
             SidebarRowActionKind.DeleteProject when target?.ProjectId is { } projectId
-                => () => _deleteProject(projectId),
+                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.DeleteProject(projectId)),
             SidebarRowActionKind.OpenProjectThreads when target?.Kind == SidebarSelectionKind.GlobalScope
-                => () => _openProjectThreads(string.Empty),
+                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.OpenProjectThreads(string.Empty)),
             SidebarRowActionKind.OpenProjectThreads when target?.ProjectId is { } projectId
-                => () => _openProjectThreads(projectId),
+                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.OpenProjectThreads(projectId)),
             SidebarRowActionKind.OpenProjectDetails when target?.ProjectId is { } projectId
-                => () => _openProjectDetails(projectId),
+                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.OpenProjectDetails(projectId)),
             SidebarRowActionKind.OpenFolder
-                => _openFolder,
+                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.OpenFolder()),
             _ => static () => { },
         };
     }

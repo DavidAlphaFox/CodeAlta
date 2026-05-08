@@ -357,7 +357,7 @@ public sealed class ArchitectureGuardrailTests
             "App/ShellThreadStateCoordinator.cs:353:_ = _ensureThreadHistoryLoadedAsync(thread, CancellationToken.None);",
             "App/ShellThreadStateCoordinator.cs:444:_ = PersistViewStateAsync();",
             "App/ShellThreadStateCoordinator.cs:481:_ = PersistViewStateAsync();",
-            "App/SidebarCoordinator.cs:309:_ = CommitInlineRenameAsync(row, projectId, displayName, previousTitle);",
+            "App/SidebarCoordinator.cs:297:_ = CommitInlineRenameAsync(row, projectId, displayName, previousTitle);",
             "App/ThreadPromptDispatchCoordinator.cs:177:_ = RecordResolvedReferenceUsageAsync(promptInput.ResolvedReferences);",
             "App/ThreadPromptDraftPersistenceCoordinator.cs:83:_ = PersistPromptDraftAsync(threadId, normalizedPrompt, cancellationSource);",
             "App/ThreadRuntimeEventCoordinator.cs:94:_ = ObservePluginAgentEventAsync(thread, agentRuntimeEvent.Event);",

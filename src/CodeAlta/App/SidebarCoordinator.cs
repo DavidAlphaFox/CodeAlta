@@ -27,11 +27,7 @@ internal sealed class SidebarCoordinator
         Action cycleSortMode,
         Action openNavigatorSettings,
         Func<string, string, Task> renameProjectDisplayNameAsync,
-        Action<string> requestDeleteThread,
-        Action<string> requestDeleteProject,
-        Action<string> openProjectThreads,
-        Action<string> openProjectDetails,
-        Action openFolder,
+        ISidebarRowCommandDispatcher rowCommandDispatcher,
         Action openLogs)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
@@ -40,11 +36,7 @@ internal sealed class SidebarCoordinator
         ArgumentNullException.ThrowIfNull(cycleSortMode);
         ArgumentNullException.ThrowIfNull(openNavigatorSettings);
         ArgumentNullException.ThrowIfNull(renameProjectDisplayNameAsync);
-        ArgumentNullException.ThrowIfNull(requestDeleteThread);
-        ArgumentNullException.ThrowIfNull(requestDeleteProject);
-        ArgumentNullException.ThrowIfNull(openProjectThreads);
-        ArgumentNullException.ThrowIfNull(openProjectDetails);
-        ArgumentNullException.ThrowIfNull(openFolder);
+        ArgumentNullException.ThrowIfNull(rowCommandDispatcher);
         ArgumentNullException.ThrowIfNull(openLogs);
 
         _viewModel = viewModel;
@@ -59,11 +51,7 @@ internal sealed class SidebarCoordinator
             BeginInlineRenameSelectedProject,
             SubmitInlineRename,
             CancelInlineRename,
-            requestDeleteThread,
-            requestDeleteProject,
-            openProjectThreads,
-            openProjectDetails,
-            openFolder,
+            rowCommandDispatcher,
             OnSelectedTargetChanged,
             openLogs);
     }
