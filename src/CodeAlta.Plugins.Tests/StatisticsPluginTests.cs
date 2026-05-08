@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CodeAlta.Agent;
 using CodeAlta.Plugin.Statistics;
 using CodeAlta.Plugins.Abstractions;
@@ -98,6 +99,63 @@ public sealed class StatisticsPluginTests
         Assert.AreEqual(0, result.Count);
     }
 
+    [TestMethod]
+    public async Task Projection_CountsModelGeneratedToolInputAsOutputWithoutToolOutput()
+    {
+        var plugin = new StatisticsPlugin();
+        var contribution = plugin.GetThreadEventProjections().Single();
+        var backendId = new AgentBackendId("provider-1");
+        var runId = new AgentRunId("run-output-accounting");
+        var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
+        var details = ParseDetails("{\"command\":\"run\",\"arguments\":\"tool args\"}");
+        var events = new AgentEvent[]
+        {
+            new AgentActivityEvent(backendId, "session-1", startedAt, runId, AgentActivityKind.Turn, AgentActivityPhase.Started, "turn-1", null, "turn", null),
+            new AgentContentCompletedEvent(backendId, "session-1", startedAt.AddMilliseconds(100), runId, AgentContentKind.User, "user-1", "turn-1", "prompt"),
+            new AgentContentCompletedEvent(backendId, "session-1", startedAt.AddMilliseconds(200), runId, AgentContentKind.Assistant, "assistant-1", "turn-1", "hi"),
+            new AgentContentCompletedEvent(backendId, "session-1", startedAt.AddMilliseconds(300), runId, AgentContentKind.Reasoning, "reasoning-1", "turn-1", "abc"),
+            new AgentContentCompletedEvent(backendId, "session-1", startedAt.AddMilliseconds(400), runId, AgentContentKind.ReasoningSummary, "summary-1", "turn-1", "sum"),
+            new AgentContentCompletedEvent(backendId, "session-1", startedAt.AddMilliseconds(500), runId, AgentContentKind.Plan, "plan-1", "turn-1", "plan"),
+            new AgentActivityEvent(backendId, "session-1", startedAt.AddMilliseconds(600), runId, AgentActivityKind.ToolCall, AgentActivityPhase.Started, "tool-1", "turn-1", "tool", null, details),
+            new AgentContentCompletedEvent(backendId, "session-1", startedAt.AddMilliseconds(700), runId, AgentContentKind.ToolOutput, "tool-output-1", "tool-1", "tool output is not model output"),
+            new AgentActivityEvent(backendId, "session-1", startedAt.AddMilliseconds(800), runId, AgentActivityKind.ToolCall, AgentActivityPhase.Completed, "tool-1", "turn-1", "tool", "done"),
+            new AgentActivityEvent(backendId, "session-1", startedAt.AddSeconds(1), runId, AgentActivityKind.Turn, AgentActivityPhase.Completed, "turn-1", null, "turn", null),
+        };
+
+        var result = await contribution.ProjectAsync(CreateContext(events), CancellationToken.None);
+
+        var card = result.Single();
+        StringAssert.Contains(card.Markdown, "2 in / 7 out");
+        var detailsMarkdown = card.DetailSections.Single().Markdown;
+        StringAssert.Contains(detailsMarkdown, "Tool input (model generated) | 16 chars");
+        StringAssert.Contains(detailsMarkdown, "Generated output | 28 chars");
+        StringAssert.Contains(detailsMarkdown, "Tool output | 31 chars");
+    }
+
+    [TestMethod]
+    public async Task Projection_IncludesCompactionCountAndDurationInDetails()
+    {
+        var plugin = new StatisticsPlugin();
+        var contribution = plugin.GetThreadEventProjections().Single();
+        var backendId = new AgentBackendId("provider-1");
+        var runId = new AgentRunId("run-compaction");
+        var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
+        var events = new AgentEvent[]
+        {
+            new AgentActivityEvent(backendId, "session-1", startedAt, runId, AgentActivityKind.Turn, AgentActivityPhase.Started, "turn-1", null, "turn", null),
+            new AgentContentCompletedEvent(backendId, "session-1", startedAt.AddMilliseconds(100), runId, AgentContentKind.User, "user-1", "turn-1", "prompt"),
+            new AgentSessionUpdateEvent(backendId, "session-1", startedAt.AddSeconds(1), runId, AgentSessionUpdateKind.CompactionStarted, "compacting"),
+            new AgentSessionUpdateEvent(backendId, "session-1", startedAt.AddSeconds(3), runId, AgentSessionUpdateKind.CompactionCompleted, "compacted"),
+            new AgentActivityEvent(backendId, "session-1", startedAt.AddSeconds(4), runId, AgentActivityKind.Turn, AgentActivityPhase.Completed, "turn-1", null, "turn", null),
+        };
+
+        var result = await contribution.ProjectAsync(CreateContext(events), CancellationToken.None);
+
+        var card = result.Single();
+        StringAssert.Contains(card.Markdown, "compactions 1 / 2.0s");
+        StringAssert.Contains(card.DetailSections.Single().Markdown, "Compactions | 1 / 2.0s");
+    }
+
     private static PluginThreadEventProjectionContext CreateContext(IReadOnlyList<AgentEvent> events)
         => new()
         {
@@ -112,6 +170,12 @@ public sealed class StatisticsPluginTests
             Events = events,
             IsCompleteBatch = true,
         };
+
+    private static JsonElement ParseDetails(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
 
     private static IReadOnlyList<AgentEvent> CreateTurnEvents(DateTimeOffset startedAt, bool includeCompletedAssistant, bool includeUsage, AgentRunId? runId)
     {

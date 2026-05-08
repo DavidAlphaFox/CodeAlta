@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using CodeAlta.Agent;
 using CodeAlta.Plugins.Abstractions;
 
@@ -69,6 +70,10 @@ public sealed class StatisticsPlugin : PluginBase
                     turn.ReportedOutputTokens,
                     turn.EstimatedInputTokens,
                     turn.EstimatedOutputTokens,
+                    ToolInputCharacters = turn.ToolInput.Characters,
+                    GeneratedOutputCharacters = turn.GeneratedOutput.Characters,
+                    turn.CompactionCount,
+                    turn.CompactionDuration,
                 },
             });
         }
@@ -152,7 +157,7 @@ public sealed class StatisticsPlugin : PluginBase
         => phase is AgentActivityPhase.Completed or AgentActivityPhase.Failed or AgentActivityPhase.Canceled;
 
     private static bool IsToolActivity(AgentActivityKind kind)
-        => kind != AgentActivityKind.Turn;
+        => kind is not AgentActivityKind.Turn and not AgentActivityKind.Compaction;
 
     private static bool IsToolOutputKind(AgentContentKind kind)
         => kind is AgentContentKind.CommandOutput or AgentContentKind.FileChangeOutput or AgentContentKind.ToolOutput;
@@ -241,6 +246,8 @@ public sealed class StatisticsPlugin : PluginBase
         private readonly Dictionary<string, ContentBuilder> _content = new(StringComparer.Ordinal);
         private readonly Dictionary<string, ToolCallBuilder> _tools = new(StringComparer.Ordinal);
         private readonly List<DateTimeOffset> _modelOutputTimestamps = [];
+        private readonly CompactionStatisticsBuilder _compactions = new();
+        private readonly StringBuilder _planSnapshotText = new();
         private AgentOperationUsageSnapshot? _lastOperationUsage;
         private AgentSystemPromptStatistics? _systemPromptStatistics;
 
@@ -274,6 +281,8 @@ public sealed class StatisticsPlugin : PluginBase
                         _lastOperationUsage = usage;
                     }
 
+                    _compactions.Add(update);
+
                     if (update.Kind is AgentSessionUpdateKind.Idle or AgentSessionUpdateKind.Shutdown or AgentSessionUpdateKind.TaskCompleted)
                     {
                         IsComplete = true;
@@ -282,8 +291,10 @@ public sealed class StatisticsPlugin : PluginBase
 
                     MessageCounts.SessionUpdate++;
                     break;
-                case AgentPlanSnapshotEvent:
+                case AgentPlanSnapshotEvent plan:
                     MessageCounts.Plan++;
+                    AppendPlanSnapshot(plan.Snapshot);
+                    _modelOutputTimestamps.Add(plan.Timestamp);
                     break;
                 case AgentErrorEvent:
                     MessageCounts.Error++;
@@ -320,15 +331,26 @@ public sealed class StatisticsPlugin : PluginBase
         public TurnStatistics Build()
         {
             var contents = _content.Values.Select(static item => item.Build()).ToArray();
-            var tools = _tools.Values.Select(static item => item.Build()).OrderBy(static item => item.StartedAt ?? item.EndedAt ?? DateTimeOffset.MinValue).ToArray();
+            var tools = _tools.Values
+                .Select(item => item.Build(ContentStats.For(contents.Where(content => IsOwnedToolOutput(content, item.ActivityId)))))
+                .OrderBy(static item => item.StartedAt ?? item.EndedAt ?? DateTimeOffset.MinValue)
+                .ToArray();
             var assistant = ContentStats.For(contents, AgentContentKind.Assistant);
             var reasoning = ContentStats.For(contents, AgentContentKind.Reasoning);
             var reasoningSummary = ContentStats.For(contents, AgentContentKind.ReasoningSummary);
+            var plan = ContentStats.Sum(ContentStats.For(contents, AgentContentKind.Plan, AgentContentKind.Notice), ContentStats.ForText(_planSnapshotText.ToString()));
             var prompt = ContentStats.For(contents, AgentContentKind.User);
-            var toolOutput = ContentStats.For(contents, AgentContentKind.CommandOutput, AgentContentKind.FileChangeOutput, AgentContentKind.ToolOutput);
-            var outputChars = assistant.Characters + reasoning.Characters + reasoningSummary.Characters + toolOutput.Characters;
+            var toolInput = ContentStats.Sum(tools.Select(static item => item.Input));
+            var unownedToolOutput = ContentStats.For(contents.Where(content =>
+                IsToolOutputKind(content.Kind) &&
+                !_tools.ContainsKey(content.ContentId) &&
+                (string.IsNullOrWhiteSpace(content.ParentActivityId) || !_tools.ContainsKey(content.ParentActivityId))));
+            var toolOutput = ContentStats.Sum(tools.Select(static item => item.Output), unownedToolOutput);
+            var generatedOutput = ContentStats.Sum(assistant, reasoning, reasoningSummary, plan, toolInput);
+            var outputChars = generatedOutput.Characters;
             var estimatedInputTokens = EstimateTokensFromCharacters(prompt.Characters + (_systemPromptStatistics?.SystemChars ?? 0) + (_systemPromptStatistics?.DeveloperChars ?? 0));
             var estimatedOutputTokens = EstimateTokensFromCharacters(outputChars);
+            var compactions = _compactions.Build();
             var toolIntervals = tools
                 .Where(static item => item.StartedAt is not null && item.EndedAt is not null && item.EndedAt >= item.StartedAt)
                 .Select(static item => new TimeInterval(item.StartedAt!.Value, item.EndedAt!.Value))
@@ -364,7 +386,12 @@ public sealed class StatisticsPlugin : PluginBase
                 assistant,
                 reasoning,
                 reasoningSummary,
+                plan,
+                toolInput,
                 toolOutput,
+                generatedOutput,
+                compactions.Count,
+                compactions.Duration,
                 MessageCounts.Clone(),
                 tools,
                 BuildBuckets(tools),
@@ -387,7 +414,7 @@ public sealed class StatisticsPlugin : PluginBase
             var content = GetContent(delta.Kind, delta.ContentId, delta.ParentActivityId);
             content.AddDelta(delta.Delta);
             AddContentMessageCount(delta.Kind);
-            if (delta.Kind is AgentContentKind.Assistant or AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary)
+            if (IsModelGeneratedContent(delta.Kind))
             {
                 _modelOutputTimestamps.Add(delta.Timestamp);
                 if (delta.Kind == AgentContentKind.Assistant)
@@ -406,7 +433,7 @@ public sealed class StatisticsPlugin : PluginBase
             var content = GetContent(completed.Kind, completed.ContentId, completed.ParentActivityId);
             content.SetCompleted(completed.Content);
             AddContentMessageCount(completed.Kind);
-            if (completed.Kind is AgentContentKind.Assistant or AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary)
+            if (IsModelGeneratedContent(completed.Kind))
             {
                 _modelOutputTimestamps.Add(completed.Timestamp);
                 if (completed.Kind == AgentContentKind.Assistant)
@@ -419,6 +446,14 @@ public sealed class StatisticsPlugin : PluginBase
                 }
             }
         }
+
+        private static bool IsModelGeneratedContent(AgentContentKind kind)
+            => kind is AgentContentKind.Assistant or AgentContentKind.Reasoning or AgentContentKind.ReasoningSummary or AgentContentKind.Plan or AgentContentKind.Notice;
+
+        private static bool IsOwnedToolOutput(ContentStatistics content, string activityId)
+            => IsToolOutputKind(content.Kind) &&
+               (string.Equals(content.ParentActivityId, activityId, StringComparison.Ordinal) ||
+                string.Equals(content.ContentId, activityId, StringComparison.Ordinal));
 
         private void AddActivity(AgentActivityEvent activity)
         {
@@ -437,10 +472,45 @@ public sealed class StatisticsPlugin : PluginBase
                 return;
             }
 
+            if (activity.Kind == AgentActivityKind.Compaction)
+            {
+                _compactions.Add(activity);
+                return;
+            }
+
             if (IsToolActivity(activity.Kind))
             {
-                GetTool(activity).Add(activity);
+                if (GetTool(activity).Add(activity))
+                {
+                    _modelOutputTimestamps.Add(activity.Timestamp);
+                }
             }
+        }
+
+        private void AppendPlanSnapshot(AgentPlanSnapshot snapshot)
+        {
+            if (!string.IsNullOrWhiteSpace(snapshot.Explanation))
+            {
+                AppendPlanText(snapshot.Explanation);
+            }
+
+            if (snapshot.Steps is not null)
+            {
+                foreach (var step in snapshot.Steps)
+                {
+                    AppendPlanText(step.Text);
+                }
+            }
+        }
+
+        private void AppendPlanText(string text)
+        {
+            if (_planSnapshotText.Length > 0)
+            {
+                _planSnapshotText.AppendLine();
+            }
+
+            _planSnapshotText.Append(text);
         }
 
         private ContentBuilder GetContent(AgentContentKind kind, string contentId, string? parentActivityId)
@@ -627,13 +697,18 @@ public sealed class StatisticsPlugin : PluginBase
         private DateTimeOffset? _startedAt;
         private DateTimeOffset? _endedAt;
         private AgentActivityPhase _lastPhase;
-        private readonly StringBuilder _messages = new();
+        private readonly List<string> _inputParts = [];
+        private readonly List<string> _outputParts = [];
+        private readonly HashSet<string> _seenInputParts = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _seenOutputParts = new(StringComparer.Ordinal);
+
+        public string ActivityId { get; } = activityId;
 
         public IReadOnlyList<DateTimeOffset> Timestamps => _timestamps;
 
         private readonly List<DateTimeOffset> _timestamps = [];
 
-        public void Add(AgentActivityEvent activity)
+        public bool Add(AgentActivityEvent activity)
         {
             _timestamps.Add(activity.Timestamp);
             _lastPhase = activity.Phase;
@@ -648,23 +723,28 @@ public sealed class StatisticsPlugin : PluginBase
                 _startedAt ??= activity.Timestamp;
             }
 
-            if (!string.IsNullOrWhiteSpace(activity.Message))
+            var input = ResolveToolInput(activity);
+            if (!string.IsNullOrWhiteSpace(input) && _seenInputParts.Add(input))
             {
-                if (_messages.Length > 0)
-                {
-                    _messages.AppendLine();
-                }
-
-                _messages.Append(activity.Message);
+                _inputParts.Add(input);
             }
+
+            var output = ResolveToolOutput(activity);
+            if (!string.IsNullOrWhiteSpace(output) && _seenOutputParts.Add(output))
+            {
+                _outputParts.Add(output);
+            }
+
+            return !string.IsNullOrWhiteSpace(input);
         }
 
-        public ToolCallStatistics Build()
+        public ToolCallStatistics Build(ContentStats contentOutput)
         {
-            var text = _messages.ToString();
-            var size = new ContentStats(text.Length, ByteCount(text), EstimateTokensFromCharacters(text.Length));
+            var input = ContentStats.ForText(string.Join(Environment.NewLine + Environment.NewLine, _inputParts));
+            var activityOutput = ContentStats.ForText(string.Join(Environment.NewLine + Environment.NewLine, _outputParts));
+            var output = contentOutput.Characters > 0 || contentOutput.Bytes > 0 ? contentOutput : activityOutput;
             return new ToolCallStatistics(
-                activityId,
+                ActivityId,
                 kind,
                 string.IsNullOrWhiteSpace(name) ? kind.ToString() : name.Trim(),
                 ToolBucketName(kind, name),
@@ -673,10 +753,179 @@ public sealed class StatisticsPlugin : PluginBase
                 _startedAt is not null && _endedAt is not null && _endedAt >= _startedAt ? _endedAt - _startedAt : null,
                 Failed: _lastPhase == AgentActivityPhase.Failed,
                 Canceled: _lastPhase == AgentActivityPhase.Canceled,
-                Input: ContentStats.Empty,
-                Output: size);
+                Input: input,
+                Output: output);
+        }
+
+        private static string? ResolveToolInput(AgentActivityEvent activity)
+        {
+            var parts = new List<string>();
+            if (activity.Details is { ValueKind: JsonValueKind.Object } details)
+            {
+                AppendString(parts, details, "command");
+                AppendString(parts, details, "toolName");
+                AppendString(parts, details, "mcpToolName");
+                AppendString(parts, details, "tool");
+                AppendString(parts, details, "name");
+                AppendRaw(parts, details, "arguments");
+                AppendRaw(parts, details, "input");
+                AppendString(parts, details, "cwd", static value => $"cwd: {value}");
+                AppendString(parts, details, "query");
+                AppendString(parts, details, "prompt");
+                AppendString(parts, details, "path");
+                AppendString(parts, details, "server", static value => $"server: {value}");
+                AppendString(parts, details, "mcpServerName", static value => $"server: {value}");
+                AppendString(parts, details, "agentDescription");
+            }
+
+            if (parts.Count == 0)
+            {
+                if (activity.Kind is AgentActivityKind.WebSearch or AgentActivityKind.ImageGeneration && !string.IsNullOrWhiteSpace(activity.Message))
+                {
+                    parts.Add(activity.Message);
+                }
+                else if (activity.Kind == AgentActivityKind.CommandExecution && !string.IsNullOrWhiteSpace(activity.Name))
+                {
+                    parts.Add(activity.Name);
+                }
+            }
+
+            return parts.Count == 0
+                ? null
+                : string.Join(Environment.NewLine + Environment.NewLine, parts.Where(static item => !string.IsNullOrWhiteSpace(item)).Distinct(StringComparer.Ordinal));
+        }
+
+        private static string? ResolveToolOutput(AgentActivityEvent activity)
+        {
+            if (activity.Details is { ValueKind: JsonValueKind.Object } details)
+            {
+                if (TryGetString(details, "aggregatedOutput", out var aggregatedOutput))
+                {
+                    return aggregatedOutput;
+                }
+
+                if (TryResolveNestedString(details, out var nestedOutput, "result", "content") ||
+                    TryResolveNestedString(details, out nestedOutput, "error", "message") ||
+                    TryResolveNestedString(details, out nestedOutput, "output", "body") ||
+                    TryResolveNestedString(details, out nestedOutput, "result", "detailedContent"))
+                {
+                    return nestedOutput;
+                }
+            }
+
+            return activity.Kind == AgentActivityKind.CommandExecution || IsTerminalPhase(activity.Phase)
+                ? activity.Message
+                : null;
+        }
+
+        private static void AppendRaw(List<string> parts, JsonElement details, string propertyName)
+        {
+            if (details.TryGetProperty(propertyName, out var value))
+            {
+                var text = value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    parts.Add(text);
+                }
+            }
+        }
+
+        private static void AppendString(List<string> parts, JsonElement details, string propertyName, Func<string, string>? formatter = null)
+        {
+            if (TryGetString(details, propertyName, out var value))
+            {
+                parts.Add(formatter?.Invoke(value) ?? value);
+            }
+        }
+
+        private static bool TryGetString(JsonElement details, string propertyName, out string value)
+        {
+            value = string.Empty;
+            if (!details.TryGetProperty(propertyName, out var property))
+            {
+                return false;
+            }
+
+            value = property.ValueKind == JsonValueKind.String ? property.GetString() ?? string.Empty : property.GetRawText();
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        private static bool TryResolveNestedString(JsonElement root, out string? value, params string[] path)
+        {
+            value = null;
+            var current = root;
+            foreach (var segment in path)
+            {
+                if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+                {
+                    return false;
+                }
+            }
+
+            value = current.ValueKind == JsonValueKind.String ? current.GetString() : current.GetRawText();
+            return !string.IsNullOrWhiteSpace(value);
         }
     }
+
+    private sealed class CompactionStatisticsBuilder
+    {
+        private readonly Dictionary<string, DateTimeOffset> _activityStarts = new(StringComparer.Ordinal);
+        private int _activityCount;
+        private TimeSpan _activityDuration;
+        private DateTimeOffset? _sessionStartedAt;
+        private int _sessionCount;
+        private TimeSpan _sessionDuration;
+
+        public void Add(AgentActivityEvent activity)
+        {
+            if (activity.Kind != AgentActivityKind.Compaction)
+            {
+                return;
+            }
+
+            if (activity.Phase is AgentActivityPhase.Requested or AgentActivityPhase.Started)
+            {
+                _activityStarts[activity.ActivityId] = activity.Timestamp;
+                return;
+            }
+
+            if (!IsTerminalPhase(activity.Phase))
+            {
+                return;
+            }
+
+            _activityCount++;
+            if (_activityStarts.Remove(activity.ActivityId, out var startedAt) && activity.Timestamp >= startedAt)
+            {
+                _activityDuration += activity.Timestamp - startedAt;
+            }
+        }
+
+        public void Add(AgentSessionUpdateEvent update)
+        {
+            if (update.Kind == AgentSessionUpdateKind.CompactionStarted)
+            {
+                _sessionStartedAt = update.Timestamp;
+            }
+            else if (update.Kind == AgentSessionUpdateKind.CompactionCompleted)
+            {
+                _sessionCount++;
+                if (_sessionStartedAt is { } startedAt && update.Timestamp >= startedAt)
+                {
+                    _sessionDuration += update.Timestamp - startedAt;
+                }
+
+                _sessionStartedAt = null;
+            }
+        }
+
+        public CompactionStatistics Build()
+            => _sessionCount > 0
+                ? new CompactionStatistics(_sessionCount, _sessionDuration)
+                : new CompactionStatistics(_activityCount, _activityDuration);
+    }
+
+    private sealed record CompactionStatistics(int Count, TimeSpan Duration);
 
     private sealed record TimeInterval(DateTimeOffset Start, DateTimeOffset End);
 
@@ -687,12 +936,46 @@ public sealed class StatisticsPlugin : PluginBase
         public static ContentStats Empty { get; } = new(0, 0, 0);
 
         public static ContentStats For(IReadOnlyList<ContentStatistics> contents, params AgentContentKind[] kinds)
+            => For((IEnumerable<ContentStatistics>)contents, kinds);
+
+        public static ContentStats For(IEnumerable<ContentStatistics> contents, params AgentContentKind[] kinds)
         {
             var kindSet = kinds.ToHashSet();
+            var matching = contents.Where(item => kindSet.Contains(item.Kind)).ToArray();
             return new ContentStats(
-                contents.Where(item => kindSet.Contains(item.Kind)).Sum(static item => item.Characters),
-                contents.Where(item => kindSet.Contains(item.Kind)).Sum(static item => item.Bytes),
-                contents.Where(item => kindSet.Contains(item.Kind)).Sum(static item => item.EstimatedTokens));
+                matching.Sum(static item => item.Characters),
+                matching.Sum(static item => item.Bytes),
+                matching.Sum(static item => item.EstimatedTokens));
+        }
+
+        public static ContentStats For(IEnumerable<ContentStatistics> contents)
+        {
+            var values = contents.ToArray();
+            return new ContentStats(
+                values.Sum(static item => item.Characters),
+                values.Sum(static item => item.Bytes),
+                values.Sum(static item => item.EstimatedTokens));
+        }
+
+        public static ContentStats ForText(string? text)
+        {
+            var characters = text?.Length ?? 0;
+            return new ContentStats(characters, ByteCount(text), EstimateTokensFromCharacters(characters));
+        }
+
+        public static ContentStats Sum(params ContentStats[] stats)
+            => Sum((IEnumerable<ContentStats>)stats);
+
+        public static ContentStats Sum(IEnumerable<ContentStats> stats, params ContentStats[] additional)
+            => Sum(stats.Concat(additional));
+
+        public static ContentStats Sum(IEnumerable<ContentStats> stats)
+        {
+            var values = stats.ToArray();
+            return new ContentStats(
+                values.Sum(static item => item.Characters),
+                values.Sum(static item => item.Bytes),
+                values.Sum(static item => item.EstimatedTokens));
         }
     }
 
@@ -765,7 +1048,12 @@ public sealed class StatisticsPlugin : PluginBase
         ContentStats Assistant,
         ContentStats Reasoning,
         ContentStats ReasoningSummary,
+        ContentStats Plan,
+        ContentStats ToolInput,
         ContentStats ToolOutput,
+        ContentStats GeneratedOutput,
+        int CompactionCount,
+        TimeSpan CompactionDuration,
         MessageCounts MessageCounts,
         IReadOnlyList<ToolCallStatistics> Tools,
         IReadOnlyList<ToolBucketStatistics> Buckets,
@@ -791,6 +1079,8 @@ public sealed class StatisticsPlugin : PluginBase
         public double AssistantTokensPerSecond => Rate(Assistant.EstimatedTokens, Duration - ToolSpan);
 
         public double ReasoningTokensPerSecond => Rate(Reasoning.EstimatedTokens, Duration - ToolSpan);
+
+        public double GeneratedOutputTokensPerSecond => Rate(GeneratedOutput.EstimatedTokens, Duration - ToolSpan);
 
         private static double Rate(long tokens, TimeSpan duration)
             => tokens <= 0 || duration.TotalSeconds <= 0 ? 0 : tokens / duration.TotalSeconds;
@@ -838,6 +1128,13 @@ public sealed class StatisticsPlugin : PluginBase
                 .Append(turn.Tools.Count)
                 .Append(" calls / ")
                 .Append(FormatDuration(turn.TotalToolTime));
+            if (turn.CompactionCount > 0)
+            {
+                builder.Append(" · compactions ")
+                    .Append(turn.CompactionCount.ToString(CultureInfo.InvariantCulture))
+                    .Append(" / ")
+                    .Append(FormatDuration(turn.CompactionDuration));
+            }
 
             return builder.ToString();
         }
@@ -851,13 +1148,18 @@ public sealed class StatisticsPlugin : PluginBase
                 .Append("| Assistant | ").Append(FormatSize(turn.Assistant)).AppendLine(" |")
                 .Append("| Reasoning | ").Append(FormatSize(turn.Reasoning)).AppendLine(" |")
                 .Append("| Reasoning summary | ").Append(FormatSize(turn.ReasoningSummary)).AppendLine(" |")
+                .Append("| Plan/notice | ").Append(FormatSize(turn.Plan)).AppendLine(" |")
+                .Append("| Tool input (model generated) | ").Append(FormatSize(turn.ToolInput)).AppendLine(" |")
+                .Append("| Generated output | ").Append(FormatSize(turn.GeneratedOutput)).AppendLine(" |")
                 .Append("| Tool output | ").Append(FormatSize(turn.ToolOutput)).AppendLine(" |")
+                .Append("| Compactions | ").Append(turn.CompactionCount.ToString(CultureInfo.InvariantCulture)).Append(" / ").Append(FormatDuration(turn.CompactionDuration)).AppendLine(" |")
                 .Append("| First assistant token | ").Append(FormatOptionalDuration(turn.FirstAssistantLatency)).AppendLine(" |")
                 .Append("| First reasoning token | ").Append(FormatOptionalDuration(turn.FirstReasoningLatency)).AppendLine(" |")
                 .Append("| Thinking time | ").Append(FormatDuration(turn.ThinkingTime)).AppendLine(" |")
                 .Append("| Longest gap | ").Append(FormatDuration(turn.LongestGap)).AppendLine(" |")
                 .Append("| Assistant speed | ").Append(FormatRate(turn.AssistantTokensPerSecond)).AppendLine(" |")
-                .Append("| Reasoning speed | ").Append(FormatRate(turn.ReasoningTokensPerSecond)).AppendLine(" |");
+                .Append("| Reasoning speed | ").Append(FormatRate(turn.ReasoningTokensPerSecond)).AppendLine(" |")
+                .Append("| Generated output speed | ").Append(FormatRate(turn.GeneratedOutputTokensPerSecond)).AppendLine(" |");
 
             if (turn.HasReportedUsage || turn.SystemPromptTokens is not null || turn.DeveloperPromptTokens is not null)
             {
@@ -874,8 +1176,8 @@ public sealed class StatisticsPlugin : PluginBase
 
             if (turn.Buckets.Count > 0)
             {
-                builder.AppendLine().AppendLine("| Tool bucket | Calls | Fail | Cancel | Duration | Output |")
-                    .AppendLine("| --- | ---: | ---: | ---: | ---: | ---: |");
+                builder.AppendLine().AppendLine("| Tool bucket | Calls | Fail | Cancel | Duration | Input | Output |")
+                    .AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
                 foreach (var bucket in turn.Buckets)
                 {
                     builder.Append("| ").Append(EscapeMarkdown(bucket.Name))
@@ -883,6 +1185,7 @@ public sealed class StatisticsPlugin : PluginBase
                         .Append(" | ").Append(bucket.FailedCount.ToString(CultureInfo.InvariantCulture))
                         .Append(" | ").Append(bucket.CanceledCount.ToString(CultureInfo.InvariantCulture))
                         .Append(" | ").Append(FormatDuration(bucket.TotalDuration))
+                        .Append(" | ").Append(FormatNumber(bucket.InputCharacters)).Append(" chars")
                         .Append(" | ").Append(FormatNumber(bucket.OutputCharacters)).Append(" chars |")
                         .AppendLine();
                 }
