@@ -10,7 +10,7 @@ using XenoAtom.Logging;
 
 namespace CodeAlta.App;
 
-internal sealed class CodeAltaShellController : IAsyncDisposable
+internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IAsyncDisposable
 {
     private readonly ICodeAltaShell _shell;
     private readonly IKnownProjectImporter _knownProjectImporter;

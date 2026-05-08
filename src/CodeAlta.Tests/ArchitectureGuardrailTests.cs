@@ -394,6 +394,16 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void RuntimeEventPump_TargetsRuntimeEventProjectorFacade()
+    {
+        var pumpSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "RuntimeEventPump.cs"));
+
+        Assert.IsTrue(pumpSource.Contains("IThreadRuntimeEventProjector", StringComparison.Ordinal));
+        Assert.IsFalse(pumpSource.Contains("CodeAltaShellController", StringComparison.Ordinal));
+        Assert.IsTrue(pumpSource.Contains("_runtimeEventProjector.QueueRuntimeEvent(runtimeEvent, cancellationToken);", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void TabContentMigrationInventory_ReportsLegacyContentPlacementApis()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();

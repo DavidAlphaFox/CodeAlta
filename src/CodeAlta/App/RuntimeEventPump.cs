@@ -5,20 +5,20 @@ namespace CodeAlta.App;
 internal sealed class RuntimeEventPump : IAsyncDisposable
 {
     private readonly WorkThreadRuntimeService _runtimeService;
-    private readonly CodeAltaShellController _shellController;
+    private readonly IThreadRuntimeEventProjector _runtimeEventProjector;
     private readonly CancellationTokenSource _disposeCts = new();
     private CancellationTokenSource? _pumpCts;
     private Task? _pumpTask;
 
     public RuntimeEventPump(
         WorkThreadRuntimeService runtimeService,
-        CodeAltaShellController shellController)
+        IThreadRuntimeEventProjector runtimeEventProjector)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
-        ArgumentNullException.ThrowIfNull(shellController);
+        ArgumentNullException.ThrowIfNull(runtimeEventProjector);
 
         _runtimeService = runtimeService;
-        _shellController = shellController;
+        _runtimeEventProjector = runtimeEventProjector;
     }
 
     public void Start(CancellationToken cancellationToken)
@@ -63,7 +63,7 @@ internal sealed class RuntimeEventPump : IAsyncDisposable
         {
             await foreach (var runtimeEvent in _runtimeService.StreamEventsAsync(cancellationToken).ConfigureAwait(false))
             {
-                _shellController.QueueRuntimeEvent(runtimeEvent, cancellationToken);
+                _runtimeEventProjector.QueueRuntimeEvent(runtimeEvent, cancellationToken);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
