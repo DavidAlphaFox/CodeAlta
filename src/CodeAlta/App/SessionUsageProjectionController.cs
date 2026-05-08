@@ -49,6 +49,9 @@ internal sealed class SessionUsageProjectionController
     }
 
     public void InvalidateSelectedSessionUsage()
+        => ApplySessionUsageProjection();
+
+    public void ApplySessionUsageProjection()
     {
         _workspaceContext.DispatchToUiDeferred(
             () =>

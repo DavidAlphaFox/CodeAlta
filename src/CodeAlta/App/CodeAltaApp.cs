@@ -179,7 +179,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _terminalLoopCoordinator = composition.TerminalLoopCoordinator;
         _frontendEvents = composition.FrontendEvents;
         _shellTabService.SetFrontendEvents(_frontendEvents);
-        _projectionCoordinator = new ShellProjectionCoordinator(_frontendEvents, new CodeAltaProjectionInvalidator(this));
         _chatBackendInitializationCoordinator = composition.ChatBackendInitializationCoordinator;
         _threadStateCoordinator = composition.ThreadStateCoordinator;
         _workspaceCoordinator = composition.WorkspaceCoordinator;
@@ -197,6 +196,11 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _sidebarCoordinator = composition.SidebarCoordinator;
         _navigatorActionCoordinator = composition.NavigatorActionCoordinator;
         _modelProviderSelectorCoordinator = composition.ModelProviderSelectorCoordinator;
+        _projectionCoordinator = new ShellProjectionCoordinator(
+            _frontendEvents,
+            _workspaceCoordinator,
+            _modelProviderSelectorCoordinator,
+            _threadPromptQueueCoordinator);
         _shellWorkspaceContext = composition.ShellWorkspaceContext;
         _threadSelectionContext = composition.ThreadSelectionContext;
         _workspaceRefreshContext = composition.WorkspaceRefreshContext;

@@ -3,6 +3,7 @@ using CodeAlta.Threading;
 using CodeAlta.Agent;
 using CodeAlta.App;
 using CodeAlta.App.Context;
+using CodeAlta.App.Events;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Chat;
@@ -12,7 +13,7 @@ using XenoAtom.Terminal.UI.Controls;
 
 namespace CodeAlta.Presentation.Workspace;
 
-internal sealed class ModelProviderSelectorCoordinator
+internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProjectionController
 {
     private readonly IReadOnlyList<AgentBackendDescriptor> _backendDescriptors;
     private readonly ThreadWorkspaceViewModel _workspaceViewModel;
@@ -418,6 +419,9 @@ internal sealed class ModelProviderSelectorCoordinator
     }
 
     public void UpdatePromptAvailabilityUi()
+        => ApplyPromptAvailabilityProjection();
+
+    public void ApplyPromptAvailabilityProjection()
     {
         _selectorState.VerifyBindableAccess();
         var projection = BuildPromptComposerProjection();

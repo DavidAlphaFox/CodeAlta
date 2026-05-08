@@ -1,37 +1,57 @@
 namespace CodeAlta.App.Events;
 
-internal interface IProjectionInvalidator
+internal interface IWorkspaceProjectionController
 {
-    void RefreshCatalogAndThreadWorkspace();
+    void ApplyCatalogProjection();
 
-    void RefreshSelectionAndThreadWorkspace();
+    void ApplySelectionProjection();
 
-    void RefreshHeaderAndThreadWorkspace();
+    void ApplyHeaderProjection();
 
-    void RefreshShellChrome();
+    void ApplyShellChromeProjection();
 
-    void InvalidateThreadChrome();
+    void ApplyTabProjection();
 
-    void FocusPromptTarget();
+    void ApplyThreadStatusProjection();
 
-    void UpdatePromptAvailabilityUi();
+    void ApplyPromptDraftProjection();
 
-    void RefreshQueuedPromptList();
+    void ApplySessionUsageProjection();
 
-    void InvalidateSelectedSessionUsage();
+    void RequestPromptFocus();
+}
+
+internal interface IPromptAvailabilityProjectionController
+{
+    void ApplyPromptAvailabilityProjection();
+}
+
+internal interface IQueuedPromptProjectionController
+{
+    void ApplyQueuedPromptProjection();
 }
 
 internal sealed class ShellProjectionCoordinator : IDisposable
 {
     private readonly IDisposable _subscription;
-    private readonly IProjectionInvalidator _invalidator;
+    private readonly IWorkspaceProjectionController _workspaceProjections;
+    private readonly IPromptAvailabilityProjectionController _promptAvailabilityProjection;
+    private readonly IQueuedPromptProjectionController _queuedPromptProjection;
 
-    public ShellProjectionCoordinator(FrontendEventPublisher publisher, IProjectionInvalidator invalidator)
+    public ShellProjectionCoordinator(
+        FrontendEventPublisher publisher,
+        IWorkspaceProjectionController workspaceProjections,
+        IPromptAvailabilityProjectionController promptAvailabilityProjection,
+        IQueuedPromptProjectionController queuedPromptProjection)
     {
         ArgumentNullException.ThrowIfNull(publisher);
-        ArgumentNullException.ThrowIfNull(invalidator);
+        ArgumentNullException.ThrowIfNull(workspaceProjections);
+        ArgumentNullException.ThrowIfNull(promptAvailabilityProjection);
+        ArgumentNullException.ThrowIfNull(queuedPromptProjection);
 
-        _invalidator = invalidator;
+        _workspaceProjections = workspaceProjections;
+        _promptAvailabilityProjection = promptAvailabilityProjection;
+        _queuedPromptProjection = queuedPromptProjection;
         _subscription = publisher.Subscribe(Handle);
     }
 
@@ -43,48 +63,47 @@ internal sealed class ShellProjectionCoordinator : IDisposable
         switch (frontendEvent)
         {
             case CatalogChangedEvent:
-                _invalidator.RefreshCatalogAndThreadWorkspace();
+                _workspaceProjections.ApplyCatalogProjection();
                 break;
             case SelectionChangedEvent:
-                _invalidator.RefreshSelectionAndThreadWorkspace();
+                _workspaceProjections.ApplySelectionProjection();
                 break;
             case OpenTabsChangedEvent:
             case SelectedTabChangedEvent:
-                _invalidator.RefreshSelectionAndThreadWorkspace();
+                _workspaceProjections.ApplyTabProjection();
                 break;
             case HeaderChangedEvent:
-                _invalidator.RefreshHeaderAndThreadWorkspace();
+                _workspaceProjections.ApplyHeaderProjection();
                 break;
             case ShellChromeChangedEvent:
             case RuntimeTimelineChangedEvent:
-                _invalidator.RefreshShellChrome();
+                _workspaceProjections.ApplyShellChromeProjection();
                 break;
             case ThreadStatusChangedEvent:
-                _invalidator.RefreshShellChrome();
-                _invalidator.UpdatePromptAvailabilityUi();
+                _workspaceProjections.ApplyThreadStatusProjection();
+                _promptAvailabilityProjection.ApplyPromptAvailabilityProjection();
                 break;
             case PromptDraftChangedEvent:
             case PromptImagesChangedEvent:
-                _invalidator.RefreshShellChrome();
-                _invalidator.InvalidateThreadChrome();
-                _invalidator.UpdatePromptAvailabilityUi();
+                _workspaceProjections.ApplyPromptDraftProjection();
+                _promptAvailabilityProjection.ApplyPromptAvailabilityProjection();
                 break;
             case PromptAvailabilityChangedEvent:
             case ModelProviderStateChangedEvent:
-                _invalidator.UpdatePromptAvailabilityUi();
+                _promptAvailabilityProjection.ApplyPromptAvailabilityProjection();
                 break;
             case PromptFocusRequestedEvent:
-                _invalidator.FocusPromptTarget();
+                _workspaceProjections.RequestPromptFocus();
                 break;
             case ModelProviderCatalogChangedEvent:
-                _invalidator.RefreshSelectionAndThreadWorkspace();
+                _workspaceProjections.ApplySelectionProjection();
                 break;
             case QueuedPromptListChangedEvent:
-                _invalidator.RefreshQueuedPromptList();
-                _invalidator.UpdatePromptAvailabilityUi();
+                _queuedPromptProjection.ApplyQueuedPromptProjection();
+                _promptAvailabilityProjection.ApplyPromptAvailabilityProjection();
                 break;
             case SessionUsageChangedEvent:
-                _invalidator.InvalidateSelectedSessionUsage();
+                _workspaceProjections.ApplySessionUsageProjection();
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported shell frontend event: {frontendEvent.GetType().Name}");

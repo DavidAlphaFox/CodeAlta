@@ -9,145 +9,152 @@ public sealed class ShellProjectionCoordinatorTests
     [TestMethod]
     public void Publish_CatalogChanged_RefreshesCatalogWorkspace()
     {
-        var invalidator = new CapturingProjectionInvalidator();
+        var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
-        using var coordinator = new ShellProjectionCoordinator(publisher, invalidator);
+        using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
         publisher.Publish(new CatalogChangedEvent());
 
-        CollectionAssert.AreEqual(new[] { "catalog" }, invalidator.Calls);
+        CollectionAssert.AreEqual(new[] { "catalog" }, projections.Calls);
     }
 
     [TestMethod]
     public void Publish_SelectionChanged_RefreshesSelectionWorkspace()
     {
-        var invalidator = new CapturingProjectionInvalidator();
+        var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
-        using var coordinator = new ShellProjectionCoordinator(publisher, invalidator);
+        using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
         publisher.Publish(new SelectionChangedEvent());
 
-        CollectionAssert.AreEqual(new[] { "selection" }, invalidator.Calls);
+        CollectionAssert.AreEqual(new[] { "selection" }, projections.Calls);
     }
 
     [TestMethod]
     public void Publish_TabChangedEvents_RefreshSelectionWorkspace()
     {
-        var invalidator = new CapturingProjectionInvalidator();
+        var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
-        using var coordinator = new ShellProjectionCoordinator(publisher, invalidator);
+        using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
         publisher.Publish(new OpenTabsChangedEvent([]));
         publisher.Publish(new SelectedTabChangedEvent(null));
 
-        CollectionAssert.AreEqual(new[] { "selection", "selection" }, invalidator.Calls);
+        CollectionAssert.AreEqual(new[] { "tabs", "tabs" }, projections.Calls);
     }
 
     [TestMethod]
     public void Publish_ThreadStatusChanged_RefreshesChromeAndPromptAvailability()
     {
-        var invalidator = new CapturingProjectionInvalidator();
+        var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
-        using var coordinator = new ShellProjectionCoordinator(publisher, invalidator);
+        using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
         publisher.Publish(new ThreadStatusChangedEvent("thread-1"));
 
-        CollectionAssert.AreEqual(new[] { "chrome", "prompt" }, invalidator.Calls);
+        CollectionAssert.AreEqual(new[] { "thread-status", "prompt" }, projections.Calls);
     }
 
     [TestMethod]
     public void Publish_ModelProviderChanged_RefreshesPromptAvailability()
     {
-        var invalidator = new CapturingProjectionInvalidator();
+        var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
-        using var coordinator = new ShellProjectionCoordinator(publisher, invalidator);
+        using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
         publisher.Publish(new ModelProviderStateChangedEvent("provider"));
 
-        CollectionAssert.AreEqual(new[] { "prompt" }, invalidator.Calls);
+        CollectionAssert.AreEqual(new[] { "prompt" }, projections.Calls);
     }
 
     [TestMethod]
     public void Publish_PromptDraftChanged_RefreshesChromeWithoutWorkspaceRefresh()
     {
-        var invalidator = new CapturingProjectionInvalidator();
+        var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
-        using var coordinator = new ShellProjectionCoordinator(publisher, invalidator);
+        using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
         publisher.Publish(new PromptDraftChangedEvent("thread-1"));
 
-        CollectionAssert.AreEqual(new[] { "chrome", "thread-chrome", "prompt" }, invalidator.Calls);
+        CollectionAssert.AreEqual(new[] { "prompt-draft", "prompt" }, projections.Calls);
     }
 
     [TestMethod]
     public void Publish_ModelProviderCatalogChanged_RefreshesSelectionWorkspace()
     {
-        var invalidator = new CapturingProjectionInvalidator();
+        var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
-        using var coordinator = new ShellProjectionCoordinator(publisher, invalidator);
+        using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
         publisher.Publish(new ModelProviderCatalogChangedEvent());
 
-        CollectionAssert.AreEqual(new[] { "selection" }, invalidator.Calls);
+        CollectionAssert.AreEqual(new[] { "selection" }, projections.Calls);
     }
 
     [TestMethod]
     public void Publish_QueuedPromptListChanged_RefreshesQueueAndPromptAvailability()
     {
-        var invalidator = new CapturingProjectionInvalidator();
+        var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
-        using var coordinator = new ShellProjectionCoordinator(publisher, invalidator);
+        using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
         publisher.Publish(new QueuedPromptListChangedEvent("thread-1"));
 
-        CollectionAssert.AreEqual(new[] { "queue", "prompt" }, invalidator.Calls);
+        CollectionAssert.AreEqual(new[] { "queue", "prompt" }, projections.Calls);
     }
 
     [TestMethod]
     public void Publish_PromptFocusRequested_FocusesPrompt()
     {
-        var invalidator = new CapturingProjectionInvalidator();
+        var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
-        using var coordinator = new ShellProjectionCoordinator(publisher, invalidator);
+        using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
         publisher.Publish(new PromptFocusRequestedEvent());
 
-        CollectionAssert.AreEqual(new[] { "focus" }, invalidator.Calls);
+        CollectionAssert.AreEqual(new[] { "focus" }, projections.Calls);
     }
 
     [TestMethod]
     public void Publish_SessionUsageChanged_InvalidatesSelectedSessionUsage()
     {
-        var invalidator = new CapturingProjectionInvalidator();
+        var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
-        using var coordinator = new ShellProjectionCoordinator(publisher, invalidator);
+        using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
         publisher.Publish(new SessionUsageChangedEvent("thread-1"));
 
-        CollectionAssert.AreEqual(new[] { "usage" }, invalidator.Calls);
+        CollectionAssert.AreEqual(new[] { "usage" }, projections.Calls);
     }
 
-    private sealed class CapturingProjectionInvalidator : IProjectionInvalidator
+    private sealed class CapturingProjectionControllers :
+        IWorkspaceProjectionController,
+        IPromptAvailabilityProjectionController,
+        IQueuedPromptProjectionController
     {
         public List<string> Calls { get; } = [];
 
-        public void RefreshCatalogAndThreadWorkspace() => Calls.Add("catalog");
+        public void ApplyCatalogProjection() => Calls.Add("catalog");
 
-        public void RefreshSelectionAndThreadWorkspace() => Calls.Add("selection");
+        public void ApplySelectionProjection() => Calls.Add("selection");
 
-        public void RefreshHeaderAndThreadWorkspace() => Calls.Add("header");
+        public void ApplyHeaderProjection() => Calls.Add("header");
 
-        public void RefreshShellChrome() => Calls.Add("chrome");
+        public void ApplyShellChromeProjection() => Calls.Add("chrome");
 
-        public void InvalidateThreadChrome() => Calls.Add("thread-chrome");
+        public void ApplyTabProjection() => Calls.Add("tabs");
 
-        public void FocusPromptTarget() => Calls.Add("focus");
+        public void ApplyThreadStatusProjection() => Calls.Add("thread-status");
 
-        public void UpdatePromptAvailabilityUi() => Calls.Add("prompt");
+        public void ApplyPromptDraftProjection() => Calls.Add("prompt-draft");
 
-        public void RefreshQueuedPromptList() => Calls.Add("queue");
+        public void ApplySessionUsageProjection() => Calls.Add("usage");
 
-        public void InvalidateSelectedSessionUsage() => Calls.Add("usage");
+        public void RequestPromptFocus() => Calls.Add("focus");
+
+        public void ApplyPromptAvailabilityProjection() => Calls.Add("prompt");
+
+        public void ApplyQueuedPromptProjection() => Calls.Add("queue");
     }
 
     private sealed class InlineUiDispatcher : IUiDispatcher

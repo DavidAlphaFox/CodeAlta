@@ -441,8 +441,8 @@ public sealed class ArchitectureGuardrailTests
         {
             "App/CodeAltaShellController.cs:71:_initializationTask = Task.Run(",
             "App/CodeAltaShellController.cs:356:var startupProviderLoadTask = Task.Run(",
-            "App/CodeAltaApp.cs:342:_ = PersistViewStateAsync();",
-            "App/CodeAltaApp.cs:423:_ = OpenModelProvidersAsync();",
+            "App/CodeAltaApp.cs:346:_ = PersistViewStateAsync();",
+            "App/CodeAltaApp.cs:427:_ = OpenModelProvidersAsync();",
             "App/RuntimeEventPump.cs:34:_pumpTask = Task.Run(",
             "App/ShellThreadStateCoordinator.cs:245:_ = RestoreStartupThreadHistoryAsync(threadId, cancellationToken);",
             "App/ShellThreadStateCoordinator.cs:254:_ = PersistViewStateAsync();",
@@ -547,6 +547,27 @@ public sealed class ArchitectureGuardrailTests
         {
             Assert.IsFalse(compositionSource.Contains(callback, StringComparison.Ordinal), callback);
         }
+    }
+
+    [TestMethod]
+    public void ShellProjectionCoordinator_UsesTypedProjectionControllers()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        Assert.IsFalse(File.Exists(Path.Combine(codeAltaRoot, "App", "CodeAltaProjectionInvalidator.cs")));
+
+        var coordinatorSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "Events", "ShellProjectionCoordinator.cs"));
+        Assert.IsFalse(coordinatorSource.Contains("IProjectionInvalidator", StringComparison.Ordinal));
+        Assert.IsFalse(coordinatorSource.Contains("RefreshCatalogAndThreadWorkspace", StringComparison.Ordinal));
+        StringAssert.Contains(coordinatorSource, "IWorkspaceProjectionController");
+        StringAssert.Contains(coordinatorSource, "IPromptAvailabilityProjectionController");
+        StringAssert.Contains(coordinatorSource, "IQueuedPromptProjectionController");
+        StringAssert.Contains(coordinatorSource, "ApplyCatalogProjection");
+        StringAssert.Contains(coordinatorSource, "ApplySelectionProjection");
+        StringAssert.Contains(coordinatorSource, "ApplyThreadStatusProjection");
+        StringAssert.Contains(coordinatorSource, "ApplyPromptAvailabilityProjection");
+        StringAssert.Contains(coordinatorSource, "ApplyQueuedPromptProjection");
+        StringAssert.Contains(coordinatorSource, "ApplySessionUsageProjection");
+        StringAssert.Contains(coordinatorSource, "ApplyTabProjection");
     }
 
     [TestMethod]

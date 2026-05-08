@@ -52,41 +52,67 @@ internal sealed class WorkspaceProjectionController
     }
 
     public void RefreshShellChrome()
-        => _workspaceContext.DispatchToUi(RefreshShellChromeCore);
+        => ApplyShellChromeProjection();
+
+    public void ApplyShellChromeProjection()
+        => _workspaceContext.DispatchToUi(ApplyShellChromeProjectionCore);
 
     public void RefreshCatalogAndThreadWorkspace()
-        => _workspaceContext.DispatchToUi(RefreshCatalogAndThreadWorkspaceCore);
+        => ApplyCatalogProjection();
+
+    public void ApplyCatalogProjection()
+        => _workspaceContext.DispatchToUi(ApplyCatalogProjectionCore);
 
     public void RefreshHeaderAndThreadWorkspace()
-        => _workspaceContext.DispatchToUi(RefreshHeaderAndThreadWorkspaceCore);
+        => ApplyHeaderProjection();
+
+    public void ApplyHeaderProjection()
+        => _workspaceContext.DispatchToUi(ApplyHeaderProjectionCore);
 
     public void RefreshSelectionAndThreadWorkspace()
-        => _workspaceContext.DispatchToUi(RefreshSelectionAndThreadWorkspaceCore);
+        => ApplySelectionProjection();
+
+    public void ApplySelectionProjection()
+        => _workspaceContext.DispatchToUi(ApplySelectionProjectionCore);
+
+    public void ApplyTabProjection()
+        => ApplySelectionProjection();
+
+    public void ApplyThreadStatusProjection()
+        => ApplyShellChromeProjection();
+
+    public void ApplyPromptDraftProjection()
+        => _workspaceContext.DispatchToUi(
+            () =>
+            {
+                ApplyShellChromeProjectionCore();
+                _viewRefreshState.Value++;
+            });
 
     public void InvalidateThreadChrome()
         => _workspaceContext.DispatchToUi(() => _viewRefreshState.Value++);
 
-    private void RefreshHeaderAndThreadWorkspaceCore()
+    private void ApplyHeaderProjectionCore()
     {
         _workspaceContext.VerifyBindableAccess();
         _workspaceContext.EnsureSelectionDefaults();
         RefreshThreadWorkspaceCore();
     }
 
-    private void RefreshShellChromeCore()
+    private void ApplyShellChromeProjectionCore()
     {
         _workspaceContext.VerifyBindableAccess();
         _workspaceContext.EnsureSelectionDefaults();
         _workspaceContext.RefreshSidebarProjection();
     }
 
-    private void RefreshCatalogAndThreadWorkspaceCore()
+    private void ApplyCatalogProjectionCore()
     {
-        RefreshShellChromeCore();
+        ApplyShellChromeProjectionCore();
         RefreshThreadWorkspaceCore();
     }
 
-    private void RefreshSelectionAndThreadWorkspaceCore()
+    private void ApplySelectionProjectionCore()
     {
         _workspaceContext.VerifyBindableAccess();
         _workspaceContext.EnsureSelectionDefaults();

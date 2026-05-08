@@ -1,5 +1,6 @@
 using CodeAlta.App.State;
 using CodeAlta.App.Context;
+using CodeAlta.App.Events;
 using CodeAlta.Models;
 using CodeAlta.ViewModels;
 using CodeAlta.Views;
@@ -10,7 +11,7 @@ using IntState = XenoAtom.Terminal.UI.State<int>;
 
 namespace CodeAlta.App;
 
-internal sealed class ShellWorkspaceCoordinator
+internal sealed class ShellWorkspaceCoordinator : IWorkspaceProjectionController
 {
     private readonly CodeAltaShellViewModel _shellViewModel;
     private readonly ShellWorkspaceContext _workspaceContext;
@@ -53,14 +54,29 @@ internal sealed class ShellWorkspaceCoordinator
     public void RefreshShellChrome()
         => _workspaceProjection.RefreshShellChrome();
 
+    public void ApplyShellChromeProjection()
+        => _workspaceProjection.ApplyShellChromeProjection();
+
     public void RefreshCatalogAndThreadWorkspace()
         => _workspaceProjection.RefreshCatalogAndThreadWorkspace();
+
+    public void ApplyCatalogProjection()
+        => _workspaceProjection.ApplyCatalogProjection();
 
     public void RefreshHeaderAndThreadWorkspace()
         => _workspaceProjection.RefreshHeaderAndThreadWorkspace();
 
+    public void ApplyHeaderProjection()
+        => _workspaceProjection.ApplyHeaderProjection();
+
     public void RefreshSelectionAndThreadWorkspace()
         => _workspaceProjection.RefreshSelectionAndThreadWorkspace();
+
+    public void ApplySelectionProjection()
+        => _workspaceProjection.ApplySelectionProjection();
+
+    public void ApplyTabProjection()
+        => _workspaceProjection.ApplyTabProjection();
 
     public void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
         => _statusProjection.SetStatus(message, showSpinner, tone);
@@ -85,8 +101,20 @@ internal sealed class ShellWorkspaceCoordinator
     public void InvalidateSelectedSessionUsage()
         => _sessionUsageProjection.InvalidateSelectedSessionUsage();
 
+    public void ApplySessionUsageProjection()
+        => _sessionUsageProjection.ApplySessionUsageProjection();
+
     public void InvalidateThreadChrome()
         => _workspaceProjection.InvalidateThreadChrome();
+
+    public void ApplyThreadStatusProjection()
+        => _workspaceProjection.ApplyThreadStatusProjection();
+
+    public void ApplyPromptDraftProjection()
+        => _workspaceProjection.ApplyPromptDraftProjection();
+
+    public void RequestPromptFocus()
+        => _workspaceContext.DispatchToUiDeferred(_workspaceContext.FocusPromptTarget);
 
     public void RefreshRunningStatusElapsed(DateTimeOffset now)
         => _statusProjection.RefreshRunningStatusElapsed(now);

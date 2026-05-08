@@ -1,4 +1,5 @@
 using CodeAlta.App.Context;
+using CodeAlta.App.Events;
 using CodeAlta.App.State;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Prompting;
@@ -6,7 +7,7 @@ using CodeAlta.ViewModels;
 
 namespace CodeAlta.App;
 
-internal sealed class ThreadPromptQueueCoordinator
+internal sealed class ThreadPromptQueueCoordinator : IQueuedPromptProjectionController
 {
     private readonly ThreadWorkspaceViewModel _workspaceViewModel;
     private readonly ThreadSelectionContext _threadSelection;
@@ -214,7 +215,10 @@ internal sealed class ThreadPromptQueueCoordinator
     }
 
     public void RefreshSelectedThreadQueueUi()
-        => _dispatchToUi(RefreshSelectedThreadQueueUiCore);
+        => ApplyQueuedPromptProjection();
+
+    public void ApplyQueuedPromptProjection()
+        => _dispatchToUi(ApplyQueuedPromptProjectionCore);
 
     public string AddPendingSteer(OpenThreadState tab, string prompt)
         => AddPendingSteer(tab, PromptSubmission.TextOnly(prompt));
@@ -316,7 +320,7 @@ internal sealed class ThreadPromptQueueCoordinator
         }
     }
 
-    private void RefreshSelectedThreadQueueUiCore()
+    private void ApplyQueuedPromptProjectionCore()
     {
         _verifyBindableAccess();
 
