@@ -362,7 +362,8 @@ public sealed class ArchitectureGuardrailTests
         var parameters = constructor.GetParameters();
         var delegateParameters = parameters.Count(static parameter => typeof(Delegate).IsAssignableFrom(parameter.ParameterType));
 
-        Assert.IsTrue(delegateParameters <= 3, $"ShellCommandSurfaceCoordinator has {delegateParameters} delegate parameters.");
+        Assert.IsTrue(delegateParameters <= 1, $"ShellCommandSurfaceCoordinator has {delegateParameters} delegate parameters.");
+        Assert.IsTrue(parameters.Any(static parameter => parameter.Name == "toggleCommandBarMultiLine" && typeof(Delegate).IsAssignableFrom(parameter.ParameterType)));
         Assert.IsTrue(parameters.Any(static parameter => parameter.ParameterType == typeof(IShellPromptInputService)));
         Assert.IsTrue(parameters.Any(static parameter => parameter.ParameterType == typeof(IShellThreadCommandService)));
         Assert.IsTrue(parameters.Any(static parameter => parameter.ParameterType == typeof(IShellDialogCommandService)));
@@ -573,6 +574,81 @@ public sealed class ArchitectureGuardrailTests
         var shellBridgeSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "ICodeAltaShell.cs"));
         Assert.IsFalse(shellBridgeSource.Contains("RefreshCatalogAndThreadWorkspace", StringComparison.Ordinal));
         StringAssert.Contains(shellBridgeSource, "PublishStartupCatalogProjectionReady");
+    }
+
+    [TestMethod]
+    public void FrontendRefactorV2_CleanupGuardrailsPreventLegacyFacadeShims()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var allProductionSource = Directory.EnumerateFiles(codeAltaRoot, "*.cs", SearchOption.AllDirectories)
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/'),
+                Content = File.ReadAllText(file),
+            })
+            .ToArray();
+        var forbiddenNames = new[]
+        {
+            "ICodeAltaFrontendServices",
+            "CodeAltaFrontendServicesAdapter",
+            "IProjectionInvalidator",
+            "CodeAltaProjectionInvalidator",
+            "RefreshCatalogAndThreadWorkspace",
+            "RefreshSelectionAndThreadWorkspace",
+            "RefreshHeaderAndThreadWorkspace",
+            "RefreshShellChrome",
+        };
+        var violations = allProductionSource
+            .SelectMany(entry => forbiddenNames
+                .Where(name => entry.Content.Contains(name, StringComparison.Ordinal))
+                .Select(name => $"{entry.RelativePath}:{name}"))
+            .OrderBy(static violation => violation, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), violations);
+    }
+
+    [TestMethod]
+    public void FrontendRefactorV2_DoesNotAddLargeDelegatingPorts()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var approvedLegacyPorts = new[]
+        {
+            "App/IModelProviderPreferencePort.cs:DelegatingModelProviderPreferencePort:9",
+            "App/IShellSelectionPort.cs:DelegatingShellSelectionPort:6",
+            "App/ShellWorkspacePorts.cs:DelegatingShellWorkspaceProjectionPort:9",
+            "App/ThreadCommandPorts.cs:DelegatingThreadLifecycleCommandPort:4",
+            "App/ThreadTabPorts.cs:DelegatingThreadTabLifecyclePort:5",
+        };
+        var largeDelegatingPorts = Directory.EnumerateFiles(Path.Combine(codeAltaRoot, "App"), "*.cs", SearchOption.AllDirectories)
+            .SelectMany(file => FindLargeDelegatingPorts(codeAltaRoot, file, maxDelegateFields: 3))
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(approvedLegacyPorts, largeDelegatingPorts);
+    }
+
+    [TestMethod]
+    public void FrontendRefactorV2_PresentationViewsDependenciesAreExplicitlyApproved()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var presentationRoot = Path.Combine(codeAltaRoot, "Presentation");
+        var approvedViewDependencies = new[]
+        {
+            "Presentation/Editing/FileEditorTab.cs",
+            "Presentation/Tabs/ThreadTabStripCoordinator.cs",
+            "Presentation/Timeline/ChatTimelineVisualFactory.cs",
+            "Presentation/Timeline/FileChangePresenter.cs",
+            "Presentation/Timeline/ToolCallPresenter.cs",
+            "Presentation/Usage/SessionUsagePresenter.cs",
+        };
+        var viewDependencies = Directory.EnumerateFiles(presentationRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(file => File.ReadAllText(file).Contains("using CodeAlta.Views;", StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/'))
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(approvedViewDependencies, viewDependencies);
     }
 
     [TestMethod]
@@ -1691,6 +1767,28 @@ public sealed class ArchitectureGuardrailTests
             .Cast<Match>()
             .Where(match => Regex.Matches(match.Groups["params"].Value, @"\b(?:Action|Func)\s*(?:<|\s+[A-Za-z_])").Count > maxDelegateParameters)
             .Select(match => $"{relativePath}:{match.Groups["name"].Value}")
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> FindLargeDelegatingPorts(
+        string codeAltaRoot,
+        string file,
+        int maxDelegateFields)
+    {
+        var relativePath = Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/');
+        var source = File.ReadAllText(file);
+        return Regex.Matches(
+                source,
+                @"internal\s+sealed\s+class\s+(?<name>Delegating\w+Port)\b(?<body>.*?)(?=\ninternal\s+(?:sealed\s+)?class\s+|\ninternal\s+interface\s+|\z)",
+                RegexOptions.Singleline)
+            .Cast<Match>()
+            .Select(match => new
+            {
+                Name = match.Groups["name"].Value,
+                Count = Regex.Matches(match.Groups["body"].Value, @"private\s+readonly\s+(?:Action|Func)\b").Count,
+            })
+            .Where(port => port.Count > maxDelegateFields)
+            .Select(port => $"{relativePath}:{port.Name}:{port.Count}")
             .ToArray();
     }
 
