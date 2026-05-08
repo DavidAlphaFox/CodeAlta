@@ -57,7 +57,7 @@ internal sealed class ThreadExecutionOptionsFactory
             _selectorState.GetUiDispatcher(),
             () =>
             {
-                if (_selectorState.GetSelectedBackendIndex() is not { } backendIndex || _selectorState.GetSelectedModelIndex() is not { } modelIndex)
+                if (_selectorState.GetSelectedModelProviderIndex() is not { } backendIndex || _selectorState.GetSelectedModelIndex() is not { } modelIndex)
                 {
                     return backendState.SelectedModelId;
                 }
@@ -80,7 +80,7 @@ internal sealed class ThreadExecutionOptionsFactory
             _selectorState.GetUiDispatcher(),
             () =>
             {
-                if (_selectorState.GetSelectedBackendIndex() is not { } backendIndex || _selectorState.GetSelectedReasoningIndex() is not { } reasoningIndex)
+                if (_selectorState.GetSelectedModelProviderIndex() is not { } backendIndex || _selectorState.GetSelectedReasoningIndex() is not { } reasoningIndex)
                 {
                     return backendState.SelectedReasoningEffort;
                 }

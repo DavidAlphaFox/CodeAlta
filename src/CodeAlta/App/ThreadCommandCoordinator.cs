@@ -432,7 +432,7 @@ internal sealed class ThreadCommandCoordinator
 
     private AgentBackendId ResolveSelectedBackendId()
     {
-        var backendIndex = UiDispatch.Invoke(_selectorState.GetUiDispatcher(), () => _selectorState.GetSelectedBackendIndex());
+        var backendIndex = UiDispatch.Invoke(_selectorState.GetUiDispatcher(), () => _selectorState.GetSelectedModelProviderIndex());
         var backendOptions = ChatBackendPresentation.BuildBackendOptions(_backendDescriptors);
         if (backendIndex is { } index && (uint)index < (uint)backendOptions.Count)
         {

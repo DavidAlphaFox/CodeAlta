@@ -71,7 +71,7 @@ public sealed class ChatSelectorCoordinatorTests
 
         coordinator.RefreshForDraftScope(AgentBackendIds.Copilot);
 
-        Assert.AreEqual(1, workspaceViewModel.SelectedBackendIndex);
+        Assert.AreEqual(1, workspaceViewModel.SelectedModelProviderIndex);
         CollectionAssert.AreEqual(new[] { "GPT-4.1", "o4-mini" }, workspaceViewModel.ModelOptions.Select(static option => option.Label).ToArray());
         Assert.AreEqual(2, syncCallCount);
 
@@ -213,7 +213,7 @@ public sealed class ChatSelectorCoordinatorTests
 
         coordinator.RefreshForThread(tab);
 
-        Assert.IsTrue(workspaceViewModel.CanSelectBackend);
+        Assert.IsTrue(workspaceViewModel.CanSelectModelProvider);
     }
 
     [TestMethod]
@@ -259,16 +259,16 @@ public sealed class ChatSelectorCoordinatorTests
             static (_, selectedTab) => !selectedTab.StatusBusy);
 
         coordinator.RefreshForThread(tab);
-        Assert.IsTrue(workspaceViewModel.CanSelectBackend);
+        Assert.IsTrue(workspaceViewModel.CanSelectModelProvider);
 
         tab.StatusBusy = true;
         coordinator.UpdatePromptAvailabilityUi();
-        Assert.IsFalse(workspaceViewModel.CanSelectBackend);
+        Assert.IsFalse(workspaceViewModel.CanSelectModelProvider);
 
         tab.StatusBusy = false;
         coordinator.UpdatePromptAvailabilityUi();
 
-        Assert.IsTrue(workspaceViewModel.CanSelectBackend);
+        Assert.IsTrue(workspaceViewModel.CanSelectModelProvider);
     }
 
     [TestMethod]

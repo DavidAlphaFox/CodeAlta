@@ -8,25 +8,25 @@ public sealed partial class ThreadWorkspaceViewModel
 {
     public ThreadWorkspaceViewModel()
     {
-        BackendStatusMarkup = string.Empty;
+        ModelProviderStatusMarkup = string.Empty;
         ProviderSummaryMarkup = string.Empty;
-        SelectedBackendIndex = -1;
+        SelectedModelProviderIndex = -1;
         SelectedModelIndex = -1;
         SelectedReasoningIndex = -1;
-        BackendOptions = [];
+        ModelProviderOptions = [];
         ModelOptions = [];
         ReasoningOptions = [];
         PromptStripItems = [];
     }
 
     [Bindable]
-    public partial string BackendStatusMarkup { get; set; }
+    public partial string ModelProviderStatusMarkup { get; set; }
 
     [Bindable]
     public partial string ProviderSummaryMarkup { get; set; }
 
     [Bindable]
-    public partial bool CanSelectBackend { get; set; }
+    public partial bool CanSelectModelProvider { get; set; }
 
     [Bindable]
     public partial bool CanSelectModel { get; set; }
@@ -35,10 +35,10 @@ public sealed partial class ThreadWorkspaceViewModel
     public partial bool CanSelectReasoning { get; set; }
 
     [Bindable]
-    public partial IReadOnlyList<ChatBackendOption> BackendOptions { get; set; }
+    public partial IReadOnlyList<ChatBackendOption> ModelProviderOptions { get; set; }
 
     [Bindable]
-    public partial int SelectedBackendIndex { get; set; }
+    public partial int SelectedModelProviderIndex { get; set; }
 
     [Bindable]
     public partial IReadOnlyList<ChatModelOption> ModelOptions { get; set; }

@@ -20,8 +20,8 @@ internal sealed class ChatSelectorStateStore
         _uiDispatcher = uiDispatcher;
     }
 
-    public int? GetSelectedBackendIndex()
-        => _workspaceViewModel.SelectedBackendIndex >= 0 ? _workspaceViewModel.SelectedBackendIndex : null;
+    public int? GetSelectedModelProviderIndex()
+        => _workspaceViewModel.SelectedModelProviderIndex >= 0 ? _workspaceViewModel.SelectedModelProviderIndex : null;
 
     public int? GetSelectedModelIndex()
         => _workspaceViewModel.SelectedModelIndex >= 0 ? _workspaceViewModel.SelectedModelIndex : null;
@@ -29,11 +29,11 @@ internal sealed class ChatSelectorStateStore
     public int? GetSelectedReasoningIndex()
         => _workspaceViewModel.SelectedReasoningIndex >= 0 ? _workspaceViewModel.SelectedReasoningIndex : null;
 
-    public void SetBackendSelection(IReadOnlyList<ChatBackendOption> items, int selectedIndex)
+    public void SetModelProviderSelection(IReadOnlyList<ChatBackendOption> items, int selectedIndex)
     {
         ArgumentNullException.ThrowIfNull(items);
-        _workspaceViewModel.BackendOptions = items;
-        _workspaceViewModel.SelectedBackendIndex = selectedIndex;
+        _workspaceViewModel.ModelProviderOptions = items;
+        _workspaceViewModel.SelectedModelProviderIndex = selectedIndex;
     }
 
     public void SetModelSelection(IReadOnlyList<ChatModelOption> items, int selectedIndex)

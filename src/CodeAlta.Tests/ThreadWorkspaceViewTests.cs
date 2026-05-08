@@ -99,7 +99,7 @@ public sealed class ThreadWorkspaceViewTests
         var shellViewModel = new CodeAltaShellViewModel();
         var workspaceViewModel = new ThreadWorkspaceViewModel
         {
-            BackendOptions = [new ChatBackendOption(new("codex"), "Codex")],
+            ModelProviderOptions = [new ChatBackendOption(new("codex"), "Codex")],
             ModelOptions = [new ChatModelOption("gpt-5", "GPT-5")],
             ReasoningOptions = [new ChatReasoningOption(Agent.AgentReasoningEffort.High, "High")],
         };
@@ -119,7 +119,7 @@ public sealed class ThreadWorkspaceViewTests
         Assert.AreEqual(1, reasoningSelect.Items.Count);
         Assert.AreEqual("High", reasoningSelect.Items[0].Label);
 
-        workspaceViewModel.BackendOptions =
+        workspaceViewModel.ModelProviderOptions =
         [
             new ChatBackendOption(new("codex"), "Codex"),
             new ChatBackendOption(new("copilot"), "Copilot"),

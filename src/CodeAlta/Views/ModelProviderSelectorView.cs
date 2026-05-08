@@ -20,10 +20,10 @@ internal sealed class ModelProviderSelectorView
 
         ChatBackendSelect = new Select<ChatBackendOption>()
             .SelectionChanged((_, e) => controller.SelectProvider(e.NewIndex))
-            .SelectedIndex(workspaceViewModel.Bind.SelectedBackendIndex)
+            .SelectedIndex(workspaceViewModel.Bind.SelectedModelProviderIndex)
             .MinWidth(14)
             .MaxWidth(22)
-            .IsEnabled(workspaceViewModel.Bind.CanSelectBackend);
+            .IsEnabled(workspaceViewModel.Bind.CanSelectModelProvider);
         ChatModelSelect = new Select<ChatModelOption>()
             .SelectionChanged((_, e) => controller.SelectModel(e.NewIndex))
             .SelectedIndex(workspaceViewModel.Bind.SelectedModelIndex)
@@ -71,7 +71,7 @@ internal sealed class ModelProviderSelectorView
     {
         ArgumentNullException.ThrowIfNull(workspaceViewModel);
 
-        ChatBackendPresentation.ReplaceSelectItems(ChatBackendSelect, workspaceViewModel.BackendOptions);
+        ChatBackendPresentation.ReplaceSelectItems(ChatBackendSelect, workspaceViewModel.ModelProviderOptions);
         ChatBackendPresentation.ReplaceSelectItems(ChatModelSelect, workspaceViewModel.ModelOptions);
         ChatBackendPresentation.ReplaceSelectItems(ChatReasoningSelect, workspaceViewModel.ReasoningOptions);
     }

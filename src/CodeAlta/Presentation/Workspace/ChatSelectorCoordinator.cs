@@ -120,10 +120,10 @@ internal sealed class ChatSelectorCoordinator
                 configuredProviderKeys: GetConfiguredProviderKeys());
             if (backendOptions.Count == 0)
             {
-                _selectorState.SetBackendSelection([], -1);
+                _selectorState.SetModelProviderSelection([], -1);
                 _selectorState.SetModelSelection([], -1);
                 _selectorState.SetReasoningSelection([], -1);
-                _workspaceViewModel.CanSelectBackend = false;
+                _workspaceViewModel.CanSelectModelProvider = false;
                 _workspaceViewModel.CanSelectModel = false;
                 _workspaceViewModel.CanSelectReasoning = false;
                 _syncChatSelectorItems();
@@ -132,7 +132,7 @@ internal sealed class ChatSelectorCoordinator
 
             var backendId = preferredBackendId ?? GetPreferredDraftBackendId(backendOptions);
             var backendIndex = Math.Max(0, backendOptions.FindIndex(option => string.Equals(option.BackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase)));
-            _selectorState.SetBackendSelection(backendOptions, backendIndex);
+            _selectorState.SetModelProviderSelection(backendOptions, backendIndex);
 
             var backendState = _chatBackendStates[backendOptions[backendIndex].BackendId.Value];
             _preferences.ApplyDraftModelProviderState(backendState);
@@ -153,7 +153,7 @@ internal sealed class ChatSelectorCoordinator
                 reasoningOptions.FindIndex(option => option.Effort == backendState.SelectedReasoningEffort),
                 0,
                 Math.Max(0, reasoningOptions.Count - 1)));
-            _workspaceViewModel.CanSelectBackend = true;
+            _workspaceViewModel.CanSelectModelProvider = true;
             _workspaceViewModel.CanSelectModel = backendState.Availability == ChatBackendAvailability.Ready;
             _workspaceViewModel.CanSelectReasoning = backendState.Availability == ChatBackendAvailability.Ready;
             _syncChatSelectorItems();
@@ -179,17 +179,17 @@ internal sealed class ChatSelectorCoordinator
                 configuredProviderKeys: GetConfiguredProviderKeys());
             if (backendOptions.Count == 0)
             {
-                _selectorState.SetBackendSelection([], -1);
+                _selectorState.SetModelProviderSelection([], -1);
                 _selectorState.SetModelSelection([], -1);
                 _selectorState.SetReasoningSelection([], -1);
-                _workspaceViewModel.CanSelectBackend = false;
+                _workspaceViewModel.CanSelectModelProvider = false;
                 _workspaceViewModel.CanSelectModel = false;
                 _workspaceViewModel.CanSelectReasoning = false;
                 _syncChatSelectorItems();
                 return;
             }
 
-            _selectorState.SetBackendSelection(
+            _selectorState.SetModelProviderSelection(
                 backendOptions,
                 Math.Clamp(
                 backendOptions.FindIndex(option => string.Equals(option.BackendId.Value, tab.BackendId.Value, StringComparison.OrdinalIgnoreCase)),
@@ -217,7 +217,7 @@ internal sealed class ChatSelectorCoordinator
                 reasoningOptions.FindIndex(option => option.Effort == tab.ReasoningEffort),
                 0,
                 Math.Max(0, reasoningOptions.Count - 1)));
-            _workspaceViewModel.CanSelectBackend = _canSelectThreadBackend(tab.Thread, tab);
+            _workspaceViewModel.CanSelectModelProvider = _canSelectThreadBackend(tab.Thread, tab);
             _workspaceViewModel.CanSelectModel = backendState.Availability == ChatBackendAvailability.Ready;
             _workspaceViewModel.CanSelectReasoning = backendState.Availability == ChatBackendAvailability.Ready;
             _syncChatSelectorItems();
@@ -375,7 +375,7 @@ internal sealed class ChatSelectorCoordinator
                     return GetDefaultBackendId();
                 }
 
-                if (_selectorState.GetSelectedBackendIndex() is { } backendIndex &&
+                if (_selectorState.GetSelectedModelProviderIndex() is { } backendIndex &&
                     (uint)backendIndex < (uint)options.Count)
                 {
                     return options[backendIndex].BackendId;
@@ -447,13 +447,13 @@ internal sealed class ChatSelectorCoordinator
             return;
         }
 
-        _workspaceViewModel.CanSelectBackend = _workspaceViewModel.BackendOptions.Count > 0 &&
+        _workspaceViewModel.CanSelectModelProvider = _workspaceViewModel.ModelProviderOptions.Count > 0 &&
             _canSelectThreadBackend(selectedThread, selectedTab);
     }
 
     private AgentBackendId GetPreferredDraftBackendId(IReadOnlyList<ChatBackendOption> backendOptions)
     {
-        if (_selectorState.GetSelectedBackendIndex() is { } backendIndex &&
+        if (_selectorState.GetSelectedModelProviderIndex() is { } backendIndex &&
             (uint)backendIndex < (uint)backendOptions.Count)
         {
             var current = backendOptions[backendIndex].BackendId;
