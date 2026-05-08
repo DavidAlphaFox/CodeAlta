@@ -1,5 +1,4 @@
 using CodeAlta.Agent;
-using CodeAlta.App.Events;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
@@ -45,7 +44,7 @@ internal sealed class CodeAltaShellBridge : ICodeAltaShell
         => _app.HandleRuntimeEvent(runtimeEvent);
 
     public void RefreshCatalogAndThreadWorkspace()
-        => _app.Ev.Publish(new CatalogChangedEvent());
+        => _app.RefreshCatalogAndThreadWorkspace();
 
     public void TrySchedulePendingStartupThreadRestore(CancellationToken cancellationToken)
         => _app.TrySchedulePendingStartupThreadRestore(cancellationToken);

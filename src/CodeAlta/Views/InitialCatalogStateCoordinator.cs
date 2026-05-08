@@ -1,5 +1,4 @@
 using CodeAlta.App;
-using CodeAlta.App.Events;
 using CodeAlta.Models;
 
 namespace CodeAlta.Views;
@@ -8,7 +7,7 @@ internal sealed class InitialCatalogStateCoordinator
 {
     private readonly Func<CancellationToken, Task<ShellThreadStateCoordinator.InitialCatalogState>> _loadInitialCatalogStateAsync;
     private readonly Action<ShellThreadStateCoordinator.InitialCatalogState> _applyInitialCatalogState;
-    private readonly FrontendEventPublisher _frontendEvents;
+    private readonly Action _refreshCatalogAndThreadWorkspace;
     private readonly Action _focusPromptEditor;
     private readonly Action<string, bool, StatusTone> _setStatus;
     private Task<ShellThreadStateCoordinator.InitialCatalogState>? _initialCatalogStateTask;
@@ -17,19 +16,19 @@ internal sealed class InitialCatalogStateCoordinator
     public InitialCatalogStateCoordinator(
         Func<CancellationToken, Task<ShellThreadStateCoordinator.InitialCatalogState>> loadInitialCatalogStateAsync,
         Action<ShellThreadStateCoordinator.InitialCatalogState> applyInitialCatalogState,
-        FrontendEventPublisher frontendEvents,
+        Action refreshCatalogAndThreadWorkspace,
         Action focusPromptEditor,
         Action<string, bool, StatusTone> setStatus)
     {
         ArgumentNullException.ThrowIfNull(loadInitialCatalogStateAsync);
         ArgumentNullException.ThrowIfNull(applyInitialCatalogState);
-        ArgumentNullException.ThrowIfNull(frontendEvents);
+        ArgumentNullException.ThrowIfNull(refreshCatalogAndThreadWorkspace);
         ArgumentNullException.ThrowIfNull(focusPromptEditor);
         ArgumentNullException.ThrowIfNull(setStatus);
 
         _loadInitialCatalogStateAsync = loadInitialCatalogStateAsync;
         _applyInitialCatalogState = applyInitialCatalogState;
-        _frontendEvents = frontendEvents;
+        _refreshCatalogAndThreadWorkspace = refreshCatalogAndThreadWorkspace;
         _focusPromptEditor = focusPromptEditor;
         _setStatus = setStatus;
     }
@@ -53,7 +52,7 @@ internal sealed class InitialCatalogStateCoordinator
         try
         {
             _applyInitialCatalogState(task.GetAwaiter().GetResult());
-            _frontendEvents.Publish(new CatalogChangedEvent());
+            _refreshCatalogAndThreadWorkspace();
             _focusPromptEditor();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
