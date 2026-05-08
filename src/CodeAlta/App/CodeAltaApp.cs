@@ -199,7 +199,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _initialCatalogStateCoordinator = new InitialCatalogStateCoordinator(
             cancellationToken => _threadStateCoordinator.LoadInitialCatalogStateAsync(cancellationToken),
             _threadStateCoordinator.ApplyInitialCatalogState,
-            RefreshCatalogAndThreadWorkspace,
+            composition.FrontendEvents,
             FocusPromptEditor,
             SetStatus);
         _acpUi = new AcpFrontendCoordinator(
