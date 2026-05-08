@@ -80,6 +80,7 @@ internal sealed class SessionUsageProjectionController
             _sessionUsageViewModel.Usage = tab.Usage;
             _sessionUsageViewModel.BackendName = ResolveBackendDisplayName(tab.BackendId, backendState);
             _sessionUsageViewModel.ModelName = tab.ModelId ?? backendState?.SelectedModelId;
+            _sessionUsageViewModel.PluginTransientEvents = tab.PluginTransientEvents.Snapshot;
             return;
         }
 
@@ -88,6 +89,7 @@ internal sealed class SessionUsageProjectionController
         _sessionUsageViewModel.Usage = null;
         _sessionUsageViewModel.BackendName = ResolveBackendDisplayName(backendId, draftBackendState);
         _sessionUsageViewModel.ModelName = draftBackendState?.SelectedModelId;
+        _sessionUsageViewModel.PluginTransientEvents = [];
     }
 
     private static string ResolveBackendDisplayName(AgentBackendId backendId, ChatBackendState? backendState)

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Built-in turn and session statistics plugin for CodeAlta.</Description>
+    <Authors>Alexandre Mutel</Authors>
+    <PackageTags>codealta;plugin;statistics;agentic;ai</PackageTags>
+    <PackageProjectUrl>https://github.com/xoofx/CodeAlta</PackageProjectUrl>
+    <PackageLicenseExpression>BSD-2-Clause</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CodeAlta.Plugins.Abstractions\CodeAlta.Plugins.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

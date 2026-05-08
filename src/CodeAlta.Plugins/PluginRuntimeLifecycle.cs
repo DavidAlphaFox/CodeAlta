@@ -320,6 +320,7 @@ public sealed class PluginRuntimeActivator
         Add(PluginPoint.PromptProcessor, instance.GetPromptProcessors());
         Add(PluginPoint.Compaction, instance.GetCompactionContributions());
         Add(PluginPoint.Ui, instance.GetUiContributions());
+        Add(PluginPoint.ThreadEventProjection, instance.GetThreadEventProjections());
         Add(PluginPoint.Resource, instance.GetResources());
         return registrations;
 

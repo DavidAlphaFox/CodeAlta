@@ -19,6 +19,7 @@ internal sealed class ThreadTimelinePresenter
     private readonly Dictionary<string, ChatStatusState> _activityStates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ChatStatusState> _interactionStates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ChatStatusState> _planStates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ChatStatusState> _pluginProjectionStates = new(StringComparer.Ordinal);
     private readonly List<MessageNavigationAnchor> _messageNavigationAnchors = [];
     private List<DocumentFlowItem>? _bufferedHistoryItems;
     private PendingAssistantState? _pendingAssistant;
@@ -102,6 +103,11 @@ internal sealed class ThreadTimelinePresenter
             }
 
             foreach (var state in _planStates.Values)
+            {
+                ChatTimelineVisualFactory.ApplyLocalFileRootPath(state.Markdown, _localFileRootPath);
+            }
+
+            foreach (var state in _pluginProjectionStates.Values)
             {
                 ChatTimelineVisualFactory.ApplyLocalFileRootPath(state.Markdown, _localFileRootPath);
             }
@@ -336,6 +342,24 @@ internal sealed class ThreadTimelinePresenter
         string? headerSecondary = null)
         => UpsertStatus(_activityStates, key, timestamp, markdown, tone, headerOverride, headerSecondary);
 
+    public void UpsertPluginProjection(
+        string key,
+        DateTimeOffset timestamp,
+        string markdown,
+        string? headerSecondary = null)
+        => UpsertStatus(_pluginProjectionStates, key, timestamp, markdown, ChatTimelineTone.Notice, "Plugin", headerSecondary);
+
+    public void RemovePluginProjection(string key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        if (!_pluginProjectionStates.Remove(key, out var state))
+        {
+            return;
+        }
+
+        RemoveTimelineItems([state.Item]);
+    }
+
     public void AddStatus(
         DateTimeOffset timestamp,
         string markdown,
@@ -537,6 +561,7 @@ internal sealed class ThreadTimelinePresenter
         _activityStates.Clear();
         _interactionStates.Clear();
         _planStates.Clear();
+        _pluginProjectionStates.Clear();
         _pendingAssistant = null;
         _optimisticUserPrompt = null;
         _truncatedHistory = null;

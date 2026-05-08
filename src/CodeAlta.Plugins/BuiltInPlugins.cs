@@ -22,13 +22,18 @@ public sealed record BuiltInPluginDefinition
     /// <summary>Gets the factory used to create a plugin instance.</summary>
     public required Func<PluginBase> Factory { get; init; }
 
+    /// <summary>Gets the concrete plugin type, when known without invoking the factory.</summary>
+    public Type? PluginType { get; init; }
+
     /// <summary>Gets the built-in plugin descriptor.</summary>
     public PluginDescriptor CreateDescriptor()
-        => new()
+    {
+        var pluginType = ResolvePluginType();
+        return new PluginDescriptor
         {
             RuntimeKey = "builtin:" + Id,
-            TypeName = Factory.Method.ReturnType.FullName ?? Factory.Method.ReturnType.Name,
-            AssemblyName = Factory.Method.Module.Assembly.GetName().Name ?? "CodeAlta",
+            TypeName = pluginType.FullName ?? pluginType.Name,
+            AssemblyName = pluginType.Assembly.GetName().Name ?? "CodeAlta",
             DisplayName = DisplayName,
             Description = Description,
             Metadata = new Dictionary<string, string>
@@ -37,6 +42,12 @@ public sealed record BuiltInPluginDefinition
                 ["BuiltInId"] = Id,
             },
         };
+    }
+
+    /// <summary>Resolves the concrete plugin type.</summary>
+    /// <returns>The concrete plugin type.</returns>
+    public Type ResolvePluginType()
+        => PluginType ?? (Factory.Method.ReturnType == typeof(PluginBase) ? Factory().GetType() : Factory.Method.ReturnType);
 }
 
 /// <summary>

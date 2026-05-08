@@ -1,7 +1,7 @@
 # CodeAlta Plugin Abstractions Specification
 
 Status: **Draft**
-Last updated: **2026-05-05**
+Last updated: **2026-05-08**
 Audience: implementers of `CodeAlta.Plugins.Abstractions`, future `CodeAlta.Plugins`, CodeAlta UI/orchestration/runtime surfaces, and plugin authors.
 
 Primary inputs:
@@ -311,6 +311,30 @@ plugin assembly -> CodeAlta.Plugins.Abstractions <- CodeAlta executable / CodeAl
 ```
 
 The abstraction package can reference stable public library projects and NuGet packages, but not app internals.
+
+### 6.1.1 Built-in plugin packaging
+
+Built-in plugins should use the same public abstraction shape as external plugins. A built-in plugin is allowed to be registered by the host through a `BuiltInPluginDefinition`, but its implementation should still live in its own plugin assembly instead of inside the app or plugin runtime implementation.
+
+Recommended project shape for first-party built-ins:
+
+```text
+src/CodeAlta.Plugin.<Name>/
+  CodeAlta.Plugin.<Name>.csproj
+  <Name>Plugin.cs
+```
+
+The first statistics plugin should therefore be authored as a separate `CodeAlta.Plugin.Statistics` project with the plugin implementation kept in a single C# source file, for example `StatisticsPlugin.cs`, so the code remains close to what an external source plugin author could write in `plugin.cs`.
+
+The built-in plugin project should:
+
+1. reference `CodeAlta.Plugins.Abstractions` as its primary host-facing dependency;
+2. avoid referencing the `CodeAlta` executable, frontend, orchestration internals, or `CodeAlta.Plugins` runtime internals;
+3. use only `PluginBase` overrides and contribution descriptors to integrate with the host;
+4. keep implementation-specific helper types in the same source file when practical, unless a helper belongs in the public abstraction package;
+5. be registered by host/runtime bootstrap code as a built-in plugin without bypassing normal enablement, diagnostics, contribution collection, or disable-by-config behavior.
+
+Tests for a built-in plugin may live outside the plugin source file and may use test-only references to host/runtime projects where needed. The runtime registration code may reference the built-in plugin assembly to create the plugin instance, but the plugin implementation should not depend on host internals in the opposite direction.
 
 ### 6.2 Dependency policy
 
@@ -978,7 +1002,7 @@ Plugins that want to affect UI from observed events should emit separate derived
 
 Plugins can project transient, plugin-owned timeline/status details from normalized agent events without appending to persisted user/agent transcript history.
 
-The implemented abstraction is `PluginThreadEventProjection`, returned from `PluginAgentEventObserver` callbacks. Runtime behavior:
+The implemented abstraction is `PluginThreadEventProjectionContribution`, returned from `PluginBase.GetThreadEventProjections()`. Runtime behavior:
 
 - projections carry the plugin id, event id, project/thread/run scope, message, timestamp, optional severity, and optional details payload;
 - `WorkThreadPluginDerivedEventProjector` maps projections to `PluginDerivedThreadEvent` orchestration events;

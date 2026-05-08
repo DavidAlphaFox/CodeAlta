@@ -35,11 +35,32 @@ public sealed record PluginThreadEventProjectionContext
     /// <summary>Gets the durable thread identifier.</summary>
     public required string ThreadId { get; init; }
 
+    /// <summary>Gets the project identifier, when known.</summary>
+    public string? ProjectId { get; init; }
+
+    /// <summary>Gets the project path, when known.</summary>
+    public string? ProjectPath { get; init; }
+
+    /// <summary>Gets the backend identifier, when known.</summary>
+    public string? BackendId { get; init; }
+
+    /// <summary>Gets the active model identifier, when known.</summary>
+    public string? Model { get; init; }
+
+    /// <summary>Gets the primary session identifier represented by the event batch, when known.</summary>
+    public string? SessionId { get; init; }
+
+    /// <summary>Gets the primary run identifier represented by the event batch, when known.</summary>
+    public string? RunId { get; init; }
+
     /// <summary>Gets the canonical events being projected.</summary>
     public required IReadOnlyList<AgentEvent> Events { get; init; }
 
     /// <summary>Gets a value indicating whether the events came from history replay instead of the live event stream.</summary>
     public bool IsReplay { get; init; }
+
+    /// <summary>Gets a value indicating whether the batch is complete enough to emit final turn projections.</summary>
+    public bool IsCompleteBatch { get; init; }
 }
 
 /// <summary>
@@ -52,6 +73,9 @@ public sealed record PluginDerivedThreadEvent
 
     /// <summary>Gets markdown text for default frontend rendering, when available.</summary>
     public string? Markdown { get; init; }
+
+    /// <summary>Gets the timestamp to show for the transient event, when available.</summary>
+    public DateTimeOffset? Timestamp { get; init; }
 
     /// <summary>Gets an optional renderer target/schema name.</summary>
     public string? RenderTarget { get; init; }

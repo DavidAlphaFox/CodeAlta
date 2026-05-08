@@ -136,6 +136,7 @@ internal partial class Program
                     IsHeadless = false,
                     WaitForEnterAfterBuildLiveOutput = pluginBootstrapOptions.WaitForEnterAfterPluginLiveOutput,
                     RawArguments = args,
+                    BuiltIns = CodeAltaBuiltInPlugins.All,
                 },
                 cancellationToken);
             stopwatch.Stop();

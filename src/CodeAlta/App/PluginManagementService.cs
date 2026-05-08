@@ -27,7 +27,7 @@ internal sealed class PluginManagementService
         var safeMode = PluginRuntimeConfigResolver.IsSafeModeEnabled([]);
         var sourcePackages = DiscoverSourcePackages(selectedProject).ToArray();
         var entries = _modelBuilder.Build(
-            builtIns: [],
+            CodeAltaBuiltInPlugins.All,
             sourcePackages,
             globalConfig,
             projectConfig,

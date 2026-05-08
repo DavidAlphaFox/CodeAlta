@@ -501,7 +501,7 @@ public sealed class ArchitectureGuardrailTests
             "App/SidebarCoordinator.cs:297:_ = CommitInlineRenameAsync(row, projectId, displayName, previousTitle);",
             "App/ThreadPromptDispatchCoordinator.cs:177:_ = RecordResolvedReferenceUsageAsync(promptInput.ResolvedReferences);",
             "App/ThreadPromptDraftPersistenceCoordinator.cs:83:_ = PersistPromptDraftAsync(threadId, normalizedPrompt, cancellationSource);",
-            "App/ThreadRuntimeEventCoordinator.cs:167:_ = InvalidateProjectFileSearchAsync(thread.WorkingDirectory);",
+            "App/ThreadRuntimeEventCoordinator.cs:230:_ = InvalidateProjectFileSearchAsync(thread.WorkingDirectory);",
             "Presentation/Editing/FileEditorTab.cs:213:_ = RefreshExternalStateAsync();",
             "Presentation/Editing/ProjectFileOpenDialogController.cs:217:_ = AcceptSelectedAsync(selected);",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:153:var sessionCreateTask = Task.Run(",

@@ -193,6 +193,40 @@ internal sealed class PluginHostBridge
         await _runtime.Adapter.ObserveAgentEventAsync(activePlugins, new PluginAgentEventContext { Plugin = seed.Descriptor, Services = seed.RuntimeContext.Services, Event = @event }, options, cancellationToken);
     }
 
+    public async Task<WorkThreadPluginDerivedEventProjectionResult> ProjectThreadEventsAsync(
+        WorkThreadDescriptor thread,
+        OpenThreadState tab,
+        IReadOnlyList<AgentEvent> events,
+        bool isReplay,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(events);
+
+        if (_runtime.ActivePlugins.Count == 0 || events.Count == 0)
+        {
+            return new WorkThreadPluginDerivedEventProjectionResult([], []);
+        }
+
+        var projectPath = ResolveProjectPath(thread) ?? _getCurrentProject()?.ProjectPath ?? Environment.CurrentDirectory;
+        var projector = new WorkThreadPluginDerivedEventProjector(
+            options => _runtime.Adapter.GetContributions<PluginThreadEventProjectionContribution>(PluginPoint.ThreadEventProjection, options));
+        return await projector.ProjectAsync(
+            new WorkThreadCommandContext
+            {
+                ProjectId = thread.ProjectRef ?? _getCurrentProject()?.Id ?? "current",
+                ProjectPath = projectPath,
+                PromptSessionId = tab.ActiveRunId?.Value ?? thread.ThreadId,
+                ModelProviderId = tab.BackendId.Value,
+                ModelId = tab.ModelId,
+                ThreadId = thread.ThreadId,
+            },
+            events,
+            isReplay,
+            cancellationToken);
+    }
+
     public async Task<PluginCompactionAugmentation> BeforeCompactionAsync(
         WorkThreadDescriptor thread,
         OpenThreadState tab,

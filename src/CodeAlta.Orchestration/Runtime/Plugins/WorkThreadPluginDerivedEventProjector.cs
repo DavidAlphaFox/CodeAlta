@@ -9,7 +9,7 @@ namespace CodeAlta.Orchestration.Runtime.Plugins;
 /// </summary>
 public sealed class WorkThreadPluginDerivedEventProjector
 {
-    private readonly PluginOrchestrationBridge _plugins;
+    private readonly Func<PluginAdapterOperationOptions, IReadOnlyList<PluginContributionRegistration>> _getThreadEventProjectors;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WorkThreadPluginDerivedEventProjector"/> class.
@@ -17,9 +17,25 @@ public sealed class WorkThreadPluginDerivedEventProjector
     /// <param name="plugins">The headless plugin orchestration bridge.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="plugins"/> is <see langword="null"/>.</exception>
     public WorkThreadPluginDerivedEventProjector(PluginOrchestrationBridge plugins)
+        : this(CreateProjectionGetter(plugins))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WorkThreadPluginDerivedEventProjector"/> class.
+    /// </summary>
+    /// <param name="getThreadEventProjectors">Gets active thread event projector registrations.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="getThreadEventProjectors"/> is <see langword="null"/>.</exception>
+    public WorkThreadPluginDerivedEventProjector(Func<PluginAdapterOperationOptions, IReadOnlyList<PluginContributionRegistration>> getThreadEventProjectors)
+    {
+        ArgumentNullException.ThrowIfNull(getThreadEventProjectors);
+        _getThreadEventProjectors = getThreadEventProjectors;
+    }
+
+    private static Func<PluginAdapterOperationOptions, IReadOnlyList<PluginContributionRegistration>> CreateProjectionGetter(PluginOrchestrationBridge plugins)
     {
         ArgumentNullException.ThrowIfNull(plugins);
-        _plugins = plugins;
+        return plugins.GetThreadEventProjectors;
     }
 
     /// <summary>
@@ -45,12 +61,13 @@ public sealed class WorkThreadPluginDerivedEventProjector
             ProjectId = context.ProjectId,
             ProjectPath = context.ProjectPath,
             ThreadId = context.ThreadId ?? context.ThreadDraftId,
+            RunId = events.LastOrDefault(static @event => @event.RunId is not null)?.RunId?.Value,
             BackendId = context.ModelProviderId,
             Model = context.ModelId,
             HasInteractiveUi = false,
             IsHeadless = true,
         };
-        var registrations = _plugins.GetThreadEventProjectors(options);
+        var registrations = _getThreadEventProjectors(options);
         if (registrations.Count == 0 || events.Count == 0)
         {
             return new WorkThreadPluginDerivedEventProjectionResult([], []);
@@ -72,8 +89,15 @@ public sealed class WorkThreadPluginDerivedEventProjector
                         {
                             Handle = registration.Handle,
                             ThreadId = context.ThreadId ?? context.ThreadDraftId ?? string.Empty,
+                            ProjectId = context.ProjectId,
+                            ProjectPath = context.ProjectPath,
+                            BackendId = context.ModelProviderId,
+                            Model = context.ModelId,
+                            SessionId = events.LastOrDefault(static @event => !string.IsNullOrWhiteSpace(@event.SessionId))?.SessionId,
+                            RunId = options.RunId,
                             Events = events,
                             IsReplay = isReplay,
+                            IsCompleteBatch = true,
                         },
                         cancellationToken)
                     .ConfigureAwait(false);

@@ -36,6 +36,7 @@ internal sealed class OpenThreadStateStore
         tab.PermissionRequests.Clear();
         tab.UserInputRequests.Clear();
         tab.Session.LastRenderedSystemPromptEvent = null;
+        tab.PluginTransientEvents.Clear();
     }
 
     public OpenThreadState? FindOpenThread(string threadId)

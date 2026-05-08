@@ -123,7 +123,7 @@ public sealed class PluginRuntimeManager : IAsyncDisposable
 
             var discovered = new DiscoveredPluginType
             {
-                Type = builtIn.Factory.Method.ReturnType == typeof(PluginBase) ? builtIn.Factory().GetType() : builtIn.Factory.Method.ReturnType,
+                Type = builtIn.ResolvePluginType(),
                 Descriptor = builtIn.CreateDescriptor(),
             };
             var activation = await activator.ActivateAsync(

@@ -5,6 +5,7 @@ using CodeAlta.App.State;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
+using CodeAlta.Orchestration.Runtime.Plugins;
 using CodeAlta.Presentation.Prompting;
 using CodeAlta.Presentation.Timeline;
 using CodeAlta.Threading;
@@ -520,6 +521,14 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             ObservedEvent = agentEvent;
             return Task.CompletedTask;
         }
+
+        public Task<WorkThreadPluginDerivedEventProjectionResult> ProjectThreadEventsAsync(
+            WorkThreadDescriptor thread,
+            OpenThreadState tab,
+            IReadOnlyList<AgentEvent> events,
+            bool isReplay,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new WorkThreadPluginDerivedEventProjectionResult([], []));
     }
 
     private sealed class TestShellStatusPort : IShellStatusPort

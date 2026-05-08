@@ -89,6 +89,7 @@ The abstraction package includes contracts for:
 - resource roots such as skills, system prompts, templates, themes, MCP manifests, and agent definitions;
 - compaction hooks for before/instruction/reducer/after participation;
 - normalized agent event observation;
+- transient thread event projections through `GetThreadEventProjections()`, used for plugin-owned timeline cards that are replayed from canonical history but are not persisted into conversation history;
 - diagnostics, lifecycle states, context invalidation, and no-op/headless service implementations.
 
 Low-ceremony factories are available for common authoring tasks: `Command`, `Startup`, `Prompt`, `Attachments`, `PluginUi`, `Resources`, `Tool`, and `PluginBackend`.
@@ -96,6 +97,8 @@ Low-ceremony factories are available for common authoring tasks: `Command`, `Sta
 Command-line contributions intentionally use plain `XenoAtom.CommandLine` objects such as `Command` and `CommandGroup`, with options, arguments, validation, completion, and callbacks added through the command-line API directly instead of a CodeAlta-specific wrapper.
 
 Capabilities removed from the hardcoded 1.0 core—such as built-in MCP services, semantic or language-specific indexing, local model hosting, and multi-agent orchestration roles—should be reintroduced through focused plugins or reusable service packages rather than frontend-owned app code.
+
+Built-in plugins follow the same abstraction model. The statistics plugin is packaged as `CodeAlta.Plugin.Statistics` and keeps its implementation in a single `StatisticsPlugin.cs` file so it stays close to what an external `plugin.cs` source plugin could author. It is enabled by default, can be disabled through `[plugins.statistics] enabled = false`, and projects transient per-turn/session statistics from normalized agent events without writing plugin messages to canonical thread history.
 
 Plugins should schedule long-running background work through `Services.Tasks.Run(...)` or the `PluginBase.Tasks` shortcut instead of calling `Task.Run` directly. The runtime tracks these handles, cancels them during deactivation, and can delay unload while `PluginTaskHandle.Completion` is still running.
 

@@ -135,6 +135,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
                     RawArguments = rawArguments,
                     WaitForEnterAfterPluginLiveOutput = pluginBootstrapOptions.WaitForEnterAfterPluginLiveOutput,
                     PrestartedPluginRuntime = prestartedPluginRuntime,
+                    PluginBuiltIns = CodeAltaBuiltInPlugins.All,
                     ConfigureAgentBackends = RegisterFrontendBackends,
                 },
                 cancellationToken)

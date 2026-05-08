@@ -1,4 +1,5 @@
 using CodeAlta.Agent;
+using CodeAlta.App;
 using CodeAlta.Presentation.Formatting;
 using CodeAlta.ViewModels;
 using CodeAlta.Presentation.Controls;
@@ -96,7 +97,7 @@ internal sealed class SessionUsagePresenter
 
     private Visual BuildPopupContent()
     {
-        return BuildDetailsVisual(_viewModel.Usage, _viewModel.BackendName, _viewModel.ModelName);
+        return BuildDetailsVisual(_viewModel.Usage, _viewModel.BackendName, _viewModel.ModelName, _viewModel.PluginTransientEvents);
     }
 
     private void CopyMarkdown()
@@ -105,7 +106,11 @@ internal sealed class SessionUsagePresenter
         _copyMarkdown(markdown);
     }
 
-    private Visual BuildDetailsVisual(AgentSessionUsage? usage, string backendName, string? modelName)
+    private Visual BuildDetailsVisual(
+        AgentSessionUsage? usage,
+        string backendName,
+        string? modelName,
+        IReadOnlyList<PluginTransientEventProjection> pluginTransientEvents)
     {
         var stack = new VStack
         {
@@ -139,6 +144,7 @@ internal sealed class SessionUsagePresenter
         AddUsageBreakdownContent(stack, usage);
         AddLimitsAndQuotasContent(stack, usage);
         AddBackendSpecificContent(stack, usage);
+        AddPluginProjectionContent(stack, pluginTransientEvents);
 
         return BuildPopupContainer(stack);
     }
@@ -284,6 +290,25 @@ internal sealed class SessionUsagePresenter
             }
 
             AddCopilotUsageContent(stack, copilot);
+        }
+    }
+
+    private static void AddPluginProjectionContent(VStack stack, IReadOnlyList<PluginTransientEventProjection> projections)
+    {
+        if (projections.Count == 0)
+        {
+            return;
+        }
+
+        AddSectionHeader(stack, "Plugin statistics");
+        foreach (var projection in projections)
+        {
+            if (string.IsNullOrWhiteSpace(projection.Markdown))
+            {
+                continue;
+            }
+
+            stack.Add(CreateUsageMarkdownControl(projection.Markdown));
         }
     }
 

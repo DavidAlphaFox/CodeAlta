@@ -120,6 +120,8 @@ internal sealed class OpenThreadState
         set => Session.Usage = value;
     }
 
+    public PluginTransientEventProjectionStore PluginTransientEvents => Session.PluginTransientEvents;
+
     public bool HasPromptDraft
         => !string.IsNullOrWhiteSpace(Session.PromptDraftText) || Session.PromptImageAttachments.Count > 0;
 

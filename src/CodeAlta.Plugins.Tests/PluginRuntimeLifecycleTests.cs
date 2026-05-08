@@ -69,6 +69,25 @@ public sealed class PluginRuntimeLifecycleTests
     }
 
     [TestMethod]
+    public async Task ActivatorCollectsThreadEventProjectionContributions()
+    {
+        var registry = new PluginContributionRegistry();
+        var activator = new PluginRuntimeActivator(registry);
+        var discovered = new DiscoveredPluginType
+        {
+            Type = typeof(ThreadEventProjectionPlugin),
+            Descriptor = PluginDescriptorFactory.FromType(typeof(ThreadEventProjectionPlugin)),
+        };
+
+        var result = await activator.ActivateAsync(discovered, null, null, new PluginActivationOptions { HostInfo = CreateHostInfo() });
+
+        Assert.IsTrue(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        var registration = registry.GetSnapshot().Single(static item => item.Handle.Point == PluginPoint.ThreadEventProjection);
+        Assert.IsInstanceOfType<PluginThreadEventProjectionContribution>(registration.Contribution);
+        await result.ActivePlugin!.DeactivateAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [TestMethod]
     public async Task DeactivateReportsFailedUnloadDiagnosticsWhenLoadContextIsStillReferenced()
     {
         var registry = new PluginContributionRegistry();
@@ -146,5 +165,17 @@ public sealed class PluginRuntimeLifecycleTests
 
     public sealed class EmptyPlugin : PluginBase
     {
+    }
+
+    public sealed class ThreadEventProjectionPlugin : PluginBase
+    {
+        public override IEnumerable<PluginThreadEventProjectionContribution> GetThreadEventProjections()
+        {
+            yield return new PluginThreadEventProjectionContribution
+            {
+                Name = "stats",
+                ProjectAsync = static (_, _) => ValueTask.FromResult<IReadOnlyList<PluginDerivedThreadEvent>>([]),
+            };
+        }
     }
 }

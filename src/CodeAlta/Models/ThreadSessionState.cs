@@ -1,4 +1,5 @@
 using CodeAlta.Agent;
+using CodeAlta.App;
 using CodeAlta.Presentation.Prompting;
 
 namespace CodeAlta.Models;
@@ -44,4 +45,6 @@ internal sealed class ThreadSessionState
     public AgentSessionUsage? Usage { get; set; }
 
     public AgentSystemPromptEvent? LastRenderedSystemPromptEvent { get; set; }
+
+    public PluginTransientEventProjectionStore PluginTransientEvents { get; } = new();
 }
