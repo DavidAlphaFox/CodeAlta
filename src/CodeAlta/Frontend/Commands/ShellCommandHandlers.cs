@@ -1,9 +1,6 @@
 using CodeAlta.App;
-using CodeAlta.App.State;
-using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Plugins.Abstractions;
-using CodeAlta.Views;
 
 namespace CodeAlta.Frontend.Commands;
 
@@ -29,34 +26,31 @@ internal static class ThreadCommandHandlers
     public static void Register(
         ShellCommandRegistry registry,
         ThreadCommandCoordinator threadCommands,
-        Func<WorkThreadDescriptor?> getSelectedThread,
-        Func<WorkThreadDescriptor, OpenThreadState> ensureThreadTab,
-        Action<string, bool, StatusTone> setStatus)
+        IShellThreadCommandService threadCommandService,
+        IShellStatusService statusService)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(threadCommands);
-        ArgumentNullException.ThrowIfNull(getSelectedThread);
-        ArgumentNullException.ThrowIfNull(ensureThreadTab);
-        ArgumentNullException.ThrowIfNull(setStatus);
+        ArgumentNullException.ThrowIfNull(threadCommandService);
+        ArgumentNullException.ThrowIfNull(statusService);
 
         registry.Register<AbortSelectedThreadCommand>((_, _) => ToValueTask(threadCommands.AbortSelectedThreadAsync()));
         registry.Register<CompactSelectedThreadCommand>((_, _) => ToValueTask(threadCommands.CompactSelectedThreadAsync()));
-        registry.Register<ShowQueueStatusCommand>((_, _) => ToValueTask(ShowSelectedThreadQueueStatusAsync(getSelectedThread, ensureThreadTab, setStatus)));
+        registry.Register<ShowQueueStatusCommand>((_, _) => ToValueTask(ShowSelectedThreadQueueStatusAsync(threadCommandService, statusService)));
         registry.Register<ClearSelectedThreadQueueCommand>((_, _) => ToValueTask(threadCommands.ClearSelectedThreadQueueAsync()));
     }
 
     private static Task ShowSelectedThreadQueueStatusAsync(
-        Func<WorkThreadDescriptor?> getSelectedThread,
-        Func<WorkThreadDescriptor, OpenThreadState> ensureThreadTab,
-        Action<string, bool, StatusTone> setStatus)
+        IShellThreadCommandService threadCommandService,
+        IShellStatusService statusService)
     {
-        if (getSelectedThread() is not { } thread)
+        if (threadCommandService.GetSelectedThread() is not { } thread)
         {
-            setStatus("Open a thread before inspecting its queue.", false, StatusTone.Warning);
+            statusService.SetStatus("Open a thread before inspecting its queue.", tone: StatusTone.Warning);
             return Task.CompletedTask;
         }
 
-        var tab = ensureThreadTab(thread);
+        var tab = threadCommandService.EnsureThreadTab(thread);
         var queuedCount = tab.QueuedPrompts.Count;
         var tone = queuedCount == 0
             ? StatusTone.Ready
@@ -65,7 +59,7 @@ internal static class ThreadCommandHandlers
             ? $"Queue empty · {thread.Title}"
             : $"{queuedCount} queued prompt(s) waiting in '{thread.Title}'.";
 
-        setStatus(message, false, tone);
+        statusService.SetStatus(message, tone: tone);
         return Task.CompletedTask;
     }
 
@@ -80,59 +74,23 @@ internal static class NavigationCommandHandlers
 {
     public static void Register(
         ShellCommandRegistry registry,
-        Action focusSidebar,
-        Action focusPrompt,
-        Func<Task> selectTabLeftAsync,
-        Func<Task> selectTabRightAsync,
-        Func<Task> scrollToPreviousMessageAsync,
-        Func<Task> scrollToNextMessageAsync,
-        Func<Task> scrollToFirstMessageAsync,
-        Func<Task> scrollToLastMessageAsync)
+        IShellNavigationCommandService navigationCommandService)
     {
         ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(focusSidebar);
-        ArgumentNullException.ThrowIfNull(focusPrompt);
-        ArgumentNullException.ThrowIfNull(selectTabLeftAsync);
-        ArgumentNullException.ThrowIfNull(selectTabRightAsync);
-        ArgumentNullException.ThrowIfNull(scrollToPreviousMessageAsync);
-        ArgumentNullException.ThrowIfNull(scrollToNextMessageAsync);
-        ArgumentNullException.ThrowIfNull(scrollToFirstMessageAsync);
-        ArgumentNullException.ThrowIfNull(scrollToLastMessageAsync);
+        ArgumentNullException.ThrowIfNull(navigationCommandService);
 
         registry.Register<FocusSidebarCommand>((_, _) =>
         {
-            focusSidebar();
+            navigationCommandService.FocusSidebar();
             return ValueTask.CompletedTask;
         });
         registry.Register<FocusPromptCommand>((_, _) =>
         {
-            focusPrompt();
+            navigationCommandService.FocusPrompt();
             return ValueTask.CompletedTask;
         });
-        registry.Register<SelectRelativeTabCommand>((command, _) => ToValueTask(command.Offset < 0 ? selectTabLeftAsync() : selectTabRightAsync()));
-        registry.Register<ScrollSelectedThreadMessageCommand>((command, _) => ToValueTask(ScrollToMessageAsync(
-            command.Target,
-            scrollToPreviousMessageAsync,
-            scrollToNextMessageAsync,
-            scrollToFirstMessageAsync,
-            scrollToLastMessageAsync)));
-    }
-
-    private static Task ScrollToMessageAsync(
-        ThreadMessageScrollTarget target,
-        Func<Task> scrollToPreviousMessageAsync,
-        Func<Task> scrollToNextMessageAsync,
-        Func<Task> scrollToFirstMessageAsync,
-        Func<Task> scrollToLastMessageAsync)
-    {
-        return target switch
-        {
-            ThreadMessageScrollTarget.Previous => scrollToPreviousMessageAsync(),
-            ThreadMessageScrollTarget.Next => scrollToNextMessageAsync(),
-            ThreadMessageScrollTarget.First => scrollToFirstMessageAsync(),
-            ThreadMessageScrollTarget.Last => scrollToLastMessageAsync(),
-            _ => throw new ArgumentOutOfRangeException(nameof(target), target, "Unknown thread message scroll target."),
-        };
+        registry.Register<SelectRelativeTabCommand>((command, _) => ToValueTask(navigationCommandService.SelectRelativeTabAsync(command.Offset)));
+        registry.Register<ScrollSelectedThreadMessageCommand>((command, _) => ToValueTask(navigationCommandService.ScrollSelectedThreadMessageAsync(command.Target)));
     }
 
     private static ValueTask ToValueTask(Task task)
@@ -148,28 +106,14 @@ internal static class DialogCommandHandlers
         ShellCommandRegistry registry,
         Func<string?, Task> showHelpAsync,
         Action showCommandPalette,
-        Action exitApp,
         Action<string?> showOpenFolderDialog,
-        Func<Task> openModelProvidersAsync,
-        Func<Task> openFileEditorAsync,
-        Func<Task> openSkillsAsync,
-        Func<Task> openPluginsAsync,
-        Action openSessionUsage,
-        Action openThreadInfo,
-        Action openExpandedPromptEditor)
+        IShellDialogCommandService dialogCommandService)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(showHelpAsync);
         ArgumentNullException.ThrowIfNull(showCommandPalette);
-        ArgumentNullException.ThrowIfNull(exitApp);
         ArgumentNullException.ThrowIfNull(showOpenFolderDialog);
-        ArgumentNullException.ThrowIfNull(openModelProvidersAsync);
-        ArgumentNullException.ThrowIfNull(openFileEditorAsync);
-        ArgumentNullException.ThrowIfNull(openSkillsAsync);
-        ArgumentNullException.ThrowIfNull(openPluginsAsync);
-        ArgumentNullException.ThrowIfNull(openSessionUsage);
-        ArgumentNullException.ThrowIfNull(openThreadInfo);
-        ArgumentNullException.ThrowIfNull(openExpandedPromptEditor);
+        ArgumentNullException.ThrowIfNull(dialogCommandService);
 
         registry.Register<OpenHelpCommand>((command, _) => ToValueTask(showHelpAsync(command.FilterText)));
         registry.Register<OpenCommandPaletteCommand>((_, _) =>
@@ -179,7 +123,7 @@ internal static class DialogCommandHandlers
         });
         registry.Register<ExitAppCommand>((_, _) =>
         {
-            exitApp();
+            dialogCommandService.ExitApp();
             return ValueTask.CompletedTask;
         });
         registry.Register<OpenFolderCommand>((command, _) =>
@@ -187,23 +131,23 @@ internal static class DialogCommandHandlers
             showOpenFolderDialog(command.InitialPath);
             return ValueTask.CompletedTask;
         });
-        registry.Register<OpenModelProvidersCommand>((_, _) => ToValueTask(openModelProvidersAsync()));
-        registry.Register<OpenFileEditorCommand>((_, _) => ToValueTask(openFileEditorAsync()));
-        registry.Register<OpenSkillsCommand>((_, _) => ToValueTask(openSkillsAsync()));
-        registry.Register<OpenPluginsCommand>((_, _) => ToValueTask(openPluginsAsync()));
+        registry.Register<OpenModelProvidersCommand>((_, _) => ToValueTask(dialogCommandService.OpenModelProvidersAsync()));
+        registry.Register<OpenFileEditorCommand>((_, _) => ToValueTask(dialogCommandService.OpenFileEditorAsync()));
+        registry.Register<OpenSkillsCommand>((_, _) => ToValueTask(dialogCommandService.OpenSkillsAsync()));
+        registry.Register<OpenPluginsCommand>((_, _) => ToValueTask(dialogCommandService.OpenPluginsAsync()));
         registry.Register<OpenSessionUsageCommand>((_, _) =>
         {
-            openSessionUsage();
+            dialogCommandService.OpenSessionUsage();
             return ValueTask.CompletedTask;
         });
         registry.Register<OpenThreadInfoCommand>((_, _) =>
         {
-            openThreadInfo();
+            dialogCommandService.OpenThreadInfo();
             return ValueTask.CompletedTask;
         });
         registry.Register<OpenExpandedPromptCommand>((_, _) =>
         {
-            openExpandedPromptEditor();
+            dialogCommandService.OpenExpandedPromptEditor();
             return ValueTask.CompletedTask;
         });
     }
@@ -217,12 +161,12 @@ internal static class DialogCommandHandlers
 
 internal static class TabCommandHandlers
 {
-    public static void Register(ShellCommandRegistry registry, Func<Task> closeCurrentTabAsync)
+    public static void Register(ShellCommandRegistry registry, IShellTabCommandService tabCommandService)
     {
         ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(closeCurrentTabAsync);
+        ArgumentNullException.ThrowIfNull(tabCommandService);
 
-        registry.Register<CloseCurrentTabCommand>((_, _) => ToValueTask(closeCurrentTabAsync()));
+        registry.Register<CloseCurrentTabCommand>((_, _) => ToValueTask(tabCommandService.CloseCurrentTabAsync()));
     }
 
     private static ValueTask ToValueTask(Task task)
@@ -238,19 +182,16 @@ internal static class PluginCommandHandlers
         ShellCommandRegistry registry,
         PluginHostBridge? pluginHostBridge,
         ThreadCommandCoordinator threadCommands,
-        IShellStatusService statusService,
-        Action<string, bool, StatusTone> setStatus)
+        IShellStatusService statusService)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(threadCommands);
         ArgumentNullException.ThrowIfNull(statusService);
-        ArgumentNullException.ThrowIfNull(setStatus);
 
         registry.Register<ExecutePluginTextCommand>((command, cancellationToken) => ToValueTask(ExecutePluginTextCommandAsync(
             pluginHostBridge,
             threadCommands,
             statusService,
-            setStatus,
             command.CommandName,
             command.Arguments,
             cancellationToken)));
@@ -260,7 +201,6 @@ internal static class PluginCommandHandlers
         PluginHostBridge? pluginHostBridge,
         ThreadCommandCoordinator threadCommands,
         IShellStatusService statusService,
-        Action<string, bool, StatusTone> setStatus,
         string name,
         string? arguments,
         CancellationToken cancellationToken)
@@ -272,7 +212,7 @@ internal static class PluginCommandHandlers
             {
                 if (!string.IsNullOrWhiteSpace(result.UserMessage))
                 {
-                    setStatus(result.UserMessage, false, StatusTone.Info);
+                    statusService.SetStatus(result.UserMessage);
                 }
 
                 if (!string.IsNullOrWhiteSpace(result.PromptText))

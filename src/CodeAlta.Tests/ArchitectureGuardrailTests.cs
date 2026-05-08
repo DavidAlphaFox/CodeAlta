@@ -354,6 +354,37 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void ShellCommandSurfaceCoordinator_UsesNamedCommandServicesInsteadOfCallbackFanOut()
+    {
+        var constructor = typeof(ShellCommandSurfaceCoordinator)
+            .GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Single();
+        var parameters = constructor.GetParameters();
+        var delegateParameters = parameters.Count(static parameter => typeof(Delegate).IsAssignableFrom(parameter.ParameterType));
+
+        Assert.IsTrue(delegateParameters <= 3, $"ShellCommandSurfaceCoordinator has {delegateParameters} delegate parameters.");
+        Assert.IsTrue(parameters.Any(static parameter => parameter.ParameterType == typeof(IShellPromptInputService)));
+        Assert.IsTrue(parameters.Any(static parameter => parameter.ParameterType == typeof(IShellThreadCommandService)));
+        Assert.IsTrue(parameters.Any(static parameter => parameter.ParameterType == typeof(IShellDialogCommandService)));
+        Assert.IsTrue(parameters.Any(static parameter => parameter.ParameterType == typeof(IShellNavigationCommandService)));
+        Assert.IsTrue(parameters.Any(static parameter => parameter.ParameterType == typeof(IShellTabCommandService)));
+
+        var source = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Frontend", "Commands", "ShellCommandSurfaceCoordinator.cs"));
+        var factorySource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Frontend", "Commands", "ShellCommandRegistryFactory.cs"));
+        var viewFactorySource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "CodeAltaShellViewFactory.cs"));
+        Assert.IsTrue(source.Contains("new ShellCommandRegistryFactory(", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("registry.RegisterFactory(", StringComparison.Ordinal));
+        Assert.IsTrue(factorySource.Contains("registry.RegisterFactory(", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("Func<Task> scrollToPreviousMessageAsync", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("Func<Task> openModelProvidersAsync", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("Func<WorkThreadDescriptor?> getSelectedThread", StringComparison.Ordinal));
+        Assert.IsFalse(viewFactorySource.Contains("Action focusSidebar", StringComparison.Ordinal));
+        Assert.IsFalse(viewFactorySource.Contains("Action focusPromptEditor", StringComparison.Ordinal));
+        Assert.IsTrue(viewFactorySource.Contains("shellCommandSurfaceCoordinator.FocusSidebarAsync", StringComparison.Ordinal));
+        Assert.IsTrue(viewFactorySource.Contains("shellCommandSurfaceCoordinator.FocusPromptAsync", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void FrontendShellContracts_DoNotAddBackendTerminologyOutsideLegacyAdapters()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
@@ -410,8 +441,8 @@ public sealed class ArchitectureGuardrailTests
         {
             "App/CodeAltaShellController.cs:71:_initializationTask = Task.Run(",
             "App/CodeAltaShellController.cs:356:var startupProviderLoadTask = Task.Run(",
-            "App/CodeAltaApp.cs:360:_ = PersistViewStateAsync();",
-            "App/CodeAltaApp.cs:441:_ = OpenModelProvidersAsync();",
+            "App/CodeAltaApp.cs:347:_ = PersistViewStateAsync();",
+            "App/CodeAltaApp.cs:428:_ = OpenModelProvidersAsync();",
             "App/RuntimeEventPump.cs:34:_pumpTask = Task.Run(",
             "App/ShellThreadStateCoordinator.cs:245:_ = RestoreStartupThreadHistoryAsync(threadId, cancellationToken);",
             "App/ShellThreadStateCoordinator.cs:254:_ = PersistViewStateAsync();",

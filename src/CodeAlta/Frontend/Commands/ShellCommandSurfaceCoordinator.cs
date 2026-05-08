@@ -13,7 +13,7 @@ using XenoAtom.Terminal.UI.Styling;
 
 namespace CodeAlta.Frontend.Commands;
 
-internal sealed class ShellCommandSurfaceCoordinator
+internal sealed class ShellCommandSurfaceCoordinator : IShellCommandSurfacePresenter
 {
     internal static CommandPaletteStyle CommandPalettePopupStyle { get; } = CommandPaletteStyle.Default with
     {
@@ -34,31 +34,13 @@ internal sealed class ShellCommandSurfaceCoordinator
     private readonly PromptComposerViewModel _promptComposerViewModel;
     private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel;
     private readonly ThreadCommandCoordinator _threadCommandCoordinator;
-    private readonly Func<Rectangle?> _getHelpBounds;
-    private readonly Func<Visual?> _getHelpFocusTarget;
-    private readonly Func<IReadOnlyList<ProjectDescriptor>> _getProjects;
-    private readonly Func<string, bool, Task> _openFolderAsync;
-    private readonly Func<Task> _openModelProvidersAsync;
-    private readonly Func<Task> _openFileEditorAsync;
-    private readonly Func<Task> _openSkillsAsync;
-    private readonly Func<Task> _openPluginsAsync;
-    private readonly Func<Task> _closeCurrentTabAsync;
-    private readonly Func<WorkThreadDescriptor?> _getSelectedThread;
-    private readonly Func<WorkThreadDescriptor, OpenThreadState> _ensureThreadTab;
-    private readonly Action _focusSidebar;
-    private readonly Action _focusPrompt;
+    private readonly IShellThreadCommandService _threadCommandService;
+    private readonly IShellDialogCommandService _dialogCommandService;
+    private readonly IShellNavigationCommandService _navigationCommandService;
+    private readonly IShellTabCommandService _tabCommandService;
     private readonly Action _toggleCommandBarMultiLine;
-    private readonly Action<string, bool, StatusTone> _setStatus;
+    private readonly IShellPromptInputService _promptInputService;
     private readonly IShellStatusService _statusService;
-    private readonly Action _openSessionUsage;
-    private readonly Action _openThreadInfo;
-    private readonly Action _openExpandedPromptEditor;
-    private readonly Func<Task> _selectTabLeftAsync;
-    private readonly Func<Task> _selectTabRightAsync;
-    private readonly Func<Task> _scrollToPreviousMessageAsync;
-    private readonly Func<Task> _scrollToNextMessageAsync;
-    private readonly Func<Task> _scrollToFirstMessageAsync;
-    private readonly Func<Task> _scrollToLastMessageAsync;
     private readonly ShellCommandRegistry _shellCommandRegistry;
     private readonly IShellCommandDispatcher _shellCommandDispatcher;
     private readonly ShellInputCoordinator _shellInputCoordinator;
@@ -71,97 +53,50 @@ internal sealed class ShellCommandSurfaceCoordinator
         PromptComposerViewModel promptComposerViewModel,
         ThreadWorkspaceViewModel threadWorkspaceViewModel,
         ThreadCommandCoordinator threadCommandCoordinator,
-        Func<IReadOnlyList<ProjectDescriptor>> getProjects,
-        Func<string, bool, Task> openFolderAsync,
-        Func<Task> openModelProvidersAsync,
-        Func<Task> openFileEditorAsync,
-        Func<Task> openSkillsAsync,
-        Func<Task> openPluginsAsync,
-        Func<string?> getPromptText,
-        Func<Task> closeCurrentTabAsync,
-        Action<string, bool, StatusTone> setStatus,
-        Func<Rectangle?> getHelpBounds,
-        Func<Visual?> getHelpFocusTarget,
-        Func<WorkThreadDescriptor?> getSelectedThread,
-        Func<WorkThreadDescriptor, OpenThreadState> ensureThreadTab,
-        Action focusSidebar,
-        Action focusPrompt,
+        IShellPromptInputService promptInputService,
+        IShellThreadCommandService threadCommandService,
+        IShellDialogCommandService dialogCommandService,
+        IShellNavigationCommandService navigationCommandService,
+        IShellTabCommandService tabCommandService,
+        IShellStatusService statusService,
         Action toggleCommandBarMultiLine,
-        Action openSessionUsage,
-        Action openThreadInfo,
-        Action openExpandedPromptEditor,
-        Func<Task> selectTabLeftAsync,
-        Func<Task> selectTabRightAsync,
-        Func<Task> scrollToPreviousMessageAsync,
-        Func<Task> scrollToNextMessageAsync,
-        Func<Task> scrollToFirstMessageAsync,
-        Func<Task> scrollToLastMessageAsync,
         PluginHostBridge? pluginHostBridge = null)
     {
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
         ArgumentNullException.ThrowIfNull(threadWorkspaceViewModel);
         ArgumentNullException.ThrowIfNull(threadCommandCoordinator);
-        ArgumentNullException.ThrowIfNull(getProjects);
-        ArgumentNullException.ThrowIfNull(openFolderAsync);
-        ArgumentNullException.ThrowIfNull(openModelProvidersAsync);
-        ArgumentNullException.ThrowIfNull(openFileEditorAsync);
-        ArgumentNullException.ThrowIfNull(openSkillsAsync);
-        ArgumentNullException.ThrowIfNull(openPluginsAsync);
-        ArgumentNullException.ThrowIfNull(getPromptText);
-        ArgumentNullException.ThrowIfNull(closeCurrentTabAsync);
-        ArgumentNullException.ThrowIfNull(setStatus);
-        ArgumentNullException.ThrowIfNull(getHelpBounds);
-        ArgumentNullException.ThrowIfNull(getHelpFocusTarget);
-        ArgumentNullException.ThrowIfNull(getSelectedThread);
-        ArgumentNullException.ThrowIfNull(ensureThreadTab);
-        ArgumentNullException.ThrowIfNull(focusSidebar);
-        ArgumentNullException.ThrowIfNull(focusPrompt);
+        ArgumentNullException.ThrowIfNull(promptInputService);
+        ArgumentNullException.ThrowIfNull(threadCommandService);
+        ArgumentNullException.ThrowIfNull(dialogCommandService);
+        ArgumentNullException.ThrowIfNull(navigationCommandService);
+        ArgumentNullException.ThrowIfNull(tabCommandService);
+        ArgumentNullException.ThrowIfNull(statusService);
         ArgumentNullException.ThrowIfNull(toggleCommandBarMultiLine);
-        ArgumentNullException.ThrowIfNull(openSessionUsage);
-        ArgumentNullException.ThrowIfNull(openThreadInfo);
-        ArgumentNullException.ThrowIfNull(openExpandedPromptEditor);
-        ArgumentNullException.ThrowIfNull(selectTabLeftAsync);
-        ArgumentNullException.ThrowIfNull(selectTabRightAsync);
-        ArgumentNullException.ThrowIfNull(scrollToPreviousMessageAsync);
-        ArgumentNullException.ThrowIfNull(scrollToNextMessageAsync);
-        ArgumentNullException.ThrowIfNull(scrollToFirstMessageAsync);
-        ArgumentNullException.ThrowIfNull(scrollToLastMessageAsync);
 
         _promptComposerViewModel = promptComposerViewModel;
         _threadWorkspaceViewModel = threadWorkspaceViewModel;
         _threadCommandCoordinator = threadCommandCoordinator;
-        _getProjects = getProjects;
-        _openFolderAsync = openFolderAsync;
-        _openModelProvidersAsync = openModelProvidersAsync;
-        _openFileEditorAsync = openFileEditorAsync;
-        _openSkillsAsync = openSkillsAsync;
-        _openPluginsAsync = openPluginsAsync;
-        _closeCurrentTabAsync = closeCurrentTabAsync;
-        _getHelpBounds = getHelpBounds;
-        _getHelpFocusTarget = getHelpFocusTarget;
-        _getSelectedThread = getSelectedThread;
-        _ensureThreadTab = ensureThreadTab;
-        _focusSidebar = focusSidebar;
-        _focusPrompt = focusPrompt;
+        _promptInputService = promptInputService;
+        _threadCommandService = threadCommandService;
+        _dialogCommandService = dialogCommandService;
+        _navigationCommandService = navigationCommandService;
+        _tabCommandService = tabCommandService;
         _toggleCommandBarMultiLine = toggleCommandBarMultiLine;
-        _setStatus = setStatus;
-        _statusService = new DelegatingShellStatusService(setStatus);
-        _openSessionUsage = openSessionUsage;
-        _openThreadInfo = openThreadInfo;
-        _openExpandedPromptEditor = openExpandedPromptEditor;
-        _selectTabLeftAsync = selectTabLeftAsync;
-        _selectTabRightAsync = selectTabRightAsync;
-        _scrollToPreviousMessageAsync = scrollToPreviousMessageAsync;
-        _scrollToNextMessageAsync = scrollToNextMessageAsync;
-        _scrollToFirstMessageAsync = scrollToFirstMessageAsync;
-        _scrollToLastMessageAsync = scrollToLastMessageAsync;
+        _statusService = statusService;
         _pluginHostBridge = pluginHostBridge;
-        _shellCommandRegistry = CreateCommandRegistry();
+        _shellCommandRegistry = new ShellCommandRegistryFactory(
+            _threadCommandCoordinator,
+            _threadCommandService,
+            _dialogCommandService,
+            _navigationCommandService,
+            _tabCommandService,
+            _statusService,
+            _pluginHostBridge).Create(this);
         _shellCommandDispatcher = new ShellCommandDispatcher(_shellCommandRegistry);
         _shellInputCoordinator = new ShellInputCoordinator(
             new ShellInputRouter(),
-            getPromptText,
-            threadCommandCoordinator.IsCurrentPromptEmpty,
+            _promptInputService.GetPromptText,
+            _promptInputService.IsCurrentPromptEmpty,
             _shellCommandDispatcher);
     }
 
@@ -212,9 +147,12 @@ internal sealed class ShellCommandSurfaceCoordinator
     public Task ShowHelpAsync(string? filterText = null, CancellationToken cancellationToken = default)
         => DispatchShellCommandAsync(new OpenHelpCommand(filterText), cancellationToken);
 
+    Task IShellCommandSurfacePresenter.ShowHelpDialogAsync(string? filterText)
+        => ShowShellHelpAsync(filterText);
+
     public void ShowCommandPalette()
     {
-        var app = _getHelpFocusTarget()?.App ?? _commandPalette?.App;
+        var app = _dialogCommandService.GetDialogFocusTarget()?.App ?? _commandPalette?.App;
         _activeCommandPaletteStyle = ResolveCommandPalettePopupStyle(app?.FocusedElement);
         (_commandPalette ??= CreateCommandPalette(() => _activeCommandPaletteStyle)).Show();
     }
@@ -224,6 +162,12 @@ internal sealed class ShellCommandSurfaceCoordinator
 
     public Task ExitAppAsync()
         => DispatchShellCommandAsync(new ExitAppCommand());
+
+    public Task FocusSidebarAsync()
+        => DispatchShellCommandAsync(new FocusSidebarCommand());
+
+    public Task FocusPromptAsync()
+        => DispatchShellCommandAsync(new FocusPromptCommand());
 
     public void ToggleCommandBarMultiLine()
         => _toggleCommandBarMultiLine();
@@ -243,72 +187,19 @@ internal sealed class ShellCommandSurfaceCoordinator
     public Task OpenPluginsAsync()
         => DispatchShellCommandAsync(new OpenPluginsCommand());
 
-    private void ShowOpenFolderDialogCore(string? initialPath)
+    public void ShowOpenFolderDialog(string? initialPath = null)
         => new DirectoryPathDialog(
             "Open Project",
             "Type a project name from the sidebar or a rooted folder path.",
             "Open",
-            _openFolderAsync,
-            _getHelpBounds,
-            _getHelpFocusTarget,
-            _getHelpFocusTarget,
-            () => _getProjects(),
+            _dialogCommandService.OpenFolderAsync,
+            _dialogCommandService.GetDialogBounds,
+            _dialogCommandService.GetDialogFocusTarget,
+            _dialogCommandService.GetDialogFocusTarget,
+            _dialogCommandService.GetProjects,
             initialPath,
             placeholder: "CodeAlta or C:\\code\\SomeFolder")
             .Show();
-
-    private ShellCommandRegistry CreateCommandRegistry()
-    {
-        var registry = new ShellCommandRegistry();
-        registry.RegisterFactory("CodeAlta.Shell.Help", static () => new OpenHelpCommand());
-        registry.RegisterFactory("CodeAlta.Project.OpenFolder", static () => new OpenFolderCommand());
-        registry.RegisterFactory("CodeAlta.Providers.Manage", static () => new OpenModelProvidersCommand());
-        registry.RegisterFactory("CodeAlta.File.Edit", static () => new OpenFileEditorCommand());
-        registry.RegisterFactory("CodeAlta.Skills.Manage", static () => new OpenSkillsCommand());
-        registry.RegisterFactory("CodeAlta.Plugins.Manage", static () => new OpenPluginsCommand());
-        registry.RegisterFactory("CodeAlta.Thread.SessionUsage", static () => new OpenSessionUsageCommand());
-        registry.RegisterFactory("CodeAlta.Thread.Info", static () => new OpenThreadInfoCommand());
-        registry.RegisterFactory("CodeAlta.Thread.ExpandPrompt", static () => new OpenExpandedPromptCommand());
-        registry.RegisterFactory("CodeAlta.Thread.Abort", static () => new AbortSelectedThreadCommand());
-        registry.RegisterFactory("CodeAlta.Thread.ClearQueue", static () => new ClearSelectedThreadQueueCommand());
-        registry.RegisterFactory("CodeAlta.Thread.Compact", static () => new CompactSelectedThreadCommand());
-        registry.RegisterFactory("CodeAlta.Thread.CloseTab", static () => new CloseCurrentTabCommand());
-        registry.RegisterFactory("CodeAlta.Thread.TabLeft", static () => new SelectRelativeTabCommand(-1));
-        registry.RegisterFactory("CodeAlta.Thread.TabRight", static () => new SelectRelativeTabCommand(1));
-        registry.RegisterFactory("CodeAlta.Thread.MessagePrevious", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Previous));
-        registry.RegisterFactory("CodeAlta.Thread.MessageNext", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Next));
-        registry.RegisterFactory("CodeAlta.Thread.MessageFirst", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.First));
-        registry.RegisterFactory("CodeAlta.Thread.MessageLast", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Last));
-
-        PromptCommandHandlers.Register(registry, _threadCommandCoordinator);
-        ThreadCommandHandlers.Register(registry, _threadCommandCoordinator, _getSelectedThread, _ensureThreadTab, _setStatus);
-        NavigationCommandHandlers.Register(
-            registry,
-            _focusSidebar,
-            _focusPrompt,
-            _selectTabLeftAsync,
-            _selectTabRightAsync,
-            _scrollToPreviousMessageAsync,
-            _scrollToNextMessageAsync,
-            _scrollToFirstMessageAsync,
-            _scrollToLastMessageAsync);
-        DialogCommandHandlers.Register(
-            registry,
-            ShowShellHelpAsync,
-            ShowCommandPalette,
-            () => _getHelpFocusTarget()?.App?.Stop(),
-            ShowOpenFolderDialogCore,
-            _openModelProvidersAsync,
-            _openFileEditorAsync,
-            _openSkillsAsync,
-            _openPluginsAsync,
-            _openSessionUsage,
-            _openThreadInfo,
-            _openExpandedPromptEditor);
-        TabCommandHandlers.Register(registry, _closeCurrentTabAsync);
-        PluginCommandHandlers.Register(registry, _pluginHostBridge, _threadCommandCoordinator, _statusService, _setStatus);
-        return registry;
-    }
 
     private ThreadWorkspaceCommandBinding CreateCommandBinding(string commandId, Action execute)
     {
@@ -386,27 +277,27 @@ internal sealed class ShellCommandSurfaceCoordinator
 
     private bool CanExecutePluginCommand(PluginCommandAvailability availability)
     {
-        if (availability.RequiresProject && _getSelectedThread()?.ProjectRef is null)
+        if (availability.RequiresProject && _threadCommandService.GetSelectedThread()?.ProjectRef is null)
         {
             return false;
         }
 
-        if (availability.RequiresThread && _getSelectedThread() is null)
+        if (availability.RequiresThread && _threadCommandService.GetSelectedThread() is null)
         {
             return false;
         }
 
-        if (availability.RequiresIdleThread && (_getSelectedThread() is not { } idleThread || _ensureThreadTab(idleThread).StatusBusy))
+        if (availability.RequiresIdleThread && (_threadCommandService.GetSelectedThread() is not { } idleThread || _threadCommandService.EnsureThreadTab(idleThread).StatusBusy))
         {
             return false;
         }
 
-        if (availability.RequiresBusyThread && (_getSelectedThread() is not { } busyThread || !_ensureThreadTab(busyThread).StatusBusy))
+        if (availability.RequiresBusyThread && (_threadCommandService.GetSelectedThread() is not { } busyThread || !_threadCommandService.EnsureThreadTab(busyThread).StatusBusy))
         {
             return false;
         }
 
-        var backendThread = _getSelectedThread();
+        var backendThread = _threadCommandService.GetSelectedThread();
         if ((availability.RequiresCodeAltaManagedBackend || availability.BackendFamilies.Count > 0) && backendThread is null)
         {
             return false;
@@ -439,7 +330,7 @@ internal sealed class ShellCommandSurfaceCoordinator
         var result = await _pluginHostBridge.ExecuteCommandAsync(name, arguments, cancellationToken);
         if (!string.IsNullOrWhiteSpace(result.UserMessage))
         {
-            _setStatus(result.UserMessage, false, StatusTone.Info);
+            _statusService.SetStatus(result.UserMessage);
         }
 
         if (!string.IsNullOrWhiteSpace(result.PromptText))
@@ -472,11 +363,11 @@ internal sealed class ShellCommandSurfaceCoordinator
     }
 
     private void ObserveUiTask(Func<Task> taskFactory, string operation)
-        => _ = UiTaskDiagnostics.ObserveAsync(taskFactory, operation, _setStatus);
+        => _ = UiTaskDiagnostics.ObserveAsync(taskFactory, operation, _statusService.SetStatus);
 
     private Task ShowShellHelpAsync(string? filterText = null)
     {
-        _helpDialog ??= new ShellHelpDialog(_getHelpBounds, _getHelpFocusTarget);
+        _helpDialog ??= new ShellHelpDialog(_dialogCommandService.GetDialogBounds, _dialogCommandService.GetDialogFocusTarget);
         return _helpDialog.ShowAsync(filterText);
     }
 

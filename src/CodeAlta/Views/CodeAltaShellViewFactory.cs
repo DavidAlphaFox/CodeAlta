@@ -28,8 +28,6 @@ internal static class CodeAltaShellViewFactory
         ArgumentNullException.ThrowIfNull(options.ShellCommandSurfaceCoordinator);
         ArgumentNullException.ThrowIfNull(options.OpenAcpManager);
         ArgumentNullException.ThrowIfNull(options.ToggleTerminalLoopCallback);
-        ArgumentNullException.ThrowIfNull(options.FocusSidebar);
-        ArgumentNullException.ThrowIfNull(options.FocusPromptEditor);
         ArgumentNullException.ThrowIfNull(options.CanUseCommandPalette);
 
         var workspaceView = new ThreadWorkspaceView(
@@ -56,8 +54,6 @@ internal static class CodeAltaShellViewFactory
             options.ShellCommandSurfaceCoordinator,
             options.OpenAcpManager,
             options.ToggleTerminalLoopCallback,
-            options.FocusSidebar,
-            options.FocusPromptEditor,
             options.CanUseCommandPalette,
             options.ComposePluginFooter?.Invoke(workspaceView.ThreadCommandBar));
 
@@ -71,8 +67,6 @@ internal static class CodeAltaShellViewFactory
         ShellCommandSurfaceCoordinator shellCommandSurfaceCoordinator,
         Action openAcpManager,
         Action toggleTerminalLoopCallback,
-        Action focusSidebar,
-        Action focusPromptEditor,
         Func<bool> canUseCommandPalette,
         Visual? pluginFooter = null)
     {
@@ -82,8 +76,6 @@ internal static class CodeAltaShellViewFactory
         ArgumentNullException.ThrowIfNull(shellCommandSurfaceCoordinator);
         ArgumentNullException.ThrowIfNull(openAcpManager);
         ArgumentNullException.ThrowIfNull(toggleTerminalLoopCallback);
-        ArgumentNullException.ThrowIfNull(focusSidebar);
-        ArgumentNullException.ThrowIfNull(focusPromptEditor);
         ArgumentNullException.ThrowIfNull(canUseCommandPalette);
 
         var shellView = new CodeAltaShellView(
@@ -110,7 +102,7 @@ internal static class CodeAltaShellViewFactory
             Gesture = commandPaletteMetadata.Gesture,
             Sequence = commandPaletteMetadata.Sequence,
             Presentation = CommandPresentation.CommandBar,
-            Execute = _ => shellCommandSurfaceCoordinator.ShowCommandPalette(),
+            Execute = command => { _ = shellCommandSurfaceCoordinator.ShowCommandPaletteAsync(); },
             CanExecute = _ => canUseCommandPalette(),
             IsVisible = _ => canUseCommandPalette(),
             ConsumesGestureWhenUnavailable = false,
@@ -136,10 +128,10 @@ internal static class CodeAltaShellViewFactory
             openAcpManager));
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.Shell.FocusSidebar"),
-            focusSidebar));
+            () => _ = shellCommandSurfaceCoordinator.FocusSidebarAsync()));
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.Shell.FocusPrompt"),
-            focusPromptEditor));
+            () => _ = shellCommandSurfaceCoordinator.FocusPromptAsync()));
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.Shell.ToggleCommandBarMultiLine"),
             shellCommandSurfaceCoordinator.ToggleCommandBarMultiLine));
