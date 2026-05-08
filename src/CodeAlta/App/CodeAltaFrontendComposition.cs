@@ -55,7 +55,7 @@ internal sealed class CodeAltaFrontendComposition
         ICodeAltaShell shell,
         KnownProjectImporter knownProjectImporter,
         State<float> welcomePhase01,
-        IThreadStateFrontendPort threadStateFrontend,
+        ThreadStateFrontendPort threadStateFrontend,
         ICodeAltaFrontendServices frontend,
         CodexInstallProgressReporter? codexInstallProgress = null,
         PluginHostBridge? pluginHostBridge = null)

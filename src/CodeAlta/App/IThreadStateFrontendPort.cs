@@ -29,11 +29,11 @@ internal interface IThreadStateFrontendPort
     void RemoveThreadTabPage(string threadId);
 }
 
-internal sealed class CodeAltaThreadStateFrontendPort : IThreadStateFrontendPort
+internal sealed class ThreadStateFrontendPort : IThreadStateFrontendPort
 {
     private readonly CodeAltaApp _app;
 
-    public CodeAltaThreadStateFrontendPort(CodeAltaApp app)
+    public ThreadStateFrontendPort(CodeAltaApp app)
     {
         ArgumentNullException.ThrowIfNull(app);
         _app = app;

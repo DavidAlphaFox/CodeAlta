@@ -169,7 +169,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             new CodeAltaShellBridge(this),
             _knownProjectImporter,
             _shellAnimationRuntime.WelcomePhase01,
-            new CodeAltaThreadStateFrontendPort(this),
+            new(this),
             new CodeAltaFrontendServicesAdapter(this),
             codexInstallProgress,
             ownedServices?.PluginHostBridge);
@@ -526,9 +526,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         => _workspaceCoordinator.RefreshShellChrome();
 
     internal void RefreshCatalogAndThreadWorkspace() { _threadInfoPresenter?.InvalidateSelection(); _workspaceCoordinator.RefreshCatalogAndThreadWorkspace(); }
-
-    internal void RefreshHeaderAndThreadWorkspace()
-        => _workspaceCoordinator.RefreshHeaderAndThreadWorkspace();
+    internal FrontendEventPublisher Ev=>_frontendEvents;
+    internal void RefreshHeaderAndThreadWorkspace()=> _workspaceCoordinator.RefreshHeaderAndThreadWorkspace();
 
     internal void RefreshSelectionAndThreadWorkspace() { _threadInfoPresenter?.InvalidateSelection(); _workspaceCoordinator.RefreshSelectionAndThreadWorkspace(); }
 
