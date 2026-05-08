@@ -14,7 +14,7 @@ internal interface ICodeAltaFrontendServices
     void ApplyPendingSidebarSelection();
     IUiDispatcher GetUiDispatcher();
     Rectangle? GetThreadPaneBounds();
-    bool IsChatBackendReady(AgentBackendId backendId);
+    bool IsModelProviderReady(AgentBackendId backendId);
     string? LoadPromptDraft(string threadId);
     void DeletePromptDraft(string threadId);
     void ApplyThreadPreference(OpenThreadState thread);
@@ -36,9 +36,9 @@ internal interface ICodeAltaFrontendServices
     void EnsureSelectionDefaults();
     void RefreshSidebarProjection();
     void SyncSidebarSelectionToCurrentState();
-    void RefreshChatSelectorsForDraftScope();
-    void RefreshChatSelectorsForThread(OpenThreadState thread);
-    void SyncChatSelectorItems();
+    void RefreshModelProviderSelectorsForDraftScope();
+    void RefreshModelProviderSelectorsForThread(OpenThreadState thread);
+    void SyncModelProviderSelectorItems();
     void SyncPromptText(ThreadSessionState? session);
     void UpdatePromptAvailabilityUi();
     void UpdatePromptImageAttachmentsUi();

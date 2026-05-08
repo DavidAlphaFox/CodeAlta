@@ -126,7 +126,7 @@ internal sealed class WorkspaceProjectionController
 
         var tab = _threadSelection.EnsureThreadTab(selectedThread);
         _workspaceContext.RefreshQueuedPromptList();
-        _workspaceContext.RefreshChatSelectorsForThread(tab);
+        _workspaceContext.RefreshModelProviderSelectorsForThread(tab);
         _workspaceContext.SyncPromptDraftText(tab.Session);
         _workspaceContext.UpdatePromptAvailabilityUi();
         if (!string.Equals(_displayedThreadId, selectedThread.ThreadId, StringComparison.OrdinalIgnoreCase))
@@ -143,7 +143,7 @@ internal sealed class WorkspaceProjectionController
     {
         _displayedThreadId = null;
         _workspaceContext.RefreshQueuedPromptList();
-        _workspaceContext.RefreshChatSelectorsForDraftScope();
+        _workspaceContext.RefreshModelProviderSelectorsForDraftScope();
         _workspaceContext.SyncPromptDraftText(session: null);
         _workspaceContext.UpdatePromptAvailabilityUi();
         _statusProjection.SetReadyStatusForCurrentSelection();

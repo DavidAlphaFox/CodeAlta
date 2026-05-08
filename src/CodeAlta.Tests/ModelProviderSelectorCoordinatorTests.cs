@@ -44,7 +44,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             DefaultReasoningEffort: AgentReasoningEffort.Low,
             SupportedReasoningEfforts: [AgentReasoningEffort.Low]));
 
-        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
+        var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
         var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftModelProviderPreference,
             static _ => throw new NotSupportedException(),
@@ -87,7 +87,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public void GetPreferredBackendId_UsesConfiguredDefaultProvider()
+    public void GetPreferredModelProviderId_UsesConfiguredDefaultProvider()
     {
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
@@ -107,13 +107,13 @@ public sealed class ModelProviderSelectorCoordinatorTests
             backendStates,
             static _ => "zai");
 
-        var preferredBackendId = coordinator.GetPreferredBackendId();
+        var preferredBackendId = coordinator.GetPreferredModelProviderId();
 
         Assert.AreEqual("zai", preferredBackendId.Value);
     }
 
     [TestMethod]
-    public void GetPreferredBackendId_FallsBackToFirstReadyProviderDeterministically()
+    public void GetPreferredModelProviderId_FallsBackToFirstReadyProviderDeterministically()
     {
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
@@ -135,7 +135,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             backendStates,
             static _ => null);
 
-        var preferredBackendId = coordinator.GetPreferredBackendId();
+        var preferredBackendId = coordinator.GetPreferredModelProviderId();
 
         Assert.AreEqual("openai", preferredBackendId.Value);
     }
@@ -191,7 +191,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
         backendStates["openai"].Availability = ChatBackendAvailability.Ready;
         backendStates["anthropic"].Availability = ChatBackendAvailability.Ready;
 
-        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
+        var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
         var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftModelProviderPreference,
             static _ => { },
@@ -238,7 +238,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
         backendStates["openai"].Availability = ChatBackendAvailability.Ready;
         backendStates["anthropic"].Availability = ChatBackendAvailability.Ready;
 
-        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
+        var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
         var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftModelProviderPreference,
             static _ => { },
@@ -272,7 +272,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public async Task OnBackendSelectionChangedAsync_UsesSwitchCallbackForSelectedThread()
+    public async Task OnModelProviderSelectionChangedAsync_UsesSwitchCallbackForSelectedThread()
     {
         using var temp = TempDirectory.Create();
         var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
@@ -293,7 +293,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
         backendStates["openai"].Availability = ChatBackendAvailability.Ready;
         backendStates["anthropic"].Availability = ChatBackendAvailability.Ready;
 
-        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
+        var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
         var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftModelProviderPreference,
             static _ => { },
@@ -325,7 +325,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             () => refreshedSelectionCount++);
 
         coordinator.RefreshForThread(tab);
-        await coordinator.OnBackendSelectionChangedAsync(newIndex: 1);
+        await coordinator.OnModelProviderSelectionChangedAsync(newIndex: 1);
 
         Assert.AreEqual(1, switchCallCount);
         Assert.AreEqual(1, refreshedSelectionCount);
@@ -353,7 +353,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
         backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4", DisplayName: "GPT-5.4"));
         backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4-mini", DisplayName: "GPT-5.4 Mini"));
 
-        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
+        var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
         var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftModelProviderPreference,
             static _ => { },
@@ -395,7 +395,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
         backendState.Models.Add(new AgentModelInfo("gpt-5.4", DisplayName: "GPT-5.4"));
         backendState.Models.Add(new AgentModelInfo("gpt-5.4-mini", DisplayName: "GPT-5.4 Mini"));
 
-        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
+        var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
         var draftPreferenceApplyCount = 0;
         var preferences = new FrontendModelProviderPreferencePort(
             state =>
@@ -438,7 +438,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
         Func<string?, string?> getEffectiveDefaultProviderKey,
         Func<IReadOnlyList<string>>? getConfiguredProviderKeys = null)
     {
-        var selectorState = new ChatSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
+        var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
         var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftModelProviderPreference,
             static _ => throw new NotSupportedException(),

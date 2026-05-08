@@ -88,9 +88,9 @@ public sealed class ShellFrontendStateStoreTests
     }
 
     [TestMethod]
-    public void ChatSelectorStateStore_RejectsAccessOffUiThread()
+    public void ModelProviderSelectorStateStore_RejectsAccessOffUiThread()
     {
-        var store = new ChatSelectorStateStore(
+        var store = new ModelProviderSelectorStateStore(
             new ThreadWorkspaceViewModel(),
             new NonOwnerUiDispatcher());
 

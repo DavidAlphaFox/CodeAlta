@@ -83,7 +83,7 @@ internal sealed class SessionUsageProjectionController
             return;
         }
 
-        var backendId = _workspaceContext.GetPreferredBackendId();
+        var backendId = _workspaceContext.GetPreferredModelProviderId();
         _chatBackendStates.TryGetValue(backendId.Value, out var draftBackendState);
         _sessionUsageViewModel.Usage = null;
         _sessionUsageViewModel.BackendName = ResolveBackendDisplayName(backendId, draftBackendState);

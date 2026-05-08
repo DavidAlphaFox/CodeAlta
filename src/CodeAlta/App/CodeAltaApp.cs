@@ -61,7 +61,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly SidebarCoordinator _sidebarCoordinator;
     private readonly NavigatorActionCoordinator _navigatorActionCoordinator;
-    private readonly ModelProviderSelectorCoordinator _chatSelectorCoordinator;
+    private readonly ModelProviderSelectorCoordinator _modelProviderSelectorCoordinator;
     private readonly ThreadTabStripCoordinator _threadTabStripCoordinator;
     private readonly IShellTabService _shellTabService = new InMemoryShellTabService();
     private readonly ShellAnimationRuntime _shellAnimationRuntime = new();
@@ -192,7 +192,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _chatBackendStates = composition.ChatBackendStates;
         _sidebarCoordinator = composition.SidebarCoordinator;
         _navigatorActionCoordinator = composition.NavigatorActionCoordinator;
-        _chatSelectorCoordinator = composition.ModelProviderSelectorCoordinator;
+        _modelProviderSelectorCoordinator = composition.ModelProviderSelectorCoordinator;
         _shellWorkspaceContext = composition.ShellWorkspaceContext;
         _threadSelectionContext = composition.ThreadSelectionContext;
         _workspaceRefreshContext = composition.WorkspaceRefreshContext;
@@ -300,7 +300,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             EnsureThreadTab,
             threadId => FindThread(threadId),
             threadId => _threadStateCoordinator.FindOpenThread(threadId),
-            thread => ThreadHistoryCoordinator.CanLoadThreadHistory(thread) && IsChatBackendReady(new AgentBackendId(thread.BackendId)),
+            thread => ThreadHistoryCoordinator.CanLoadThreadHistory(thread) && IsModelProviderReady(new AgentBackendId(thread.BackendId)),
             _threadCommandCoordinator.BuildExecutionOptions,
             (tab, message, showSpinner, tone) => SetThreadStatus(tab, message, showSpinner, tone),
             ClearThreadStatus,
@@ -441,29 +441,29 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         return true;
     }
 
-    internal void RefreshChatSelectorsForDraftScope(AgentBackendId? preferredBackendId = null)
-        => _chatSelectorCoordinator.RefreshForDraftScope(preferredBackendId);
+    internal void RefreshModelProviderSelectorsForDraftScope(AgentBackendId? preferredBackendId = null)
+        => _modelProviderSelectorCoordinator.RefreshForDraftScope(preferredBackendId);
 
-    internal void RefreshChatSelectorsForThread(OpenThreadState tab)
-        => _chatSelectorCoordinator.RefreshForThread(tab);
-    internal void SyncChatSelectorItems()
-        => _threadWorkspaceView?.SyncChatSelectorItems(_threadWorkspaceViewModel);
+    internal void RefreshModelProviderSelectorsForThread(OpenThreadState tab)
+        => _modelProviderSelectorCoordinator.RefreshForThread(tab);
+    internal void SyncModelProviderSelectorItems()
+        => _threadWorkspaceView?.SyncModelProviderSelectorItems(_threadWorkspaceViewModel);
     private void OnChatBackendSelectionChanged(int newIndex)
-        => ObserveUiTask(() => _chatSelectorCoordinator.OnBackendSelectionChangedAsync(newIndex), "change the selected provider");
+        => ObserveUiTask(() => _modelProviderSelectorCoordinator.OnModelProviderSelectionChangedAsync(newIndex), "change the selected provider");
     private void OnChatModelSelectionChanged(int newIndex)
-        => _chatSelectorCoordinator.OnModelSelectionChanged(newIndex);
+        => _modelProviderSelectorCoordinator.OnModelSelectionChanged(newIndex);
     private void OnChatReasoningSelectionChanged(int newIndex)
-        => _chatSelectorCoordinator.OnReasoningSelectionChanged(newIndex);
-    private AgentBackendId GetPreferredBackendId()
-        => _chatSelectorCoordinator.GetPreferredBackendId();
-    internal bool IsChatBackendReady(AgentBackendId backendId)
-        => _chatSelectorCoordinator.IsChatBackendReady(backendId);
+        => _modelProviderSelectorCoordinator.OnReasoningSelectionChanged(newIndex);
+    private AgentBackendId GetPreferredModelProviderId()
+        => _modelProviderSelectorCoordinator.GetPreferredModelProviderId();
+    internal bool IsModelProviderReady(AgentBackendId backendId)
+        => _modelProviderSelectorCoordinator.IsModelProviderReady(backendId);
 
     private bool TryGetPromptUnavailableStatus(out string message, out StatusTone tone)
-        => _chatSelectorCoordinator.TryGetPromptUnavailableStatus(out message, out tone);
+        => _modelProviderSelectorCoordinator.TryGetPromptUnavailableStatus(out message, out tone);
     internal bool TrySetPromptUnavailableStatus() { if (!TryGetPromptUnavailableStatus(out var message, out var tone)) return false; SetStatus(message, tone: tone); return true; }
     internal void UpdatePromptAvailabilityUi()
-        => _chatSelectorCoordinator.UpdatePromptAvailabilityUi();
+        => _modelProviderSelectorCoordinator.UpdatePromptAvailabilityUi();
 
     internal void RefreshQueuedPromptList() => _threadPromptQueueCoordinator.RefreshSelectedThreadQueueUi();
 
@@ -483,7 +483,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         var promptRoot = () => PromptReferenceProjectRootResolver.Resolve(GetSelectedThread(), GetProjectById, GetSelectedProject);
         var imageCallbacks = PromptImageWorkspaceCallbackFactory.Create(
             _promptDraftUiCoordinator,
-            new PromptImageCapabilityContext(GetSelectedThread, threadId => _threadStateCoordinator.FindOpenThread(threadId), GetPreferredBackendId, _chatBackendStates),
+            new PromptImageCapabilityContext(GetSelectedThread, threadId => _threadStateCoordinator.FindOpenThread(threadId), GetPreferredModelProviderId, _chatBackendStates),
             (message, tone) => SetStatus(message, tone: tone));
         var openHelp = () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.ShowHelpAsync(), "show help");
         var showPalette = () => _shellCommandSurfaceCoordinator.ShowCommandPalette();

@@ -21,9 +21,9 @@ internal interface IShellWorkspaceProjectionPort
 
     void RefreshQueuedPromptList();
 
-    void RefreshChatSelectorsForDraftScope();
+    void RefreshModelProviderSelectorsForDraftScope();
 
-    void RefreshChatSelectorsForThread(OpenThreadState tab);
+    void RefreshModelProviderSelectorsForThread(OpenThreadState tab);
 
     void SyncPromptDraftText(ThreadSessionState? session);
 
@@ -111,10 +111,10 @@ internal sealed class DelegatingShellWorkspaceProjectionPort : IShellWorkspacePr
     public void RefreshQueuedPromptList()
         => _refreshQueuedPromptList();
 
-    public void RefreshChatSelectorsForDraftScope()
+    public void RefreshModelProviderSelectorsForDraftScope()
         => _refreshChatSelectorsForDraftScope();
 
-    public void RefreshChatSelectorsForThread(OpenThreadState tab)
+    public void RefreshModelProviderSelectorsForThread(OpenThreadState tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
         _refreshChatSelectorsForThread(tab);

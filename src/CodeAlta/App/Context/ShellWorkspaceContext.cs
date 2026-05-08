@@ -30,7 +30,7 @@ internal sealed class ShellWorkspaceContext
         _uiDispatcher = uiDispatcher;
     }
 
-    public AgentBackendId GetPreferredBackendId()
+    public AgentBackendId GetPreferredModelProviderId()
         => _promptAvailability.GetPreferredModelProviderId();
 
     public (bool HasStatus, string Message, StatusTone Tone) GetPromptUnavailableStatus()
@@ -51,13 +51,13 @@ internal sealed class ShellWorkspaceContext
     public void RefreshQueuedPromptList()
         => _projection.RefreshQueuedPromptList();
 
-    public void RefreshChatSelectorsForDraftScope()
-        => _projection.RefreshChatSelectorsForDraftScope();
+    public void RefreshModelProviderSelectorsForDraftScope()
+        => _projection.RefreshModelProviderSelectorsForDraftScope();
 
-    public void RefreshChatSelectorsForThread(OpenThreadState tab)
+    public void RefreshModelProviderSelectorsForThread(OpenThreadState tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        _projection.RefreshChatSelectorsForThread(tab);
+        _projection.RefreshModelProviderSelectorsForThread(tab);
     }
 
     public void SyncPromptDraftText(ThreadSessionState? session)

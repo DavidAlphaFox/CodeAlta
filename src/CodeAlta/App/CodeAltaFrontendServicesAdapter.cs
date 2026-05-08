@@ -23,7 +23,7 @@ internal sealed class CodeAltaFrontendServicesAdapter : ICodeAltaFrontendService
     public void ApplyPendingSidebarSelection() => _app.ApplyPendingSidebarSelection();
     public IUiDispatcher GetUiDispatcher() => _app.GetUiDispatcher();
     public Rectangle? GetThreadPaneBounds() => _app.ThreadPaneLayout?.GetAbsoluteBounds();
-    public bool IsChatBackendReady(AgentBackendId backendId) => _app.IsChatBackendReady(backendId);
+    public bool IsModelProviderReady(AgentBackendId backendId) => _app.IsModelProviderReady(backendId);
     public string? LoadPromptDraft(string threadId) => _app.LoadPromptDraft(threadId);
     public void DeletePromptDraft(string threadId) => _app.DeletePromptDraft(threadId);
     public void ApplyThreadPreference(OpenThreadState thread) => _app.ApplyThreadPreference(thread);
@@ -45,9 +45,9 @@ internal sealed class CodeAltaFrontendServicesAdapter : ICodeAltaFrontendService
     public void EnsureSelectionDefaults() => _app.EnsureSelectionDefaults();
     public void RefreshSidebarProjection() => _app.RefreshSidebarProjection();
     public void SyncSidebarSelectionToCurrentState() => _app.SyncSidebarSelectionToCurrentState();
-    public void RefreshChatSelectorsForDraftScope() => _app.RefreshChatSelectorsForDraftScope();
-    public void RefreshChatSelectorsForThread(OpenThreadState thread) => _app.RefreshChatSelectorsForThread(thread);
-    public void SyncChatSelectorItems() => _app.SyncChatSelectorItems();
+    public void RefreshModelProviderSelectorsForDraftScope() => _app.RefreshModelProviderSelectorsForDraftScope();
+    public void RefreshModelProviderSelectorsForThread(OpenThreadState thread) => _app.RefreshModelProviderSelectorsForThread(thread);
+    public void SyncModelProviderSelectorItems() => _app.SyncModelProviderSelectorItems();
     public void SyncPromptText(ThreadSessionState? session) => _app.SyncPromptText(session);
     public void UpdatePromptAvailabilityUi() => _app.UpdatePromptAvailabilityUi();
     public void UpdatePromptImageAttachmentsUi() => _app.UpdatePromptImageAttachmentsUi();

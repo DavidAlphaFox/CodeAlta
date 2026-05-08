@@ -15,7 +15,7 @@ internal sealed class ThreadExecutionOptionsFactory
     private readonly IReadOnlyList<AgentBackendDescriptor> _backendDescriptors;
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly ThreadSelectionContext _threadSelection;
-    private readonly ChatSelectorStateStore _selectorState;
+    private readonly ModelProviderSelectorStateStore _selectorState;
     private readonly ThreadPermissionRequestCoordinator _permissionRequests;
     private readonly ThreadUserInputRequestCoordinator _userInputRequests;
 
@@ -24,7 +24,7 @@ internal sealed class ThreadExecutionOptionsFactory
         IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
         Dictionary<string, ChatBackendState> chatBackendStates,
         ThreadSelectionContext threadSelection,
-        ChatSelectorStateStore selectorState,
+        ModelProviderSelectorStateStore selectorState,
         ThreadPermissionRequestCoordinator permissionRequests,
         ThreadUserInputRequestCoordinator userInputRequests)
     {

@@ -203,7 +203,7 @@ internal sealed class ThreadWorkspaceView
     public void OpenExpandedPromptDialog()
         => _promptComposerView.OpenExpandedPromptDialog();
 
-    public void SyncChatSelectorItems(ThreadWorkspaceViewModel workspaceViewModel)
+    public void SyncModelProviderSelectorItems(ThreadWorkspaceViewModel workspaceViewModel)
     {
         ArgumentNullException.ThrowIfNull(workspaceViewModel);
 

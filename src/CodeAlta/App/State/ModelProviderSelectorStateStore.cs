@@ -4,12 +4,12 @@ using CodeAlta.ViewModels;
 
 namespace CodeAlta.App.State;
 
-internal sealed class ChatSelectorStateStore
+internal sealed class ModelProviderSelectorStateStore
 {
     private readonly ThreadWorkspaceViewModel _workspaceViewModel;
     private readonly IUiDispatcher _uiDispatcher;
 
-    public ChatSelectorStateStore(
+    public ModelProviderSelectorStateStore(
         ThreadWorkspaceViewModel workspaceViewModel,
         IUiDispatcher uiDispatcher)
     {

@@ -21,7 +21,7 @@ internal sealed class ThreadCommandCoordinator
     private readonly IReadOnlyList<AgentBackendDescriptor> _backendDescriptors;
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly ThreadSelectionContext _threadSelection;
-    private readonly ChatSelectorStateStore _selectorState;
+    private readonly ModelProviderSelectorStateStore _selectorState;
     private readonly ThreadCommandContext _commandContext;
     private readonly ThreadPromptQueueCoordinator _queueCoordinator;
     private readonly PromptComposerViewModel _promptComposerViewModel;
@@ -34,7 +34,7 @@ internal sealed class ThreadCommandCoordinator
         CatalogOptions catalogOptions,
         Dictionary<string, ChatBackendState> chatBackendStates,
         ThreadSelectionContext threadSelection,
-        ChatSelectorStateStore selectorState,
+        ModelProviderSelectorStateStore selectorState,
         ThreadCommandContext commandContext,
         ThreadPromptQueueCoordinator queueCoordinator,
         PromptComposerViewModel promptComposerViewModel,
@@ -63,7 +63,7 @@ internal sealed class ThreadCommandCoordinator
         IReadOnlyList<AgentBackendDescriptor> backendDescriptors,
         Dictionary<string, ChatBackendState> chatBackendStates,
         ThreadSelectionContext threadSelection,
-        ChatSelectorStateStore selectorState,
+        ModelProviderSelectorStateStore selectorState,
         ThreadCommandContext commandContext,
         ThreadPromptQueueCoordinator queueCoordinator,
         PromptComposerViewModel promptComposerViewModel,
@@ -145,7 +145,7 @@ internal sealed class ThreadCommandCoordinator
 
             _commandContext.ClearDraftInput();
         }
-        else if (!IsChatBackendReady(new AgentBackendId(thread.BackendId)))
+        else if (!IsModelProviderReady(new AgentBackendId(thread.BackendId)))
         {
             _commandContext.SetReadyStatusForCurrentSelection();
             return;
@@ -217,7 +217,7 @@ internal sealed class ThreadCommandCoordinator
             return;
         }
 
-        if (!IsChatBackendReady(new AgentBackendId(thread.BackendId)))
+        if (!IsModelProviderReady(new AgentBackendId(thread.BackendId)))
         {
             _commandContext.SetReadyStatusForCurrentSelection();
             return;
@@ -374,7 +374,7 @@ internal sealed class ThreadCommandCoordinator
             return;
         }
 
-        if (!IsChatBackendReady(backendId))
+        if (!IsModelProviderReady(backendId))
         {
             _commandContext.SetReadyStatusForCurrentSelection();
             return;
@@ -407,7 +407,7 @@ internal sealed class ThreadCommandCoordinator
         }
     }
 
-    private bool IsChatBackendReady(AgentBackendId backendId)
+    private bool IsModelProviderReady(AgentBackendId backendId)
     {
         return _chatBackendStates.TryGetValue(backendId.Value, out var state) &&
                state.Availability == ChatBackendAvailability.Ready;

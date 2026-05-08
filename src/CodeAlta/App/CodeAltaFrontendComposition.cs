@@ -37,7 +37,7 @@ internal sealed class CodeAltaFrontendComposition
     public required NavigatorActionCoordinator NavigatorActionCoordinator { get; init; }
     public required ModelProviderSelectorCoordinator ModelProviderSelectorCoordinator { get; init; }
     public required IModelProviderPreferencePort ModelProviderPreferencePort { get; init; }
-    public required ChatSelectorStateStore ChatSelectorStateStore { get; init; }
+    public required ModelProviderSelectorStateStore ModelProviderSelectorStateStore { get; init; }
     public required ShellStateStore ShellStateStore { get; init; }
     public required FrontendEventPublisher FrontendEvents { get; init; }
     public required ShellWorkspaceContext ShellWorkspaceContext { get; init; }
@@ -114,7 +114,7 @@ internal sealed class CodeAltaFrontendComposition
             uiDispatcher,
             shellStateStore,
             frontend.GetThreadPaneBounds,
-            thread => frontend.IsChatBackendReady(new AgentBackendId(thread.BackendId)),
+            thread => frontend.IsModelProviderReady(new AgentBackendId(thread.BackendId)),
             frontend.LoadPromptDraft,
             frontend.DeletePromptDraft,
             frontend.ApplyThreadPreference,
@@ -134,7 +134,7 @@ internal sealed class CodeAltaFrontendComposition
             () => threadStateCoordinator.Selection,
             frontend.RefreshCatalogAndThreadWorkspace,
             frontend.UpdatePromptImageAttachmentsUi);
-        var chatSelectorStateContext = new ChatSelectorStateStore(threadWorkspaceViewModel, uiDispatcher);
+        var modelProviderSelectorStateContext = new ModelProviderSelectorStateStore(threadWorkspaceViewModel, uiDispatcher);
         var modelProviderPreferencePort = new FrontendModelProviderPreferencePort(
             frontend.ApplyDraftModelProviderPreference,
             frontend.ApplyThreadPreference,
@@ -179,17 +179,17 @@ internal sealed class CodeAltaFrontendComposition
             threadStateCoordinator.RekeyThreadIdentity,
             frontend.PersistViewStateAsync,
             runtimeService.GetHistoryAsync);
-        var chatSelectorCoordinator = new ModelProviderSelectorCoordinator(
+        var modelProviderSelectorCoordinator = new ModelProviderSelectorCoordinator(
             backendDescriptors,
             threadWorkspaceViewModel,
             promptComposerViewModel,
             chatBackendStates,
-            chatSelectorStateContext,
+            modelProviderSelectorStateContext,
             threadSelectionContext,
             modelProviderPreferencePort,
             workspaceRefreshContext,
             configStore.GetEffectiveDefaultProvider,
-            frontend.SyncChatSelectorItems,
+            frontend.SyncModelProviderSelectorItems,
             threadProviderSwitchCoordinator.CanSelectThreadProvider,
             (thread, tab, targetBackendId) => threadProviderSwitchCoordinator.SwitchThreadProviderAsync(thread, tab, targetBackendId),
             frontend.RefreshSelectionAndThreadWorkspace,
@@ -203,10 +203,10 @@ internal sealed class CodeAltaFrontendComposition
 
         var shellWorkspaceContext = new ShellWorkspaceContext(
             new DelegatingShellPromptAvailabilityPort(
-                chatSelectorCoordinator.GetPreferredBackendId,
+                modelProviderSelectorCoordinator.GetPreferredModelProviderId,
                 () =>
                 {
-                    var hasStatus = chatSelectorCoordinator.TryGetPromptUnavailableStatus(out var message, out var tone);
+                    var hasStatus = modelProviderSelectorCoordinator.TryGetPromptUnavailableStatus(out var message, out var tone);
                     return (hasStatus, message, tone);
                 }),
             new ShellWorkspaceSurfacePort(
@@ -222,8 +222,8 @@ internal sealed class CodeAltaFrontendComposition
                 frontend.RefreshSidebarProjection,
                 frontend.SyncSidebarSelectionToCurrentState,
                 () => threadPromptQueueCoordinator!.RefreshSelectedThreadQueueUi(),
-                frontend.RefreshChatSelectorsForDraftScope,
-                frontend.RefreshChatSelectorsForThread,
+                frontend.RefreshModelProviderSelectorsForDraftScope,
+                frontend.RefreshModelProviderSelectorsForThread,
                 frontend.SyncPromptText,
                 frontend.UpdatePromptAvailabilityUi,
                 frontend.SyncThreadTabControl),
@@ -272,7 +272,7 @@ internal sealed class CodeAltaFrontendComposition
         var threadCreationCoordinator = new ThreadCreationCoordinator(
             runtimeService,
             catalogOptions,
-            chatSelectorCoordinator.GetPreferredBackendId,
+            modelProviderSelectorCoordinator.GetPreferredModelProviderId,
             threadSelectionContext.GetSelectedProject,
             () => threadSelectionContext.Selection,
             static () => null,
@@ -287,7 +287,7 @@ internal sealed class CodeAltaFrontendComposition
             backendDescriptors,
             chatBackendStates,
             threadSelectionContext,
-            chatSelectorStateContext,
+            modelProviderSelectorStateContext,
             new ThreadCommandContext(
                 new DelegatingThreadLifecycleCommandPort(
                     title => threadCreationCoordinator.CreateGlobalThreadAsync(title),
@@ -333,9 +333,9 @@ internal sealed class CodeAltaFrontendComposition
             ChatBackendStates = chatBackendStates,
             SidebarCoordinator = sidebarCoordinator,
             NavigatorActionCoordinator = navigatorActionCoordinator,
-            ModelProviderSelectorCoordinator = chatSelectorCoordinator,
+            ModelProviderSelectorCoordinator = modelProviderSelectorCoordinator,
             ModelProviderPreferencePort = modelProviderPreferencePort,
-            ChatSelectorStateStore = chatSelectorStateContext,
+            ModelProviderSelectorStateStore = modelProviderSelectorStateContext,
             ShellStateStore = shellStateStore,
             FrontendEvents = frontendEvents,
             ShellWorkspaceContext = shellWorkspaceContext,

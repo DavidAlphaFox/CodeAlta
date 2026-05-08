@@ -94,7 +94,7 @@ public sealed class ThreadWorkspaceViewTests
     }
 
     [TestMethod]
-    public void SyncChatSelectorItems_ReplacesSelectItems()
+    public void SyncModelProviderSelectorItems_ReplacesSelectItems()
     {
         var shellViewModel = new CodeAltaShellViewModel();
         var workspaceViewModel = new ThreadWorkspaceViewModel
@@ -106,7 +106,7 @@ public sealed class ThreadWorkspaceViewTests
         var promptComposerViewModel = new PromptComposerViewModel();
         var view = CreateThreadWorkspaceView(shellViewModel, workspaceViewModel, promptComposerViewModel);
 
-        view.SyncChatSelectorItems(workspaceViewModel);
+        view.SyncModelProviderSelectorItems(workspaceViewModel);
 
         var backendSelect = GetPrivateField<Select<ChatBackendOption>>(view, "ChatBackendSelect");
         var modelSelect = GetPrivateField<Select<ChatModelOption>>(view, "ChatModelSelect");
@@ -127,7 +127,7 @@ public sealed class ThreadWorkspaceViewTests
         workspaceViewModel.ModelOptions = [new ChatModelOption("gpt-5.1", "GPT-5.1")];
         workspaceViewModel.ReasoningOptions = [new ChatReasoningOption(Agent.AgentReasoningEffort.Low, "Low")];
 
-        view.SyncChatSelectorItems(workspaceViewModel);
+        view.SyncModelProviderSelectorItems(workspaceViewModel);
 
         Assert.AreEqual(2, backendSelect.Items.Count);
         Assert.AreEqual("Copilot", backendSelect.Items[1].Label);
