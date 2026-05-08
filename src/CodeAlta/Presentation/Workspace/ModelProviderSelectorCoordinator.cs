@@ -23,7 +23,7 @@ internal sealed class ModelProviderSelectorCoordinator
     private readonly IModelProviderPreferencePort _preferences;
     private readonly WorkspaceRefreshContext _workspaceRefresh;
     private readonly Func<string?, string?> _getEffectiveDefaultProviderKey;
-    private readonly Action _syncChatSelectorItems;
+    private readonly Action _syncModelProviderSelectorItems;
     private readonly Func<WorkThreadDescriptor, OpenThreadState, bool> _canSelectThreadBackend;
     private readonly Func<WorkThreadDescriptor, OpenThreadState, AgentBackendId, Task<bool>> _trySwitchThreadBackendAsync;
     private readonly Action _refreshSelectionAndThreadWorkspace;
@@ -39,7 +39,7 @@ internal sealed class ModelProviderSelectorCoordinator
         IModelProviderPreferencePort preferences,
         WorkspaceRefreshContext workspaceRefresh,
         Func<string?, string?> getEffectiveDefaultProviderKey,
-        Action syncChatSelectorItems,
+        Action syncModelProviderSelectorItems,
         Func<WorkThreadDescriptor, OpenThreadState, bool>? canSelectThreadBackend = null,
         Func<WorkThreadDescriptor, OpenThreadState, AgentBackendId, Task<bool>>? trySwitchThreadBackendAsync = null,
         Action? refreshSelectionAndThreadWorkspace = null,
@@ -56,7 +56,7 @@ internal sealed class ModelProviderSelectorCoordinator
             preferences,
             workspaceRefresh,
             getEffectiveDefaultProviderKey,
-            syncChatSelectorItems,
+            syncModelProviderSelectorItems,
             canSelectThreadBackend,
             trySwitchThreadBackendAsync,
             refreshSelectionAndThreadWorkspace,
@@ -74,7 +74,7 @@ internal sealed class ModelProviderSelectorCoordinator
         IModelProviderPreferencePort preferences,
         WorkspaceRefreshContext workspaceRefresh,
         Func<string?, string?> getEffectiveDefaultProviderKey,
-        Action syncChatSelectorItems,
+        Action syncModelProviderSelectorItems,
         Func<WorkThreadDescriptor, OpenThreadState, bool>? canSelectThreadBackend = null,
         Func<WorkThreadDescriptor, OpenThreadState, AgentBackendId, Task<bool>>? trySwitchThreadBackendAsync = null,
         Action? refreshSelectionAndThreadWorkspace = null,
@@ -89,7 +89,7 @@ internal sealed class ModelProviderSelectorCoordinator
         ArgumentNullException.ThrowIfNull(preferences);
         ArgumentNullException.ThrowIfNull(workspaceRefresh);
         ArgumentNullException.ThrowIfNull(getEffectiveDefaultProviderKey);
-        ArgumentNullException.ThrowIfNull(syncChatSelectorItems);
+        ArgumentNullException.ThrowIfNull(syncModelProviderSelectorItems);
 
         _backendDescriptors = backendDescriptors;
         _workspaceViewModel = workspaceViewModel;
@@ -100,7 +100,7 @@ internal sealed class ModelProviderSelectorCoordinator
         _preferences = preferences;
         _workspaceRefresh = workspaceRefresh;
         _getEffectiveDefaultProviderKey = getEffectiveDefaultProviderKey;
-        _syncChatSelectorItems = syncChatSelectorItems;
+        _syncModelProviderSelectorItems = syncModelProviderSelectorItems;
         _canSelectThreadBackend = canSelectThreadBackend ?? ((_, _) => false);
         _trySwitchThreadBackendAsync = trySwitchThreadBackendAsync ?? ((_, _, _) => Task.FromResult(false));
         _refreshSelectionAndThreadWorkspace = refreshSelectionAndThreadWorkspace ?? (() => { });
@@ -126,7 +126,7 @@ internal sealed class ModelProviderSelectorCoordinator
                 _workspaceViewModel.CanSelectModelProvider = false;
                 _workspaceViewModel.CanSelectModel = false;
                 _workspaceViewModel.CanSelectReasoning = false;
-                _syncChatSelectorItems();
+                _syncModelProviderSelectorItems();
                 return;
             }
 
@@ -156,7 +156,7 @@ internal sealed class ModelProviderSelectorCoordinator
             _workspaceViewModel.CanSelectModelProvider = true;
             _workspaceViewModel.CanSelectModel = backendState.Availability == ChatBackendAvailability.Ready;
             _workspaceViewModel.CanSelectReasoning = backendState.Availability == ChatBackendAvailability.Ready;
-            _syncChatSelectorItems();
+            _syncModelProviderSelectorItems();
         }
         finally
         {
@@ -185,7 +185,7 @@ internal sealed class ModelProviderSelectorCoordinator
                 _workspaceViewModel.CanSelectModelProvider = false;
                 _workspaceViewModel.CanSelectModel = false;
                 _workspaceViewModel.CanSelectReasoning = false;
-                _syncChatSelectorItems();
+                _syncModelProviderSelectorItems();
                 return;
             }
 
@@ -220,7 +220,7 @@ internal sealed class ModelProviderSelectorCoordinator
             _workspaceViewModel.CanSelectModelProvider = _canSelectThreadBackend(tab.Thread, tab);
             _workspaceViewModel.CanSelectModel = backendState.Availability == ChatBackendAvailability.Ready;
             _workspaceViewModel.CanSelectReasoning = backendState.Availability == ChatBackendAvailability.Ready;
-            _syncChatSelectorItems();
+            _syncModelProviderSelectorItems();
         }
         finally
         {
@@ -430,10 +430,10 @@ internal sealed class ModelProviderSelectorCoordinator
         _promptComposerViewModel.CanCloseTab = projection.CanCloseTab;
         _promptComposerViewModel.CanClearQueue = projection.CanClearQueue;
         _promptComposerViewModel.CanAlwaysEnqueue = projection.CanAlwaysEnqueue;
-        UpdateThreadBackendSelectionAvailability();
+        UpdateThreadModelProviderSelectionAvailability();
     }
 
-    private void UpdateThreadBackendSelectionAvailability()
+    private void UpdateThreadModelProviderSelectionAvailability()
     {
         if (_threadSelection.Selection.Target is not WorkspaceTarget.Thread)
         {
@@ -502,7 +502,7 @@ internal sealed class ModelProviderSelectorCoordinator
         {
             _selectorState.SetModelSelection(modelOptions, selectedModelIndex);
             _selectorState.SetReasoningSelection(reasoningOptions, selectedReasoningIndex);
-            _syncChatSelectorItems();
+            _syncModelProviderSelectorItems();
         }
         finally
         {

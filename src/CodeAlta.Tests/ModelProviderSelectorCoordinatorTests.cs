@@ -170,7 +170,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public void RefreshForThread_UsesThreadBackendSelectionCapability()
+    public void RefreshForThread_UsesThreadModelProviderSelectionCapability()
     {
         using var temp = TempDirectory.Create();
         var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
@@ -217,7 +217,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public void UpdatePromptAvailabilityUi_RefreshesThreadBackendSelectionCapability()
+    public void UpdatePromptAvailabilityUi_RefreshesThreadModelProviderSelectionCapability()
     {
         using var temp = TempDirectory.Create();
         var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);

@@ -448,11 +448,11 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         => _modelProviderSelectorCoordinator.RefreshForThread(tab);
     internal void SyncModelProviderSelectorItems()
         => _threadWorkspaceView?.SyncModelProviderSelectorItems(_threadWorkspaceViewModel);
-    private void OnChatBackendSelectionChanged(int newIndex)
+    private void OnModelProviderSelectionChanged(int newIndex)
         => ObserveUiTask(() => _modelProviderSelectorCoordinator.OnModelProviderSelectionChangedAsync(newIndex), "change the selected provider");
-    private void OnChatModelSelectionChanged(int newIndex)
+    private void OnModelSelectionChanged(int newIndex)
         => _modelProviderSelectorCoordinator.OnModelSelectionChanged(newIndex);
-    private void OnChatReasoningSelectionChanged(int newIndex)
+    private void OnReasoningSelectionChanged(int newIndex)
         => _modelProviderSelectorCoordinator.OnReasoningSelectionChanged(newIndex);
     private AgentBackendId GetPreferredModelProviderId()
         => _modelProviderSelectorCoordinator.GetPreferredModelProviderId();
@@ -496,7 +496,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             WorkspaceChromeController = ThreadWorkspaceChromeController.Create(() => CreateUsageComputedVisual(EnsureSessionUsagePresenter().BuildIndicatorVisual), anchor => EnsureThreadInfoPresenter().TogglePopup(anchor), () => ObserveUiTask(OpenModelProvidersAsync, "open model providers")),
             PromptComposerController = PromptComposerViewController.Create(acceptedPrompt => ObserveUiTask(() => _shellCommandSurfaceCoordinator.HandleAcceptedPromptAsync(acceptedPrompt), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync(steer: false), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.AbortSelectedThreadAsync(), "abort the selected thread"), openHelp, showPalette),
             QueuedPromptController = QueuedPromptStripController.Create(markdown => (_threadWorkspaceView?.ThreadPaneLayout.App)?.Terminal.Clipboard.TrySetText(markdown), queuedPromptId => ObserveUiTask(() => _threadCommandCoordinator.ConvertSelectedThreadQueuedPromptToSteerAsync(queuedPromptId), "convert the queued prompt to steer"), pendingSteerId => _threadCommandCoordinator.DeleteSelectedThreadPendingSteer(pendingSteerId), queuedPromptId => _threadCommandCoordinator.DeleteSelectedThreadQueuedPrompt(queuedPromptId), (queuedPromptId, remainingCount) => _threadCommandCoordinator.UpdateSelectedThreadQueuedPromptCount(queuedPromptId, remainingCount), (queuedPromptId, text) => _threadCommandCoordinator.UpdateSelectedThreadQueuedPromptText(queuedPromptId, text), (onAccepted, placeholder) => ThreadWorkspaceView.CreateStyledPromptEditor(onAccepted, openHelp, showPalette, projectFileSearch, promptRoot, placeholder)),
-            ModelProviderSelectorController = ModelProviderSelectorController.Create(OnChatBackendSelectionChanged, OnChatModelSelectionChanged, OnChatReasoningSelectionChanged, () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.CompactSelectedThreadAsync(), "compact the selected thread")),
+            ModelProviderSelectorController = ModelProviderSelectorController.Create(OnModelProviderSelectionChanged, OnModelSelectionChanged, OnReasoningSelectionChanged, () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.CompactSelectedThreadAsync(), "compact the selected thread")),
             ThreadTabHostController = ThreadTabHostController.Create(selectedIndex => _threadTabStripCoordinator.ObserveBoundSelection(selectedIndex)),
             ProjectFileSearchService = projectFileSearch,
             GetPromptReferenceProjectRoot = promptRoot,

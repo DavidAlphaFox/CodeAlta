@@ -61,8 +61,8 @@ internal sealed class DelegatingShellWorkspaceProjectionPort : IShellWorkspacePr
     private readonly Action _refreshSidebarProjection;
     private readonly Action _syncSidebarSelectionToCurrentState;
     private readonly Action _refreshQueuedPromptList;
-    private readonly Action _refreshChatSelectorsForDraftScope;
-    private readonly Action<OpenThreadState> _refreshChatSelectorsForThread;
+    private readonly Action _refreshModelProviderSelectorsForDraftScope;
+    private readonly Action<OpenThreadState> _refreshModelProviderSelectorsForThread;
     private readonly Action<ThreadSessionState?> _syncPromptDraftText;
     private readonly Action _updatePromptAvailabilityUi;
     private readonly Action _syncThreadTabControl;
@@ -72,8 +72,8 @@ internal sealed class DelegatingShellWorkspaceProjectionPort : IShellWorkspacePr
         Action refreshSidebarProjection,
         Action syncSidebarSelectionToCurrentState,
         Action refreshQueuedPromptList,
-        Action refreshChatSelectorsForDraftScope,
-        Action<OpenThreadState> refreshChatSelectorsForThread,
+        Action refreshModelProviderSelectorsForDraftScope,
+        Action<OpenThreadState> refreshModelProviderSelectorsForThread,
         Action<ThreadSessionState?> syncPromptDraftText,
         Action updatePromptAvailabilityUi,
         Action syncThreadTabControl)
@@ -82,8 +82,8 @@ internal sealed class DelegatingShellWorkspaceProjectionPort : IShellWorkspacePr
         ArgumentNullException.ThrowIfNull(refreshSidebarProjection);
         ArgumentNullException.ThrowIfNull(syncSidebarSelectionToCurrentState);
         ArgumentNullException.ThrowIfNull(refreshQueuedPromptList);
-        ArgumentNullException.ThrowIfNull(refreshChatSelectorsForDraftScope);
-        ArgumentNullException.ThrowIfNull(refreshChatSelectorsForThread);
+        ArgumentNullException.ThrowIfNull(refreshModelProviderSelectorsForDraftScope);
+        ArgumentNullException.ThrowIfNull(refreshModelProviderSelectorsForThread);
         ArgumentNullException.ThrowIfNull(syncPromptDraftText);
         ArgumentNullException.ThrowIfNull(updatePromptAvailabilityUi);
         ArgumentNullException.ThrowIfNull(syncThreadTabControl);
@@ -92,8 +92,8 @@ internal sealed class DelegatingShellWorkspaceProjectionPort : IShellWorkspacePr
         _refreshSidebarProjection = refreshSidebarProjection;
         _syncSidebarSelectionToCurrentState = syncSidebarSelectionToCurrentState;
         _refreshQueuedPromptList = refreshQueuedPromptList;
-        _refreshChatSelectorsForDraftScope = refreshChatSelectorsForDraftScope;
-        _refreshChatSelectorsForThread = refreshChatSelectorsForThread;
+        _refreshModelProviderSelectorsForDraftScope = refreshModelProviderSelectorsForDraftScope;
+        _refreshModelProviderSelectorsForThread = refreshModelProviderSelectorsForThread;
         _syncPromptDraftText = syncPromptDraftText;
         _updatePromptAvailabilityUi = updatePromptAvailabilityUi;
         _syncThreadTabControl = syncThreadTabControl;
@@ -112,12 +112,12 @@ internal sealed class DelegatingShellWorkspaceProjectionPort : IShellWorkspacePr
         => _refreshQueuedPromptList();
 
     public void RefreshModelProviderSelectorsForDraftScope()
-        => _refreshChatSelectorsForDraftScope();
+        => _refreshModelProviderSelectorsForDraftScope();
 
     public void RefreshModelProviderSelectorsForThread(OpenThreadState tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        _refreshChatSelectorsForThread(tab);
+        _refreshModelProviderSelectorsForThread(tab);
     }
 
     public void SyncPromptDraftText(ThreadSessionState? session)

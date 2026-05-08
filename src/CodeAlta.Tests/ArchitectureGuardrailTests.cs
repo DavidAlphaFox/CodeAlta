@@ -1411,12 +1411,12 @@ public sealed class ArchitectureGuardrailTests
     public void AppContexts_DoNotExposeConcreteSelectorEditorOrLayoutControls()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
-        var chatSelectorContextSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "State", "ModelProviderSelectorStateStore.cs"));
+        var modelProviderSelectorStateStoreSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "State", "ModelProviderSelectorStateStore.cs"));
         var workspaceContextSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "Context", "ShellWorkspaceContext.cs"));
 
         Assert.IsFalse(File.Exists(Path.Combine(codeAltaRoot, "App", "Context", "ChatSelectorUiContext.cs")));
-        Assert.IsFalse(chatSelectorContextSource.Contains("public Select<", StringComparison.Ordinal));
-        Assert.IsFalse(chatSelectorContextSource.Contains("GetThreadInput()", StringComparison.Ordinal));
+        Assert.IsFalse(modelProviderSelectorStateStoreSource.Contains("public Select<", StringComparison.Ordinal));
+        Assert.IsFalse(modelProviderSelectorStateStoreSource.Contains("GetThreadInput()", StringComparison.Ordinal));
         Assert.IsFalse(workspaceContextSource.Contains("GetThreadPaneLayout()", StringComparison.Ordinal));
         Assert.IsFalse(workspaceContextSource.Contains("GetThreadBodySplitter()", StringComparison.Ordinal));
         Assert.IsFalse(workspaceContextSource.Contains("GetThreadInput()", StringComparison.Ordinal));

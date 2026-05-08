@@ -47,14 +47,14 @@ internal sealed class AcpFrontendCoordinator
         _dispatchToUi(
             () =>
             {
-                SyncChatBackendCatalog();
+                SyncModelProviderCatalog();
                 PublishModelProviderCatalogChanged();
             });
         await _chatBackendInitializationCoordinator.InitializeAsync(CancellationToken.None);
         _dispatchToUi(
             () =>
             {
-                SyncChatBackendCatalog();
+                SyncModelProviderCatalog();
                 PublishModelProviderCatalogChanged();
                 _setStatus("ACP backends refreshed.", false, StatusTone.Info);
             });
@@ -70,7 +70,7 @@ internal sealed class AcpFrontendCoordinator
     private void PublishModelProviderCatalogChanged()
         => _frontendEvents.Publish(new ModelProviderCatalogChangedEvent());
 
-    private void SyncChatBackendCatalog()
+    private void SyncModelProviderCatalog()
     {
         var backendDescriptors = _ownedServices?.BackendDescriptors
             ?? CodeAltaOwnedServices.CreateBuiltInBackendDescriptors();

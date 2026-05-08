@@ -72,14 +72,14 @@ internal sealed class ProviderFrontendCoordinator
         _dispatchToUi(
             () =>
             {
-                SyncChatBackendCatalog();
+                SyncModelProviderCatalog();
                 PublishModelProviderCatalogChanged();
             });
         await _chatBackendInitializationCoordinator.InitializeAsync(cancellationToken);
         _dispatchToUi(
             () =>
             {
-                SyncChatBackendCatalog();
+                SyncModelProviderCatalog();
                 PublishModelProviderCatalogChanged();
                 _setStatus("Model providers refreshed.", false, StatusTone.Info);
             });
@@ -363,7 +363,7 @@ internal sealed class ProviderFrontendCoordinator
         }
     }
 
-    private void SyncChatBackendCatalog()
+    private void SyncModelProviderCatalog()
     {
         var backendDescriptors = _ownedServices?.BackendDescriptors
             ?? CodeAltaOwnedServices.CreateBuiltInBackendDescriptors();
