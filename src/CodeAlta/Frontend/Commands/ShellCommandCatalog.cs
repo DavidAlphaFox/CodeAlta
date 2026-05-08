@@ -315,4 +315,11 @@ internal static class ShellCommandCatalog
 
         return Commands.First(command => string.Equals(command.Id, commandId, StringComparison.Ordinal));
     }
+
+    public static bool Contains(string commandId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commandId);
+
+        return Commands.Any(command => string.Equals(command.Id, commandId, StringComparison.Ordinal));
+    }
 }

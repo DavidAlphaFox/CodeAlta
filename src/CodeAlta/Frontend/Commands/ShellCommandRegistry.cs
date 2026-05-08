@@ -22,6 +22,10 @@ internal sealed class ShellCommandRegistry
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commandId);
         ArgumentNullException.ThrowIfNull(factory);
+        if (!ShellCommandCatalog.Contains(commandId))
+        {
+            throw new ArgumentException($"Shell command '{commandId}' must be declared in {nameof(ShellCommandCatalog)} before a factory can be registered.", nameof(commandId));
+        }
 
         _factories[commandId] = factory;
     }

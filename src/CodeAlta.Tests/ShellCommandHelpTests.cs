@@ -140,4 +140,23 @@ public sealed class ShellCommandHelpTests
         Assert.IsFalse(steerCommand.CommandSearchText.Contains("/steer", StringComparison.Ordinal));
         Assert.AreEqual("Exit", exitCommand.DisplayLabelMarkup);
     }
+
+    [TestMethod]
+    public void ShellCommandCatalog_RequiresUniqueIdsAndAvailabilityMetadata()
+    {
+        var duplicateIds = ShellCommandCatalog.Commands
+            .GroupBy(static command => command.Id, StringComparer.Ordinal)
+            .Where(static group => group.Count() > 1)
+            .Select(static group => group.Key)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), duplicateIds);
+        foreach (var command in ShellCommandCatalog.Commands)
+        {
+            StringAssert.StartsWith(command.Id, "CodeAlta.");
+            Assert.IsFalse(string.IsNullOrWhiteSpace(command.Label));
+            Assert.IsFalse(string.IsNullOrWhiteSpace(command.Description));
+            Assert.IsTrue(Enum.IsDefined(command.Availability), $"{command.Id} has an undefined availability value.");
+        }
+    }
 }

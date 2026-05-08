@@ -62,6 +62,14 @@ public sealed class ShellCommandDispatcherTests
         Assert.IsInstanceOfType<FocusPromptCommand>(command);
     }
 
+    [TestMethod]
+    public void RegisterFactory_RejectsCommandIdWithoutCatalogMetadata()
+    {
+        var registry = new ShellCommandRegistry();
+
+        Assert.ThrowsExactly<ArgumentException>(() => registry.RegisterFactory("CodeAlta.Test.Missing", static () => new FocusPromptCommand()));
+    }
+
     private sealed class CapturingUiDispatcher : IUiDispatcher
     {
         private readonly bool _hasAccess;
