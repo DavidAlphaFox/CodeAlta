@@ -161,7 +161,7 @@ internal sealed class CodeAltaFrontendComposition
             threadStateCoordinator,
             resolveProviderDisplayName,
             frontend.GetPromptFocusTarget,
-            frontend.RefreshCatalogAndThreadWorkspace,
+            () => frontendEvents.Publish(new CatalogChangedEvent()),
             frontend.SetStatus,
             frontend.SetReadyStatusForCurrentSelection);
         var threadProviderSwitchCoordinator = new ThreadProviderSwitchCoordinator(
@@ -214,7 +214,7 @@ internal sealed class CodeAltaFrontendComposition
                 frontend.GetPromptFocusTarget,
                 _ => { },
                 frontend.FocusPromptTarget,
-                _ => frontend.RefreshCatalogAndThreadWorkspace(),
+                _ => frontendEvents.Publish(new CatalogChangedEvent()),
                 _ => frontend.RefreshSidebarProjection()),
             new DelegatingShellWorkspaceProjectionPort(
                 frontend.EnsureSelectionDefaults,
