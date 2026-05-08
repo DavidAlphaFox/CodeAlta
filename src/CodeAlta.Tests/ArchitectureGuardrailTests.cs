@@ -441,15 +441,15 @@ public sealed class ArchitectureGuardrailTests
         {
             "App/CodeAltaShellController.cs:71:_initializationTask = Task.Run(",
             "App/CodeAltaShellController.cs:356:var startupProviderLoadTask = Task.Run(",
-            "App/CodeAltaApp.cs:346:_ = PersistViewStateAsync();",
-            "App/CodeAltaApp.cs:427:_ = OpenModelProvidersAsync();",
+            "App/CodeAltaApp.cs:342:_ = PersistViewStateAsync();",
+            "App/CodeAltaApp.cs:423:_ = OpenModelProvidersAsync();",
             "App/RuntimeEventPump.cs:34:_pumpTask = Task.Run(",
             "App/ShellThreadStateCoordinator.cs:245:_ = RestoreStartupThreadHistoryAsync(threadId, cancellationToken);",
             "App/ShellThreadStateCoordinator.cs:254:_ = PersistViewStateAsync();",
             "App/ShellThreadStateCoordinator.cs:267:_ = PersistViewStateAsync();",
             "App/ShellThreadStateCoordinator.cs:325:_ = PersistViewStateAsync();",
-            "App/ShellThreadStateCoordinator.cs:418:_ = PersistViewStateAsync();",
-            "App/ShellThreadStateCoordinator.cs:455:_ = PersistViewStateAsync();",
+            "App/ShellThreadStateCoordinator.cs:408:_ = PersistViewStateAsync();",
+            "App/ShellThreadStateCoordinator.cs:445:_ = PersistViewStateAsync();",
             "App/SidebarCoordinator.cs:297:_ = CommitInlineRenameAsync(row, projectId, displayName, previousTitle);",
             "App/ThreadPromptDispatchCoordinator.cs:177:_ = RecordResolvedReferenceUsageAsync(promptInput.ResolvedReferences);",
             "App/ThreadPromptDraftPersistenceCoordinator.cs:83:_ = PersistPromptDraftAsync(threadId, normalizedPrompt, cancellationSource);",
@@ -460,6 +460,10 @@ public sealed class ArchitectureGuardrailTests
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:164:_ = sessionCreateTask.ContinueWith(",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:377:_ = CloseAsync();",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:378:_ = RecordUsageAsync(selected);",
+            "Presentation/Tabs/ThreadTabStripCoordinator.cs:426:_ = CloseTabFromViewAsync(currentThreadId, ShellTabCloseReason.UserDetached);",
+            "Presentation/Tabs/ThreadTabStripCoordinator.cs:631:_ = CloseTabFromViewAsync(CodeAltaApp.DraftTabId, ShellTabCloseReason.UserDetached);",
+            "Presentation/Tabs/ThreadTabStripCoordinator.cs:666:_ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.FileEditorClosed);",
+            "Presentation/Tabs/ThreadTabStripCoordinator.cs:707:_ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.UserDetached);",
             "Presentation/Threads/ThreadInfoPresenter.cs:96:_ = LoadAsync(cancellationTokenSource.Token);",
         };
         var violations = new[]
@@ -615,6 +619,7 @@ public sealed class ArchitectureGuardrailTests
         var fileEditorSource = File.ReadAllText(Path.Combine(codeAltaRoot, "Views", "FileEditorWorkspaceCoordinator.cs"));
         var threadCommandsSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "ThreadCommandCoordinator.cs"));
         var navigatorSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "NavigatorActionCoordinator.cs"));
+        var appSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "CodeAltaApp.cs"));
 
         StringAssert.Contains(shellTabsSource, "UserDetached");
         StringAssert.Contains(shellTabsSource, "FileEditorClosed");
@@ -626,6 +631,8 @@ public sealed class ArchitectureGuardrailTests
         StringAssert.Contains(threadStateSource, "ShellTabCloseReason.ThreadDeleted");
         StringAssert.Contains(threadStateSource, "ShellTabCloseReason.ProjectClosed");
         StringAssert.Contains(fileEditorSource, "ShellTabCloseReason.FileEditorClosed");
+        StringAssert.Contains(appSource, "new DelegatingShellTabCommandService(() => _threadTabStripCoordinator.CloseSelectedTabAsync())");
+        Assert.IsFalse(appSource.Contains("CloseSelectedThreadAsync", StringComparison.Ordinal));
 
         StringAssert.Contains(threadCommandsSource, "AbortSelectedThreadAsync");
         StringAssert.Contains(threadCommandsSource, "_runtimeService.AbortAsync(thread.ThreadId)");

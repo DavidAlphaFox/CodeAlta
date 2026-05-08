@@ -276,11 +276,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
                 () => { _ = _threadTabStripCoordinator.TrySelectRelativeTab(1); return Task.CompletedTask; },
                 () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToPreviousMessage()), () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToNextMessage()),
                 () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToFirstMessage()), () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToLastMessage())),
-            new DelegatingShellTabCommandService(() => _fileEditorWorkspaceCoordinator.GetSelectedFileTab() is { } fileTab
-                ? _fileEditorWorkspaceCoordinator.CloseFileTabAsync(fileTab.TabId)
-                : GetSelectedThread() is not null
-                    ? CloseSelectedThreadAsync()
-                    : CloseDraftTabAsync()),
+            new DelegatingShellTabCommandService(() => _threadTabStripCoordinator.CloseSelectedTabAsync()),
             new DelegatingShellStatusService(SetStatus),
             ToggleCommandBarMultiLine,
             _ownedServices?.PluginHostBridge);
@@ -730,9 +726,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     internal void OpenAcpManagement() { if (_acpManagementCoordinator is null) { SetStatus("ACP management is unavailable in this app instance.", tone: StatusTone.Warning); return; } _acpManagementCoordinator.Open(); }
     internal Task OpenModelProvidersAsync() => _providerDialogCoordinator.OpenAsync();
     internal void FocusSidebar() { SyncSidebarSelectionToCurrentState(); ApplyPendingSidebarSelection(); _sidebarCoordinator.View.Tree.App?.Focus(_sidebarCoordinator.View.Tree); }
-    private async Task CloseSelectedThreadAsync()
-        => await _threadStateCoordinator.CloseSelectedThreadAsync();
-
     private async Task CloseThreadTabAsync(string threadId)
         => await _threadStateCoordinator.CloseThreadTabAsync(threadId);
 

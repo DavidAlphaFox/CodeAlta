@@ -1,9 +1,13 @@
 using CodeAlta.App;
+using CodeAlta.App.Context;
+using CodeAlta.App.State;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Shell;
 using CodeAlta.Presentation.Tabs;
+using CodeAlta.Threading;
 using CodeAlta.Views;
+using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
 
 namespace CodeAlta.Tests;
@@ -138,6 +142,40 @@ public sealed class CodeAltaAppTabStripTests
     }
 
     [TestMethod]
+    public async Task CloseSelectedTabAsync_ClosesThreadThroughTabStripLifecyclePath()
+    {
+        var tabs = new InMemoryShellTabService();
+        tabs.OpenOrGetTab(CreateDescriptor("thread-1", ShellTabKind.Thread));
+        var closedThreads = new List<string>();
+        var coordinator = CreateCoordinator(tabs, closeThreadTab: threadId =>
+        {
+            closedThreads.Add(threadId);
+            tabs.CloseTabAsync(new ShellTabId(threadId), ShellTabCloseReason.UserDetached).GetAwaiter().GetResult();
+        });
+
+        var closed = await coordinator.CloseSelectedTabAsync();
+
+        Assert.IsTrue(closed);
+        CollectionAssert.AreEqual(new[] { "thread-1" }, closedThreads.ToArray());
+        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("thread-1"), out _));
+    }
+
+    [TestMethod]
+    public async Task CloseSelectedTabAsync_ClosesEditorThroughTabStripLifecyclePath()
+    {
+        var tabId = "file:C:/code/CodeAlta/readme.md";
+        var tabs = new InMemoryShellTabService();
+        tabs.OpenOrGetTab(CreateDescriptor(tabId, ShellTabKind.Editor));
+        var closedFiles = new List<string>();
+        var coordinator = CreateCoordinator(tabs, closeFileTab: closedFiles.Add);
+
+        var closed = await coordinator.CloseSelectedTabAsync();
+
+        Assert.IsTrue(closed);
+        CollectionAssert.AreEqual(new[] { tabId }, closedFiles.ToArray());
+    }
+
+    [TestMethod]
     public void GetAdjacentTabIndex_WrapsLeftFromFirstTab()
     {
         Assert.AreEqual(2, ThreadTabStripCoordinator.GetAdjacentTabIndex(selectedIndex: 0, tabCount: 3, delta: -1));
@@ -179,5 +217,69 @@ public sealed class CodeAltaAppTabStripTests
             ShellTabKind.Plugin => new ShellTabAssociation.Plugin("stats", "main"),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
         };
+    }
+
+    private static ThreadTabStripCoordinator CreateCoordinator(
+        IShellTabService tabs,
+        Action<string>? closeThreadTab = null,
+        Action<string>? closeFileTab = null)
+    {
+        var options = new CatalogOptions
+        {
+            GlobalRoot = Path.Combine(Path.GetTempPath(), "CodeAltaTests", Guid.NewGuid().ToString("N")),
+        };
+        var dispatcher = new InlineUiDispatcher();
+        var threadState = new ShellThreadStateCoordinator(
+            new ProjectCatalog(options),
+            new WorkThreadCatalog(options),
+            dispatcher,
+            new ShellStateStore(dispatcher),
+            new TestThreadStateFrontendPort());
+
+        var selection = new ThreadSelectionContext(
+            threadState,
+            static (_, _) => Task.CompletedTask,
+            static _ => false);
+        var context = new ThreadTabContext(
+            new DelegatingThreadTabSurfacePort(
+                static () => null,
+                static () => null,
+                static build => new ComputedVisual(build),
+                dispatcher),
+            new DelegatingThreadTabLifecyclePort(
+                static () => { },
+                static () => { },
+                closeThreadTab ?? (static _ => { }),
+                static () => { },
+                static _ => { }),
+            new DelegatingFileEditorTabPort(
+                static _ => null,
+                static _ => { },
+                closeFileTab ?? (static _ => { })));
+        return new ThreadTabStripCoordinator(selection, context, tabs);
+    }
+
+    private sealed class InlineUiDispatcher : IUiDispatcher
+    {
+        public bool CheckAccess() => true;
+
+        public void Post(Action action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            action();
+        }
+
+        public Task InvokeAsync(Action action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            action();
+            return Task.CompletedTask;
+        }
+
+        public Task<T> InvokeAsync<T>(Func<T> action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            return Task.FromResult(action());
+        }
     }
 }

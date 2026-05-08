@@ -330,16 +330,6 @@ internal sealed class ShellThreadStateCoordinator
             : OpenThreadResult.Opened;
     }
 
-    public async Task<TabCloseResult> CloseSelectedThreadAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SelectedThreadId))
-        {
-            return TabCloseResult.NotOpen;
-        }
-
-        return await CloseThreadTabAsync(SelectedThreadId);
-    }
-
     public async Task<TabCloseResult> CloseThreadTabAsync(string threadId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(threadId);

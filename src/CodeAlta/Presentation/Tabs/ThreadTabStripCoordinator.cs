@@ -93,6 +93,14 @@ internal sealed class ThreadTabStripCoordinator
         }
     }
 
+    public Task<bool> CloseSelectedTabAsync(CancellationToken cancellationToken = default)
+    {
+        var selectedTab = _shellTabs.GetTabs().FirstOrDefault(static tab => tab.IsSelected);
+        return selectedTab is null
+            ? Task.FromResult(false)
+            : CloseTabAsync(selectedTab, ShellTabCloseReason.UserDetached, cancellationToken);
+    }
+
     public void OnSelectionChanged(int selectedIndex)
     {
         var tabControl = _threadTabs.GetTabControl();
@@ -415,8 +423,7 @@ internal sealed class ThreadTabStripCoordinator
             }
 
             e.Cancel = true;
-            _ = _shellTabs.CloseTabAsync(new ShellTabId(currentThreadId), ShellTabCloseReason.UserDetached);
-            _threadTabs.CloseThreadTab(currentThreadId);
+            _ = CloseTabFromViewAsync(currentThreadId, ShellTabCloseReason.UserDetached);
         };
 
         workspaceView.RememberTabPage(thread.ThreadId, page);
@@ -621,8 +628,7 @@ internal sealed class ThreadTabStripCoordinator
             }
 
             e.Cancel = true;
-            _ = _shellTabs.CloseTabAsync(new ShellTabId(CodeAltaApp.DraftTabId), ShellTabCloseReason.UserDetached);
-            _threadTabs.CloseDraftTab();
+            _ = CloseTabFromViewAsync(CodeAltaApp.DraftTabId, ShellTabCloseReason.UserDetached);
         };
 
         return page;
@@ -657,7 +663,7 @@ internal sealed class ThreadTabStripCoordinator
             }
 
             e.Cancel = true;
-            _threadTabs.CloseFileTab(currentTabId);
+            _ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.FileEditorClosed);
         };
 
         return page;
@@ -698,7 +704,7 @@ internal sealed class ThreadTabStripCoordinator
             }
 
             e.Cancel = true;
-            _ = _shellTabs.CloseTabAsync(new ShellTabId(currentTabId), ShellTabCloseReason.UserDetached);
+            _ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.UserDetached);
         };
 
         workspaceView.RememberTabPage(tabId, page);
@@ -708,6 +714,38 @@ internal sealed class ThreadTabStripCoordinator
     private static bool IsDraftTab(TabPage page)
         => TryGetTabId(page, out var tabId) &&
            string.Equals(tabId, CodeAltaApp.DraftTabId, StringComparison.Ordinal);
+
+    private Task<bool> CloseTabFromViewAsync(string tabId, ShellTabCloseReason reason, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tabId);
+        return _shellTabs.TryGetTab(new ShellTabId(tabId), out var tab)
+            ? CloseTabAsync(tab, reason, cancellationToken)
+            : Task.FromResult(false);
+    }
+
+    private async Task<bool> CloseTabAsync(ShellTabSnapshot tab, ShellTabCloseReason reason, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!tab.CanClose)
+        {
+            return false;
+        }
+
+        switch (tab.Kind)
+        {
+            case ShellTabKind.Editor:
+                _threadTabs.CloseFileTab(tab.TabId.Value);
+                return true;
+            case ShellTabKind.PromptDraft:
+                _threadTabs.CloseDraftTab();
+                return true;
+            case ShellTabKind.Thread:
+                _threadTabs.CloseThreadTab(tab.TabId.Value);
+                return true;
+            default:
+                return await _shellTabs.CloseTabAsync(tab.TabId, reason, cancellationToken);
+        }
+    }
 
     private void SyncActiveThreadTabContent(ThreadWorkspaceView workspaceView, TabControl tabControl)
     {
