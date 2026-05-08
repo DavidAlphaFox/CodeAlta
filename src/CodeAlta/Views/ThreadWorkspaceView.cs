@@ -30,16 +30,9 @@ internal sealed class ThreadWorkspaceView
     private readonly Action _openCommandPalette;
     private readonly IProjectFileSearchService _projectFileSearchService;
     private readonly Func<string?> _getPromptReferenceProjectRoot;
-    private readonly Func<IReadOnlyList<PromptImageAttachment>> _getPromptImages;
-    private readonly Func<string> _getNextPromptImageTitle;
-    private readonly Action<PromptImageAttachment> _addPromptImage;
-    private readonly Action<string, string> _renamePromptImage;
-    private readonly Action<string> _deletePromptImage;
-    private readonly Func<bool> _canPastePromptImages;
-    private readonly Func<string> _getPromptImageUnsupportedMessage;
-    private readonly Action<string, StatusTone> _setPromptImageStatus;
     private readonly Dictionary<string, VSplitter> _threadTabContentSplitters = new(StringComparer.OrdinalIgnoreCase);
     private readonly ModelProviderSelectorView _modelProviderSelectorView;
+    private readonly PromptImageAttachmentStripView _promptImageAttachmentStripView;
     private Dialog? _expandedPromptDialog;
     private string? _activeThreadTabContentId;
 
@@ -99,15 +92,11 @@ internal sealed class ThreadWorkspaceView
         _openCommandPalette = openCommandPalette;
         _projectFileSearchService = projectFileSearchService;
         _getPromptReferenceProjectRoot = getPromptReferenceProjectRoot;
-        var promptImages = promptImageCallbacks ?? PromptImageWorkspaceCallbacks.Empty;
-        _getPromptImages = promptImages.GetPromptImages;
-        _getNextPromptImageTitle = promptImages.GetNextPromptImageTitle;
-        _addPromptImage = promptImages.AddPromptImage;
-        _renamePromptImage = promptImages.RenamePromptImage;
-        _deletePromptImage = promptImages.DeletePromptImage;
-        _canPastePromptImages = promptImages.CanPastePromptImages;
-        _getPromptImageUnsupportedMessage = promptImages.GetPromptImageUnsupportedMessage;
-        _setPromptImageStatus = promptImages.SetPromptImageStatus;
+        _promptImageAttachmentStripView = new PromptImageAttachmentStripView(
+            promptComposerViewModel,
+            promptImageCallbacks,
+            () => ThreadPaneLayout?.GetAbsoluteBounds(),
+            () => ThreadInput);
 
         ThreadCommandBar = new CommandBar
         {
@@ -130,7 +119,7 @@ internal sealed class ThreadWorkspaceView
             commandBindings,
             promptText)
             .IsEnabled(promptComposerViewModel.Bind.IsEnabled);
-        ConfigurePromptImagePasteHandler(ThreadInput);
+        _promptImageAttachmentStripView.ConfigurePromptImagePasteHandler(ThreadInput);
         ThreadInputView = ThreadInput.Scrollable();
 
         SendPromptButton = CreatePromptActionButton(promptComposerViewModel, sendPrompt, abortThread);
@@ -177,7 +166,7 @@ internal sealed class ThreadWorkspaceView
             updateQueuedPromptText,
             (onAccepted, placeholder) => CreateStyledPromptEditor(onAccepted, openHelp, openCommandPalette, projectFileSearchService, getPromptReferenceProjectRoot, placeholder)).Root;
 
-        var promptImageStrip = new ComputedVisual(BuildPromptImageAttachmentStrip);
+        var promptImageStrip = _promptImageAttachmentStripView.Root;
 
         var selectionRight = new HStack(
         [
@@ -385,245 +374,6 @@ internal sealed class ThreadWorkspaceView
         _modelProviderSelectorView.SyncItems(workspaceViewModel);
     }
 
-    private Visual BuildPromptImageAttachmentStrip()
-    {
-        _ = _promptComposerViewModel.PromptImageAttachmentVersion;
-        var images = _getPromptImages();
-        if (images.Count == 0)
-        {
-            return new Placeholder { IsVisible = false };
-        }
-
-        var children = new List<Visual>(images.Count + 1)
-        {
-            new Markup($"[dim]Images ({images.Count})[/]") { Wrap = false },
-        };
-        foreach (var image in images)
-        {
-            var imageId = image.Id;
-            children.Add(new Button(new TextBlock($"▧ {image.Title}") { Wrap = false })
-                .Click(() => OpenPromptImageDetailsDialog(imageId))
-                .Tooltip(new TextBlock($"Open pasted image {image.Title}")));
-        }
-
-        return new Border(new HStack([.. children]) { Spacing = 1, HorizontalAlignment = Align.Stretch })
-        {
-            HorizontalAlignment = Align.Stretch,
-        }
-        .Padding(new Thickness(1, 0, 1, 0));
-    }
-
-    private void ConfigurePromptImagePasteHandler(ChatPromptEditor editor)
-    {
-        ArgumentNullException.ThrowIfNull(editor);
-
-        editor.ClipboardPasteHandler = new TextEditorClipboardPasteHandler(HandlePromptClipboardPaste);
-    }
-
-    private string? HandlePromptClipboardPaste(TextEditorClipboardPasteContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        if (!context.HasImage)
-        {
-            return null;
-        }
-
-        var defaultTitle = _getNextPromptImageTitle();
-        if (!_canPastePromptImages())
-        {
-            _setPromptImageStatus(_getPromptImageUnsupportedMessage(), StatusTone.Warning);
-            return string.Empty;
-        }
-
-        if (PromptImageClipboardReader.TryReadImage(context, defaultTitle, out var image, out var failureReason) && image is not null)
-        {
-            OpenAddPromptImageDialog(image);
-            return string.Empty;
-        }
-
-        _setPromptImageStatus(failureReason ?? "The clipboard does not contain a supported image payload.", StatusTone.Warning);
-        return string.Empty;
-    }
-
-    private void OpenAddPromptImageDialog(PromptImageAttachment image)
-    {
-        ArgumentNullException.ThrowIfNull(image);
-
-        Dialog? dialog = null;
-        var titleState = new State<string?>(image.Title);
-        var titleBox = new TextBox().Text(titleState).HorizontalAlignment(Align.Stretch);
-        var size = ResponsiveDialogSize.Resolve(ThreadPaneLayout.GetAbsoluteBounds(), minWidth: 64, minHeight: 22, widthFactor: 0.65, heightFactor: 0.65);
-        var preview = CreatePromptImagePreview(
-            image,
-            cellWidth: Math.Max(24, size.Width - 6),
-            cellHeight: Math.Max(8, size.Height - 9));
-        var addButton = new Button(new TextBlock("Add To Prompt")) { Tone = ControlTone.Primary };
-        var cancelButton = new Button(new TextBlock("Cancel"));
-
-        void AddImage()
-        {
-            var title = PromptImageAttachment.NormalizeTitle(titleState.Value ?? string.Empty);
-            _addPromptImage(image.WithTitle(title));
-            dialog?.Close();
-            (ThreadPaneLayout.App ?? ThreadInput.App)?.Focus(ThreadInput);
-            _setPromptImageStatus($"Added image {title} to the prompt.", StatusTone.Ready);
-        }
-
-        void Cancel()
-        {
-            dialog?.Close();
-            (ThreadPaneLayout.App ?? ThreadInput.App)?.Focus(ThreadInput);
-        }
-
-        addButton.Click(AddImage);
-        cancelButton.Click(Cancel);
-        var content = new DockLayout()
-            .Top(new Markup("[dim]Review the pasted image and choose a title before adding it to the prompt.[/]") { Wrap = true })
-            .Content(new Border(preview).Padding(1))
-            .Bottom(CreatePromptImageDialogBottom(titleBox, addButton, cancelButton))
-            .HorizontalAlignment(Align.Stretch)
-            .VerticalAlignment(Align.Stretch);
-
-        dialog = new Dialog()
-            .Title("Add Image To Prompt")
-            .BottomRightText(new Markup("[dim]Ctrl+Enter Add · Esc Cancel[/]"))
-            .IsModal(true)
-            .Padding(1)
-            .Content(content);
-        dialog.Width(size.Width).Height(size.Height).MinWidth(64).MinHeight(22);
-        dialog.AddCommand(new Command { Id = "CodeAlta.Prompt.ImageAdd.Accept", LabelMarkup = "Add To Prompt", DescriptionMarkup = "Add the pasted image to the prompt.", Gesture = new KeyGesture(TerminalKey.Enter, TerminalModifiers.Ctrl), Importance = CommandImportance.Primary, Execute = _ => AddImage() });
-        dialog.AddCommand(new Command { Id = "CodeAlta.Prompt.ImageAdd.Cancel", LabelMarkup = "Cancel", DescriptionMarkup = "Cancel adding the pasted image.", Gesture = new KeyGesture(TerminalKey.Escape), Importance = CommandImportance.Primary, Execute = _ => Cancel() });
-        dialog.Show();
-        dialog.App?.Focus(titleBox);
-    }
-
-    private void OpenPromptImageDetailsDialog(string imageId)
-    {
-        var image = _getPromptImages().FirstOrDefault(image => string.Equals(image.Id, imageId, StringComparison.Ordinal));
-        if (image is null)
-        {
-            return;
-        }
-
-        Dialog? dialog = null;
-        var titleState = new State<string?>(image.Title);
-        var bounds = ThreadPaneLayout.GetAbsoluteBounds();
-        var size = ResponsiveDialogSize.Resolve(bounds, minWidth: 64, minHeight: 20, widthFactor: 0.8, heightFactor: 0.8);
-        var titleBox = new TextBox().Text(titleState).HorizontalAlignment(Align.Stretch);
-        var preview = CreatePromptImagePreview(
-            image,
-            cellWidth: Math.Max(24, size.Width - 8),
-            cellHeight: Math.Max(8, size.Height - 10));
-        var saveButton = new Button(new TextBlock("Rename")) { Tone = ControlTone.Primary };
-        var deleteButton = new Button(new TextBlock("Delete")) { Tone = ControlTone.Error };
-        var closeButton = new Button(new TextBlock("Close"));
-
-        void Close()
-        {
-            dialog?.Close();
-            (ThreadPaneLayout.App ?? ThreadInput.App)?.Focus(ThreadInput);
-        }
-
-        void Rename()
-        {
-            var title = PromptImageAttachment.NormalizeTitle(titleState.Value ?? string.Empty);
-            _renamePromptImage(imageId, title);
-            dialog?.Title(title);
-            _setPromptImageStatus($"Renamed image to {title}.", StatusTone.Ready);
-        }
-
-        void Delete()
-        {
-            _deletePromptImage(imageId);
-            dialog?.Close();
-            (ThreadPaneLayout.App ?? ThreadInput.App)?.Focus(ThreadInput);
-            _setPromptImageStatus($"Deleted image {image.Title} from the prompt.", StatusTone.Ready);
-        }
-
-        saveButton.Click(Rename);
-        deleteButton.Click(Delete);
-        closeButton.Click(Close);
-        var content = new DockLayout()
-            .Top(new Markup("[dim]Preview, rename, or remove this prompt image attachment.[/]") { Wrap = true })
-            .Content(new Border(preview).Padding(1))
-            .Bottom(CreatePromptImageDialogBottom(titleBox, saveButton, deleteButton, closeButton))
-            .HorizontalAlignment(Align.Stretch)
-            .VerticalAlignment(Align.Stretch);
-
-        dialog = new Dialog()
-            .Title(image.Title)
-            .BottomRightText(new Markup("[dim]Esc Close[/]"))
-            .IsModal(true)
-            .Padding(1)
-            .Content(content);
-        dialog.Width(size.Width).Height(size.Height).MinWidth(64).MinHeight(20);
-        dialog.AddCommand(new Command { Id = "CodeAlta.Prompt.ImageDetails.Close", LabelMarkup = "Close", DescriptionMarkup = "Close image preview.", Gesture = new KeyGesture(TerminalKey.Escape), Importance = CommandImportance.Primary, Execute = _ => Close() });
-        dialog.Show();
-        dialog.App?.Focus(titleBox);
-    }
-
-    private static Visual CreatePromptImageDialogBottom(TextBox titleBox, params Button[] buttons)
-    {
-        ArgumentNullException.ThrowIfNull(titleBox);
-        ArgumentNullException.ThrowIfNull(buttons);
-
-        var titleEditor = new Grid()
-            .Rows(new RowDefinition { Height = GridLength.Auto })
-            .Columns(new ColumnDefinition { Width = GridLength.Auto }, new ColumnDefinition { Width = GridLength.Star(1) })
-            .Cell(new TextBlock("Title") { Wrap = false }, 0, 0)
-            .Cell(titleBox, 0, 1);
-        var buttonRow = new HStack(buttons)
-        {
-            Spacing = 2,
-            HorizontalAlignment = Align.End,
-        };
-
-        return new Grid()
-            .Rows(new RowDefinition { Height = GridLength.Auto })
-            .Columns(new ColumnDefinition { Width = GridLength.Star(1) }, new ColumnDefinition { Width = GridLength.Auto })
-            .Cell(titleEditor, 0, 0)
-            .Cell(buttonRow, 0, 1);
-    }
-
-    private static Visual CreatePromptImagePreview(PromptImageAttachment image, int cellWidth, int cellHeight)
-    {
-        var fallback = new Border(new VStack(
-            new TextBlock(image.Title) { Wrap = false },
-            new TextBlock($"{image.MediaType} · {FormatByteSize(image.Bytes.Length)}") { Wrap = false }))
-        {
-            HorizontalAlignment = Align.Stretch,
-            VerticalAlignment = Align.Stretch,
-        };
-        return new ImageControl(TerminalImageSource.FromEncodedBytes(image.Bytes, $"prompt-image:{image.Id}"))
-        {
-            CellWidth = cellWidth,
-            CellHeight = cellHeight,
-            ScaleMode = ImageScaleMode.Fit,
-            PreserveAspectRatio = true,
-            AccessibilityText = image.Title,
-            FallbackContent = fallback,
-            HorizontalAlignment = Align.Stretch,
-            VerticalAlignment = Align.Stretch,
-        };
-    }
-
-    private static string FormatByteSize(int byteCount)
-    {
-        if (byteCount < 1024)
-        {
-            return $"{byteCount} B";
-        }
-
-        var kib = byteCount / 1024d;
-        if (kib < 1024)
-        {
-            return $"{kib:0.#} KiB";
-        }
-
-        return $"{kib / 1024d:0.#} MiB";
-    }
-
     private static ChatPromptEditor CreatePromptEditor(
         PromptComposerViewModel promptComposerViewModel,
         Action openHelp,
@@ -717,7 +467,7 @@ internal sealed class ThreadWorkspaceView
             .Text(promptText)
             .MinHeight(12)
             .IsEnabled(promptComposerViewModel.Bind.IsEnabled);
-        ConfigurePromptImagePasteHandler(editor);
+        _promptImageAttachmentStripView.ConfigurePromptImagePasteHandler(editor);
         editor.AddCommand(CreateExpandedPromptDialogCloseCommand("CodeAlta.Thread.ExpandPrompt.Close", new KeyGesture(TerminalKey.Escape)));
         editor.AddCommand(CreateExpandedPromptDialogCloseCommand("CodeAlta.Thread.ExpandPrompt.CloseWithCtrlEnter", new KeyGesture(TerminalKey.Enter, TerminalModifiers.Ctrl), CommandPresentation.None));
 
