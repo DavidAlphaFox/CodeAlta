@@ -170,7 +170,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             _knownProjectImporter,
             _shellAnimationRuntime.WelcomePhase01,
             new(this),
-            new CodeAltaFrontendServicesAdapter(this),
+            this,
             codexInstallProgress,
             ownedServices?.PluginHostBridge);
         _modelProviderPreferences = composition.ModelProviderPreferences;

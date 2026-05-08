@@ -1197,6 +1197,22 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void FrontendComposition_DoesNotUseBroadFrontendServiceAdapter()
+    {
+        var appRoot = Path.Combine(GetCodeAltaSourceRoot(), "App");
+        var compositionSource = File.ReadAllText(Path.Combine(appRoot, "CodeAltaFrontendComposition.cs"));
+        var frontendServiceInterfaces = Directory.EnumerateFiles(GetCodeAltaSourceRoot(), "*.cs", SearchOption.AllDirectories)
+            .SelectMany(file => Regex.Matches(File.ReadAllText(file), @"interface\s+\w*FrontendServices\b", RegexOptions.CultureInvariant))
+            .ToArray();
+
+        Assert.IsFalse(File.Exists(Path.Combine(appRoot, "ICodeAltaFrontendServices.cs")));
+        Assert.IsFalse(File.Exists(Path.Combine(appRoot, "CodeAltaFrontendServicesAdapter.cs")));
+        Assert.IsFalse(compositionSource.Contains("ICodeAltaFrontendServices", StringComparison.Ordinal));
+        Assert.IsFalse(compositionSource.Contains("CodeAltaFrontendServicesAdapter", StringComparison.Ordinal));
+        Assert.AreEqual(0, frontendServiceInterfaces.Length);
+    }
+
+    [TestMethod]
     public void CodeAltaApp_DelegatesWorkspaceRefreshWorkflow()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));

@@ -9,6 +9,7 @@ using CodeAlta.Presentation.Chat;
 using CodeAlta.Presentation.Workspace;
 using CodeAlta.Threading;
 using CodeAlta.ViewModels;
+using CodeAlta.Views;
 using XenoAtom.Terminal.UI;
 
 namespace CodeAlta.App;
@@ -56,7 +57,7 @@ internal sealed class CodeAltaFrontendComposition
         KnownProjectImporter knownProjectImporter,
         State<float> welcomePhase01,
         ThreadStateFrontendPort threadStateFrontend,
-        ICodeAltaFrontendServices frontend,
+        CodeAltaApp frontend,
         CodexInstallProgressReporter? codexInstallProgress = null,
         PluginHostBridge? pluginHostBridge = null)
     {
@@ -154,7 +155,7 @@ internal sealed class CodeAltaFrontendComposition
             shellController,
             threadStateCoordinator,
             resolveProviderDisplayName,
-            frontend.GetPromptFocusTarget,
+            () => frontend.ThreadInput,
             () => frontendEvents.Publish(new CatalogChangedEvent()),
             frontend.SetStatus,
             frontend.SetReadyStatusForCurrentSelection);
@@ -204,8 +205,8 @@ internal sealed class CodeAltaFrontendComposition
                 }),
             new ShellWorkspaceSurfacePort(
                 frontend.HasWorkspaceSurface,
-                frontend.GetThreadPaneBounds,
-                frontend.GetPromptFocusTarget,
+                () => frontend.ThreadPaneLayout?.GetAbsoluteBounds(),
+                () => frontend.ThreadInput,
                 _ => { },
                 frontend.FocusPromptTarget,
                 _ => frontendEvents.Publish(new CatalogChangedEvent()),
@@ -215,7 +216,7 @@ internal sealed class CodeAltaFrontendComposition
                 frontend.RefreshSidebarProjection,
                 frontend.SyncSidebarSelectionToCurrentState,
                 () => threadPromptQueueCoordinator!.RefreshSelectedThreadQueueUi(),
-                frontend.RefreshModelProviderSelectorsForDraftScope,
+                () => frontend.RefreshModelProviderSelectorsForDraftScope(),
                 frontend.RefreshModelProviderSelectorsForThread,
                 frontend.SyncPromptText,
                 frontend.ApplyPromptAvailabilityProjection,
@@ -248,7 +249,7 @@ internal sealed class CodeAltaFrontendComposition
         var shellStatusPort = new ShellStatusPort(
             uiDispatcher,
             frontend.SetStatus,
-            frontend.SetThreadStatus,
+            (thread, message, showSpinner, tone) => frontend.SetThreadStatus(thread, message, showSpinner, tone),
             frontend.ClearThreadStatus,
             frontend.SetProviderSessionLoadStatus);
         var threadRuntimeEventCoordinator = new ThreadRuntimeEventCoordinator(
