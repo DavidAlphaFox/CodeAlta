@@ -24,6 +24,7 @@ internal static class TestThreadStateServices
         Action<string, string?, AgentReasoningEffort?, bool>? rememberThreadPreference = null,
         Func<WorkThreadDescriptor, CancellationToken, Task>? ensureThreadHistoryLoadedAsync = null,
         Action? resetPendingThreadTabSelection = null,
+        Action<string>? replaceDraftTabWithThread = null,
         Action<string, ShellTabCloseReason>? removeThreadTabPage = null,
         FrontendEventPublisher? frontendEvents = null)
         => new(
@@ -40,6 +41,7 @@ internal static class TestThreadStateServices
             new ThreadHistoryLoaderService(ensureThreadHistoryLoadedAsync ?? (static (_, _) => Task.CompletedTask)),
             new ThreadStateTabLifecycleService(
                 resetPendingThreadTabSelection ?? (static () => { }),
+                replaceDraftTabWithThread ?? (static _ => { }),
                 removeThreadTabPage ?? (static (_, _) => { })),
             frontendEvents);
 }

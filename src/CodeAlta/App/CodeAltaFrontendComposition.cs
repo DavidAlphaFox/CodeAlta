@@ -22,6 +22,7 @@ internal sealed class CodeAltaFrontendComposition
     public required TerminalLoopCoordinator TerminalLoopCoordinator { get; init; }
     public required ChatBackendInitializationCoordinator ChatBackendInitializationCoordinator { get; init; }
     public required ShellThreadStateCoordinator ThreadStateCoordinator { get; init; }
+    public required DraftTabReplacementPort DraftTabReplacement { get; init; }
     public required ShellWorkspaceCoordinator WorkspaceCoordinator { get; init; }
     public required ThreadRuntimeEventCoordinator ThreadRuntimeEventCoordinator { get; init; }
     public required ThreadPromptQueueCoordinator ThreadPromptQueueCoordinator { get; init; }
@@ -81,6 +82,7 @@ internal sealed class CodeAltaFrontendComposition
         var uiDispatcher = frontend.GetUiDispatcher();
         var shellStateStore = new ShellStateStore(uiDispatcher);
         var frontendEvents = new FrontendEventPublisher(uiDispatcher);
+        var draftTabReplacement = new DraftTabReplacementPort();
         var legacyPromptSessionId = new PromptSessionId("legacy-selected-prompt");
         var promptSessionPort = new LegacyPromptSessionPort(
             uiDispatcher,
@@ -121,7 +123,7 @@ internal sealed class CodeAltaFrontendComposition
             threadModelProviderPreferenceService,
             new ThreadModelProviderReadinessService(thread => frontend.IsModelProviderReady(new AgentBackendId(thread.BackendId))),
             new ThreadHistoryLoaderService(frontend.EnsureThreadHistoryLoadedAsync),
-            new ThreadStateTabLifecycleService(frontend.ResetPendingThreadTabSelection, frontend.RemoveThreadTabPage),
+            new ThreadStateTabLifecycleService(frontend.ResetPendingThreadTabSelection, draftTabReplacement.ReplaceDraftTabWithThread, frontend.RemoveThreadTabPage),
             frontendEvents);
         var threadSelectionContext = new ThreadSelectionContext(
             threadStateCoordinator,
@@ -317,6 +319,7 @@ internal sealed class CodeAltaFrontendComposition
             TerminalLoopCoordinator = terminalLoopCoordinator,
             ChatBackendInitializationCoordinator = chatBackendInitializationCoordinator,
             ThreadStateCoordinator = threadStateCoordinator,
+            DraftTabReplacement = draftTabReplacement,
             WorkspaceCoordinator = workspaceCoordinator,
             ThreadRuntimeEventCoordinator = threadRuntimeEventCoordinator,
             ThreadPromptQueueCoordinator = threadPromptQueueCoordinator,

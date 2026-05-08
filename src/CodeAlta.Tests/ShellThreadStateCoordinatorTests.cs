@@ -101,6 +101,24 @@ public sealed class ShellThreadStateCoordinatorTests
     }
 
     [TestMethod]
+    public async Task RegisterCreatedThreadAsync_ReplacesDraftTabWithCreatedThread()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var replacedDraftThreadIds = new List<string>();
+        var coordinator = CreateCoordinator(options, replaceDraftTabWithThread: replacedDraftThreadIds.Add);
+        var project = CreateProject("project-1", "CodeAlta");
+        var thread = CreateThread("thread-1", project.Id);
+        coordinator.ApplyRecoveredCatalogState([project], []);
+
+        await coordinator.RegisterCreatedThreadAsync(thread);
+
+        CollectionAssert.AreEqual(new[] { "thread-1" }, replacedDraftThreadIds.ToArray());
+        Assert.AreEqual("thread-1", coordinator.SelectedThreadId);
+        CollectionAssert.Contains(coordinator.ViewState.OpenThreadIds, "thread-1");
+    }
+
+    [TestMethod]
     public async Task ClosingThreadTab_DoesNotStopThread()
     {
         using var temp = TempDirectory.Create();
@@ -482,6 +500,7 @@ public sealed class ShellThreadStateCoordinatorTests
         WorkThreadCatalog? threadCatalog = null,
         Func<string, string?>? loadPromptDraft = null,
         Action<string>? deletePromptDraft = null,
+        Action<string>? replaceDraftTabWithThread = null,
         Action<string, ShellTabCloseReason>? removeThreadTabPage = null,
         ShellStateStore? stateStore = null,
         FrontendEventPublisher? frontendEvents = null)
@@ -494,6 +513,7 @@ public sealed class ShellThreadStateCoordinatorTests
             stateStore ?? new ShellStateStore(new InlineUiDispatcher()),
             loadPromptDraft: loadPromptDraft,
             deletePromptDraft: deletePromptDraft,
+            replaceDraftTabWithThread: replaceDraftTabWithThread,
             removeThreadTabPage: removeThreadTabPage,
             frontendEvents: frontendEvents);
     }

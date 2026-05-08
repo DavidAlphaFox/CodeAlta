@@ -52,26 +52,55 @@ internal interface IThreadStateTabLifecycleService
 {
     void ResetPendingThreadTabSelection();
 
+    void ReplaceDraftTabWithThread(string threadId);
+
     void RemoveThreadTabPage(string threadId, ShellTabCloseReason reason);
+}
+
+internal sealed class DraftTabReplacementPort
+{
+    private Func<string, bool> _replaceDraftTabWithThread = static _ => false;
+
+    public void Bind(Func<string, bool> replaceDraftTabWithThread)
+    {
+        ArgumentNullException.ThrowIfNull(replaceDraftTabWithThread);
+        _replaceDraftTabWithThread = replaceDraftTabWithThread;
+    }
+
+    public void ReplaceDraftTabWithThread(string threadId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        _ = _replaceDraftTabWithThread(threadId);
+    }
 }
 
 internal sealed class ThreadStateTabLifecycleService : IThreadStateTabLifecycleService
 {
     private readonly Action _resetPendingThreadTabSelection;
+    private readonly Action<string> _replaceDraftTabWithThread;
     private readonly Action<string, ShellTabCloseReason> _removeThreadTabPage;
 
     public ThreadStateTabLifecycleService(
         Action resetPendingThreadTabSelection,
+        Action<string> replaceDraftTabWithThread,
         Action<string, ShellTabCloseReason> removeThreadTabPage)
     {
         ArgumentNullException.ThrowIfNull(resetPendingThreadTabSelection);
+        ArgumentNullException.ThrowIfNull(replaceDraftTabWithThread);
         ArgumentNullException.ThrowIfNull(removeThreadTabPage);
         _resetPendingThreadTabSelection = resetPendingThreadTabSelection;
+        _replaceDraftTabWithThread = replaceDraftTabWithThread;
         _removeThreadTabPage = removeThreadTabPage;
     }
 
     public void ResetPendingThreadTabSelection()
         => _resetPendingThreadTabSelection();
+
+    public void ReplaceDraftTabWithThread(string threadId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        _replaceDraftTabWithThread(threadId);
+    }
 
     public void RemoveThreadTabPage(string threadId, ShellTabCloseReason reason)
     {

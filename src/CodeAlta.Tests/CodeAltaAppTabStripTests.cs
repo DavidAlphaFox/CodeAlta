@@ -176,6 +176,23 @@ public sealed class CodeAltaAppTabStripTests
     }
 
     [TestMethod]
+    public void ReplaceDraftTabWithThread_ClosesDraftAndSelectsCreatedThread()
+    {
+        var tabs = new InMemoryShellTabService();
+        tabs.OpenOrGetTab(CreateDescriptor(CodeAltaApp.DraftTabId, ShellTabKind.PromptDraft));
+        tabs.OpenOrGetTab(CreateDescriptor("thread-1", ShellTabKind.Thread));
+        tabs.SelectTabAsync(new ShellTabId(CodeAltaApp.DraftTabId)).GetAwaiter().GetResult();
+        var coordinator = CreateCoordinator(tabs);
+
+        var replaced = coordinator.ReplaceDraftTabWithThread("thread-1");
+
+        Assert.IsTrue(replaced);
+        Assert.IsFalse(tabs.TryGetTab(new ShellTabId(CodeAltaApp.DraftTabId), out _));
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("thread-1"), out var threadTab));
+        Assert.IsTrue(threadTab.IsSelected);
+    }
+
+    [TestMethod]
     public void GetAdjacentTabIndex_WrapsLeftFromFirstTab()
     {
         Assert.AreEqual(2, ThreadTabStripCoordinator.GetAdjacentTabIndex(selectedIndex: 0, tabCount: 3, delta: -1));

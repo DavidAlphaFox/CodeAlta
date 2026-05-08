@@ -307,6 +307,7 @@ internal sealed class ShellThreadStateCoordinator
             {
                 _catalogStateCoordinator.UpsertThread(thread);
                 OpenThread(thread.ThreadId);
+                _tabLifecycle.ReplaceDraftTabWithThread(thread.ThreadId);
             });
 
         await _historyLoader.EnsureThreadHistoryLoadedAsync(thread, CancellationToken.None);

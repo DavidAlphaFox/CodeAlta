@@ -225,6 +225,27 @@ internal sealed class ThreadTabStripCoordinator
         _shellTabs.SelectTabAsync(selectedTab.TabId).GetAwaiter().GetResult();
     }
 
+    public bool ReplaceDraftTabWithThread(string threadId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+
+        ResetPendingSelection();
+        if (_threadTabs.GetWorkspaceView() is { } workspaceView && _threadSelection.FindThread(threadId) is { } thread)
+        {
+            EnsureThreadShellTab(workspaceView, thread);
+        }
+
+        if (_shellTabs.TryGetTab(new ShellTabId(threadId), out var threadTab) && !threadTab.IsSelected)
+        {
+            _shellTabs.SelectTabAsync(threadTab.TabId).GetAwaiter().GetResult();
+        }
+
+        var replaced = _shellTabs.TryGetTab(new ShellTabId(CodeAltaApp.DraftTabId), out var draftTab) &&
+            _shellTabs.CloseTabAsync(draftTab.TabId, ShellTabCloseReason.Replaced).GetAwaiter().GetResult();
+        SyncControl();
+        return replaced;
+    }
+
     public bool TrySelectRelativeTab(int delta)
     {
         var tabControl = _threadTabs.GetTabControl();

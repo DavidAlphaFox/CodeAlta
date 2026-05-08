@@ -261,6 +261,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             _threadSelectionContext,
             _threadTabContext,
             _shellTabService);
+        composition.DraftTabReplacement.Bind(_threadTabStripCoordinator.ReplaceDraftTabWithThread);
         var input = new DelegatingShellPromptInputService(() => ReadBindableState(() => _promptDraftUiCoordinator.PromptText), _threadCommandCoordinator.IsCurrentPromptEmpty);
         var threadSvc = new DelegatingShellThreadCommandService(GetSelectedThread, EnsureThreadTab);
         var dialogs = new DelegatingShellDialogCommandService(
@@ -688,8 +689,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private async Task RestoreStartupThreadHistoryAsync(string? threadId, CancellationToken cancellationToken)
         => await _threadStateCoordinator.RestoreStartupThreadHistoryAsync(threadId, cancellationToken);
 
-    internal async Task RegisterCreatedThreadAsync(WorkThreadDescriptor thread)
-        => await _threadStateCoordinator.RegisterCreatedThreadAsync(thread);
+    internal Task RegisterCreatedThreadAsync(WorkThreadDescriptor thread)
+        => _threadStateCoordinator.RegisterCreatedThreadAsync(thread);
 
     internal void OpenThread(string threadId)
     {
