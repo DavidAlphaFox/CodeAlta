@@ -404,7 +404,6 @@ internal sealed class ShellThreadStateCoordinator
         var removedSelectedThread = string.Equals(SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
         var removedThread = FindThread(threadId);
         ViewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
-        _tabLifecycle.RemoveThreadTabPage(threadId, ShellTabCloseReason.UserDetached);
         if (removedSelectedThread)
         {
             var nextThreadId = ViewState.OpenThreadIds.FirstOrDefault();
@@ -412,6 +411,7 @@ internal sealed class ShellThreadStateCoordinator
             _selectionCoordinator.ApplyThreadRemovalFallback(nextThreadId, removedThread?.ProjectRef, Projects, Threads);
         }
 
+        _tabLifecycle.RemoveThreadTabPage(threadId, ShellTabCloseReason.UserDetached);
         ViewState.UpdatedAt = DateTimeOffset.UtcNow;
         await PersistViewStateAsync();
         SyncStateStore(selectionChanged: true);

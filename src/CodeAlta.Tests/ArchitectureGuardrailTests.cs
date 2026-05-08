@@ -508,10 +508,10 @@ public sealed class ArchitectureGuardrailTests
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:164:_ = sessionCreateTask.ContinueWith(",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:377:_ = CloseAsync();",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:378:_ = RecordUsageAsync(selected);",
-            "Presentation/Tabs/ThreadTabStripCoordinator.cs:461:_ = CloseTabFromViewAsync(currentThreadId, ShellTabCloseReason.UserDetached);",
-            "Presentation/Tabs/ThreadTabStripCoordinator.cs:666:_ = CloseTabFromViewAsync(CodeAltaApp.DraftTabId, ShellTabCloseReason.UserDetached);",
-            "Presentation/Tabs/ThreadTabStripCoordinator.cs:701:_ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.FileEditorClosed);",
-            "Presentation/Tabs/ThreadTabStripCoordinator.cs:742:_ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.UserDetached);",
+            "Presentation/Tabs/ThreadTabStripCoordinator.cs:469:_ = CloseTabFromViewAsync(currentThreadId, ShellTabCloseReason.UserDetached);",
+            "Presentation/Tabs/ThreadTabStripCoordinator.cs:674:_ = CloseTabFromViewAsync(CodeAltaApp.DraftTabId, ShellTabCloseReason.UserDetached);",
+            "Presentation/Tabs/ThreadTabStripCoordinator.cs:709:_ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.FileEditorClosed);",
+            "Presentation/Tabs/ThreadTabStripCoordinator.cs:750:_ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.UserDetached);",
             "Presentation/Threads/ThreadInfoPresenter.cs:96:_ = LoadAsync(cancellationTokenSource.Token);",
         };
         var violations = new[]

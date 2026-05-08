@@ -55,7 +55,12 @@ internal sealed class ThreadTabHostView
     public bool RemoveTabPage(string tabId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tabId);
-        var removed = _tabPages.Remove(tabId);
+        var removed = _tabPages.Remove(tabId, out var page);
+        if (removed && page is not null)
+        {
+            ThreadTabControl.TryCloseTab(page);
+        }
+
         if (_threadTabContentSplitters.Remove(tabId, out var splitter) &&
             string.Equals(_activeThreadTabContentId, tabId, StringComparison.OrdinalIgnoreCase))
         {

@@ -103,6 +103,19 @@ public sealed class ShellTabServiceTests
     }
 
     [TestMethod]
+    public async Task OpenOrGetTab_SelectsNewTabAfterLastSelectedTabWasClosed()
+    {
+        var service = new InMemoryShellTabService();
+        service.OpenOrGetTab(CreateDescriptor("tab-1"));
+
+        await service.CloseTabAsync(new ShellTabId("tab-1"), ShellTabCloseReason.UserDetached);
+        service.OpenOrGetTab(CreateDescriptor("tab-2"));
+
+        Assert.IsTrue(service.TryGetTab(new ShellTabId("tab-2"), out var tab));
+        Assert.IsTrue(tab.IsSelected);
+    }
+
+    [TestMethod]
     public async Task CloseTabAsync_LeavesPinnedTabsOpen()
     {
         var service = new InMemoryShellTabService();

@@ -295,6 +295,7 @@ internal sealed class ThreadTabStripCoordinator
 
         RestoreThreadTabsFromViewState(workspaceView);
         EnsureSelectedThreadSurfaceShellTab(workspaceView);
+        EnsureCurrentThreadSurfaceShellTabSelected();
         EnsureSelectedShellTab();
         return ThreadTabStripProjectionBuilder.Build(_shellTabs.GetTabs());
     }
@@ -335,15 +336,22 @@ internal sealed class ThreadTabStripCoordinator
             EnsureDraftShellTab(workspaceView);
         }
 
-        SelectRestoredThreadSurfaceShellTab();
+        EnsureCurrentThreadSurfaceShellTabSelected();
     }
 
-    private void SelectRestoredThreadSurfaceShellTab()
+    private void EnsureCurrentThreadSurfaceShellTabSelected()
     {
         var selectedTabId = ResolveThreadSurfaceSelectedTabId();
         if (string.IsNullOrWhiteSpace(selectedTabId) ||
             !_shellTabs.TryGetTab(new ShellTabId(selectedTabId), out var selectedTab) ||
             selectedTab.IsSelected)
+        {
+            return;
+        }
+
+        var currentSelectedTab = _shellTabs.GetTabs().FirstOrDefault(static tab => tab.IsSelected);
+        if (currentSelectedTab is not null &&
+            currentSelectedTab.Kind is not (ShellTabKind.PromptDraft or ShellTabKind.Thread))
         {
             return;
         }

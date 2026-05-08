@@ -163,6 +163,56 @@ public sealed class ShellThreadStateCoordinatorTests
     }
 
     [TestMethod]
+    public async Task CloseThreadTabAsync_SelectsFallbackThreadBeforeRemovingSelectedTabPage()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        string? selectedThreadDuringRemoval = null;
+        ShellThreadStateCoordinator? coordinator = null;
+        coordinator = CreateCoordinator(
+            options,
+            removeThreadTabPage: (_, _) => selectedThreadDuringRemoval = coordinator!.SelectedThreadId);
+        var project = CreateProject("project-1", "CodeAlta");
+        coordinator.ApplyRecoveredCatalogState(
+            [project],
+            [CreateThread("thread-1", project.Id), CreateThread("thread-2", project.Id)]);
+        coordinator.OpenThread("thread-1");
+        coordinator.OpenThread("thread-2");
+
+        await coordinator.CloseThreadTabAsync("thread-2").ConfigureAwait(false);
+
+        Assert.AreEqual("thread-1", selectedThreadDuringRemoval);
+        Assert.AreEqual("thread-1", coordinator.SelectedThreadId);
+    }
+
+    [TestMethod]
+    public async Task CloseThreadTabAsync_SelectsDraftBeforeRemovingLastSelectedTabPage()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        string? selectedThreadDuringRemoval = "not-called";
+        WorkspaceTarget? targetDuringRemoval = null;
+        ShellThreadStateCoordinator? coordinator = null;
+        coordinator = CreateCoordinator(
+            options,
+            removeThreadTabPage: (_, _) =>
+            {
+                selectedThreadDuringRemoval = coordinator!.SelectedThreadId;
+                targetDuringRemoval = coordinator.Selection.Target;
+            });
+        var project = CreateProject("project-1", "CodeAlta");
+        coordinator.ApplyRecoveredCatalogState([project], [CreateThread("thread-1", project.Id)]);
+        coordinator.OpenThread("thread-1");
+
+        await coordinator.CloseThreadTabAsync("thread-1").ConfigureAwait(false);
+
+        Assert.IsNull(selectedThreadDuringRemoval);
+        Assert.IsInstanceOfType<WorkspaceTarget.Draft>(targetDuringRemoval);
+        Assert.IsNull(coordinator.SelectedThreadId);
+        Assert.IsInstanceOfType<WorkspaceTarget.Draft>(coordinator.Selection.Target);
+    }
+
+    [TestMethod]
     public void EnsureThreadTab_LoadsPersistedPromptDraft()
     {
         using var temp = TempDirectory.Create();

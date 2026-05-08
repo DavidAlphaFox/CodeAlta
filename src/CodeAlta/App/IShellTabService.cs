@@ -276,7 +276,7 @@ internal sealed class InMemoryShellTabService : IShellTabService
         _tabs.Remove(tabId);
         if (selectedChanged)
         {
-            _selectedTabId = _tabs.Keys.FirstOrDefault();
+            _selectedTabId = _tabs.Count == 0 ? null : _tabs.Keys.First();
         }
 
         RaiseTabsChanged(openTabsChanged: true, selectedTabChanged: selectedChanged);

@@ -269,6 +269,91 @@ public sealed class CodeAltaAppTabStripTests
     }
 
     [TestMethod]
+    public async Task SyncControl_ReplacesLastClosedThreadWithDraftDuringCloseProjectionRefresh()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var dispatcher = new InlineUiDispatcher();
+        var workspaceView = CreateThreadWorkspaceView();
+        var tabs = new InMemoryShellTabService();
+        ThreadTabStripCoordinator? coordinator = null;
+        var threadState = TestThreadStateServices.CreateCoordinator(
+            new ProjectCatalog(options),
+            new WorkThreadCatalog(options),
+            dispatcher,
+            new ShellStateStore(dispatcher),
+            removeThreadTabPage: (threadId, reason) =>
+            {
+                tabs.CloseTabAsync(new ShellTabId(threadId), reason).GetAwaiter().GetResult();
+                workspaceView.RemoveTabPage(threadId);
+                coordinator?.SyncControl();
+            });
+        var project = CreateProject("project-1", "CodeAlta");
+        threadState.ApplyRecoveredCatalogState([project], [CreateThread("thread-1", project.Id)]);
+        threadState.OpenThread("thread-1");
+        coordinator = CreateCoordinator(tabs, threadState, workspaceView, dispatcher);
+        coordinator.SyncControl();
+
+        await threadState.CloseThreadTabAsync("thread-1").ConfigureAwait(false);
+        coordinator.SyncControl();
+
+        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("thread-1"), out _));
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId(CodeAltaApp.DraftTabId), out var draftTab));
+        Assert.IsTrue(draftTab.IsSelected);
+        CollectionAssert.AreEqual(
+            new[] { CodeAltaApp.DraftTabId },
+            workspaceView.ThreadTabControl.Tabs
+                .Select(GetTabPageId)
+                .ToArray());
+        Assert.AreEqual(0, workspaceView.ThreadTabControl.SelectedIndex);
+    }
+
+    [TestMethod]
+    public async Task SyncControl_SelectsFallbackThreadAndActivatesTimelineAfterSelectedTabClose()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var dispatcher = new InlineUiDispatcher();
+        var workspaceView = CreateThreadWorkspaceView();
+        var tabs = new InMemoryShellTabService();
+        var threadState = TestThreadStateServices.CreateCoordinator(
+            new ProjectCatalog(options),
+            new WorkThreadCatalog(options),
+            dispatcher,
+            new ShellStateStore(dispatcher),
+            removeThreadTabPage: (threadId, reason) =>
+            {
+                tabs.CloseTabAsync(new ShellTabId(threadId), reason).GetAwaiter().GetResult();
+                workspaceView.RemoveTabPage(threadId);
+            });
+        var project = CreateProject("project-1", "CodeAlta");
+        threadState.ApplyRecoveredCatalogState(
+            [project],
+            [CreateThread("thread-1", project.Id), CreateThread("thread-2", project.Id)]);
+        threadState.OpenThread("thread-1");
+        threadState.OpenThread("thread-2");
+        tabs.OpenOrGetTab(CreateDescriptor(CodeAltaApp.DraftTabId, ShellTabKind.PromptDraft));
+        var coordinator = CreateCoordinator(tabs, threadState, workspaceView, dispatcher);
+        coordinator.SyncControl();
+
+        await threadState.CloseThreadTabAsync("thread-2").ConfigureAwait(false);
+        coordinator.SyncControl();
+
+        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("thread-2"), out _));
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("thread-1"), out var fallbackTab));
+        Assert.IsTrue(fallbackTab.IsSelected);
+        CollectionAssert.AreEqual(
+            new[] { CodeAltaApp.DraftTabId, "thread-1" },
+            workspaceView.ThreadTabControl.Tabs
+                .Select(GetTabPageId)
+                .ToArray());
+        Assert.AreEqual(1, workspaceView.ThreadTabControl.SelectedIndex);
+        Assert.IsTrue(workspaceView.TryGetTabPage("thread-1", out var page));
+        var threadContent = Assert.IsInstanceOfType<VSplitter>(page.Content);
+        Assert.AreSame(workspaceView.ThreadBottomPanel, threadContent.Second);
+    }
+
+    [TestMethod]
     public void GetAdjacentTabIndex_WrapsLeftFromFirstTab()
     {
         Assert.AreEqual(2, ThreadTabStripCoordinator.GetAdjacentTabIndex(selectedIndex: 0, tabCount: 3, delta: -1));
@@ -402,6 +487,13 @@ public sealed class CodeAltaAppTabStripTests
             static () => null,
             new State<string?>(string.Empty),
             new State<float>(0));
+
+    private static string GetTabPageId(TabPage page)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        var tabId = page.Data?.GetType().GetProperty("TabId")?.GetValue(page.Data) as string;
+        return tabId ?? string.Empty;
+    }
 
     private static ProjectDescriptor CreateProject(string id, string displayName)
     {
