@@ -207,9 +207,9 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             _chatBackendInitializationCoordinator,
             _chatBackendStates,
             DispatchToUi,
-            RefreshSelectionAndThreadWorkspace,
+            composition.FrontendEvents,
             SetStatus);
-        _providerUi = new ProviderFrontendCoordinator(_ownedServices, _catalogOptions, _chatBackendInitializationCoordinator, _chatBackendStates, DispatchToUi, RefreshSelectionAndThreadWorkspace, SetStatus);
+        _providerUi = new ProviderFrontendCoordinator(_ownedServices, _catalogOptions, _chatBackendInitializationCoordinator, _chatBackendStates, DispatchToUi, composition.FrontendEvents, SetStatus);
         _providerDialogCoordinator = new ProviderDialogCoordinator(
             _providerUi,
             () => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()),

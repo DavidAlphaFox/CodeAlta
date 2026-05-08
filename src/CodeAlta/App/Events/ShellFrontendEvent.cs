@@ -26,4 +26,6 @@ internal sealed record SessionUsageChangedEvent(string ThreadId) : ShellFrontend
 
 internal sealed record ModelProviderStateChangedEvent(string ModelProviderId) : ShellFrontendEvent;
 
+internal sealed record ModelProviderCatalogChangedEvent : ShellFrontendEvent;
+
 internal sealed record RuntimeTimelineChangedEvent(string ThreadId) : ShellFrontendEvent;

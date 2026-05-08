@@ -55,6 +55,18 @@ public sealed class ShellProjectionCoordinatorTests
     }
 
     [TestMethod]
+    public void Publish_ModelProviderCatalogChanged_RefreshesSelectionWorkspace()
+    {
+        var invalidator = new CapturingProjectionInvalidator();
+        var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
+        using var coordinator = new ShellProjectionCoordinator(publisher, invalidator);
+
+        publisher.Publish(new ModelProviderCatalogChangedEvent());
+
+        CollectionAssert.AreEqual(new[] { "selection" }, invalidator.Calls);
+    }
+
+    [TestMethod]
     public void Publish_QueuedPromptListChanged_RefreshesQueuedPromptList()
     {
         var invalidator = new CapturingProjectionInvalidator();

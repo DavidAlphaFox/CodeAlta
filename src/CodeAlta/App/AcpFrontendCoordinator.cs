@@ -1,4 +1,5 @@
 using CodeAlta.Agent.Acp;
+using CodeAlta.App.Events;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Chat;
 
@@ -10,7 +11,7 @@ internal sealed class AcpFrontendCoordinator
     private readonly ChatBackendInitializationCoordinator _chatBackendInitializationCoordinator;
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly Action<Action> _dispatchToUi;
-    private readonly Action _refreshSelectionAndThreadWorkspace;
+    private readonly FrontendEventPublisher _frontendEvents;
     private readonly Action<string, bool, StatusTone> _setStatus;
 
     public AcpFrontendCoordinator(
@@ -18,20 +19,20 @@ internal sealed class AcpFrontendCoordinator
         ChatBackendInitializationCoordinator chatBackendInitializationCoordinator,
         Dictionary<string, ChatBackendState> chatBackendStates,
         Action<Action> dispatchToUi,
-        Action refreshSelectionAndThreadWorkspace,
+        FrontendEventPublisher frontendEvents,
         Action<string, bool, StatusTone> setStatus)
     {
         ArgumentNullException.ThrowIfNull(chatBackendInitializationCoordinator);
         ArgumentNullException.ThrowIfNull(chatBackendStates);
         ArgumentNullException.ThrowIfNull(dispatchToUi);
-        ArgumentNullException.ThrowIfNull(refreshSelectionAndThreadWorkspace);
+        ArgumentNullException.ThrowIfNull(frontendEvents);
         ArgumentNullException.ThrowIfNull(setStatus);
 
         _ownedServices = ownedServices;
         _chatBackendInitializationCoordinator = chatBackendInitializationCoordinator;
         _chatBackendStates = chatBackendStates;
         _dispatchToUi = dispatchToUi;
-        _refreshSelectionAndThreadWorkspace = refreshSelectionAndThreadWorkspace;
+        _frontendEvents = frontendEvents;
         _setStatus = setStatus;
     }
 
@@ -47,14 +48,14 @@ internal sealed class AcpFrontendCoordinator
             () =>
             {
                 SyncChatBackendCatalog();
-                _refreshSelectionAndThreadWorkspace();
+                PublishModelProviderCatalogChanged();
             });
         await _chatBackendInitializationCoordinator.InitializeAsync(CancellationToken.None);
         _dispatchToUi(
             () =>
             {
                 SyncChatBackendCatalog();
-                _refreshSelectionAndThreadWorkspace();
+                PublishModelProviderCatalogChanged();
                 _setStatus("ACP backends refreshed.", false, StatusTone.Info);
             });
     }
@@ -63,8 +64,11 @@ internal sealed class AcpFrontendCoordinator
     {
         var backendId = AcpAgentBackendFactoryExtensions.CreateBackendId(agentId);
         await _chatBackendInitializationCoordinator.RefreshBackendAsync(backendId, CancellationToken.None);
-        _dispatchToUi(_refreshSelectionAndThreadWorkspace);
+        _dispatchToUi(PublishModelProviderCatalogChanged);
     }
+
+    private void PublishModelProviderCatalogChanged()
+        => _frontendEvents.Publish(new ModelProviderCatalogChangedEvent());
 
     private void SyncChatBackendCatalog()
     {

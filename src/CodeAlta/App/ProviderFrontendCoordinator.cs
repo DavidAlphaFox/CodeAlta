@@ -4,6 +4,7 @@ using CodeAlta.Agent.Codex;
 using CodeAlta.Agent.Copilot;
 using CodeAlta.Agent.ModelCatalog;
 using CodeAlta.Agent.OpenAI.CodexSubscription;
+using CodeAlta.App.Events;
 using CodeAlta.Catalog;
 using CodeAlta.CodexSdk;
 using CodeAlta.Models;
@@ -20,7 +21,7 @@ internal sealed class ProviderFrontendCoordinator
     private readonly ChatBackendInitializationCoordinator _chatBackendInitializationCoordinator;
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly Action<Action> _dispatchToUi;
-    private readonly Action _refreshSelectionAndThreadWorkspace;
+    private readonly FrontendEventPublisher _frontendEvents;
     private readonly Action<string, bool, StatusTone> _setStatus;
 
     public ProviderFrontendCoordinator(
@@ -29,14 +30,14 @@ internal sealed class ProviderFrontendCoordinator
         ChatBackendInitializationCoordinator chatBackendInitializationCoordinator,
         Dictionary<string, ChatBackendState> chatBackendStates,
         Action<Action> dispatchToUi,
-        Action refreshSelectionAndThreadWorkspace,
+        FrontendEventPublisher frontendEvents,
         Action<string, bool, StatusTone> setStatus)
     {
         ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(chatBackendInitializationCoordinator);
         ArgumentNullException.ThrowIfNull(chatBackendStates);
         ArgumentNullException.ThrowIfNull(dispatchToUi);
-        ArgumentNullException.ThrowIfNull(refreshSelectionAndThreadWorkspace);
+        ArgumentNullException.ThrowIfNull(frontendEvents);
         ArgumentNullException.ThrowIfNull(setStatus);
 
         _ownedServices = ownedServices;
@@ -44,7 +45,7 @@ internal sealed class ProviderFrontendCoordinator
         _chatBackendInitializationCoordinator = chatBackendInitializationCoordinator;
         _chatBackendStates = chatBackendStates;
         _dispatchToUi = dispatchToUi;
-        _refreshSelectionAndThreadWorkspace = refreshSelectionAndThreadWorkspace;
+        _frontendEvents = frontendEvents;
         _setStatus = setStatus;
     }
 
@@ -72,14 +73,14 @@ internal sealed class ProviderFrontendCoordinator
             () =>
             {
                 SyncChatBackendCatalog();
-                _refreshSelectionAndThreadWorkspace();
+                PublishModelProviderCatalogChanged();
             });
         await _chatBackendInitializationCoordinator.InitializeAsync(cancellationToken);
         _dispatchToUi(
             () =>
             {
                 SyncChatBackendCatalog();
-                _refreshSelectionAndThreadWorkspace();
+                PublishModelProviderCatalogChanged();
                 _setStatus("Model providers refreshed.", false, StatusTone.Info);
             });
     }
@@ -216,6 +217,9 @@ internal sealed class ProviderFrontendCoordinator
             : $"{accountLabel}: {accountId}";
         return new ProviderTestResult(true, accountMessage, string.IsNullOrWhiteSpace(accountId) ? 0 : 1);
     }
+
+    private void PublishModelProviderCatalogChanged()
+        => _frontendEvents.Publish(new ModelProviderCatalogChangedEvent());
 
     internal static bool TryBuildActiveBackendTestResult(
         CodeAltaProviderDocument definition,

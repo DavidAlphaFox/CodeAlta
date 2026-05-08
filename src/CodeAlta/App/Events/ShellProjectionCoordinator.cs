@@ -61,6 +61,9 @@ internal sealed class ShellProjectionCoordinator : IDisposable
             case ModelProviderStateChangedEvent:
                 _invalidator.UpdatePromptAvailabilityUi();
                 break;
+            case ModelProviderCatalogChangedEvent:
+                _invalidator.RefreshSelectionAndThreadWorkspace();
+                break;
             case QueuedPromptListChangedEvent:
                 _invalidator.RefreshQueuedPromptList();
                 break;
