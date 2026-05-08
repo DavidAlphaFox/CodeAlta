@@ -27,6 +27,8 @@ using XenoAtom.Terminal.UI.Threading;
 
 namespace CodeAlta.Views;
 
+// CodeAltaApp intentionally remains the TUI shell composition root.
+// Add behavior to named owners first; keep methods here only to wire composition or adapt terminal controls.
 internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycle
 {
     internal static readonly Logger UiLogger = LogManager.GetLogger("CodeAlta.UI");

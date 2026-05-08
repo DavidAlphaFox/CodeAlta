@@ -440,8 +440,8 @@ public sealed class ArchitectureGuardrailTests
         {
             "App/CodeAltaShellController.cs:71:_initializationTask = Task.Run(",
             "App/CodeAltaShellController.cs:356:var startupProviderLoadTask = Task.Run(",
-            "App/CodeAltaApp.cs:345:_ = PersistViewStateAsync();",
-            "App/CodeAltaApp.cs:426:_ = OpenModelProvidersAsync();",
+            "App/CodeAltaApp.cs:347:_ = PersistViewStateAsync();",
+            "App/CodeAltaApp.cs:428:_ = OpenModelProvidersAsync();",
             "App/RuntimeEventPump.cs:34:_pumpTask = Task.Run(",
             "App/ShellThreadStateCoordinator.cs:261:_ = RestoreStartupThreadHistoryAsync(threadId, cancellationToken);",
             "App/ShellThreadStateCoordinator.cs:270:_ = PersistViewStateAsync();",
@@ -1228,6 +1228,19 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsTrue(source.Contains("Shell and thread status", StringComparison.Ordinal));
         Assert.IsTrue(source.Contains("File editor tabs", StringComparison.Ordinal));
         Assert.IsTrue(source.Contains("Plugin projections", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void CodeAltaApp_DocumentsCompositionRootBoundary()
+    {
+        var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
+        var guideSource = File.ReadAllText(Path.GetFullPath(Path.Combine(GetCodeAltaSourceRoot(), "..", "..", "doc", "development-guide.md")));
+
+        Assert.IsTrue(appSource.Contains("CodeAltaApp intentionally remains the TUI shell composition root", StringComparison.Ordinal));
+        Assert.IsTrue(appSource.Contains("Add behavior to named owners first", StringComparison.Ordinal));
+        Assert.IsTrue(guideSource.Contains("`CodeAltaApp` is the TUI shell composition root", StringComparison.Ordinal));
+        Assert.IsTrue(guideSource.Contains("ShellFrontendHost` is only the run/tick/dispose lifecycle wrapper", StringComparison.Ordinal));
+        Assert.IsTrue(guideSource.Contains("Remaining `CodeAltaApp` internal methods are grouped by owner", StringComparison.Ordinal));
     }
 
     [TestMethod]

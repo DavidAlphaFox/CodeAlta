@@ -30,7 +30,7 @@ The TUI frontend should stay organized around explicit state, commands, events, 
 flowchart LR
     Views[Views and dialogs\nview models + narrow controllers]
     Commands[ShellCommandDispatcher\ncommand registry + handlers]
-    Host[ShellFrontendHost\ncompatibility facade]
+    App[CodeAltaApp\ncomposition root + compatibility facade]
     State[ShellStateStore\nselection, tabs, prompt sessions]
     Domain[Domain services\nselection, catalog, prompts, model providers]
     Events[ShellFrontendEvent publisher]
@@ -41,8 +41,8 @@ flowchart LR
 
     Views --> Commands
     Commands --> Domain
-    Host --> Commands
-    Host --> State
+    App --> Commands
+    App --> State
     Domain --> State
     Domain --> Events
     Domain --> Runtime
@@ -55,7 +55,9 @@ flowchart LR
     Projections --> Views
 ```
 
-- `CodeAltaApp` should remain a compatibility facade and composition owner, not the central callback target for application behavior.
+- `CodeAltaApp` is the TUI shell composition root and compatibility facade. `ShellFrontendHost` is only the run/tick/dispose lifecycle wrapper; do not treat it as the owner of frontend service composition.
+- Guardrails should prevent `CodeAltaApp` from becoming a broad callback target again: new behavior belongs in named command services, domain coordinators, events, projection controllers, or explicit adapters.
+- Remaining `CodeAltaApp` internal methods are grouped by owner: composition/lifecycle wiring; provider and prompt services; projection/status/focus adapters; catalog/selection/thread restore coordinators; and tab/file/dialog command routing. Move a method only when doing so deletes callbacks/adapters or shortens an existing call path.
 - Views and dialogs receive view models plus command/service interfaces; they should not receive long domain callback lists.
 - Selection, catalog, tab, prompt, model-provider, runtime, persistence, and plugin changes should either publish a typed frontend event or return a typed command/use-case result that a small application service projects.
 - The command palette, command bar, slash commands, and shortcuts should share the same shell command metadata and dispatcher path.
