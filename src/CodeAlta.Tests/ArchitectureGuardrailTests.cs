@@ -435,6 +435,24 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void FrontendComposition_DoesNotWireBroadProjectionRefreshCallbacks()
+    {
+        var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
+        var forbiddenCallbacks = new[]
+        {
+            "frontend.RefreshCatalogAndThreadWorkspace",
+            "frontend.RefreshHeaderAndThreadWorkspace",
+            "frontend.RefreshSelectionAndThreadWorkspace",
+            "frontend.RefreshShellChrome",
+        };
+
+        foreach (var callback in forbiddenCallbacks)
+        {
+            Assert.IsFalse(compositionSource.Contains(callback, StringComparison.Ordinal), callback);
+        }
+    }
+
+    [TestMethod]
     public void TabContentMigrationInventory_ReportsLegacyContentPlacementApis()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
