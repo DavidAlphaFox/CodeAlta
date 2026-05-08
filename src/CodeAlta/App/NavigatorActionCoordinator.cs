@@ -7,7 +7,7 @@ using XenoAtom.Terminal.UI.Styling;
 
 namespace CodeAlta.App;
 
-internal sealed class NavigatorActionCoordinator
+internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
 {
     private readonly CodeAltaShellController _shellController;
     private readonly ShellThreadStateCoordinator _threadStateCoordinator;
@@ -172,9 +172,7 @@ internal sealed class NavigatorActionCoordinator
 
         new ProjectDetailsDialog(
             project,
-            SaveProjectAsync,
-            _getDialogBounds,
-            _getFocusTarget)
+            this)
             .Show();
     }
 
@@ -273,6 +271,15 @@ internal sealed class NavigatorActionCoordinator
 
     private async Task OpenFolderAsync(string folderPath, bool includeHidden)
         => await _shellController.OpenFolderAsync(folderPath, includeHidden, CancellationToken.None);
+
+    Rectangle? IProjectDetailsDialogService.GetDialogBounds()
+        => _getDialogBounds();
+
+    Visual? IProjectDetailsDialogService.GetDialogFocusTarget()
+        => _getFocusTarget();
+
+    Task IProjectDetailsDialogService.SaveProjectAsync(ProjectDescriptor project)
+        => SaveProjectAsync(project);
 
     private static ProjectDescriptor CloneProject(ProjectDescriptor project)
     {

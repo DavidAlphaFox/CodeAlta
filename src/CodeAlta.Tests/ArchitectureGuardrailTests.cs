@@ -409,6 +409,18 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void ProjectDetailsDialog_UsesNamedServiceInsteadOfDomainCallbackList()
+    {
+        var constructor = typeof(ProjectDetailsDialog)
+            .GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Single();
+        var parameters = constructor.GetParameters();
+
+        Assert.IsTrue(parameters.Any(static parameter => parameter.ParameterType == typeof(IProjectDetailsDialogService)));
+        Assert.IsFalse(parameters.Any(static parameter => typeof(Delegate).IsAssignableFrom(parameter.ParameterType)));
+    }
+
+    [TestMethod]
     public void FrontendShellContracts_DoNotAddBackendTerminologyOutsideLegacyAdapters()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();

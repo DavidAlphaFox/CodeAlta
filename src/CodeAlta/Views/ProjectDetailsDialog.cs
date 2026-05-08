@@ -14,24 +14,18 @@ internal sealed class ProjectDetailsDialog
 {
     private readonly ProjectDescriptor _project;
     private readonly ProjectDetailsDialogViewModel _viewModel;
-    private readonly Func<ProjectDescriptor, Task> _onSaveAsync;
-    private readonly Func<Visual?> _getFocusTarget;
+    private readonly IProjectDetailsDialogService _dialogService;
     private readonly Dialog _dialog;
 
     public ProjectDetailsDialog(
         ProjectDescriptor project,
-        Func<ProjectDescriptor, Task> onSaveAsync,
-        Func<Rectangle?> getBounds,
-        Func<Visual?> getFocusTarget)
+        IProjectDetailsDialogService dialogService)
     {
         ArgumentNullException.ThrowIfNull(project);
-        ArgumentNullException.ThrowIfNull(onSaveAsync);
-        ArgumentNullException.ThrowIfNull(getBounds);
-        ArgumentNullException.ThrowIfNull(getFocusTarget);
+        ArgumentNullException.ThrowIfNull(dialogService);
 
         _project = CloneProject(project);
-        _onSaveAsync = onSaveAsync;
-        _getFocusTarget = getFocusTarget;
+        _dialogService = dialogService;
         _viewModel = new ProjectDetailsDialogViewModel
         {
             Id = project.Id,
@@ -151,7 +145,7 @@ internal sealed class ProjectDetailsDialog
             .IsModal(true)
             .Padding(1)
             .Content(content);
-        ResponsiveDialogSize.Apply(_dialog, getBounds(), minWidth: 70, minHeight: 16, widthFactor: 0.8, heightFactor: 0.75);
+        ResponsiveDialogSize.Apply(_dialog, _dialogService.GetDialogBounds(), minWidth: 70, minHeight: 16, widthFactor: 0.8, heightFactor: 0.75);
         _dialog.AddCommand(new Command
         {
             Id = "CodeAlta.ProjectDetails.Close",
@@ -188,7 +182,7 @@ internal sealed class ProjectDetailsDialog
             return;
         }
 
-        await _onSaveAsync(updatedProject);
+        await _dialogService.SaveProjectAsync(updatedProject);
         Close();
     }
 
@@ -196,7 +190,7 @@ internal sealed class ProjectDetailsDialog
     {
         var app = _dialog.App;
         _dialog.Close();
-        if (_getFocusTarget() is { } focusTarget)
+        if (_dialogService.GetDialogFocusTarget() is { } focusTarget)
         {
             app?.Focus(focusTarget);
         }
