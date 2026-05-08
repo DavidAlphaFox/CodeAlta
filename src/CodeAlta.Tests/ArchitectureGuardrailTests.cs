@@ -191,6 +191,68 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void FrontendRefactorV2Inventory_ReportsCurrentSimplificationBudget()
+    {
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        var sourceFiles = Directory
+            .EnumerateFiles(codeAltaRoot, "*.cs", SearchOption.AllDirectories)
+            .ToArray();
+        var frontendRoots = new[] { "App", "Frontend", "Views" };
+        var delegateReferenceCounts = frontendRoots
+            .Select(root => new
+            {
+                Root = root,
+                Count = Directory
+                    .EnumerateFiles(Path.Combine(codeAltaRoot, root), "*.cs", SearchOption.AllDirectories)
+                    .Sum(file => File.ReadLines(file).Count(static line =>
+                        line.Contains("Action<", StringComparison.Ordinal) ||
+                        line.Contains("Func<", StringComparison.Ordinal) ||
+                        line.Contains("Action ", StringComparison.Ordinal))),
+            })
+            .ToArray();
+        var oversizedConstructors = sourceFiles
+            .SelectMany(file => FindConstructorsWithTooManyDelegates(codeAltaRoot, file, maxDelegateParameters: 3))
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+        var transitionalNames = new[]
+        {
+            "ICodeAltaFrontendServices",
+            "CodeAltaFrontendServicesAdapter",
+            "IProjectionInvalidator",
+            "RefreshCatalogAndThreadWorkspace",
+            "RefreshSelectionAndThreadWorkspace",
+            "RefreshShellChrome",
+        };
+        var transitionalReferences = sourceFiles
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(codeAltaRoot, file).Replace('\\', '/'),
+                Content = File.ReadAllText(file),
+            })
+            .SelectMany(entry => transitionalNames
+                .Where(name => entry.Content.Contains(name, StringComparison.Ordinal))
+                .Select(name => $"{entry.RelativePath}:{name}"))
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        TestContext.WriteLine("Frontend v2 simplification inventory:");
+        TestContext.WriteLine("Total production CodeAlta C# LOC: {0}", sourceFiles.Sum(static file => File.ReadLines(file).Count()));
+        TestContext.WriteLine(
+            "Delegate references: {0}",
+            string.Join(", ", delegateReferenceCounts.Select(static item => $"{item.Root}={item.Count}")));
+        TestContext.WriteLine(
+            "Constructors with more than 3 delegate parameters:\n{0}",
+            string.Join(Environment.NewLine, oversizedConstructors));
+        TestContext.WriteLine(
+            "Transitional facade/projection references:\n{0}",
+            string.Join(Environment.NewLine, transitionalReferences));
+        Assert.IsTrue(sourceFiles.Length > 0);
+        Assert.IsTrue(delegateReferenceCounts.Length == frontendRoots.Length);
+        Assert.IsNotNull(oversizedConstructors);
+        Assert.IsNotNull(transitionalReferences);
+    }
+
+    [TestMethod]
     public void CodeAltaFrontendCallbacks_IsDeletedAfterPortMigration()
     {
         Assert.IsFalse(File.Exists(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendCallbacks.cs")));
