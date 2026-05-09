@@ -1106,7 +1106,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             return NotFound(context, "session.notFound", $"Session '{threadId}' was not found.");
         }
 
-        if (!CanAccessThread(context, info.Thread))
+        if (!CanAccessThread(context, info.Thread) && !CanSendPeerMessageToGlobalCoordinator(context, info.Thread, kind))
         {
             return PermissionDenied(context, "policy.visibilityDenied", $"The caller is not allowed to mutate session '{threadId}'.");
         }
@@ -2026,6 +2026,14 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         => (string.Equals(context.Caller.Kind, "agent", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(context.Caller.Kind, "plugin", StringComparison.OrdinalIgnoreCase)) &&
            !string.IsNullOrWhiteSpace(context.Caller.SourceProjectId);
+
+    private static bool CanSendPeerMessageToGlobalCoordinator(AltaCommandContext context, WorkThreadDescriptor thread, PromptDispatchKind kind)
+        => kind is PromptDispatchKind.Message or PromptDispatchKind.Request &&
+           string.Equals(context.Caller.Kind, "agent", StringComparison.OrdinalIgnoreCase) &&
+           !string.IsNullOrWhiteSpace(context.Caller.SourceProjectId) &&
+           !string.IsNullOrWhiteSpace(context.Caller.SourceThreadId) &&
+           thread.Kind == WorkThreadKind.GlobalThread &&
+           string.IsNullOrWhiteSpace(thread.ProjectRef);
 
     private static string GetGlobalRootOrCwd(AltaCommandContext context)
         => context.Services.Get<CatalogOptions>()?.GlobalRoot ?? context.Cwd ?? Environment.CurrentDirectory;

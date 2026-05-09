@@ -1129,6 +1129,46 @@ public sealed class AltaLiveToolTests
         Assert.IsTrue(ReadJsonLines(show.Stdout).Any(static line => line.GetProperty("type").GetString() == "alta.error" && line.GetProperty("code").GetString() == "policy.visibilityDenied"));
     }
 
+    [TestMethod]
+    public async Task SessionVisibility_GlobalCoordinatorCanReachProjectsAndProjectAgentsCanReplyWithoutInspectingGlobalTranscript()
+    {
+        using var root = TempDirectory.Create();
+        var projectPath = Path.Combine(root.Path, "project");
+        Directory.CreateDirectory(projectPath);
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var projectCatalog = new ProjectCatalog(options);
+        var project = await projectCatalog.UpsertFromPathAsync(projectPath).ConfigureAwait(false);
+        var backendId = new AgentBackendId("coordinator-visibility");
+        var backend = new StatefulBackend(backendId);
+        var runtime = CreateRuntime(options, backend);
+        await using var _ = runtime.ConfigureAwait(false);
+        var dispatcher = CreateDispatcher(new AltaServiceCollection()
+            .Add(options)
+            .Add(projectCatalog)
+            .Add(new WorkThreadCatalog(options))
+            .Add(runtime));
+        var global = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var projectSession = await dispatcher.InvokeAsync(["session", "create", "--project", project.Id, "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var globalThreadId = ReadJsonLines(global.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
+        var projectThreadId = ReadJsonLines(projectSession.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
+        var coordinatorCaller = new AltaCallerIdentity { Kind = "agent", SourceThreadId = globalThreadId, SourceAgentId = "global-coordinator" };
+        var projectCaller = new AltaCallerIdentity { Kind = "agent", SourceProjectId = project.Id, SourceThreadId = projectThreadId, SourceAgentId = "project-agent" };
+
+        var coordinatorShow = await dispatcher.InvokeAsync(["session", "show", projectThreadId], caller: coordinatorCaller).ConfigureAwait(false);
+        var coordinatorRequest = await dispatcher.InvokeAsync(["session", "request", projectThreadId, "--message", "please inspect"], caller: coordinatorCaller).ConfigureAwait(false);
+        var projectShowGlobal = await dispatcher.InvokeAsync(["session", "show", globalThreadId], caller: projectCaller).ConfigureAwait(false);
+        var projectReply = await dispatcher.InvokeAsync(["session", "message", globalThreadId, "--kind", "answer", "--message", "project reply"], caller: projectCaller).ConfigureAwait(false);
+
+        Assert.AreEqual(AltaExitCodes.Success, coordinatorShow.ExitCode);
+        Assert.AreEqual(AltaExitCodes.Success, coordinatorRequest.ExitCode);
+        Assert.AreEqual(AltaExitCodes.PolicyDenied, projectShowGlobal.ExitCode);
+        Assert.AreEqual(AltaExitCodes.Success, projectReply.ExitCode);
+        Assert.AreEqual(2, backend.SentOptions.Count);
+        StringAssert.Contains(ExtractText(backend.SentOptions[0].Input), $"Source thread: {globalThreadId}");
+        StringAssert.Contains(ExtractText(backend.SentOptions[1].Input), $"Source thread: {projectThreadId}");
+        StringAssert.Contains(ExtractText(backend.SentOptions[1].Input), "Kind: answer");
+    }
+
     private static void AssertHistoryFallbackWarning(AltaCommandResult result)
     {
         Assert.AreEqual(AltaExitCodes.Success, result.ExitCode);
