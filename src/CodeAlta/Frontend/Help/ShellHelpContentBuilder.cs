@@ -1,9 +1,54 @@
+using System.Text;
 using CodeAlta.Frontend.Commands;
 
 namespace CodeAlta.Frontend.Help;
 
 internal static class ShellHelpContentBuilder
 {
+    public static string BuildMarkdown(string? filterText = null)
+    {
+        var sections = BuildSections(filterText);
+        var builder = new StringBuilder();
+
+        builder.AppendLine("# Shell Commands");
+        builder.AppendLine();
+        builder.AppendLine("Use `?`, `/`, or the shortcuts below to discover available shell actions.");
+        builder.AppendLine();
+
+        if (sections.Count == 0)
+        {
+            builder.AppendLine("_No commands matched that filter._");
+            return builder.ToString();
+        }
+
+        foreach (var section in sections)
+        {
+            builder.Append("## ")
+                .AppendLine(EscapeMarkdownText(section.Title));
+            builder.AppendLine();
+
+            foreach (var entry in section.Entries)
+            {
+                builder.Append("- **")
+                    .Append(EscapeMarkdownText(entry.Label))
+                    .Append("** — ")
+                    .Append(EscapeMarkdownText(entry.Description));
+
+                if (entry.Bindings.Count > 0)
+                {
+                    builder.Append(" (")
+                        .Append(string.Join(" · ", entry.Bindings.Select(FormatInlineCode)));
+                    builder.Append(')');
+                }
+
+                builder.AppendLine();
+                builder.AppendLine();
+            }
+        }
+
+        return builder.ToString();
+    }
+
     public static IReadOnlyList<ShellHelpSection> BuildSections(string? filterText = null)
     {
         var commands = ShellCommandCatalog.Commands
@@ -84,6 +129,20 @@ internal static class ShellHelpContentBuilder
 
     private static string FormatSequence(object sequence)
         => sequence.ToString() ?? string.Empty;
+
+    private static string FormatInlineCode(string value)
+        => string.IsNullOrEmpty(value)
+            ? "``"
+            : $"`{value.Replace("`", "\\`", StringComparison.Ordinal)}`";
+
+    private static string EscapeMarkdownText(string value)
+        => value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("[", "\\[", StringComparison.Ordinal)
+            .Replace("]", "\\]", StringComparison.Ordinal)
+            .Replace("*", "\\*", StringComparison.Ordinal)
+            .Replace("`", "\\`", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
 }
 
 internal sealed record ShellHelpSection(string Title, IReadOnlyList<ShellHelpEntry> Entries);

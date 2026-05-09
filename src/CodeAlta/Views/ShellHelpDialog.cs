@@ -3,6 +3,7 @@ using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Commands;
 using XenoAtom.Terminal.UI.Controls;
+using XenoAtom.Terminal.UI.Extensions.Markdown;
 using XenoAtom.Terminal.UI.Geometry;
 using XenoAtom.Terminal.UI.Input;
 
@@ -30,32 +31,7 @@ internal sealed class ShellHelpDialog
             return Task.CompletedTask;
         }
 
-        var sections = ShellHelpContentBuilder.BuildSections(filterText);
-        var contentItems = new List<Visual>
-        {
-            new Markup("[bold]Shell Commands[/]").Wrap(true),
-            new Markup("[dim]Use ?, /, or the shortcuts below to discover available shell actions.[/]").Wrap(true),
-        };
-
-        if (sections.Count == 0)
-        {
-            contentItems.Add(new Markup("[dim]No commands matched that filter.[/]").Wrap(true));
-        }
-        else
-        {
-            foreach (var section in sections)
-            {
-                contentItems.Add(new Markup($"[bold]{section.Title}[/]").Wrap(true));
-                foreach (var entry in section.Entries)
-                {
-                    var bindingText = entry.Bindings.Count == 0
-                        ? string.Empty
-                        : $" [dim]({string.Join(" · ", entry.Bindings)})[/]";
-                    contentItems.Add(new Markup($"[bold]{entry.Label}[/]{bindingText}").Wrap(true));
-                    contentItems.Add(new TextBlock(entry.Description).Wrap(true));
-                }
-            }
-        }
+        var markdown = ShellHelpContentBuilder.BuildMarkdown(filterText);
 
         var closeButton = new Button(new TextBlock($"{NerdFont.MdClose} Close"))
         {
@@ -70,7 +46,16 @@ internal sealed class ShellHelpDialog
             .BottomRightText(new Markup("[dim]Esc Close[/]"))
             .IsModal(true)
             .Padding(1)
-            .Content(new VStack(contentItems.ToArray()) { Spacing = 1 }.Scrollable());
+            .Content(new MarkdownControl(markdown)
+            {
+                HorizontalAlignment = Align.Stretch,
+                VerticalAlignment = Align.Stretch,
+                Options = MarkdownRenderOptions.Default with
+                {
+                    WrapCodeBlocks = true,
+                    MaxCodeBlockHeight = 12,
+                },
+            });
         ResponsiveDialogSize.Apply(_dialog, _getBounds(), minWidth: 70, minHeight: 16, widthFactor: 0.72, heightFactor: 0.7);
         _dialog.AddCommand(new Command
         {

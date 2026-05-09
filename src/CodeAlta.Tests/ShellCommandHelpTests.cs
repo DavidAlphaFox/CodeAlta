@@ -94,6 +94,27 @@ public sealed class ShellCommandHelpTests
     }
 
     [TestMethod]
+    public void BuildMarkdown_FormatsHelpAsMarkdown()
+    {
+        var markdown = ShellHelpContentBuilder.BuildMarkdown();
+
+        StringAssert.Contains(markdown, "# Shell Commands");
+        StringAssert.Contains(markdown, "## General");
+        StringAssert.Contains(markdown, "- **Help**");
+        StringAssert.Contains(markdown, "`/help`");
+        Assert.IsFalse(markdown.Contains("[bold]", StringComparison.Ordinal));
+        Assert.IsFalse(markdown.Contains("[dim]", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void BuildMarkdown_NoMatches_UsesMarkdownEmptyState()
+    {
+        var markdown = ShellHelpContentBuilder.BuildMarkdown("__no_such_help_entry__");
+
+        StringAssert.Contains(markdown, "_No commands matched that filter._");
+    }
+
+    [TestMethod]
     public void ShellCommandMetadata_UsesCommandStyleIdentifiers()
     {
         var fullPromptCommand = ShellCommandCatalog.Get("CodeAlta.Thread.ExpandPrompt");
