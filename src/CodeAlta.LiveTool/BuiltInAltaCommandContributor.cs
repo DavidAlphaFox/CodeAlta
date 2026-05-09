@@ -655,6 +655,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         var projects = await catalog.LoadAsync(context.CancellationToken).ConfigureAwait(false);
         var filtered = projects
             .Where(project => includeArchived || !project.Archived)
+            .Where(project => CanAccessProject(context, project.Id))
             .OrderBy(static project => project.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         foreach (var project in filtered)
@@ -684,6 +685,11 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             return NotFound(context, "project.notFound", $"Project '{reference}' was not found.");
         }
 
+        if (!CanAccessProject(context, project.Id))
+        {
+            return PermissionDenied(context, "policy.visibilityDenied", $"The caller is not allowed to inspect project '{project.Id}'.");
+        }
+
         WriteProject(context, "alta.project.detail", project);
         return AltaExitCodes.Success;
     }
@@ -700,6 +706,11 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         if (project is null)
         {
             return NotFound(context, "project.notFound", $"No catalog project matches path '{resolvedPath}'.");
+        }
+
+        if (!CanAccessProject(context, project.Id))
+        {
+            return PermissionDenied(context, "policy.visibilityDenied", $"The caller is not allowed to inspect project '{project.Id}'.");
         }
 
         WriteProject(context, "alta.project.resolution", project);
@@ -722,6 +733,15 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         if (!Directory.Exists(resolvedPath))
         {
             return NotFound(context, "project.pathNotFound", $"Project path '{resolvedPath}' does not exist.");
+        }
+
+        if (CallerHasProjectScope(context))
+        {
+            var existingProject = await catalog.GetByPathAsync(resolvedPath, context.CancellationToken).ConfigureAwait(false);
+            if (existingProject is null || !CanAccessProject(context, existingProject.Id))
+            {
+                return PermissionDenied(context, "policy.visibilityDenied", "Project-scoped callers can only update their own existing project catalog entry.");
+            }
         }
 
         var project = await catalog.UpsertFromPathAsync(resolvedPath, context.CancellationToken).ConfigureAwait(false);

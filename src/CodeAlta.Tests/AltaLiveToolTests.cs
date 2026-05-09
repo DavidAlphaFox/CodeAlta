@@ -1130,6 +1130,43 @@ public sealed class AltaLiveToolTests
     }
 
     [TestMethod]
+    public async Task ProjectVisibility_ProjectScopedAgentOnlySeesOwnProjectCatalogEntry()
+    {
+        using var root = TempDirectory.Create();
+        var projectAPath = Path.Combine(root.Path, "project-a");
+        var projectBPath = Path.Combine(root.Path, "project-b");
+        var projectCPath = Path.Combine(root.Path, "project-c");
+        Directory.CreateDirectory(projectAPath);
+        Directory.CreateDirectory(projectBPath);
+        Directory.CreateDirectory(projectCPath);
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var projectCatalog = new ProjectCatalog(options);
+        var projectA = await projectCatalog.UpsertFromPathAsync(projectAPath).ConfigureAwait(false);
+        var projectB = await projectCatalog.UpsertFromPathAsync(projectBPath).ConfigureAwait(false);
+        var dispatcher = CreateDispatcher(new AltaServiceCollection()
+            .Add(options)
+            .Add(projectCatalog));
+        var caller = new AltaCallerIdentity { Kind = "agent", SourceProjectId = projectA.Id, SourceThreadId = "project-a-thread" };
+
+        var list = await dispatcher.InvokeAsync(["project", "list"], caller: caller).ConfigureAwait(false);
+        var showOther = await dispatcher.InvokeAsync(["project", "show", projectB.Id], caller: caller).ConfigureAwait(false);
+        var resolveOther = await dispatcher.InvokeAsync(["project", "resolve", "--path", projectBPath], caller: caller).ConfigureAwait(false);
+        var upsertNew = await dispatcher.InvokeAsync(["project", "upsert", projectCPath], caller: caller).ConfigureAwait(false);
+
+        Assert.AreEqual(AltaExitCodes.Success, list.ExitCode);
+        var visibleProjects = ReadJsonLines(list.Stdout)
+            .Where(static line => line.GetProperty("type").GetString() == "alta.project.item")
+            .Select(static line => line.GetProperty("projectId").GetString())
+            .ToArray();
+        CollectionAssert.AreEqual(new[] { projectA.Id }, visibleProjects);
+        Assert.AreEqual(AltaExitCodes.PolicyDenied, showOther.ExitCode);
+        Assert.AreEqual(AltaExitCodes.PolicyDenied, resolveOther.ExitCode);
+        Assert.AreEqual(AltaExitCodes.PolicyDenied, upsertNew.ExitCode);
+        Assert.IsTrue(ReadJsonLines(showOther.Stdout).Any(static line => line.GetProperty("type").GetString() == "alta.error" && line.GetProperty("code").GetString() == "policy.visibilityDenied"));
+        Assert.IsFalse((await projectCatalog.LoadAsync().ConfigureAwait(false)).Any(project => string.Equals(project.ProjectPath, projectCPath, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [TestMethod]
     public async Task SessionVisibility_GlobalCoordinatorCanReachProjectsAndProjectAgentsCanReplyWithoutInspectingGlobalTranscript()
     {
         using var root = TempDirectory.Create();
