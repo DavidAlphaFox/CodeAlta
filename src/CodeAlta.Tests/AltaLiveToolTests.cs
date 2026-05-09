@@ -101,6 +101,47 @@ public sealed class AltaLiveToolTests
     }
 
     [TestMethod]
+    public void SessionTool_InputSchema_UsesSpecPayloadShape()
+    {
+        var tool = AltaSessionToolFactory.Create(CreateDispatcher(), new AltaSessionToolOptions());
+
+        var properties = tool.Spec.InputSchema.GetProperty("properties");
+
+        Assert.IsTrue(properties.TryGetProperty("args", out _));
+        Assert.IsTrue(properties.TryGetProperty("stdin", out _));
+        Assert.IsTrue(properties.TryGetProperty("cwd", out _));
+        Assert.IsTrue(properties.TryGetProperty("timeoutMs", out _));
+        Assert.IsTrue(properties.TryGetProperty("maxOutputRecords", out _));
+        Assert.IsTrue(properties.TryGetProperty("maxOutputBytes", out _));
+        Assert.IsFalse(properties.TryGetProperty("timeoutSeconds", out _));
+    }
+
+    [TestMethod]
+    public async Task SessionTool_Cwd_UsesInvocationWorkingDirectory()
+    {
+        using var root = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var catalog = new ProjectCatalog(options);
+        var projectPath = Path.Combine(root.Path, "cwd-project");
+        Directory.CreateDirectory(projectPath);
+        var project = await catalog.UpsertFromPathAsync(projectPath).ConfigureAwait(false);
+        var tool = AltaSessionToolFactory.Create(
+            CreateDispatcher(new AltaServiceCollection().Add(options).Add(catalog)),
+            new AltaSessionToolOptions());
+        using var arguments = JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            args = new[] { "project", "resolve" },
+            cwd = projectPath,
+        }));
+
+        var result = await tool.Handler(CreateInvocation(arguments.RootElement), CancellationToken.None).ConfigureAwait(false);
+
+        Assert.IsTrue(result.Success);
+        var resolution = ReadJsonLines(AssertTextItem(result)).Single(static line => line.GetProperty("type").GetString() == "alta.project.resolution");
+        Assert.AreEqual(project.Id, resolution.GetProperty("projectId").GetString());
+    }
+
+    [TestMethod]
     public async Task SessionTool_CommandFailure_ReturnsFailedJsonlTranscriptAndShortError()
     {
         using var arguments = JsonDocument.Parse("""{"args":["no-such-command"]}""");
@@ -141,13 +182,13 @@ public sealed class AltaLiveToolTests
     [TestMethod]
     public async Task SessionTool_InvalidTimeout_ReturnsToolArgumentError()
     {
-        using var arguments = JsonDocument.Parse("""{"args":["version"],"timeoutSeconds":0}""");
+        using var arguments = JsonDocument.Parse("""{"args":["version"],"timeoutMs":0}""");
         var tool = AltaSessionToolFactory.Create(CreateDispatcher(), new AltaSessionToolOptions());
 
         var result = await tool.Handler(CreateInvocation(arguments.RootElement), CancellationToken.None).ConfigureAwait(false);
 
         Assert.IsFalse(result.Success);
-        StringAssert.Contains(result.Error, "timeoutSeconds");
+        StringAssert.Contains(result.Error, "timeoutMs");
         StringAssert.Contains(AssertTextItem(result), "usage.invalidToolArguments");
     }
 

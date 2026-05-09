@@ -21,8 +21,12 @@ public static class AltaSessionToolFactory
               "minItems": 1
             },
             "stdin": {
-              "type": "string",
+              "type": ["string", "null"],
               "description": "Optional stdin text for commands that explicitly read --stdin."
+            },
+            "cwd": {
+              "type": ["string", "null"],
+              "description": "Optional working directory used for project-relative command resolution."
             },
             "maxOutputRecords": {
               "type": "integer",
@@ -34,9 +38,9 @@ public static class AltaSessionToolFactory
               "description": "Optional positive cap on returned UTF-8 transcript bytes.",
               "minimum": 1
             },
-            "timeoutSeconds": {
+            "timeoutMs": {
               "type": "integer",
-              "description": "Optional positive timeout for this finite alta command invocation.",
+              "description": "Optional positive timeout for this finite alta command invocation, in milliseconds.",
               "minimum": 1
             }
           },
@@ -78,7 +82,16 @@ public static class AltaSessionToolFactory
             return CreateArgumentError(error!);
         }
 
-        var stdin = ReadOptionalString(invocation.Arguments, "stdin") ?? string.Empty;
+        if (!TryReadOptionalString(invocation.Arguments, "stdin", out var stdin, out error))
+        {
+            return CreateArgumentError(error!);
+        }
+
+        if (!TryReadOptionalString(invocation.Arguments, "cwd", out var cwd, out error))
+        {
+            return CreateArgumentError(error!);
+        }
+
         var maxOutputRecords = ReadOptionalPositiveInt(invocation.Arguments, "maxOutputRecords", out error);
         if (error is not null)
         {
@@ -91,7 +104,7 @@ public static class AltaSessionToolFactory
             return CreateArgumentError(error);
         }
 
-        var timeoutSeconds = ReadOptionalPositiveInt(invocation.Arguments, "timeoutSeconds", out error);
+        var timeout = ReadTimeoutOverride(invocation.Arguments, out error);
         if (error is not null)
         {
             return CreateArgumentError(error);
@@ -99,7 +112,7 @@ public static class AltaSessionToolFactory
 
         using var timeoutCancellation = CreateTimeoutCancellationTokenSource(
             cancellationToken,
-            timeoutSeconds,
+            timeout,
             options.DefaultTimeout);
         var effectiveCancellationToken = timeoutCancellation?.Token ?? cancellationToken;
 
@@ -114,9 +127,9 @@ public static class AltaSessionToolFactory
         };
         var result = await dispatcher.InvokeAsync(
                 args,
-                stdin,
+                stdin ?? string.Empty,
                 caller,
-                options.WorkingDirectoryProvider?.Invoke() ?? options.WorkingDirectory,
+                cwd ?? options.WorkingDirectoryProvider?.Invoke() ?? options.WorkingDirectory,
                 maxOutputRecords ?? options.DefaultMaxOutputRecords,
                 maxOutputBytes ?? options.DefaultMaxOutputBytes,
                 effectiveCancellationToken)
@@ -163,14 +176,28 @@ public static class AltaSessionToolFactory
         return true;
     }
 
-    private static string? ReadOptionalString(JsonElement root, string propertyName)
+    private static bool TryReadOptionalString(JsonElement root, string propertyName, out string? value, out string? error)
     {
+        value = null;
+        error = null;
         if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty(propertyName, out var element))
         {
-            return null;
+            return true;
         }
 
-        return element.ValueKind == JsonValueKind.String ? element.GetString() : null;
+        if (element.ValueKind is JsonValueKind.Null)
+        {
+            return true;
+        }
+
+        if (element.ValueKind == JsonValueKind.String)
+        {
+            value = element.GetString();
+            return true;
+        }
+
+        error = $"Tool argument '{propertyName}' must be a string or null.";
+        return false;
     }
 
     private static int? ReadOptionalPositiveInt(JsonElement root, string propertyName, out string? error)
@@ -188,6 +215,35 @@ public static class AltaSessionToolFactory
         }
 
         return value;
+    }
+
+    private static TimeSpan? ReadTimeoutOverride(JsonElement root, out string? error)
+    {
+        var timeoutMs = ReadOptionalPositiveInt(root, "timeoutMs", out error);
+        if (error is not null)
+        {
+            return null;
+        }
+
+        // Compatibility for callers that used the initial pre-release field name before the spec was finalized.
+        var timeoutSeconds = ReadOptionalPositiveInt(root, "timeoutSeconds", out error);
+        if (error is not null)
+        {
+            return null;
+        }
+
+        if (timeoutMs is not null && timeoutSeconds is not null)
+        {
+            error = "Use either 'timeoutMs' or 'timeoutSeconds', not both.";
+            return null;
+        }
+
+        error = null;
+        return timeoutMs is { } milliseconds
+            ? TimeSpan.FromMilliseconds(milliseconds)
+            : timeoutSeconds is { } seconds
+                ? TimeSpan.FromSeconds(seconds)
+                : null;
     }
 
     private static AgentToolResult CreateArgumentError(string message)
@@ -213,12 +269,10 @@ public static class AltaSessionToolFactory
 
     private static CancellationTokenSource? CreateTimeoutCancellationTokenSource(
         CancellationToken cancellationToken,
-        int? timeoutSeconds,
+        TimeSpan? timeoutOverride,
         TimeSpan? defaultTimeout)
     {
-        var timeout = timeoutSeconds is { } seconds
-            ? TimeSpan.FromSeconds(seconds)
-            : defaultTimeout;
+        var timeout = timeoutOverride ?? defaultTimeout;
         if (timeout is null)
         {
             return null;

@@ -95,6 +95,8 @@ The tool payload should be intentionally small so plugins can add subcommands wi
 }
 ```
 
+The implemented agent-tool schema exposes `args`, nullable `stdin`, nullable `cwd`, `maxOutputRecords`, `maxOutputBytes`, and `timeoutMs` (milliseconds). The handler passes `cwd` through to the shared dispatcher so project-relative commands such as `project resolve` use the caller-supplied working directory while still falling back to the session working directory when omitted.
+
 Model-visible tool result shape:
 
 ```jsonl
