@@ -147,6 +147,8 @@ internal interface IShellDialogCommandService
 
     Task OpenFolderAsync(string path, bool trustFolder);
 
+    void OpenAcpManagement();
+
     Task OpenModelProvidersAsync();
 
     Task OpenFileEditorAsync();
@@ -161,6 +163,8 @@ internal interface IShellDialogCommandService
 
     void OpenExpandedPromptEditor();
 
+    void ToggleCommandBarMultiLine();
+
     void ExitApp();
 }
 
@@ -170,6 +174,7 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
     private readonly Func<Visual?> _getDialogFocusTarget;
     private readonly Func<IReadOnlyList<ProjectDescriptor>> _getProjects;
     private readonly Func<string, bool, Task> _openFolderAsync;
+    private readonly Action _openAcpManagement;
     private readonly Func<Task> _openModelProvidersAsync;
     private readonly Func<Task> _openFileEditorAsync;
     private readonly Func<Task> _openSkillsAsync;
@@ -177,24 +182,28 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
     private readonly Action _openSessionUsage;
     private readonly Action _openThreadInfo;
     private readonly Action _openExpandedPromptEditor;
+    private readonly Action _toggleCommandBarMultiLine;
 
     public DelegatingShellDialogCommandService(
         Func<Rectangle?> getDialogBounds,
         Func<Visual?> getDialogFocusTarget,
         Func<IReadOnlyList<ProjectDescriptor>> getProjects,
         Func<string, bool, Task> openFolderAsync,
+        Action openAcpManagement,
         Func<Task> openModelProvidersAsync,
         Func<Task> openFileEditorAsync,
         Func<Task> openSkillsAsync,
         Func<Task> openPluginsAsync,
         Action openSessionUsage,
         Action openThreadInfo,
-        Action openExpandedPromptEditor)
+        Action openExpandedPromptEditor,
+        Action toggleCommandBarMultiLine)
     {
         ArgumentNullException.ThrowIfNull(getDialogBounds);
         ArgumentNullException.ThrowIfNull(getDialogFocusTarget);
         ArgumentNullException.ThrowIfNull(getProjects);
         ArgumentNullException.ThrowIfNull(openFolderAsync);
+        ArgumentNullException.ThrowIfNull(openAcpManagement);
         ArgumentNullException.ThrowIfNull(openModelProvidersAsync);
         ArgumentNullException.ThrowIfNull(openFileEditorAsync);
         ArgumentNullException.ThrowIfNull(openSkillsAsync);
@@ -202,10 +211,12 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
         ArgumentNullException.ThrowIfNull(openSessionUsage);
         ArgumentNullException.ThrowIfNull(openThreadInfo);
         ArgumentNullException.ThrowIfNull(openExpandedPromptEditor);
+        ArgumentNullException.ThrowIfNull(toggleCommandBarMultiLine);
         _getDialogBounds = getDialogBounds;
         _getDialogFocusTarget = getDialogFocusTarget;
         _getProjects = getProjects;
         _openFolderAsync = openFolderAsync;
+        _openAcpManagement = openAcpManagement;
         _openModelProvidersAsync = openModelProvidersAsync;
         _openFileEditorAsync = openFileEditorAsync;
         _openSkillsAsync = openSkillsAsync;
@@ -213,6 +224,7 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
         _openSessionUsage = openSessionUsage;
         _openThreadInfo = openThreadInfo;
         _openExpandedPromptEditor = openExpandedPromptEditor;
+        _toggleCommandBarMultiLine = toggleCommandBarMultiLine;
     }
 
     public Rectangle? GetDialogBounds() => _getDialogBounds();
@@ -222,6 +234,8 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
     public IReadOnlyList<ProjectDescriptor> GetProjects() => _getProjects();
 
     public Task OpenFolderAsync(string path, bool trustFolder) => _openFolderAsync(path, trustFolder);
+
+    public void OpenAcpManagement() => _openAcpManagement();
 
     public Task OpenModelProvidersAsync() => _openModelProvidersAsync();
 
@@ -236,6 +250,8 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
     public void OpenThreadInfo() => _openThreadInfo();
 
     public void OpenExpandedPromptEditor() => _openExpandedPromptEditor();
+
+    public void ToggleCommandBarMultiLine() => _toggleCommandBarMultiLine();
 
     public void ExitApp() => GetDialogFocusTarget()?.App?.Stop();
 }

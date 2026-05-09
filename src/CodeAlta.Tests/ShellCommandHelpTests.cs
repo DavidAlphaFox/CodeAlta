@@ -21,6 +21,7 @@ public sealed class ShellCommandHelpTests
         var goToPromptCommand = ShellCommandCatalog.Get("CodeAlta.Shell.FocusPrompt");
         var modelCommand = ShellCommandCatalog.Get("CodeAlta.Shell.FocusModelProvider");
         var fullPromptCommand = ShellCommandCatalog.Get("CodeAlta.Thread.ExpandPrompt");
+        var sendCommand = ShellCommandCatalog.Get("CodeAlta.Thread.Send");
 
         var sections = ShellHelpContentBuilder.BuildSections();
         var entry = sections
@@ -53,6 +54,9 @@ public sealed class ShellCommandHelpTests
         var fullPromptEntry = sections
             .SelectMany(static section => section.Entries)
             .Single(candidate => string.Equals(candidate.Label, fullPromptCommand.Label, StringComparison.Ordinal));
+        var sendEntry = sections
+            .SelectMany(static section => section.Entries)
+            .Single(candidate => string.Equals(candidate.Label, sendCommand.Label, StringComparison.Ordinal));
 
         CollectionAssert.Contains(entry.Bindings.ToArray(), "/help");
         CollectionAssert.Contains(entry.Bindings.ToArray(), "?");
@@ -69,6 +73,22 @@ public sealed class ShellCommandHelpTests
         CollectionAssert.Contains(goToPromptEntry.Bindings.ToArray(), "/prompt");
         CollectionAssert.Contains(modelEntry.Bindings.ToArray(), "/model");
         CollectionAssert.Contains(fullPromptEntry.Bindings.ToArray(), "/full_prompt");
+        CollectionAssert.Contains(sendEntry.Bindings.ToArray(), "/send");
+    }
+
+    [TestMethod]
+    public void BuildSections_UsesHelpBindingsFromMetadata()
+    {
+        var sections = ShellHelpContentBuilder.BuildSections();
+        var entriesByLabel = sections
+            .SelectMany(static section => section.Entries)
+            .ToDictionary(static entry => entry.Label, StringComparer.Ordinal);
+
+        foreach (var command in ShellCommandCatalog.Commands.Where(static command => command.ShowInHelp))
+        {
+            Assert.IsTrue(entriesByLabel.TryGetValue(command.Label, out var entry), $"Missing help entry for {command.Id}.");
+            CollectionAssert.AreEqual(command.HelpBindings.ToArray(), entry.Bindings.ToArray(), $"Help bindings diverged for {command.Id}.");
+        }
     }
 
     [TestMethod]

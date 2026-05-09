@@ -39,6 +39,8 @@ public sealed class ShellInputRouterTests
         Assert.IsInstanceOfType<OpenHelpIntent>(_router.Route("/help", steerRequested: false));
         Assert.IsInstanceOfType<OpenCommandPaletteIntent>(_router.Route("/command_palette", steerRequested: false));
         Assert.IsInstanceOfType<OpenFolderIntent>(_router.Route("/open", steerRequested: false));
+        Assert.IsInstanceOfType<OpenAcpManagementIntent>(_router.Route("/acp_agents", steerRequested: false));
+        Assert.IsInstanceOfType<OpenAcpManagementIntent>(_router.Route("/acp", steerRequested: false));
         Assert.IsInstanceOfType<OpenFileEditorIntent>(_router.Route("/edit", steerRequested: false));
         Assert.IsInstanceOfType<OpenSkillsIntent>(_router.Route("/skills", steerRequested: false));
         Assert.IsInstanceOfType<OpenSkillsIntent>(_router.Route("/skill", steerRequested: false));
@@ -72,6 +74,19 @@ public sealed class ShellInputRouterTests
 
         Assert.IsInstanceOfType<SendPromptIntent>(intent);
         Assert.AreEqual("investigate the regression", ((SendPromptIntent)intent).PromptText);
+    }
+
+    [TestMethod]
+    public void Route_AllAdvertisedSlashCommands_AreRoutable()
+    {
+        foreach (var binding in ShellCommandCatalog.Commands
+                     .Where(static command => command.ShowInHelp)
+                     .SelectMany(static command => command.HelpBindings)
+                     .Where(static binding => binding.Length > 1 && binding[0] == '/'))
+        {
+            var intent = _router.Route($"{binding} sample", steerRequested: false);
+            Assert.IsFalse(intent is UnknownTextCommandIntent, $"Help advertises an unroutable slash command: {binding}");
+        }
     }
 
     [TestMethod]

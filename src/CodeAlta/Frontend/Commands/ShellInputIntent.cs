@@ -14,6 +14,8 @@ internal sealed record OpenCommandPaletteIntent : ShellInputIntent;
 
 internal sealed record ExitAppIntent : ShellInputIntent;
 
+internal sealed record ToggleCommandBarMultiLineIntent : ShellInputIntent;
+
 internal sealed record FocusSidebarIntent : ShellInputIntent;
 
 internal sealed record FocusPromptIntent : ShellInputIntent;
@@ -21,6 +23,8 @@ internal sealed record FocusPromptIntent : ShellInputIntent;
 internal sealed record FocusModelProviderIntent : ShellInputIntent;
 
 internal sealed record OpenModelProvidersIntent : ShellInputIntent;
+
+internal sealed record OpenAcpManagementIntent : ShellInputIntent;
 
 internal sealed record OpenFileEditorIntent : ShellInputIntent;
 

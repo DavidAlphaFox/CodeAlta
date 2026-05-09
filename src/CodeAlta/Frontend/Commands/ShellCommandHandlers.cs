@@ -131,9 +131,19 @@ internal static class DialogCommandHandlers
             dialogCommandService.ExitApp();
             return ValueTask.CompletedTask;
         });
+        registry.Register<ToggleCommandBarMultiLineCommand>((_, _) =>
+        {
+            dialogCommandService.ToggleCommandBarMultiLine();
+            return ValueTask.CompletedTask;
+        });
         registry.Register<OpenFolderCommand>((command, _) =>
         {
             showOpenFolderDialog(command.InitialPath);
+            return ValueTask.CompletedTask;
+        });
+        registry.Register<OpenAcpManagementCommand>((_, _) =>
+        {
+            dialogCommandService.OpenAcpManagement();
             return ValueTask.CompletedTask;
         });
         registry.Register<OpenModelProvidersCommand>((_, _) => ToValueTask(dialogCommandService.OpenModelProvidersAsync()));

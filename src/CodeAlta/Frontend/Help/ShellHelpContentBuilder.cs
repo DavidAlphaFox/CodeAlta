@@ -69,35 +69,7 @@ internal static class ShellHelpContentBuilder
     }
 
     private static ShellHelpEntry BuildEntry(ShellCommandMetadata command)
-    {
-        var bindings = new List<string>();
-        if (command.Gesture is { } gesture)
-        {
-            bindings.Add(FormatGesture(gesture));
-        }
-
-        if (command.Sequence is { } sequence)
-        {
-            bindings.Add(FormatSequence(sequence));
-        }
-
-        foreach (var alias in command.TextCommandAliases)
-        {
-            bindings.Add($"/{alias}");
-        }
-
-        if (command.Id == "CodeAlta.Shell.Help")
-        {
-            bindings.Add("?");
-        }
-
-        if (command.Id == "CodeAlta.Shell.CommandPalette")
-        {
-            bindings.Add("/");
-        }
-
-        return new ShellHelpEntry(command.Label, command.Description, bindings);
-    }
+        => new(command.Label, command.Description, command.HelpBindings);
 
     private static bool MatchesFilter(ShellCommandMetadata command, string? filterText)
     {
@@ -123,12 +95,6 @@ internal static class ShellHelpContentBuilder
             _ => category.ToString()
         };
     }
-
-    private static string FormatGesture(object gesture)
-        => gesture.ToString() ?? string.Empty;
-
-    private static string FormatSequence(object sequence)
-        => sequence.ToString() ?? string.Empty;
 
     private static string FormatInlineCode(string value)
         => string.IsNullOrEmpty(value)

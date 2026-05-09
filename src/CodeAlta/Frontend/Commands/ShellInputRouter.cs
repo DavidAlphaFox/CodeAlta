@@ -43,10 +43,12 @@ internal sealed class ShellInputRouter
             { Id: "CodeAlta.Shell.Help" } => new OpenHelpIntent(arguments),
             { Id: "CodeAlta.Shell.CommandPalette" } => new OpenCommandPaletteIntent(),
             { Id: "CodeAlta.Shell.Exit", SupportsTextCommand: true } => new ExitAppIntent(),
+            { Id: "CodeAlta.Shell.ToggleCommandBarMultiLine" } => new ToggleCommandBarMultiLineIntent(),
             { SupportsTextCommand: false } => steerRequested
                 ? new SteerPromptIntent(trimmed)
                 : new SendPromptIntent(trimmed),
             { Id: "CodeAlta.Project.OpenFolder" } => new OpenFolderIntent(arguments),
+            { Id: "CodeAlta.Acp.Manage" } => new OpenAcpManagementIntent(),
             { Id: "CodeAlta.File.Edit" } => new OpenFileEditorIntent(),
             { Id: "CodeAlta.Providers.Manage" } => new OpenModelProvidersIntent(),
             { Id: "CodeAlta.Skills.Manage" } => new OpenSkillsIntent(),

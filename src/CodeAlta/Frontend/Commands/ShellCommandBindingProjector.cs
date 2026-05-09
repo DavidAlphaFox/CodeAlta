@@ -123,7 +123,7 @@ internal sealed class ShellCommandBindingProjector
             presentation.ShowInCommandBar,
             presentation.ShowInCommandPalette,
             SupportsTextCommand: true,
-            presentation.ShowInHelp);
+            ShowInHelp: presentation.ShowInHelp);
     }
 
     private bool CanExecutePluginCommand(PluginCommandAvailability availability)

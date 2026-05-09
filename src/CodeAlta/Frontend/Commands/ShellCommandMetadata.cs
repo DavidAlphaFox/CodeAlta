@@ -46,6 +46,7 @@ internal sealed record ShellCommandMetadata(
     bool ShowInCommandBar = true,
     bool ShowInCommandPalette = true,
     bool SupportsTextCommand = true,
+    IReadOnlyList<string>? AdditionalHelpBindings = null,
     bool ShowInHelp = true)
 {
     public string CommandName { get; } = ResolveCommandName(CommandName, Label);
@@ -61,6 +62,14 @@ internal sealed record ShellCommandMetadata(
             ResolveCommandName(CommandName, Label),
             Aliases)
         : [];
+    public IReadOnlyList<string> HelpBindings { get; } = BuildHelpBindings(
+        Gesture,
+        Sequence,
+        SupportsTextCommand,
+        BuildAliases(
+            ResolveCommandName(CommandName, Label),
+            Aliases),
+        AdditionalHelpBindings);
 
     internal string CommandSearchText { get; } = BuildCommandSearchText(
         Label,
@@ -162,5 +171,49 @@ internal sealed record ShellCommandMetadata(
         }
 
         return string.Join(' ', searchTerms);
+    }
+
+    private static IReadOnlyList<string> BuildHelpBindings(
+        KeyGesture? gesture,
+        KeySequence? sequence,
+        bool supportsTextCommand,
+        IReadOnlyList<string> aliases,
+        IReadOnlyList<string>? additionalHelpBindings)
+    {
+        var bindings = new List<string>();
+
+        if (gesture is not null)
+        {
+            bindings.Add(gesture.ToString() ?? string.Empty);
+        }
+
+        if (sequence is not null)
+        {
+            bindings.Add(sequence.ToString() ?? string.Empty);
+        }
+
+        if (supportsTextCommand)
+        {
+            foreach (var alias in aliases)
+            {
+                bindings.Add($"/{alias}");
+            }
+        }
+
+        if (additionalHelpBindings is not null)
+        {
+            foreach (var binding in additionalHelpBindings)
+            {
+                if (string.IsNullOrWhiteSpace(binding) ||
+                    bindings.Contains(binding, StringComparer.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                bindings.Add(binding);
+            }
+        }
+
+        return bindings;
     }
 }

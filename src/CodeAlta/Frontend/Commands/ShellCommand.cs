@@ -30,9 +30,13 @@ internal sealed record OpenCommandPaletteCommand : ShellCommand;
 
 internal sealed record ExitAppCommand : ShellCommand;
 
+internal sealed record ToggleCommandBarMultiLineCommand : ShellCommand;
+
 internal sealed record OpenFolderCommand(string? InitialPath = null) : ShellCommand;
 
 internal sealed record OpenModelProvidersCommand : ShellCommand;
+
+internal sealed record OpenAcpManagementCommand : ShellCommand;
 
 internal sealed record OpenFileEditorCommand : ShellCommand;
 

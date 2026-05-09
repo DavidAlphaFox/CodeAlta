@@ -264,12 +264,12 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         var threadSvc = new DelegatingShellThreadCommandService(GetSelectedThread, EnsureThreadTab);
         var dialogs = new DelegatingShellDialogCommandService(
             () => DialogBoundsResolver.ResolveAppBounds(ThreadInput), () => ThreadInput, () => _threadStateCoordinator.Projects,
-            OpenFolderAsync, OpenModelProvidersAsync, _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
+            OpenFolderAsync, OpenAcp, OpenModelProvidersAsync, _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
             SkillsManagementCoordinatorFactory.Create(_ownedServices, _catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync, _threadCommandCoordinator.ActivateSelectedSkillAsync, SetStatus),
             PluginManagementCoordinatorFactory.Create(_catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync),
             () => EnsureSessionUsagePresenter().TogglePopupFromIndicator(),
             () => { if (ThreadInput is not null) EnsureThreadInfoPresenter().TogglePopup(ThreadInput); },
-            () => _threadWorkspaceView?.OpenExpandedPromptDialog());
+            () => _threadWorkspaceView?.OpenExpandedPromptDialog(), ToggleCommandBarMultiLine);
         var navigation = new DelegatingShellNavigationCommandService(
             FocusSidebar, FocusPromptEditor, FocusModelProviderSelector,
             () => { _ = _threadTabStripCoordinator.TrySelectRelativeTab(-1); return Task.CompletedTask; },
@@ -488,7 +488,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             PromptImageCallbacks = imageCallbacks,
             Sidebar = _sidebarCoordinator.View.Root,
             ShellCommandSurfaceCoordinator = _shellCommandSurfaceCoordinator,
-            OpenAcpManager = OpenAcpManagement,
+            OpenAcpManager = OpenAcp,
             ToggleTerminalLoopCallback = ToggleTerminalLoopCallback,
             CanUseCommandPalette = () => _fileEditorWorkspaceCoordinator.SelectedTabId is null,
             ComposePluginFooter = commandBar => ShellPluginFooterComposer.Compose(commandBar, _ownedServices?.PluginHostBridge),
@@ -728,7 +728,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         return Task.CompletedTask;
     }
 
-    internal void OpenAcpManagement() { if (_acpManagementCoordinator is null) { SetStatus("ACP management is unavailable in this app instance.", tone: StatusTone.Warning); return; } _acpManagementCoordinator.Open(); }
+    internal void OpenAcp() { if (_acpManagementCoordinator is null) { SetStatus("ACP management is unavailable in this app instance.", tone: StatusTone.Warning); return; } _acpManagementCoordinator.Open(); }
     internal Task OpenModelProvidersAsync() => _providerDialogCoordinator.OpenAsync();
     internal void FocusSidebar() { SyncSidebarSelectionToCurrentState(); ApplyPendingSidebarSelection(); _sidebarCoordinator.View.Tree.App?.Focus(_sidebarCoordinator.View.Tree); }
     private async Task CloseThreadTabAsync(string threadId)

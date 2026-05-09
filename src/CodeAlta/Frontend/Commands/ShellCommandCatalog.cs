@@ -47,6 +47,7 @@ internal static class ShellCommandCatalog
             ShellCommandScope.AnyShell,
             ShellCommandAvailability.Always,
             Gesture: new KeyGesture(TerminalKey.F1),
+            AdditionalHelpBindings: ["?"],
             Aliases: ["help"]),
         new(
             "CodeAlta.Shell.CommandPalette",
@@ -55,7 +56,8 @@ internal static class ShellCommandCatalog
             ShellCommandHelpCategory.General,
             ShellCommandScope.AnyShell,
             ShellCommandAvailability.Always,
-            Gesture: new KeyGesture(TerminalChar.CtrlP, TerminalModifiers.Ctrl)),
+            Gesture: new KeyGesture(TerminalChar.CtrlP, TerminalModifiers.Ctrl),
+            AdditionalHelpBindings: ["/"]),
         new(
             "CodeAlta.Shell.Exit",
             "Exit",

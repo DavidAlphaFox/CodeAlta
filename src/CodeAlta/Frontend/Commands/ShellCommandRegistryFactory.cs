@@ -52,7 +52,9 @@ internal sealed class ShellCommandRegistryFactory
 
         var registry = new ShellCommandRegistry();
         registry.RegisterFactory("CodeAlta.Shell.Help", static () => new OpenHelpCommand());
+        registry.RegisterFactory("CodeAlta.Shell.ToggleCommandBarMultiLine", static () => new ToggleCommandBarMultiLineCommand());
         registry.RegisterFactory("CodeAlta.Project.OpenFolder", static () => new OpenFolderCommand());
+        registry.RegisterFactory("CodeAlta.Acp.Manage", static () => new OpenAcpManagementCommand());
         registry.RegisterFactory("CodeAlta.Providers.Manage", static () => new OpenModelProvidersCommand());
         registry.RegisterFactory("CodeAlta.File.Edit", static () => new OpenFileEditorCommand());
         registry.RegisterFactory("CodeAlta.Skills.Manage", static () => new OpenSkillsCommand());
