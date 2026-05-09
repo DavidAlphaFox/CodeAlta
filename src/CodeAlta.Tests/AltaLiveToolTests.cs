@@ -181,6 +181,51 @@ public sealed class AltaLiveToolTests
     }
 
     [TestMethod]
+    public async Task ToolCapabilityList_SummarizesRuntimeBackendAndPluginCapabilities()
+    {
+        using var root = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var backendId = new AgentBackendId("openai-responses");
+        var pluginCatalog = new FakeAltaPluginCatalog(
+            new AltaPluginCommandContribution
+            {
+                Plugin = CreatePluginDescriptor("capability-plugin"),
+                Services = NoopPluginServices.Create(),
+                Scope = PluginScope.Global,
+                Command = new PluginAltaCommandContribution
+                {
+                    Path = "capability-sample",
+                    CreateCommandNode = _ => new Command("capability-sample", "Capability sample."),
+                },
+            });
+        var dispatcher = CreateDispatcher(new AltaServiceCollection()
+            .Add(options)
+            .Add(new ProjectCatalog(options))
+            .Add(new WorkThreadCatalog(options))
+            .Add(new SkillCatalog())
+            .Add<IReadOnlyList<AgentBackendDescriptor>>([new AgentBackendDescriptor(backendId, "OpenAI Responses")])
+            .Add<IAltaSessionToolBackendPolicy>(new AltaSessionToolBackendPolicy([backendId.Value]))
+            .Add<IAltaPluginCatalog>(pluginCatalog));
+
+        var result = await dispatcher.InvokeAsync(["tool", "capability", "list"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+
+        Assert.AreEqual(AltaExitCodes.Success, result.ExitCode);
+        var lines = ReadJsonLines(result.Stdout);
+        Assert.IsTrue(lines.Any(static line =>
+            line.GetProperty("type").GetString() == "alta.tool.runtimeCapability" &&
+            line.GetProperty("capability").GetString() == "catalog.project" &&
+            line.GetProperty("available").GetBoolean()));
+        Assert.IsTrue(lines.Any(static line =>
+            line.GetProperty("type").GetString() == "alta.tool.backendCapability" &&
+            line.GetProperty("backendId").GetString() == "openai-responses" &&
+            line.GetProperty("supportsAltaSessionTool").GetBoolean()));
+        Assert.IsTrue(lines.Any(static line =>
+            line.GetProperty("type").GetString() == "alta.tool.pluginCapability" &&
+            line.GetProperty("pluginCount").GetInt32() == 1 &&
+            line.GetProperty("pluginCommandCount").GetInt32() == 1));
+    }
+
+    [TestMethod]
     public async Task SessionTool_InvalidTimeout_ReturnsToolArgumentError()
     {
         using var arguments = JsonDocument.Parse("""{"args":["version"],"timeoutMs":0}""");

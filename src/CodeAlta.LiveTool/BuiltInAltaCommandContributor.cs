@@ -494,15 +494,99 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         command.Add((_, _) =>
         {
             var policies = GetEffectivePolicies(context);
+            var recordCount = 0;
             foreach (var policy in policies.OrderBy(static policy => policy.Path, StringComparer.OrdinalIgnoreCase))
             {
                 WritePolicy(context, "alta.tool.capability", policy);
+                recordCount++;
             }
 
-            WriteSummary(context, "alta.tool.capability.summary", policies.Count, truncated: false);
+            recordCount += WriteRuntimeCapabilities(context);
+            recordCount += WriteBackendCapabilities(context);
+            recordCount += WritePluginCapabilities(context, policies);
+            WriteSummary(context, "alta.tool.capability.summary", recordCount, truncated: false);
             return ValueTask.FromResult(AltaExitCodes.Success);
         });
         return command;
+    }
+
+    private static int WriteRuntimeCapabilities(AltaCommandContext context)
+    {
+        (string Capability, bool Available)[] capabilities =
+        [
+            ("catalog.project", context.Services.Get<ProjectCatalog>() is not null),
+            ("catalog.thread", context.Services.Get<WorkThreadCatalog>() is not null),
+            ("catalog.skill", context.Services.Get<SkillCatalog>() is not null),
+            ("runtime.workThread", context.Services.Get<WorkThreadRuntimeService>() is not null),
+            ("providers.agentHub", context.Services.Get<AgentHub>() is not null),
+            ("plugins.altaCatalog", context.Services.Get<IAltaPluginCatalog>() is not null),
+            ("sessionTool.backendPolicy", context.Services.Get<IAltaSessionToolBackendPolicy>() is not null),
+        ];
+
+        foreach (var capability in capabilities)
+        {
+            AltaJsonlWriter.WriteRecord(context.Stdout, new
+            {
+                type = "alta.tool.runtimeCapability",
+                version = 1,
+                correlationId = context.CorrelationId,
+                capability = capability.Capability,
+                capability.Available,
+            });
+        }
+
+        return capabilities.Length;
+    }
+
+    private static int WriteBackendCapabilities(AltaCommandContext context)
+    {
+        var descriptors = GetBackendDescriptors(context);
+        var registered = context.Services.Get<AgentHub>()?.ListRegisteredBackends() ?? [];
+        var backendIds = descriptors.Select(static descriptor => descriptor.BackendId)
+            .Concat(registered)
+            .Distinct()
+            .OrderBy(static id => id.Value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var policy = context.Services.Get<IAltaSessionToolBackendPolicy>();
+
+        foreach (var backendId in backendIds)
+        {
+            AltaJsonlWriter.WriteRecord(context.Stdout, new
+            {
+                type = "alta.tool.backendCapability",
+                version = 1,
+                correlationId = context.CorrelationId,
+                providerKey = backendId.Value,
+                backendId = backendId.Value,
+                registered = registered.Contains(backendId),
+                configured = descriptors.Any(descriptor => descriptor.BackendId == backendId),
+                supportsAltaSessionTool = policy?.SupportsAltaSessionTool(backendId.Value) ?? false,
+            });
+        }
+
+        return backendIds.Length;
+    }
+
+    private static int WritePluginCapabilities(AltaCommandContext context, IReadOnlyList<AltaCommandPolicy> policies)
+    {
+        if (context.Services.Get<IAltaPluginCatalog>() is not { } catalog)
+        {
+            return 0;
+        }
+
+        var plugins = catalog.ListPlugins();
+        var builtInPolicyPaths = new HashSet<string>(Policies.Select(static policy => policy.Path), StringComparer.OrdinalIgnoreCase);
+        var pluginCommandCount = policies.Count(policy => !builtInPolicyPaths.Contains(policy.Path));
+        AltaJsonlWriter.WriteRecord(context.Stdout, new
+        {
+            type = "alta.tool.pluginCapability",
+            version = 1,
+            correlationId = context.CorrelationId,
+            available = true,
+            pluginCount = plugins.Count,
+            pluginCommandCount,
+        });
+        return 1;
     }
 
     private static Command CreateProviderCommand(AltaCommandContext context)
