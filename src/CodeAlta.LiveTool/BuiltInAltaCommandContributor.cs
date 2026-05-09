@@ -1105,11 +1105,6 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             return PermissionDenied(context, "policy.visibilityDenied", $"The caller is not allowed to mutate session '{threadId}'.");
         }
 
-        if (kind == PromptDispatchKind.Queue)
-        {
-            return Unsupported(context, "session.queueUnsupported", "Headless prompt queueing is unavailable in the current runtime context.");
-        }
-
         var inputText = kind is PromptDispatchKind.Message or PromptDispatchKind.Request
             ? BuildPeerAgentMessage(context, info.Thread, options, promptResult.Prompt!)
             : promptResult.Prompt!;
@@ -1117,6 +1112,18 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
 
         try
         {
+            if (kind == PromptDispatchKind.Queue)
+            {
+                var queueItem = await runtime.QueuePromptAsync(
+                    info.Thread,
+                    inputText,
+                    kind.ToString().ToLowerInvariant(),
+                    CreateProvenance(context),
+                    context.CancellationToken).ConfigureAwait(false);
+                WritePromptResult(context, "alta.session.queued", info.Thread, null, queueItem.QueueItemId, queued: true, kind, inputText);
+                return AltaExitCodes.Success;
+            }
+
             if (kind == PromptDispatchKind.Steer)
             {
                 var runId = await runtime.SteerAsync(
@@ -1125,13 +1132,20 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
                     new AgentSteerOptions { Input = AgentInput.Text(inputText) },
                     context.CancellationToken).ConfigureAwait(false);
                 await PersistPromptProvenanceAsync(context, info.Thread, runId.Value, queued: false, kind, inputText).ConfigureAwait(false);
-                WritePromptResult(context, "alta.session.steered", info.Thread, runId.Value, queued: false, kind, inputText);
+                WritePromptResult(context, "alta.session.steered", info.Thread, runId.Value, null, queued: false, kind, inputText);
                 return AltaExitCodes.Success;
             }
 
             if (options.QueueIfBusy && await runtime.HasActiveRunAsync(info.Thread, context.CancellationToken).ConfigureAwait(false))
             {
-                return Unsupported(context, "session.queueUnsupported", "The target session is busy and headless prompt queueing is unavailable in the current runtime context.");
+                var queueItem = await runtime.QueuePromptAsync(
+                    info.Thread,
+                    inputText,
+                    kind.ToString().ToLowerInvariant(),
+                    CreateProvenance(context),
+                    context.CancellationToken).ConfigureAwait(false);
+                WritePromptResult(context, "alta.session.queued", info.Thread, null, queueItem.QueueItemId, queued: true, kind, inputText);
+                return AltaExitCodes.Success;
             }
 
             var submittedRunId = await runtime.SendAsync(
@@ -1141,7 +1155,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
                 context.CancellationToken).ConfigureAwait(false);
             await runtime.PersistThreadLocalStateAsync(info.Thread, context.CancellationToken).ConfigureAwait(false);
             await PersistPromptProvenanceAsync(context, info.Thread, submittedRunId.Value, queued: false, kind, inputText).ConfigureAwait(false);
-            WritePromptResult(context, kind is PromptDispatchKind.Message or PromptDispatchKind.Request ? "alta.session.message.sent" : "alta.session.submitted", info.Thread, submittedRunId.Value, queued: false, kind, inputText);
+            WritePromptResult(context, kind is PromptDispatchKind.Message or PromptDispatchKind.Request ? "alta.session.message.sent" : "alta.session.submitted", info.Thread, submittedRunId.Value, null, queued: false, kind, inputText);
             return AltaExitCodes.Success;
         }
         catch (Exception ex) when (kind == PromptDispatchKind.Steer && ex is InvalidOperationException or NotSupportedException)
@@ -2025,7 +2039,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             latestSummary = info.Thread.LatestSummary,
             messageCount = info.Thread.MessageCount,
             isRunning = info.IsRunning,
-            queuedPromptCount = 0,
+            queuedPromptCount = info.LocalState?.QueuedPrompts.Count(static prompt => IsPendingQueuedPromptState(prompt.State)) ?? 0,
             modelSelection = ToModelSelectionPayload(CreateModelSelection(info.Thread, info.Preference)),
             createdAt = info.Thread.CreatedAt,
             updatedAt = info.Thread.UpdatedAt,
@@ -2036,6 +2050,10 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             childThreadIds = includeChildren ? children.Select(static child => child.Thread.ThreadId).ToArray() : null,
         });
     }
+
+    private static bool IsPendingQueuedPromptState(string? state)
+        => string.Equals(state, "queued", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(state, "submitting", StringComparison.OrdinalIgnoreCase);
 
     private static void WriteModelSelection(AltaCommandContext context, string type, AltaModelSelection selection, string? threadId)
     {
@@ -2156,7 +2174,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         return set;
     }
 
-    private static void WritePromptResult(AltaCommandContext context, string type, WorkThreadDescriptor thread, string runId, bool queued, PromptDispatchKind kind, string prompt)
+    private static void WritePromptResult(AltaCommandContext context, string type, WorkThreadDescriptor thread, string? runId, string? queueItemId, bool queued, PromptDispatchKind kind, string prompt)
     {
         AltaJsonlWriter.WriteRecord(context.Stdout, new
         {
@@ -2165,6 +2183,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             correlationId = context.CorrelationId,
             threadId = thread.ThreadId,
             runId,
+            queueItemId,
             queued,
             dispatchKind = kind.ToString().ToLowerInvariant(),
             submittedBy = CreateProvenance(context),

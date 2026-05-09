@@ -371,13 +371,15 @@ Implementation source:
 - `IWorkThreadOrchestrator.AbortAsync`
 - `IWorkThreadOrchestrator.CompactAsync`
 
+The current live tool dispatch path uses `WorkThreadRuntimeService` directly for create/send/steer/abort/compact and for durable queue persistence. The UI-facing `RuntimeWorkThreadOrchestratorAdapter.QueuePromptAsync` delegates to the same runtime queue service so the orchestrator contract and live tool use a shared durable queue record shape.
+
 `session create` uses the model selection resolution rules in section 5.5. Its JSONL result record must include the resolved model selection and compact `modelRef`.
 
 The current implementation persists per-thread model/reasoning preferences in `WorkThreadViewState.ThreadPreferences` when `session create` resolves a model selection so later `session model`, caller-session inheritance, and `--same-model-as` reuse the same `modelRef` after restart.
 
 When `session create` is invoked by an agent session and the target session belongs to the same project as the caller, CodeAlta should default `parentThreadId` to the caller's source thread id. If the target session is created in another project, CodeAlta should still record `createdBy` provenance but should not create a sidebar parent/child link by default. `--parent <thread-id>` can request an explicit same-project parent; `--no-parent` suppresses the hierarchy link while keeping provenance.
 
-`send` starts or continues a normal turn. `steer` must only target an active run and should fail with exit code 7 when the backend/runtime does not support steering. `queue` is explicit queueing for busy sessions. `send --queue-if-busy` is a convenience that maps to submit-or-queue behavior.
+`send` starts or continues a normal turn. `steer` must only target an active run and should fail with exit code 7 when the backend/runtime does not support steering. `queue` is explicit queueing for busy sessions. `send --queue-if-busy` is a convenience that maps to submit-or-queue behavior. Queued prompts are persisted in `WorkThreadLocalState.QueuedPrompts` with `queued`/`submitting`/`submitted`/`failed`-ready state fields, `queueItemId`, prompt preview, attribution, and eventual run/drain fields; `session list/show/status` expose the pending queued/submitting count, and runtime queue events project queue changes into open-session timelines. Runtime draining reserves at most one queued item per thread through the per-thread actor before calling the backend, so duplicate idle/error notifications cannot drain multiple queued prompts concurrently.
 
 `join` is a non-blocking observation/setup command, not authority transfer. It should return the current session summary/status and any context needed for a controller session to address the target later; it must not follow future events or wait for new output.
 
@@ -390,7 +392,7 @@ alta session request <thread-id> (--message <text> | --stdin) [--reply-requested
 
 These commands are wrappers over `session send` or `session queue` that add CodeAlta attribution metadata. They are useful when one agent needs to communicate with another without pretending to be the user. `--reply-requested` is metadata for the target session; the command still returns after delivery/queueing and does not wait for a reply.
 
-The current implementation records prompt-like operation provenance in `WorkThreadLocalState.PromptProvenance` for normal sends, steering, and inter-agent message/request wrappers. Queue provenance remains tied to durable/headless queue implementation work.
+The current implementation records prompt-like operation provenance in `WorkThreadLocalState.PromptProvenance` for normal sends, steering, inter-agent message/request wrappers, and queued prompts. Queue records share the queue item id as their prompt provenance id so restart-time timeline reconstruction can correlate prompt attribution with drain state.
 
 All inter-agent messages must be rendered to the target session with a visible attribution header similar to:
 
@@ -787,6 +789,7 @@ CodeAlta should bootstrap a compact coordinator instruction file at `~/.alta/AGE
 - it can create, send to, steer, queue, abort, and summarize project sessions when appropriate;
 - it should preserve provenance and use peer-agent authority when communicating with project sessions;
 - it should use `alta --help` and narrower help commands for progressive command discovery;
+- it should inspect and activate skills through the canonical `alta skill` commands when the live tool is available, keeping `skills activate`/`skills_activate` only as compatibility aliases;
 - it should prefer JSONL parsing and bounded/non-blocking `alta` commands.
 
 The shipped template should live in CodeAlta content, for example:
@@ -964,14 +967,14 @@ If a backend cannot store metadata, CodeAlta should render a visible header and 
 
 - [x] Implement provider/model/reasoning discovery and model-ref resolution (`provider model list`, `model list`, `model show`, `model resolve`).
 - [x] Implement `session create`, `send`, `steer`, `abort`, `compact`, and non-blocking `join` through runtime/orchestration services where possible.
-- [ ] Implement durable/headless `session queue` through `IWorkThreadOrchestrator` or an equivalent real queue service.
+- [x] Implement durable/headless `session queue` through `IWorkThreadOrchestrator` or an equivalent real queue service.
 - [x] Add durable caller/plugin attribution and same-project parent-thread assignment for `session create`.
 - [x] Add JSONL caller/plugin attribution for prompt submission, steering, abort, compact, and inter-agent message command results.
 - [x] Persist prompt/steering/inter-agent message provenance durably enough for restart-time timeline reconstruction.
-- [ ] Persist queued prompt provenance and drain state durably enough for restart-time timeline reconstruction.
+- [x] Persist queued prompt provenance and drain state durably enough for restart-time timeline reconstruction.
 - [x] Handle unsupported backend capabilities with exit code 7 and clear messages.
 - [x] Add regression tests for model-ref parsing, caller-session model inheritance, `--same-model-as` with reasoning override, child-session provenance, agent-created prompt provenance, inter-agent prompt provenance, visibility denial, and steering unsupported cases.
-- [ ] Add regression tests for plugin-created prompt provenance, plugin-created session provenance, and busy-session queueing.
+- [x] Add regression tests for plugin-created prompt provenance, plugin-created session provenance, and busy-session queueing.
 
 ### Phase 7: Agent tool exposure
 
@@ -986,7 +989,7 @@ If a backend cannot store metadata, CodeAlta should render a visible header and 
 - [x] Implement `skill list/show/activate` and compatibility aliases.
 - [x] Route session activation through `IWorkThreadOrchestrator.ActivateSkillAsync` or `WorkThreadRuntimeService.ActivateSkillAsync`.
 - [x] Return provider-managed-skill unsupported diagnostics where applicable.
-- [ ] Update skill docs/global instructions after behavior exists.
+- [x] Update skill docs/global instructions after behavior exists.
 
 ### Phase 9: Plugin extension support
 
@@ -995,15 +998,15 @@ If a backend cannot store metadata, CodeAlta should render a visible header and 
 - [x] Merge core and plugin command-node factories/descriptors so plugin commands appear in the relevant `--help` output.
 - [x] Enforce v1 collision rules and safety classifications.
 - [x] Add tests with a sample plugin/fake plugin catalog contributing a read-only command, command discovery/help, collision handling, and runtime-owned plugin service identity/scope.
-- [ ] Add tests with a mutating plugin command and plugin invocation of `alta session create` through the plugin service.
+- [x] Add tests with a mutating plugin command and plugin invocation of `alta session create` through the plugin service.
 
 ### Phase 10: Inter-agent communication and policies
 
 - [x] Implement `session message` and `session request` wrappers.
 - [x] Persist/render peer-agent attribution metadata and prompt provenance.
 - [x] Add enforced coordinator/project visibility policy checks.
-- [ ] Add sidebar/timeline projection updates for agent-created same-project child sessions and agent-created prompts.
-- [ ] Add tests ensuring peer-agent messages cannot be rendered as user/developer/system instructions.
+- [x] Add sidebar/timeline projection updates for agent-created same-project child sessions and agent-created prompts.
+- [x] Add tests ensuring peer-agent messages cannot be rendered as user/developer/system instructions.
 
 ## 12. Documentation and testing requirements
 

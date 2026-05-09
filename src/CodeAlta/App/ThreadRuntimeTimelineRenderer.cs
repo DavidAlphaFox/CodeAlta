@@ -30,6 +30,23 @@ internal sealed class ThreadRuntimeTimelineRenderer
             headerSecondary: ChatMarkdownFormatter.GetSessionUpdateHeader(hostEvent.Kind));
     }
 
+    public void RenderQueueEvent(OpenThreadState tab, WorkThreadQueueRuntimeEvent queueEvent)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(queueEvent);
+
+        var action = queueEvent.IsEnqueued ? "Queued prompt for later submission." : "Updated queued prompt state.";
+        var markdown = string.IsNullOrWhiteSpace(queueEvent.PromptPreview)
+            ? action
+            : string.Concat(action, Environment.NewLine, Environment.NewLine, "> ", queueEvent.PromptPreview.Trim().Replace("\n", "\n> ", StringComparison.Ordinal));
+        tab.Timeline.AddStatus(
+            queueEvent.Timestamp,
+            markdown,
+            ChatTimelineTone.Notice,
+            headerOverride: "Notice",
+            headerSecondary: "Prompt Queue");
+    }
+
     public void RenderAgentEvent(OpenThreadState tab, AgentEvent @event)
     {
         ArgumentNullException.ThrowIfNull(tab);

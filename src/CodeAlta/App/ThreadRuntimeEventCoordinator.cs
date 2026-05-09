@@ -90,6 +90,11 @@ internal sealed class ThreadRuntimeEventCoordinator
                     TryRenderInteraction(tab, () => _timelineRenderer.RenderHostEvent(tab, hostEvent), "host event");
                     _frontendEvents?.Publish(new RuntimeTimelineChangedEvent(thread.ThreadId));
                     break;
+
+                case WorkThreadQueueRuntimeEvent queueEvent:
+                    TryRenderInteraction(tab, () => _timelineRenderer.RenderQueueEvent(tab, queueEvent), "queue event");
+                    _frontendEvents?.Publish(new RuntimeTimelineChangedEvent(thread.ThreadId));
+                    break;
             }
         }
 

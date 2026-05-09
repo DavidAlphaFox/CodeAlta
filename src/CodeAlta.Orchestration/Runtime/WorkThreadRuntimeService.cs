@@ -480,7 +480,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             @event => entry?.ObserveEvent(@event));
         var subscription = await _agentHub.SubscribeSessionEventsAsync(
                 agentId,
-                @event => _ = PostAgentEventToActorAsync(actor, projector, @event),
+                @event => _ = PostAgentEventToActorAsync(actor, thread.ThreadId, projector, @event),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -533,6 +533,77 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         var runId = await _agentHub.RunAsync(agentId, sendOptions, cancellationToken).ConfigureAwait(false);
         await MarkActiveRunIfStillInFlightAsync(thread.ThreadId, runId, runStartedAt, cancellationToken).ConfigureAwait(false);
         return runId;
+    }
+
+    /// <summary>
+    /// Persists a headless prompt queue item for later submission by the owning runtime/front-end queue drain path.
+    /// </summary>
+    /// <param name="thread">Target thread.</param>
+    /// <param name="prompt">Prompt text to submit later.</param>
+    /// <param name="kind">Prompt dispatch kind, such as <c>send</c>, <c>message</c>, or <c>request</c>.</param>
+    /// <param name="submittedBy">Durable caller attribution for the queueing actor.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The persisted queue item.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="thread"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="prompt"/> or <paramref name="kind"/> is empty.</exception>
+    public async Task<WorkThreadQueuedPrompt> QueuePromptAsync(
+        WorkThreadDescriptor thread,
+        string prompt,
+        string kind,
+        AltaActorProvenance? submittedBy,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
+        ArgumentException.ThrowIfNullOrWhiteSpace(kind);
+
+        var actor = _threadActors.GetOrCreate(thread.ThreadId);
+        return await actor.QueryAsync(
+                async actorCancellationToken =>
+                {
+                    var timestamp = DateTimeOffset.UtcNow;
+                    var item = new WorkThreadQueuedPrompt
+                    {
+                        QueueItemId = "queue-" + Guid.NewGuid().ToString("N"),
+                        Kind = kind,
+                        Prompt = prompt,
+                        PromptPreview = CreatePromptPreview(prompt),
+                        State = "queued",
+                        SubmittedBy = submittedBy,
+                        CreatedAt = timestamp,
+                    };
+
+                    var viewState = await _threadCatalog.LoadViewStateAsync(actorCancellationToken).ConfigureAwait(false);
+                    var localState = GetOrCreateLocalState(viewState, thread.ThreadId);
+                    CopyThreadMetadata(thread, localState);
+                    localState.QueuedPrompts ??= [];
+                    localState.QueuedPrompts.Add(item);
+                    localState.PromptProvenance ??= [];
+                    localState.PromptProvenance.Add(new WorkThreadPromptProvenance
+                    {
+                        PromptId = item.QueueItemId,
+                        Kind = kind,
+                        Queued = true,
+                        PromptPreview = item.PromptPreview,
+                        SubmittedBy = submittedBy,
+                        CreatedAt = timestamp,
+                    });
+
+                    TrimLocalStateHistory(localState);
+                    viewState.ThreadStates[thread.ThreadId] = localState;
+                    viewState.UpdatedAt = timestamp;
+                    await _threadCatalog.SaveViewStateAsync(viewState, actorCancellationToken).ConfigureAwait(false);
+                    _events.TryPublish(new WorkThreadQueueRuntimeEvent(
+                        thread.ThreadId,
+                        timestamp,
+                        QueuedPromptCount(localState),
+                        item.QueueItemId,
+                        item.PromptPreview,
+                        IsEnqueued: true));
+                    return item;
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -731,6 +802,49 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         }
 
         return string.Concat(baseText.TrimEnd(), Environment.NewLine, Environment.NewLine, additionalText.Trim());
+    }
+
+    private static WorkThreadLocalState GetOrCreateLocalState(WorkThreadViewState viewState, string threadId)
+    {
+        if (!viewState.ThreadStates.TryGetValue(threadId, out var state))
+        {
+            state = new WorkThreadLocalState();
+        }
+
+        return state;
+    }
+
+    private static void CopyThreadMetadata(WorkThreadDescriptor thread, WorkThreadLocalState localState)
+    {
+        localState.Archived = thread.Status == WorkThreadStatus.Archived;
+        localState.MessageCount = thread.MessageCount;
+        localState.ParentThreadId = thread.ParentThreadId;
+        localState.CreatedBy = thread.CreatedBy;
+    }
+
+    private static int QueuedPromptCount(WorkThreadLocalState localState)
+        => localState.QueuedPrompts.Count(static prompt => IsPendingQueuedPromptState(prompt.State));
+
+    private static bool IsPendingQueuedPromptState(string? state)
+        => string.Equals(state, "queued", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(state, "submitting", StringComparison.OrdinalIgnoreCase);
+
+    private static string CreatePromptPreview(string prompt)
+        => prompt.Length <= 160 ? prompt : prompt[..160];
+
+    private static void TrimLocalStateHistory(WorkThreadLocalState localState)
+    {
+        const int MaxPromptProvenanceRecords = 200;
+        if (localState.PromptProvenance.Count > MaxPromptProvenanceRecords)
+        {
+            localState.PromptProvenance.RemoveRange(0, localState.PromptProvenance.Count - MaxPromptProvenanceRecords);
+        }
+
+        const int MaxQueuedPromptRecords = 200;
+        if (localState.QueuedPrompts.Count > MaxQueuedPromptRecords)
+        {
+            localState.QueuedPrompts.RemoveRange(0, localState.QueuedPrompts.Count - MaxQueuedPromptRecords);
+        }
     }
 
     private SkillCatalogQuery BuildSkillCatalogQuery(ProjectDescriptor? project, IReadOnlyList<string> projectRoots)
@@ -984,8 +1098,9 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         }
     }
 
-    private static async Task PostAgentEventToActorAsync(
+    private async Task PostAgentEventToActorAsync(
         WorkThreadActor actor,
+        string threadId,
         EventProjector projector,
         AgentEvent @event)
     {
@@ -997,6 +1112,11 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                     return ValueTask.CompletedTask;
                 })
                 .ConfigureAwait(false);
+
+            if (IsQueueDrainTrigger(@event))
+            {
+                await TryDrainNextQueuedPromptAsync(threadId).ConfigureAwait(false);
+            }
         }
         catch (ObjectDisposedException)
         {
@@ -1004,7 +1124,210 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         catch (InvalidOperationException)
         {
         }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
+
+    private static bool IsQueueDrainTrigger(AgentEvent @event)
+        => @event is AgentSessionUpdateEvent { Kind: AgentSessionUpdateKind.Idle }
+            or AgentErrorEvent;
+
+    private async Task TryDrainNextQueuedPromptAsync(string threadId)
+    {
+        if (_disposed || string.IsNullOrWhiteSpace(threadId))
+        {
+            return;
+        }
+
+        var work = await TryMarkNextQueuedPromptSubmittingAsync(threadId).ConfigureAwait(false);
+        if (work is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var runStartedAt = DateTimeOffset.UtcNow;
+            var runId = await _agentHub.RunAsync(
+                    work.AgentId,
+                    new AgentSendOptions { Input = AgentInput.Text(work.Prompt.Prompt) },
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+            await MarkQueuedPromptSubmittedAsync(threadId, work.Prompt.QueueItemId, runId, runStartedAt, DateTimeOffset.UtcNow).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            if (_disposed && ex is OperationCanceledException)
+            {
+                return;
+            }
+
+            await MarkQueuedPromptFailedAsync(threadId, work.Prompt.QueueItemId, ex.Message, DateTimeOffset.UtcNow).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<QueuedPromptDrainWork?> TryMarkNextQueuedPromptSubmittingAsync(string threadId)
+    {
+        var actor = _threadActors.GetOrCreate(threadId);
+        return await actor.QueryAsync(
+                async actorCancellationToken =>
+                {
+                    if (!_entries.TryGetValue(threadId, out var entry) || entry.IsTerminated || entry.HasActiveRun || entry.QueueDrainInProgress)
+                    {
+                        return null;
+                    }
+
+                    var viewState = await _threadCatalog.LoadViewStateAsync(actorCancellationToken).ConfigureAwait(false);
+                    if (!viewState.ThreadStates.TryGetValue(threadId, out var localState) || localState.QueuedPrompts.Count == 0)
+                    {
+                        return null;
+                    }
+
+                    var item = localState.QueuedPrompts.FirstOrDefault(static prompt => string.Equals(prompt.State, "queued", StringComparison.OrdinalIgnoreCase));
+                    if (item is null)
+                    {
+                        return null;
+                    }
+
+                    var timestamp = DateTimeOffset.UtcNow;
+                    item.State = "submitting";
+                    item.DrainedAt = timestamp;
+                    item.LastError = null;
+                    viewState.UpdatedAt = timestamp;
+                    await _threadCatalog.SaveViewStateAsync(viewState, actorCancellationToken).ConfigureAwait(false);
+                    entry.BeginQueueDrain();
+                    PublishQueueChanged(threadId, localState, item, timestamp, isEnqueued: false);
+                    return new QueuedPromptDrainWork(entry.AgentId, CloneQueuedPrompt(item));
+                },
+                CancellationToken.None)
+            .ConfigureAwait(false);
+    }
+
+    private async Task MarkQueuedPromptSubmittedAsync(
+        string threadId,
+        string queueItemId,
+        AgentRunId runId,
+        DateTimeOffset runStartedAt,
+        DateTimeOffset timestamp)
+        => await UpdateQueuedPromptStateAsync(
+                threadId,
+                queueItemId,
+                timestamp,
+                item =>
+                {
+                    item.State = "submitted";
+                    item.RunId = runId.Value;
+                    item.DrainedAt = timestamp;
+                    item.LastError = null;
+                },
+                provenance => provenance.RunId = runId.Value,
+                entry =>
+                {
+                    entry.CompleteQueueDrain();
+                    entry.MarkActiveRunIfStillInFlight(runId, runStartedAt);
+                })
+            .ConfigureAwait(false);
+
+    private async Task MarkQueuedPromptFailedAsync(string threadId, string queueItemId, string error, DateTimeOffset timestamp)
+        => await UpdateQueuedPromptStateAsync(
+                threadId,
+                queueItemId,
+                timestamp,
+                item =>
+                {
+                    item.State = "failed";
+                    item.DrainedAt = timestamp;
+                    item.LastError = error;
+                },
+                updateProvenance: null,
+                entry => entry.CompleteQueueDrain())
+            .ConfigureAwait(false);
+
+    private async Task UpdateQueuedPromptStateAsync(
+        string threadId,
+        string queueItemId,
+        DateTimeOffset timestamp,
+        Action<WorkThreadQueuedPrompt> updateItem,
+        Action<WorkThreadPromptProvenance>? updateProvenance,
+        Action<ThreadSessionEntry>? updateEntry)
+    {
+        var actor = _threadActors.GetOrCreate(threadId);
+        await actor.QueryAsync(
+                async actorCancellationToken =>
+                {
+                    try
+                    {
+                        var viewState = await _threadCatalog.LoadViewStateAsync(actorCancellationToken).ConfigureAwait(false);
+                        if (!viewState.ThreadStates.TryGetValue(threadId, out var localState))
+                        {
+                            return false;
+                        }
+
+                        var item = localState.QueuedPrompts.FirstOrDefault(prompt => string.Equals(prompt.QueueItemId, queueItemId, StringComparison.Ordinal));
+                        if (item is null)
+                        {
+                            return false;
+                        }
+
+                        updateItem(item);
+                        if (updateProvenance is not null)
+                        {
+                            var provenance = localState.PromptProvenance.FirstOrDefault(prompt => string.Equals(prompt.PromptId, queueItemId, StringComparison.Ordinal));
+                            if (provenance is not null)
+                            {
+                                updateProvenance(provenance);
+                            }
+                        }
+
+                        viewState.UpdatedAt = timestamp;
+                        await _threadCatalog.SaveViewStateAsync(viewState, actorCancellationToken).ConfigureAwait(false);
+                        PublishQueueChanged(threadId, localState, item, timestamp, isEnqueued: false);
+                        return true;
+                    }
+                    finally
+                    {
+                        if (updateEntry is not null && _entries.TryGetValue(threadId, out var entry))
+                        {
+                            updateEntry(entry);
+                        }
+                    }
+                },
+                CancellationToken.None)
+            .ConfigureAwait(false);
+    }
+
+    private void PublishQueueChanged(string threadId, WorkThreadLocalState localState, WorkThreadQueuedPrompt item, DateTimeOffset timestamp, bool isEnqueued)
+    {
+        _events.TryPublish(new WorkThreadQueueRuntimeEvent(
+            threadId,
+            timestamp,
+            QueuedPromptCount(localState),
+            item.QueueItemId,
+            item.PromptPreview,
+            isEnqueued));
+    }
+
+    private static WorkThreadQueuedPrompt CloneQueuedPrompt(WorkThreadQueuedPrompt item)
+        => new()
+        {
+            QueueItemId = item.QueueItemId,
+            Kind = item.Kind,
+            Prompt = item.Prompt,
+            PromptPreview = item.PromptPreview,
+            State = item.State,
+            RunId = item.RunId,
+            SubmittedBy = item.SubmittedBy,
+            CreatedAt = item.CreatedAt,
+            DrainedAt = item.DrainedAt,
+            LastError = item.LastError,
+        };
 
     private void PublishSessionLifecycleEvent(
         string threadId,
@@ -1236,6 +1559,8 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
 
         public DateTimeOffset LastTerminalEventAt { get; private set; } = DateTimeOffset.MinValue;
 
+        public bool QueueDrainInProgress { get; private set; }
+
         public bool HasActiveRun => ActiveRunId is not null;
 
         public bool Matches(WorkThreadExecutionOptions options, string backendSessionId)
@@ -1291,6 +1616,12 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             ActiveRunId = runId;
         }
 
+        public void BeginQueueDrain()
+            => QueueDrainInProgress = true;
+
+        public void CompleteQueueDrain()
+            => QueueDrainInProgress = false;
+
         public async Task DisposeAsync(AgentHub hub)
         {
             Subscription.Dispose();
@@ -1299,6 +1630,8 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
     }
 
     private sealed record RecoverableThreadCandidate(WorkThreadDescriptor Thread, bool IsCodeAltaSession);
+
+    private sealed record QueuedPromptDrainWork(AgentId AgentId, WorkThreadQueuedPrompt Prompt);
 
     private sealed class EventProjector
     {

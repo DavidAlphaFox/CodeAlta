@@ -98,7 +98,7 @@ public sealed class PluginAltaCommandContributor : IAltaCommandContributor
         => new()
         {
             Plugin = contribution.Plugin,
-            Services = contribution.Services,
+            Services = CreatePluginScopedServices(contribution.Services, contribution.Plugin.RuntimeKey),
             Scope = contribution.Scope,
             ScopeProjectId = contribution.ScopeProjectId,
             ScopeProjectPath = contribution.ScopeProjectPath,
@@ -110,6 +110,16 @@ public sealed class PluginAltaCommandContributor : IAltaCommandContributor
             CancellationToken = invocation.CancellationToken,
         };
 
+    private static IPluginServices CreatePluginScopedServices(IPluginServices services, string pluginRuntimeKey)
+    {
+        if (services.Alta is not IPluginAltaRuntimeService runtimeService)
+        {
+            return services;
+        }
+
+        return new PluginScopedServices(services, new PluginScopedAltaService(runtimeService, pluginRuntimeKey));
+    }
+
     private static bool RootMatchesDeclaredPath(string commandName, string path)
         => string.Equals(commandName, GetRoot(path), StringComparison.OrdinalIgnoreCase);
 
@@ -117,5 +127,36 @@ public sealed class PluginAltaCommandContributor : IAltaCommandContributor
     {
         var segments = path.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return segments.Length == 0 ? null : segments[0];
+    }
+
+    private sealed class PluginScopedAltaService(IPluginAltaRuntimeService inner, string pluginRuntimeKey) : IPluginAltaService
+    {
+        public ValueTask<PluginAltaCommandResult> InvokeAsync(
+            IReadOnlyList<string> args,
+            string? stdin = null,
+            PluginAltaInvocationOptions? options = null,
+            CancellationToken cancellationToken = default)
+            => inner.InvokeAsync(pluginRuntimeKey, args, stdin, options, cancellationToken);
+    }
+
+    private sealed class PluginScopedServices(IPluginServices inner, IPluginAltaService alta) : IPluginServices
+    {
+        public XenoAtom.Logging.Logger Logger => inner.Logger;
+
+        public IPluginUiService Ui => inner.Ui;
+
+        public IPluginStateStore State => inner.State;
+
+        public IPluginWorkspaceService Workspace => inner.Workspace;
+
+        public IPluginThreadService Threads => inner.Threads;
+
+        public IPluginPromptService Prompts => inner.Prompts;
+
+        public IPluginAgentService Agents => inner.Agents;
+
+        public IPluginTaskService Tasks => inner.Tasks;
+
+        public IPluginAltaService Alta { get; } = alta;
     }
 }

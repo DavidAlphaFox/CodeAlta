@@ -70,6 +70,20 @@ public sealed class ThreadRuntimeEventCoordinatorTests
     }
 
     [TestMethod]
+    public void ShouldApplyShellChromeProjectionAfterRuntimeEvent_RefreshesForQueueEvents()
+    {
+        var runtimeEvent = new WorkThreadQueueRuntimeEvent(
+            "thread-1",
+            DateTimeOffset.UtcNow,
+            QueuedPromptCount: 1,
+            QueueItemId: "queue-1",
+            PromptPreview: "queued prompt",
+            IsEnqueued: true);
+
+        Assert.IsTrue(ThreadRuntimeEventCoordinator.ShouldApplyShellChromeProjectionAfterRuntimeEvent(runtimeEvent));
+    }
+
+    [TestMethod]
     public void ApplyRuntimeEvent_ForwardsAgentEventsToPluginObserver()
     {
         var thread = CreateThread();
@@ -506,6 +520,29 @@ public sealed class ThreadRuntimeEventCoordinatorTests
                 null,
                 "Done")));
 
+        Assert.IsTrue(events.OfType<RuntimeTimelineChangedEvent>().Any(@event => @event.ThreadId == thread.ThreadId));
+        Assert.IsTrue(events.OfType<ShellChromeChangedEvent>().Any());
+    }
+
+    [TestMethod]
+    public void ApplyRuntimeEvent_QueueEventAddsTimelineNoticeAndProjectionEvents()
+    {
+        var thread = CreateThread();
+        var tab = CreateOpenThreadState(thread);
+        var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
+        var events = new List<ShellFrontendEvent>();
+        publisher.Subscribe(events.Add);
+        var coordinator = CreateCoordinator(thread, tab, frontendEvents: publisher);
+
+        coordinator.ApplyRuntimeEvent(new WorkThreadQueueRuntimeEvent(
+            thread.ThreadId,
+            DateTimeOffset.UtcNow,
+            QueuedPromptCount: 1,
+            QueueItemId: "queue-1",
+            PromptPreview: "queued prompt",
+            IsEnqueued: true));
+
+        Assert.AreEqual(1, tab.Timeline.Flow.Items.Count);
         Assert.IsTrue(events.OfType<RuntimeTimelineChangedEvent>().Any(@event => @event.ThreadId == thread.ThreadId));
         Assert.IsTrue(events.OfType<ShellChromeChangedEvent>().Any());
     }

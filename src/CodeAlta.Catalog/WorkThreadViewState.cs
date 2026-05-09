@@ -277,6 +277,12 @@ public sealed class WorkThreadLocalState
     public List<WorkThreadPromptProvenance> PromptProvenance { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets persisted headless prompts waiting for later submission or retained for drain-state reconstruction.
+    /// </summary>
+    [JsonPropertyName("queued_prompts")]
+    public List<WorkThreadQueuedPrompt> QueuedPrompts { get; set; } = [];
+
+    /// <summary>
     /// Validates the thread local state.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the message count is negative.</exception>
@@ -296,6 +302,110 @@ public sealed class WorkThreadLocalState
         foreach (var provenance in PromptProvenance)
         {
             provenance.Validate();
+        }
+
+        QueuedPrompts ??= [];
+        foreach (var queuedPrompt in QueuedPrompts)
+        {
+            queuedPrompt.Validate();
+        }
+    }
+}
+
+/// <summary>
+/// Describes a durable headless prompt queue item for a work thread.
+/// </summary>
+public sealed class WorkThreadQueuedPrompt
+{
+    /// <summary>
+    /// Gets or sets the stable queue item identifier.
+    /// </summary>
+    [JsonPropertyName("queue_item_id")]
+    public string QueueItemId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the prompt dispatch kind, such as <c>send</c>, <c>message</c>, or <c>request</c>.
+    /// </summary>
+    [JsonPropertyName("kind")]
+    public string Kind { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the queued prompt text to submit when the queue is drained.
+    /// </summary>
+    [JsonPropertyName("prompt")]
+    public string Prompt { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the short visible prompt preview stored for diagnostics and timeline reconstruction.
+    /// </summary>
+    [JsonPropertyName("prompt_preview")]
+    public string? PromptPreview { get; set; }
+
+    /// <summary>
+    /// Gets or sets the durable queue state, such as <c>queued</c>, <c>submitting</c>, <c>submitted</c>, or <c>failed</c>.
+    /// </summary>
+    [JsonPropertyName("state")]
+    public string State { get; set; } = "queued";
+
+    /// <summary>
+    /// Gets or sets the run identifier produced when this queued prompt is drained, if any.
+    /// </summary>
+    [JsonPropertyName("run_id")]
+    public string? RunId { get; set; }
+
+    /// <summary>
+    /// Gets or sets durable attribution for the actor that queued the prompt.
+    /// </summary>
+    [JsonPropertyName("submitted_by")]
+    public AltaActorProvenance? SubmittedBy { get; set; }
+
+    /// <summary>
+    /// Gets or sets the creation timestamp.
+    /// </summary>
+    [JsonPropertyName("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the timestamp at which queue draining was attempted or completed.
+    /// </summary>
+    [JsonPropertyName("drained_at")]
+    public DateTimeOffset? DrainedAt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the last drain failure message, when draining failed.
+    /// </summary>
+    [JsonPropertyName("last_error")]
+    public string? LastError { get; set; }
+
+    /// <summary>
+    /// Validates the queued prompt record.
+    /// </summary>
+    /// <exception cref="ArgumentException">Thrown when required fields are invalid.</exception>
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(QueueItemId))
+        {
+            throw new ArgumentException("Queue item id is required.", nameof(QueueItemId));
+        }
+
+        if (string.IsNullOrWhiteSpace(Kind))
+        {
+            throw new ArgumentException("Queued prompt kind is required.", nameof(Kind));
+        }
+
+        if (string.IsNullOrWhiteSpace(Prompt))
+        {
+            throw new ArgumentException("Queued prompt text is required.", nameof(Prompt));
+        }
+
+        if (string.IsNullOrWhiteSpace(State))
+        {
+            throw new ArgumentException("Queued prompt state is required.", nameof(State));
+        }
+
+        if (SubmittedBy is not null && string.IsNullOrWhiteSpace(SubmittedBy.Kind))
+        {
+            throw new ArgumentException("SubmittedBy kind is required when queued prompt attribution is present.", nameof(SubmittedBy));
         }
     }
 }

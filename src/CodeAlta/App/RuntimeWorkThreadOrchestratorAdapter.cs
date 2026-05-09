@@ -80,12 +80,22 @@ internal sealed class RuntimeWorkThreadOrchestratorAdapter : IWorkThreadOrchestr
     public ValueTask<WorkThreadCommandResult> ActivateSkillAsync(ActivateSkillRequest request, CancellationToken cancellationToken = default)
         => ValueTask.FromResult(new WorkThreadCommandResult { Outcome = WorkThreadCommandOutcomeKind.Completed });
 
-    public ValueTask<WorkThreadCommandResult> QueuePromptAsync(QueueWorkThreadPromptRequest request, CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(new WorkThreadCommandResult { Outcome = WorkThreadCommandOutcomeKind.Queued });
+    public async ValueTask<WorkThreadCommandResult> QueuePromptAsync(QueueWorkThreadPromptRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var thread = ResolveThread(request.Context);
+        var item = await _runtimeService.QueuePromptAsync(thread, request.Prompt, "send", submittedBy: null, cancellationToken);
+        return new WorkThreadCommandResult
+        {
+            Outcome = WorkThreadCommandOutcomeKind.Queued,
+            Thread = WorkThreadDescriptorSnapshot.FromDescriptor(thread),
+            Message = item.QueueItemId,
+        };
+    }
 
     public ValueTask<WorkThreadSnapshot?> GetThreadSnapshotAsync(string threadId, CancellationToken cancellationToken = default)
         => ValueTask.FromResult(_findThread(threadId) is { } thread
-            ? new WorkThreadSnapshot { Thread = WorkThreadDescriptorSnapshot.FromDescriptor(thread), IsRunning = false }
+            ? new WorkThreadSnapshot { Thread = WorkThreadDescriptorSnapshot.FromDescriptor(thread), IsRunning = false, QueuedPromptCount = 0 }
             : null);
 
     public async IAsyncEnumerable<WorkThreadOrchestratorEvent> StreamEventsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)

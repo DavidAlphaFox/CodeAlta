@@ -36,6 +36,7 @@ internal sealed class ThreadRuntimeStateReducer
         {
             WorkThreadAgentEvent agentEvent => ReduceAgentEvent(thread, tab, agentEvent.Event, isSelectedThread, ShouldApplyShellChromeProjectionAfterRuntimeEvent(runtimeEvent)),
             WorkThreadHostEvent hostEvent => ReduceHostEvent(thread, tab, hostEvent),
+            WorkThreadQueueRuntimeEvent => new ThreadRuntimeReductionResult(true, false, false, false, false, null),
             _ => default,
         };
     }
@@ -90,6 +91,7 @@ internal sealed class ThreadRuntimeStateReducer
         return runtimeEvent switch
         {
             WorkThreadHostEvent => true,
+            WorkThreadQueueRuntimeEvent => true,
             WorkThreadAgentEvent
             {
                 Event: AgentContentCompletedEvent

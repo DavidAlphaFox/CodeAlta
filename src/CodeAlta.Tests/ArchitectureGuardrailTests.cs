@@ -501,8 +501,8 @@ public sealed class ArchitectureGuardrailTests
             "App/SidebarCoordinator.cs:297:_ = CommitInlineRenameAsync(row, projectId, displayName, previousTitle);",
             "App/ThreadPromptDispatchCoordinator.cs:177:_ = RecordResolvedReferenceUsageAsync(promptInput.ResolvedReferences);",
             "App/ThreadPromptDraftPersistenceCoordinator.cs:83:_ = PersistPromptDraftAsync(threadId, normalizedPrompt, cancellationSource);",
-            "App/ThreadRuntimeEventCoordinator.cs:200:Task.Run(async () =>",
-            "App/ThreadRuntimeEventCoordinator.cs:391:_ = InvalidateProjectFileSearchAsync(thread.WorkingDirectory);",
+            "App/ThreadRuntimeEventCoordinator.cs:205:Task.Run(async () =>",
+            "App/ThreadRuntimeEventCoordinator.cs:396:_ = InvalidateProjectFileSearchAsync(thread.WorkingDirectory);",
             "Presentation/Editing/FileEditorTab.cs:213:_ = RefreshExternalStateAsync();",
             "Presentation/Editing/ProjectFileOpenDialogController.cs:217:_ = AcceptSelectedAsync(selected);",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:153:var sessionCreateTask = Task.Run(",
@@ -948,7 +948,7 @@ public sealed class ArchitectureGuardrailTests
         StringAssert.Contains(runtimeSource, "await MarkActiveRunIfStillInFlightAsync(thread.ThreadId, runId, runStartedAt, cancellationToken)");
         StringAssert.Contains(runtimeSource, "var entry = await GetActiveCoordinatorSessionForSteeringAsync(thread, options, actorCancellationToken)");
         StringAssert.Contains(runtimeSource, "return await _agentHub.SteerAsync(agentId, steerOptions, cancellationToken)");
-        StringAssert.Contains(runtimeSource, "@event => _ = PostAgentEventToActorAsync(actor, projector, @event)");
+        StringAssert.Contains(runtimeSource, "@event => _ = PostAgentEventToActorAsync(actor, thread.ThreadId, projector, @event)");
         StringAssert.Contains(runtimeSource, "projector.Project(@event);");
         StringAssert.Contains(runtimeSource, "var actor = _threadActors.GetOrCreate(threadId);");
         StringAssert.Contains(runtimeSource, "var result = await _threadActors.GetOrCreate(thread.ThreadId).ExecuteAsync(");
