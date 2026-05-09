@@ -56,6 +56,11 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Gets the skill catalog used when building instructions and activating skills.
+    /// </summary>
+    public SkillCatalog SkillCatalog => _skillCatalog;
+
+    /// <summary>
     /// Streams sanitized runtime events across all active threads.
     /// </summary>
     public IAsyncEnumerable<WorkThreadRuntimeEvent> StreamEventsAsync(CancellationToken cancellationToken = default)

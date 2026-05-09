@@ -59,6 +59,7 @@ internal sealed class CodeAltaLiveToolHost : IAsyncDisposable
         var backendDescriptors = new List<AgentBackendDescriptor>();
         var providerDefinitions = configStore.LoadGlobalProviderDefinitions(includeDisabled: true)
             .ToDictionary(static definition => definition.ProviderKey, StringComparer.OrdinalIgnoreCase);
+        var altaToolBackendIds = ResolveAltaToolBackendIds(providerDefinitions.Values);
         CodeAltaHost host;
         try
         {
@@ -75,12 +76,11 @@ internal sealed class CodeAltaLiveToolHost : IAsyncDisposable
                     PluginBuiltIns = CodeAltaBuiltInPlugins.All,
                     ConfigureAgentBackends = RegisterLiveToolBackends,
                 },
-                cancellationToken)
-            .ConfigureAwait(false);
+                cancellationToken);
         }
         catch
         {
-            await modelsDevCatalogService.DisposeAsync().ConfigureAwait(false);
+            await modelsDevCatalogService.DisposeAsync();
             if (ownsLogging && LogManager.IsInitialized)
             {
                 LogManager.Shutdown();
@@ -106,7 +106,12 @@ internal sealed class CodeAltaLiveToolHost : IAsyncDisposable
             .Add(host.RuntimeService)
             .Add(host.ProjectFileSearchService)
             .Add<IReadOnlyList<AgentBackendDescriptor>>(backendDescriptors)
-            .Add<IAltaPluginCatalog>(new RuntimeAltaPluginCatalog(host.PluginRuntime));
+            .Add<IAltaPluginCatalog>(new RuntimeAltaPluginCatalog(host.PluginRuntime))
+            .Add<IAltaSessionToolBackendPolicy>(new AltaSessionToolBackendPolicy(altaToolBackendIds));
+        var registry = new AltaCommandRegistry();
+        services
+            .Add(registry)
+            .Add(new AltaCommandDispatcher(registry, services));
 
         return new CodeAltaLiveToolHost(host, modelsDevCatalogService, services, ownsLogging);
 
@@ -161,11 +166,11 @@ internal sealed class CodeAltaLiveToolHost : IAsyncDisposable
     {
         try
         {
-            await _host.DisposeAsync().ConfigureAwait(false);
+            await _host.DisposeAsync();
         }
         finally
         {
-            await _modelsDevCatalogService.DisposeAsync().ConfigureAwait(false);
+            await _modelsDevCatalogService.DisposeAsync();
             if (_ownsLogging && LogManager.IsInitialized)
             {
                 LogManager.Shutdown();
@@ -173,44 +178,26 @@ internal sealed class CodeAltaLiveToolHost : IAsyncDisposable
         }
     }
 
-    private sealed class RuntimeAltaPluginCatalog(PluginRuntimeManager runtime) : IAltaPluginCatalog
+    private static IReadOnlySet<string> ResolveAltaToolBackendIds(IEnumerable<CodeAltaProviderDocument> providerDefinitions)
     {
-        public IReadOnlyList<AltaPluginSummary> ListPlugins()
-            => runtime.ActivePlugins
-                .Select(CreateSummary)
-                .OrderBy(static plugin => plugin.RuntimeKey, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-        public AltaPluginSummary? GetPlugin(string runtimeKey)
+        var backendIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(runtimeKey);
-            return ListPlugins().FirstOrDefault(plugin => string.Equals(plugin.RuntimeKey, runtimeKey, StringComparison.OrdinalIgnoreCase));
-        }
-
-        public IReadOnlyList<AltaCommandPolicy> ListCommandPolicies()
-            => [];
-
-        private AltaPluginSummary CreateSummary(ActivePluginInstance plugin)
+            AgentBackendIds.OpenAIChat.Value,
+            AgentBackendIds.OpenAIResponses.Value,
+        };
+        foreach (var provider in providerDefinitions)
         {
-            var descriptor = plugin.Descriptor;
-            var packageId = plugin.SourcePackage?.PackageId;
-            var diagnostics = runtime.Diagnostics
-                .Where(diagnostic => string.Equals(diagnostic.RuntimeKey, descriptor.RuntimeKey, StringComparison.OrdinalIgnoreCase) ||
-                                     (!string.IsNullOrWhiteSpace(packageId) && string.Equals(diagnostic.PackageId, packageId, StringComparison.OrdinalIgnoreCase)))
-                .Select(FormatDiagnostic)
-                .ToArray();
-            return new AltaPluginSummary
+            if (SupportsHostInjectedTools(provider.ProviderType) && !string.IsNullOrWhiteSpace(provider.ProviderKey))
             {
-                RuntimeKey = descriptor.RuntimeKey,
-                DisplayName = descriptor.DisplayName ?? descriptor.TypeName,
-                Version = descriptor.Version,
-                Scope = plugin.SourcePackage?.Root.Scope.ToString().ToLowerInvariant() ?? "builtin",
-                State = plugin.State.ToString().ToLowerInvariant(),
-                Diagnostics = diagnostics,
-            };
+                backendIds.Add(provider.ProviderKey);
+            }
         }
 
-        private static string FormatDiagnostic(PluginRuntimeDiagnostic diagnostic)
-            => $"{diagnostic.Severity}/{diagnostic.Source}: {diagnostic.Message}";
+        return backendIds;
     }
+
+    private static bool SupportsHostInjectedTools(string? providerType)
+        => string.Equals(providerType, "openai-chat", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(providerType, "openai-responses", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(providerType, "openai-codex-subscription", StringComparison.OrdinalIgnoreCase);
 }

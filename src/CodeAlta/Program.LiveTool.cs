@@ -22,7 +22,12 @@ internal partial class Program
     {
         ArgumentNullException.ThrowIfNull(args);
         var normalized = NormalizeLiveToolArguments(args);
-        return normalized.Count > 0 && LiveToolRootCommands.Contains(normalized[0]);
+        if (normalized.Count == 0)
+        {
+            return false;
+        }
+
+        return LiveToolRootCommands.Contains(normalized[0]) || !normalized[0].StartsWith("-", StringComparison.Ordinal);
     }
 
     internal static bool IsRootHelpInvocation(IReadOnlyList<string> args)
@@ -153,7 +158,8 @@ internal partial class Program
             return false;
         }
 
-        if (string.Equals(args[0], "version", StringComparison.OrdinalIgnoreCase) ||
+        if (!LiveToolRootCommands.Contains(args[0]) ||
+            string.Equals(args[0], "version", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(args[0], "tool", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(args[0], "project", StringComparison.OrdinalIgnoreCase))
         {

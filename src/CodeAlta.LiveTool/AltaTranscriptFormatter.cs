@@ -31,27 +31,13 @@ public static class AltaTranscriptFormatter
             truncated = true;
         }
 
-        var normalCount = emittedRecords.Count(record => !record.Contains("\"type\":\"alta.error\"", StringComparison.Ordinal) &&
-                                                        !record.Contains("\"type\":\"alta.warning\"", StringComparison.Ordinal));
-        var diagnosticCount = emittedRecords.Count - normalCount;
-        var header = AltaJsonlWriter.Serialize(new
-        {
-            type = "alta.result",
-            version = 1,
-            exitCode = commandResult.ExitCode,
-            correlationId = commandResult.CorrelationId,
-            truncated,
-            recordCount = normalCount,
-            diagnosticCount,
-        });
-
-        var builder = new StringBuilder(header.Length + commandResult.Stdout.Length + commandResult.Stderr.Length + 8);
-        builder.Append(header).Append('\n');
+        var includedRecords = new List<string>(emittedRecords.Count);
         foreach (var record in emittedRecords)
         {
             if (maxBytes is > 0)
             {
-                var projectedBytes = Encoding.UTF8.GetByteCount(builder.ToString()) + Encoding.UTF8.GetByteCount(record) + 1;
+                var mayTruncateAfterThisRecord = truncated || includedRecords.Count + 1 < emittedRecords.Count;
+                var projectedBytes = GetTranscriptByteCount(commandResult, includedRecords, record, mayTruncateAfterThisRecord);
                 if (projectedBytes > maxBytes.Value)
                 {
                     truncated = true;
@@ -59,22 +45,18 @@ public static class AltaTranscriptFormatter
                 }
             }
 
-            builder.Append(record).Append('\n');
+            includedRecords.Add(record);
         }
 
-        if (truncated && !header.Contains("\"truncated\":true", StringComparison.Ordinal))
+        var normalCount = includedRecords.Count(record => !record.Contains("\"type\":\"alta.error\"", StringComparison.Ordinal) &&
+                                                         !record.Contains("\"type\":\"alta.warning\"", StringComparison.Ordinal));
+        var diagnosticCount = includedRecords.Count - normalCount;
+        var header = CreateResultHeader(commandResult, truncated, normalCount, diagnosticCount);
+        var builder = new StringBuilder(header.Length + commandResult.Stdout.Length + commandResult.Stderr.Length + 8);
+        builder.Append(header).Append('\n');
+        foreach (var record in includedRecords)
         {
-            builder.Remove(0, header.Length);
-            builder.Insert(0, AltaJsonlWriter.Serialize(new
-            {
-                type = "alta.result",
-                version = 1,
-                exitCode = commandResult.ExitCode,
-                correlationId = commandResult.CorrelationId,
-                truncated = true,
-                recordCount = normalCount,
-                diagnosticCount,
-            }));
+            builder.Append(record).Append('\n');
         }
 
         return commandResult with
@@ -87,4 +69,51 @@ public static class AltaTranscriptFormatter
 
     private static IReadOnlyList<string> SplitRecords(string text)
         => text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static int GetTranscriptByteCount(
+        AltaCommandResult commandResult,
+        IReadOnlyList<string> includedRecords,
+        string candidateRecord,
+        bool truncated)
+    {
+        var normalCount = 0;
+        var diagnosticCount = 0;
+        foreach (var record in includedRecords)
+        {
+            CountRecord(record, ref normalCount, ref diagnosticCount);
+        }
+
+        CountRecord(candidateRecord, ref normalCount, ref diagnosticCount);
+        var count = Encoding.UTF8.GetByteCount(CreateResultHeader(commandResult, truncated, normalCount, diagnosticCount)) + 1;
+        foreach (var record in includedRecords)
+        {
+            count += Encoding.UTF8.GetByteCount(record) + 1;
+        }
+
+        return count + Encoding.UTF8.GetByteCount(candidateRecord) + 1;
+    }
+
+    private static string CreateResultHeader(AltaCommandResult commandResult, bool truncated, int recordCount, int diagnosticCount)
+        => AltaJsonlWriter.Serialize(new
+        {
+            type = "alta.result",
+            version = 1,
+            exitCode = commandResult.ExitCode,
+            correlationId = commandResult.CorrelationId,
+            truncated,
+            recordCount,
+            diagnosticCount,
+        });
+
+    private static void CountRecord(string record, ref int normalCount, ref int diagnosticCount)
+    {
+        if (record.Contains("\"type\":\"alta.error\"", StringComparison.Ordinal) ||
+            record.Contains("\"type\":\"alta.warning\"", StringComparison.Ordinal))
+        {
+            diagnosticCount++;
+            return;
+        }
+
+        normalCount++;
+    }
 }

@@ -519,6 +519,11 @@ public sealed class SystemPromptBuilder
             builder.Append("Available host tool count: ").Append(request.Tools.Count.ToString(CultureInfo.InvariantCulture)).AppendLine(".");
         }
 
+        if (request.Tools.Any(static tool => string.Equals(tool.Spec.Name, "alta", StringComparison.OrdinalIgnoreCase)))
+        {
+            builder.AppendLine("Use the `alta` live tool for finite CodeAlta host/session/catalog operations. Start with args [\"--help\"], then narrower help such as [\"session\",\"--help\"] before invoking mutating commands.");
+        }
+
         return builder.ToString().Trim();
     }
 

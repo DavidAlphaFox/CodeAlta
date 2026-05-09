@@ -3,6 +3,7 @@ using CodeAlta.App.Context;
 using CodeAlta.App.Events;
 using CodeAlta.App.State;
 using CodeAlta.Catalog;
+using CodeAlta.LiveTool;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Presentation.Chat;
@@ -99,6 +100,27 @@ internal sealed class CodeAltaFrontendComposition
         knownProjectImporter.ShouldLoadProviderSessions = ShouldLoadProviderSessions;
         var configStore = new CodeAltaConfigStore(catalogOptions);
         var modelProviderPreferences = new ModelProviderPreferenceCoordinator(configStore, CodeAlta.Views.CodeAltaApp.UiLogger);
+        var altaToolBackendIds = ResolveAltaToolBackendIds(configStore);
+        var altaServices = new AltaServiceCollection()
+            .Add(catalogOptions)
+            .Add(projectCatalog)
+            .Add(threadCatalog)
+            .Add(runtimeService)
+            .Add(runtimeService.SkillCatalog)
+            .Add(agentHub)
+            .Add(projectFileSearchService)
+            .Add<IReadOnlyList<AgentBackendDescriptor>>(backendDescriptors)
+            .Add<IAltaSessionToolBackendPolicy>(new AltaSessionToolBackendPolicy(altaToolBackendIds));
+        if (pluginHostBridge?.Runtime is { } pluginRuntime)
+        {
+            altaServices.Add<IAltaPluginCatalog>(new RuntimeAltaPluginCatalog(pluginRuntime));
+        }
+
+        var altaRegistry = new AltaCommandRegistry();
+        altaServices
+            .Add(altaRegistry)
+            .Add(new AltaCommandDispatcher(altaRegistry, altaServices));
+
         var threadPromptDraftService = new ThreadPromptDraftService(frontend.LoadPromptDraft, frontend.DeletePromptDraft);
         var threadModelProviderPreferenceService = new ThreadModelProviderPreferenceService(frontend.ApplyThreadPreference, frontend.RememberThreadPreference);
         var shellController = new CodeAltaShellController(
@@ -310,7 +332,9 @@ internal sealed class CodeAltaFrontendComposition
             threadPromptQueueCoordinator,
             promptComposerViewModel,
             projectFileSearchService,
-            pluginHostBridge);
+            pluginHostBridge,
+            altaServices,
+            altaToolBackendIds);
 
         return new CodeAltaFrontendComposition
         {
@@ -374,6 +398,31 @@ internal sealed class CodeAltaFrontendComposition
             }
         }
     }
+
+    private static IReadOnlySet<string> ResolveAltaToolBackendIds(CodeAltaConfigStore configStore)
+    {
+        ArgumentNullException.ThrowIfNull(configStore);
+
+        var backendIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            AgentBackendIds.OpenAIChat.Value,
+            AgentBackendIds.OpenAIResponses.Value,
+        };
+        foreach (var provider in configStore.LoadGlobalProviderDefinitions())
+        {
+            if (SupportsHostInjectedTools(provider.ProviderType) && !string.IsNullOrWhiteSpace(provider.ProviderKey))
+            {
+                backendIds.Add(provider.ProviderKey);
+            }
+        }
+
+        return backendIds;
+    }
+
+    private static bool SupportsHostInjectedTools(string? providerType)
+        => string.Equals(providerType, "openai-chat", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(providerType, "openai-responses", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(providerType, "openai-codex-subscription", StringComparison.OrdinalIgnoreCase);
 
     private static Func<string?, string> CreateProviderDisplayNameResolver(
         IReadOnlyList<AgentBackendDescriptor> backendDescriptors)

@@ -111,6 +111,7 @@ public sealed class CodeAltaHost : IAsyncDisposable
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".alta")
             : Path.GetFullPath(options.GlobalRoot);
         Directory.CreateDirectory(globalRoot);
+        _ = CoordinatorAgentsBootstrapper.Ensure(globalRoot);
         var ownsLogging = false;
         if (options.OwnsLogging && !LogManager.IsInitialized)
         {

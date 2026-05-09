@@ -31,6 +31,8 @@ internal sealed class PluginHostBridge
 
     public PluginFrontendBridge Frontend => _frontend;
 
+    public PluginRuntimeManager Runtime => _runtime;
+
     public IReadOnlyList<PluginResolvedResourceContribution> GetResources()
         => _frontend.GetResources();
 

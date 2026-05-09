@@ -2,6 +2,7 @@ using CodeAlta.Agent;
 using CodeAlta.App.Context;
 using CodeAlta.App.State;
 using CodeAlta.Catalog;
+using CodeAlta.LiveTool;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Presentation.Chat;
@@ -18,6 +19,8 @@ internal sealed class ThreadExecutionOptionsFactory
     private readonly ModelProviderSelectorStateStore _selectorState;
     private readonly ThreadPermissionRequestCoordinator _permissionRequests;
     private readonly ThreadUserInputRequestCoordinator _userInputRequests;
+    private readonly IServiceProvider? _altaServices;
+    private readonly IReadOnlySet<string> _altaToolBackendIds;
 
     public ThreadExecutionOptionsFactory(
         CatalogOptions catalogOptions,
@@ -26,7 +29,9 @@ internal sealed class ThreadExecutionOptionsFactory
         ThreadSelectionContext threadSelection,
         ModelProviderSelectorStateStore selectorState,
         ThreadPermissionRequestCoordinator permissionRequests,
-        ThreadUserInputRequestCoordinator userInputRequests)
+        ThreadUserInputRequestCoordinator userInputRequests,
+        IServiceProvider? altaServices = null,
+        IReadOnlySet<string>? altaToolBackendIds = null)
     {
         ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(backendDescriptors);
@@ -43,6 +48,8 @@ internal sealed class ThreadExecutionOptionsFactory
         _selectorState = selectorState;
         _permissionRequests = permissionRequests;
         _userInputRequests = userInputRequests;
+        _altaServices = altaServices;
+        _altaToolBackendIds = altaToolBackendIds ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 
     public WorkThreadExecutionOptions BuildPreferredExecutionOptions(
@@ -100,6 +107,7 @@ internal sealed class ThreadExecutionOptionsFactory
                 return backendState.SelectedReasoningEffort;
             });
 
+        var sourceProjectId = _threadSelection.GetSelectedProjectId();
         return new WorkThreadExecutionOptions
         {
             BackendId = backendId,
@@ -108,6 +116,11 @@ internal sealed class ThreadExecutionOptionsFactory
             ProjectRoots = projectRoots,
             Model = model,
             ReasoningEffort = reasoning,
+            Tools = CreateAltaTools(
+                backendId,
+                sourceThreadIdProvider: null,
+                sourceProjectIdProvider: () => sourceProjectId,
+                workingDirectoryProvider: () => workingDirectory),
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
             OnUserInputRequest = (request, cancellationToken) => _userInputRequests.HandleAsync(CreateTransientThreadKey(backendId, workingDirectory), request, cancellationToken),
         };
@@ -120,15 +133,21 @@ internal sealed class ThreadExecutionOptionsFactory
 
         var workingDirectory = ResolveWorkingDirectory(thread);
         var projectRoots = ResolveProjectRoots(thread);
+        var backendId = new AgentBackendId(thread.BackendId);
         return new WorkThreadExecutionOptions
         {
-            BackendId = new AgentBackendId(thread.BackendId),
+            BackendId = backendId,
             ProviderKey = thread.ResolvedProviderKey,
             WorkingDirectory = workingDirectory,
             ProjectRoots = projectRoots,
             Model = tab.ModelId,
             ReasoningEffort = tab.ReasoningEffort,
-            OnPermissionRequest = CreatePermissionHandler(new AgentBackendId(thread.BackendId), thread.ThreadId),
+            Tools = CreateAltaTools(
+                backendId,
+                sourceThreadIdProvider: () => thread.ThreadId,
+                sourceProjectIdProvider: () => thread.ProjectRef,
+                workingDirectoryProvider: () => ResolveWorkingDirectory(thread)),
+            OnPermissionRequest = CreatePermissionHandler(backendId, thread.ThreadId),
             OnUserInputRequest = (request, cancellationToken) => _userInputRequests.HandleAsync(thread.ThreadId, request, cancellationToken),
         };
     }
@@ -143,6 +162,35 @@ internal sealed class ThreadExecutionOptionsFactory
         return string.Equals(backendId.Value, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase)
             ? static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce))
             : (request, cancellationToken) => _permissionRequests.HandleAsync(threadId, request, cancellationToken);
+    }
+
+    private IReadOnlyList<AgentToolDefinition>? CreateAltaTools(
+        AgentBackendId backendId,
+        Func<string?>? sourceThreadIdProvider,
+        Func<string?>? sourceProjectIdProvider,
+        Func<string?>? workingDirectoryProvider)
+    {
+        if (_altaServices is null || !_altaToolBackendIds.Contains(backendId.Value))
+        {
+            return null;
+        }
+
+        var dispatcher = _altaServices.GetService(typeof(AltaCommandDispatcher)) as AltaCommandDispatcher
+            ?? new AltaCommandDispatcher(new AltaCommandRegistry(), _altaServices);
+        return
+        [
+            AltaSessionToolFactory.Create(
+                dispatcher,
+                new AltaSessionToolOptions
+                {
+                    SourceThreadIdProvider = sourceThreadIdProvider,
+                    SourceProjectIdProvider = sourceProjectIdProvider,
+                    WorkingDirectoryProvider = workingDirectoryProvider,
+                    DefaultMaxOutputRecords = 200,
+                    DefaultMaxOutputBytes = 64 * 1024,
+                    DefaultTimeout = TimeSpan.FromSeconds(120),
+                }),
+        ];
     }
 
     private string ResolveWorkingDirectory(WorkThreadDescriptor thread)

@@ -591,6 +591,8 @@ Frontend/TUI integrations, such as future command-palette actions or sidebar aff
 
 For CodeAlta-managed backends, the runtime should add an `alta` tool definition to sessions when enabled by policy. The handler dispatches in-process directly to the command registry.
 
+The implemented v1 policy is explicit allow-list based: `IAltaSessionToolBackendPolicy` enables the tool for CodeAlta-managed OpenAI chat/responses transports, including configured `openai-chat`, `openai-responses`, and `openai-codex-subscription` providers. It does not inject the tool into Codex app-server, generic ACP, Anthropic, Google GenAI, or other backends unless they are later added to that policy after adapter support exists.
+
 Provider-managed backends may not accept host-injected tools. For those sessions, the model-visible `alta` live tool is only guaranteed when the host controls tool injection. V1 should not advertise an external shell command as an equivalent live-control path.
 
 The `AgentToolResult` returned to the backend should contain one `AgentToolResultItem.Text` item: either the normal help text for `--help`, or the compact flat JSONL transcript for non-help commands. `AgentToolResult.Success` should be `true` only when the `alta.result.exitCode` is `0`; for non-zero exit codes, set `Error` to a short summary from the first `alta.error` record when available. Do not use tool progress callbacks for normal command output in v1 because `alta` commands are finite snapshots, not streams.
@@ -890,23 +892,23 @@ If a backend cannot store metadata, CodeAlta should render a visible header and 
 - [x] Build an `AltaCommandRegistry` around `XenoAtom.CommandLine`.
 - [x] Move/extend existing top-level CLI parsing so `alta --help` can show new command groups.
 - [x] Implement `version` and ensure `--help` works at the root, command-group, and leaf-command levels.
-- [ ] Choose and test the command-graph concurrency strategy: fresh per-invocation trees or serialized dispatch over one tree. (Implementation currently builds fresh command trees per invocation; tests still pending.)
+- [x] Choose and test the command-graph concurrency strategy: fresh per-invocation trees.
 - [x] Implement catalog-only `project list/show/resolve/upsert` using `ProjectCatalog`.
 - [ ] Add tests for parsing, help availability, JSONL output, invalid usage diagnostics, `CommandOptionException`/validator failures, and exit codes.
 
 ### Phase 2: Coordinator instruction bootstrap
 
-- [ ] Add the shipped compact coordinator `AGENTS.md` template to CodeAlta content.
-- [ ] Implement `~/.alta/AGENTS.md` first-run creation.
-- [ ] Implement managed-block refresh when the shipped version/checksum is newer.
-- [ ] Preserve the local instructions block exactly and migrate unmarked existing files safely with a backup.
-- [ ] Add tests for first-run creation, managed-block update, local-section preservation, unmarked-file migration, and damaged-marker diagnostics.
+- [x] Add the shipped compact coordinator `AGENTS.md` template to CodeAlta content.
+- [x] Implement `~/.alta/AGENTS.md` first-run creation.
+- [x] Implement managed-block refresh when the shipped version/checksum is newer.
+- [x] Preserve the local instructions block exactly and migrate unmarked existing files safely with a backup.
+- [x] Add tests for first-run creation, managed-block update, local-section preservation, unmarked-file migration, and damaged-marker diagnostics.
 
 ### Phase 3: In-process live tool wiring
 
 - [x] Register the `AltaCommandRegistry` and built-in command contributors in the CodeAlta composition root.
 - [ ] Build/freeze the final command catalog or contributor set after safe-mode/plugin bootstrap so plugin commands are available before sessions receive the live tool.
-- [ ] Expose an in-process dispatcher service that session/tool composition, UI code, tests, and plugins can call.
+- [x] Expose an in-process dispatcher service that session/tool composition, UI code, and tests can call.
 - [ ] Add tests for in-process dispatch, compact flat live-tool transcript formatting, output capture, cancellation, truncation, and missing-service diagnostics.
 
 ### Phase 4: Session discovery and status
@@ -927,25 +929,25 @@ If a backend cannot store metadata, CodeAlta should render a visible header and 
 
 ### Phase 6: Session creation and control
 
-- [ ] Implement provider/model/reasoning discovery and model-ref resolution (`provider model list`, `model list`, `model show`, `model resolve`).
+- [x] Implement provider/model/reasoning discovery and model-ref resolution (`provider model list`, `model list`, `model show`, `model resolve`).
 - [ ] Implement `session create`, `send`, `steer`, `queue`, `abort`, `compact`, and non-blocking `join` through `IWorkThreadOrchestrator` where possible.
 - [ ] Add caller attribution, plugin provenance, prompt provenance, and same-project parent-thread assignment to mutating commands.
-- [ ] Handle unsupported backend capabilities with exit code 7 and clear messages.
+- [x] Handle unsupported backend capabilities with exit code 7 and clear messages.
 - [ ] Add regression tests for model-ref parsing, caller-session model inheritance, `--same-model-as` with reasoning override, child-session provenance, agent/plugin-created prompt provenance, plugin-created session provenance, busy-session queueing, and steering unsupported cases.
 
 ### Phase 7: Agent tool exposure
 
-- [ ] Add an `alta` agent tool definition for CodeAlta-managed/local-runtime sessions.
-- [ ] Dispatch in-process to the command registry with `AltaCallerIdentity.Kind = agent`.
-- [ ] Include compact prompt guidance that tells agents to run `alta --help` and then narrower help commands such as `alta session --help` for progressive discovery.
-- [ ] Add tool output truncation and command timeout controls.
-- [ ] Add tests for live tool invocation without spawning a process.
+- [x] Add an `alta` agent tool definition for CodeAlta-managed/local-runtime sessions.
+- [x] Dispatch in-process to the command registry with `AltaCallerIdentity.Kind = agent`.
+- [x] Include compact prompt guidance that tells agents to run `alta --help` and then narrower help commands such as `alta session --help` for progressive discovery.
+- [x] Add tool output truncation and command timeout controls.
+- [x] Add tests for live tool invocation without spawning a process.
 
 ### Phase 8: Skills integration
 
-- [ ] Implement `skill list/show/activate` and compatibility aliases.
-- [ ] Route session activation through `IWorkThreadOrchestrator.ActivateSkillAsync` or `WorkThreadRuntimeService.ActivateSkillAsync`.
-- [ ] Return provider-managed-skill unsupported diagnostics where applicable.
+- [x] Implement `skill list/show/activate` and compatibility aliases.
+- [x] Route session activation through `IWorkThreadOrchestrator.ActivateSkillAsync` or `WorkThreadRuntimeService.ActivateSkillAsync`.
+- [x] Return provider-managed-skill unsupported diagnostics where applicable.
 - [ ] Update skill docs/global instructions after behavior exists.
 
 ### Phase 9: Plugin extension support

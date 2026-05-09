@@ -951,10 +951,14 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         }
 
         var workingDirectory = project?.ProjectPath ?? GetGlobalRootOrCwd(context);
+        string? createdThreadId = null;
         var executionOptions = BuildExecutionOptions(
+            context,
             modelSelection.Selection!,
             workingDirectory,
-            project is null ? [] : [project.ProjectPath]);
+            project is null ? [] : [project.ProjectPath],
+            () => createdThreadId,
+            project?.Id);
 
         WorkThreadDescriptor thread;
         if (project is null)
@@ -966,6 +970,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             thread = await runtime.CreateProjectThreadAsync(project, executionOptions, options.Title, context.CancellationToken).ConfigureAwait(false);
         }
 
+        createdThreadId = thread.ThreadId;
         thread.ParentThreadId = ResolveParentThreadId(context, thread, project, options);
         await runtime.PersistThreadLocalStateAsync(thread, context.CancellationToken).ConfigureAwait(false);
 
@@ -1505,9 +1510,12 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
     }
 
     private static WorkThreadExecutionOptions BuildExecutionOptions(
+        AltaCommandContext context,
         AltaModelSelection selection,
         string workingDirectory,
-        IReadOnlyList<string> projectRoots)
+        IReadOnlyList<string> projectRoots,
+        Func<string?>? sourceThreadIdProvider,
+        string? sourceProjectId)
         => new()
         {
             BackendId = new AgentBackendId(selection.ProviderKey),
@@ -1516,6 +1524,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             ProjectRoots = projectRoots,
             Model = selection.ModelId,
             ReasoningEffort = selection.ReasoningEffort,
+            Tools = CreateAltaSessionTools(context, selection.ProviderKey, sourceThreadIdProvider, sourceProjectId, workingDirectory),
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
             OnUserInputRequest = static (_, _) => Task.FromResult(new AgentUserInputResponse(new Dictionary<string, string>(StringComparer.Ordinal))),
         };
@@ -1542,9 +1551,41 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             ProjectRoots = projectRoots,
             Model = info.Preference?.ModelId,
             ReasoningEffort = info.Preference?.ReasoningEffort,
+            Tools = CreateAltaSessionTools(context, info.Thread.BackendId, () => info.Thread.ThreadId, info.Thread.ProjectRef, workingDirectory),
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
             OnUserInputRequest = static (_, _) => Task.FromResult(new AgentUserInputResponse(new Dictionary<string, string>(StringComparer.Ordinal))),
         };
+    }
+
+    private static IReadOnlyList<AgentToolDefinition>? CreateAltaSessionTools(
+        AltaCommandContext context,
+        string backendId,
+        Func<string?>? sourceThreadIdProvider,
+        string? sourceProjectId,
+        string? workingDirectory)
+    {
+        var policy = context.Services.Get<IAltaSessionToolBackendPolicy>();
+        if (policy is null || !policy.SupportsAltaSessionTool(backendId))
+        {
+            return null;
+        }
+
+        var dispatcher = context.Services.Get<AltaCommandDispatcher>()
+            ?? new AltaCommandDispatcher(new AltaCommandRegistry(), context.Services);
+        return
+        [
+            AltaSessionToolFactory.Create(
+                dispatcher,
+                new AltaSessionToolOptions
+                {
+                    SourceThreadIdProvider = sourceThreadIdProvider,
+                    SourceProjectId = sourceProjectId,
+                    WorkingDirectory = workingDirectory,
+                    DefaultMaxOutputRecords = 200,
+                    DefaultMaxOutputBytes = 64 * 1024,
+                    DefaultTimeout = TimeSpan.FromSeconds(120),
+                }),
+        ];
     }
 
     private static async Task<ModelResolutionResult> ResolveModelSelectionAsync(AltaCommandContext context, AltaModelSelectionOptions request)

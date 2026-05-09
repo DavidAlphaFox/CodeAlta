@@ -39,7 +39,9 @@ internal sealed class ThreadCommandCoordinator
         ThreadPromptQueueCoordinator queueCoordinator,
         PromptComposerViewModel promptComposerViewModel,
         IProjectFileSearchService? projectFileSearchService = null,
-        PluginHostBridge? pluginHostBridge = null)
+        PluginHostBridge? pluginHostBridge = null,
+        IServiceProvider? altaServices = null,
+        IReadOnlySet<string>? altaToolBackendIds = null)
         : this(
             runtimeService,
             catalogOptions,
@@ -53,7 +55,9 @@ internal sealed class ThreadCommandCoordinator
             queueCoordinator,
             promptComposerViewModel,
             projectFileSearchService,
-            pluginHostBridge)
+            pluginHostBridge,
+            altaServices,
+            altaToolBackendIds)
     {
     }
 
@@ -68,7 +72,9 @@ internal sealed class ThreadCommandCoordinator
         ThreadPromptQueueCoordinator queueCoordinator,
         PromptComposerViewModel promptComposerViewModel,
         IProjectFileSearchService? projectFileSearchService = null,
-        PluginHostBridge? pluginHostBridge = null)
+        PluginHostBridge? pluginHostBridge = null,
+        IServiceProvider? altaServices = null,
+        IReadOnlySet<string>? altaToolBackendIds = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(backendDescriptors);
@@ -90,7 +96,7 @@ internal sealed class ThreadCommandCoordinator
         _pluginHostBridge = pluginHostBridge;
         var permissionRequests = new ThreadPermissionRequestCoordinator(threadSelection, commandContext);
         var userInputRequests = new ThreadUserInputRequestCoordinator(threadSelection, commandContext);
-        _executionOptionsFactory = new ThreadExecutionOptionsFactory(catalogOptions, backendDescriptors, chatBackendStates, threadSelection, selectorState, permissionRequests, userInputRequests);
+        _executionOptionsFactory = new ThreadExecutionOptionsFactory(catalogOptions, backendDescriptors, chatBackendStates, threadSelection, selectorState, permissionRequests, userInputRequests, altaServices, altaToolBackendIds);
         _promptDispatchCoordinator = new ThreadPromptDispatchCoordinator(
             runtimeService,
             _executionOptionsFactory,
