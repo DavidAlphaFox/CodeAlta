@@ -374,7 +374,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         return _backendDescriptors;
     }
 
-    private static bool TryCreateAcpBackendOptions(
+    internal static bool TryCreateAcpBackendOptions(
         CatalogOptions catalogOptions,
         AcpBackendDefinition definition,
         out AcpAgentBackendOptions options)

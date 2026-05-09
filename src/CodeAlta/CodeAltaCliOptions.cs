@@ -114,6 +114,16 @@ internal sealed class CodeAltaCliOptions
             { "plugin-safe-mode", "Disable plugin discovery, build, and load for this process", value => state.PluginSafeMode = value is not null },
             { "plugins-status", "Print plugin discovery/config status and exit without starting the TUI", value => state.PluginsStatus = value is not null },
             { "plugins-wait-for-enter", "Wait for Enter after source plugin live progress finishes", value => state.WaitForEnterAfterPluginLiveOutput = value is not null },
+            _,
+            "Live tool commands:",
+            "  version                Print CodeAlta and live-tool version information as JSONL.",
+            "  tool <command>         Inspect live-tool status, policies, and capabilities.",
+            "  project <command>      Inspect and update the project catalog.",
+            "  thread <command>       Create, inspect, and control CodeAlta work threads.",
+            "  session <command>      Inspect and drive backend sessions.",
+            "  provider/model         Inspect configured providers and models.",
+            "  skill <command>        List, show, and activate CodeAlta skills.",
+            "  plugin <command>       Inspect loaded plugins.",
         };
 
         if (pluginCommandLineContributions is not null)
