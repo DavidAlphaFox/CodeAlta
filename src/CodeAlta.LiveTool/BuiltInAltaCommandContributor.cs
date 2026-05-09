@@ -1759,6 +1759,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
     private static async Task<SkillQueryResult> BuildSkillQueryAsync(AltaCommandContext context, string? projectRef)
     {
         ProjectDescriptor? project = null;
+        var sourceProjectId = context.Caller.SourceProjectId;
         if (!string.IsNullOrWhiteSpace(projectRef))
         {
             if (!context.TryGetRequired<ProjectCatalog>(nameof(ProjectCatalog), out var catalog))
@@ -1770,6 +1771,24 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             if (project is null)
             {
                 return SkillQueryResult.Fail(NotFound(context, "project.notFound", $"Project '{projectRef}' was not found."));
+            }
+
+            if (!CanAccessProject(context, project.Id))
+            {
+                return SkillQueryResult.Fail(PermissionDenied(context, "policy.visibilityDenied", $"The caller is not allowed to inspect project '{project.Id}'."));
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(sourceProjectId))
+        {
+            if (!context.TryGetRequired<ProjectCatalog>(nameof(ProjectCatalog), out var catalog))
+            {
+                return SkillQueryResult.Fail(AltaExitCodes.ServiceUnavailable);
+            }
+
+            project = await ResolveProjectAsync(catalog, sourceProjectId, context, includeArchived: false).ConfigureAwait(false);
+            if (project is null)
+            {
+                return SkillQueryResult.Fail(NotFound(context, "project.notFound", $"Project '{sourceProjectId}' was not found."));
             }
         }
 

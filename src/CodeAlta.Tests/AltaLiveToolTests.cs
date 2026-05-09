@@ -2,6 +2,7 @@ using System.Text.Json;
 using CodeAlta.Agent;
 using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Catalog;
+using CodeAlta.Catalog.Skills;
 using CodeAlta.LiveTool;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Plugins.Abstractions;
@@ -1167,6 +1168,42 @@ public sealed class AltaLiveToolTests
     }
 
     [TestMethod]
+    public async Task SkillVisibility_ProjectScopedAgentUsesOwnProjectAndCannotInspectOtherProjectSkills()
+    {
+        using var root = TempDirectory.Create();
+        var projectAPath = Path.Combine(root.Path, "project-a");
+        var projectBPath = Path.Combine(root.Path, "project-b");
+        Directory.CreateDirectory(projectAPath);
+        Directory.CreateDirectory(projectBPath);
+        await WriteSkillAsync(Path.Combine(projectAPath, ".alta", "skills", "project-a-skill"), "project-a-skill", "Project A skill.").ConfigureAwait(false);
+        await WriteSkillAsync(Path.Combine(projectBPath, ".alta", "skills", "project-b-skill"), "project-b-skill", "Project B skill.").ConfigureAwait(false);
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var projectCatalog = new ProjectCatalog(options);
+        var projectA = await projectCatalog.UpsertFromPathAsync(projectAPath).ConfigureAwait(false);
+        var projectB = await projectCatalog.UpsertFromPathAsync(projectBPath).ConfigureAwait(false);
+        var dispatcher = CreateDispatcher(new AltaServiceCollection()
+            .Add(options)
+            .Add(projectCatalog)
+            .Add(new SkillCatalog()));
+        var caller = new AltaCallerIdentity { Kind = "agent", SourceProjectId = projectA.Id, SourceThreadId = "project-a-thread" };
+
+        var listOwnByDefault = await dispatcher.InvokeAsync(["skill", "list"], caller: caller).ConfigureAwait(false);
+        var listOther = await dispatcher.InvokeAsync(["skill", "list", "--project", projectB.Id], caller: caller).ConfigureAwait(false);
+        var showOther = await dispatcher.InvokeAsync(["skill", "show", "project-b-skill", "--project", projectB.Id], caller: caller).ConfigureAwait(false);
+
+        Assert.AreEqual(AltaExitCodes.Success, listOwnByDefault.ExitCode);
+        var visibleSkills = ReadJsonLines(listOwnByDefault.Stdout)
+            .Where(static line => line.GetProperty("type").GetString() == "alta.skill.item")
+            .Select(static line => line.GetProperty("name").GetString())
+            .ToArray();
+        CollectionAssert.Contains(visibleSkills, "project-a-skill");
+        CollectionAssert.DoesNotContain(visibleSkills, "project-b-skill");
+        Assert.AreEqual(AltaExitCodes.PolicyDenied, listOther.ExitCode);
+        Assert.AreEqual(AltaExitCodes.PolicyDenied, showOther.ExitCode);
+        Assert.IsTrue(ReadJsonLines(showOther.Stdout).Any(static line => line.GetProperty("type").GetString() == "alta.error" && line.GetProperty("code").GetString() == "policy.visibilityDenied"));
+    }
+
+    [TestMethod]
     public async Task SessionVisibility_GlobalCoordinatorCanReachProjectsAndProjectAgentsCanReplyWithoutInspectingGlobalTranscript()
     {
         using var root = TempDirectory.Create();
@@ -1300,6 +1337,23 @@ public sealed class AltaLiveToolTests
         Assert.AreEqual(1, result.Items.Count);
         Assert.IsInstanceOfType(result.Items[0], typeof(AgentToolResultItem.Text));
         return ((AgentToolResultItem.Text)result.Items[0]).Value;
+    }
+
+    private static async Task WriteSkillAsync(string skillRoot, string name, string description)
+    {
+        Directory.CreateDirectory(skillRoot);
+        await File.WriteAllTextAsync(
+                Path.Combine(skillRoot, "SKILL.md"),
+                $$"""
+                ---
+                name: {{name}}
+                description: {{description}}
+                ---
+                # {{name}}
+
+                {{description}}
+                """)
+            .ConfigureAwait(false);
     }
 
     private static List<JsonElement> ReadJsonLines(string text)

@@ -782,7 +782,7 @@ Default v1 policy:
 
 Commands denied by visibility policy should return exit code 4 and an `alta.error` JSONL record.
 
-The current implementation treats callers without a project scope, including the global coordinator agent, as having full local visibility. Project-scoped agents can inspect/mutate only their own session and same-project sessions by default; project catalog listing/show/resolve is filtered to the caller's project, and project-scoped `project upsert` can only update that already-known project entry. Project-scoped agents cannot inspect global coordinator transcripts, but `session message` and `session request` may target global coordinator threads so project sessions can reply with peer-agent attribution.
+The current implementation treats callers without a project scope, including the global coordinator agent, as having full local visibility. Project-scoped agents can inspect/mutate only their own session and same-project sessions by default; project catalog listing/show/resolve is filtered to the caller's project, and project-scoped `project upsert` can only update that already-known project entry. Project-scoped `skill list/show` defaults to the caller's project roots and denies explicit `--project` references outside that scope. Project-scoped agents cannot inspect global coordinator transcripts, but `session message` and `session request` may target global coordinator threads so project sessions can reply with peer-agent attribution.
 
 ### 9.4 Coordinator `~/.alta/AGENTS.md`
 
@@ -1029,7 +1029,7 @@ Before considering the feature complete:
 - add sidebar/timeline projection tests for parent/child sessions and agent-created prompts;
 - document unsupported backend behavior explicitly.
 
-Current completion evidence: user-facing examples are documented in `readme.md`, `doc/readme.md#alta-live-tool`, `doc/skills.md#live-tool-commands`, and `doc/plugins.md#alta-live-tool-integration`; coordinator/skill instruction templates advertise `alta` only when it is available; regression coverage lives in `AltaLiveToolTests`, `ThreadRuntimeEventCoordinatorTests`, `ArchitectureGuardrailTests`, and catalog/plugin infrastructure tests for the command registry, JSONL transcripts, invalid usage diagnostics (unknown options, bad values, missing arguments, mutually exclusive flags, plugin validation), visibility (global coordinator access, same-project access, scoped project catalog access, coordinator reply path, denied cross-project access), provenance, explicit parent validation, queue draining, plugin contributions/invocation, and timeline/sidebar projections.
+Current completion evidence: user-facing examples are documented in `readme.md`, `doc/readme.md#alta-live-tool`, `doc/skills.md#live-tool-commands`, and `doc/plugins.md#alta-live-tool-integration`; coordinator/skill instruction templates advertise `alta` only when it is available; regression coverage lives in `AltaLiveToolTests`, `ThreadRuntimeEventCoordinatorTests`, `ArchitectureGuardrailTests`, and catalog/plugin infrastructure tests for the command registry, JSONL transcripts, invalid usage diagnostics (unknown options, bad values, missing arguments, mutually exclusive flags, plugin validation), visibility (global coordinator access, same-project access, scoped project catalog/skill access, coordinator reply path, denied cross-project access), provenance, explicit parent validation, queue draining, plugin contributions/invocation, and timeline/sidebar projections.
 
 ## 13. Resolved v1 decisions
 
