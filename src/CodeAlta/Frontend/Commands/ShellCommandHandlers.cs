@@ -89,6 +89,11 @@ internal static class NavigationCommandHandlers
             navigationCommandService.FocusPrompt();
             return ValueTask.CompletedTask;
         });
+        registry.Register<FocusModelProviderCommand>((_, _) =>
+        {
+            navigationCommandService.FocusModelProvider();
+            return ValueTask.CompletedTask;
+        });
         registry.Register<SelectRelativeTabCommand>((command, _) => ToValueTask(navigationCommandService.SelectRelativeTabAsync(command.Offset)));
         registry.Register<ScrollSelectedThreadMessageCommand>((command, _) => ToValueTask(navigationCommandService.ScrollSelectedThreadMessageAsync(command.Target)));
     }

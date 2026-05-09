@@ -71,6 +71,18 @@ public sealed class ResponsiveDialogSizeTests
     }
 
     [TestMethod]
+    public void ShellCommandCatalog_UsesCtrlGCtrlOForFocusModelProviderShortcut()
+    {
+        var sequence = ShellCommandCatalog.FocusModelProviderShortcutSequence;
+
+        Assert.AreEqual(2, sequence.Count);
+        Assert.AreEqual(TerminalChar.CtrlG, sequence[0].Char);
+        Assert.AreEqual(TerminalModifiers.Ctrl, sequence[0].Modifiers);
+        Assert.AreEqual(TerminalChar.CtrlO, sequence[1].Char);
+        Assert.AreEqual(TerminalModifiers.Ctrl, sequence[1].Modifiers);
+    }
+
+    [TestMethod]
     public void ThreadWorkspaceView_UsesCtrlGCtrlMForModelProvidersShortcut()
     {
         var sequence = ThreadWorkspaceView.ModelProvidersShortcutSequence;

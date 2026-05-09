@@ -95,8 +95,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     internal Visual? ThreadPaneLayout => _threadWorkspaceView?.ThreadPaneLayout;
     internal ChatPromptEditor? ThreadInput => _threadWorkspaceView?.ThreadInput;
     private Visual GetDialogAnchor() => ThreadInput is { } input ? input : _sidebarCoordinator.View.Tree;
-    private CommandBar? ThreadCommandBar => _threadWorkspaceView?.ThreadCommandBar;
-    private TabControl? ThreadTabControl => _threadWorkspaceView?.ThreadTabControl;
 
     public CodeAltaApp(
         ProjectCatalog projectCatalog,
@@ -243,7 +241,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             SetStatus);
         _threadTabContext = new ThreadTabContext(
             new DelegatingThreadTabSurfacePort(
-                () => ThreadTabControl,
+                () => _threadWorkspaceView?.ThreadTabControl,
                 () => _threadWorkspaceView,
                 build => CreateComputedVisual(build),
                 _uiDispatcher),
@@ -273,7 +271,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             () => { if (ThreadInput is not null) EnsureThreadInfoPresenter().TogglePopup(ThreadInput); },
             () => _threadWorkspaceView?.OpenExpandedPromptDialog());
         var navigation = new DelegatingShellNavigationCommandService(
-            FocusSidebar, FocusPromptEditor,
+            FocusSidebar, FocusPromptEditor, FocusModelProviderSelector,
             () => { _ = _threadTabStripCoordinator.TrySelectRelativeTab(-1); return Task.CompletedTask; },
             () => { _ = _threadTabStripCoordinator.TrySelectRelativeTab(1); return Task.CompletedTask; },
             () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToPreviousMessage()), () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToNextMessage()),
@@ -400,10 +398,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private void ToggleCommandBarMultiLine()
     {
         _commandBarMultiLine = !_commandBarMultiLine;
-        if (ThreadCommandBar is not null)
-        {
-            ThreadCommandBar.MultiLine = _commandBarMultiLine;
-        }
+        if (_threadWorkspaceView?.ThreadCommandBar is { } commandBar) commandBar.MultiLine = _commandBarMultiLine;
 
         SetStatus(
             _commandBarMultiLine
@@ -708,6 +703,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     }
     internal void FocusPromptEditor() { ActivateThreadSurface(); ThreadPaneLayout?.App?.Focus(ThreadInput); }
     internal void FocusPromptTarget() => ThreadPaneLayout?.App?.Focus(ThreadInput);
+    internal void FocusModelProviderSelector() { ActivateThreadSurface(); DispatchToUiDeferred(() => _threadWorkspaceView?.FocusModelProviderSelector()); }
 
     private Task ScrollSelectedThreadMessageAsync(Action<OpenThreadState> scroll)
     {

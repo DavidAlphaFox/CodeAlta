@@ -13,6 +13,10 @@ internal static class ShellCommandCatalog
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
         new KeyGesture(TerminalChar.CtrlP, TerminalModifiers.Ctrl));
 
+    public static readonly KeySequence FocusModelProviderShortcutSequence = new(
+        new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
+        new KeyGesture(TerminalChar.CtrlO, TerminalModifiers.Ctrl));
+
     public static readonly KeySequence ModelProvidersShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
         new KeyGesture(TerminalChar.CtrlM, TerminalModifiers.Ctrl));
@@ -131,6 +135,17 @@ internal static class ShellCommandCatalog
             ShellCommandAvailability.Always,
             Sequence: FocusPromptShortcutSequence,
             Aliases: ["prompt"],
+            ShowInCommandBar: false),
+        new(
+            "CodeAlta.Shell.FocusModelProvider",
+            "Model",
+            "Focus the provider/model selector in the prompt bottom bar.",
+            ShellCommandHelpCategory.General,
+            ShellCommandScope.AnyShell,
+            ShellCommandAvailability.Always,
+            Sequence: FocusModelProviderShortcutSequence,
+            CommandName: "model",
+            Aliases: ["model_selector"],
             ShowInCommandBar: false),
         new(
             "CodeAlta.Providers.Manage",

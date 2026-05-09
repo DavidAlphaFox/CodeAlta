@@ -44,6 +44,8 @@ internal sealed record FocusSidebarCommand : ShellCommand;
 
 internal sealed record FocusPromptCommand : ShellCommand;
 
+internal sealed record FocusModelProviderCommand : ShellCommand;
+
 internal sealed record OpenSessionUsageCommand : ShellCommand;
 
 internal sealed record OpenThreadInfoCommand : ShellCommand;

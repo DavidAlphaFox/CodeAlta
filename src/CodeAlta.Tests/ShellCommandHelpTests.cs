@@ -19,6 +19,7 @@ public sealed class ShellCommandHelpTests
         var skillsCommand = ShellCommandCatalog.Get("CodeAlta.Skills.Manage");
         var goToSidebarCommand = ShellCommandCatalog.Get("CodeAlta.Shell.FocusSidebar");
         var goToPromptCommand = ShellCommandCatalog.Get("CodeAlta.Shell.FocusPrompt");
+        var modelCommand = ShellCommandCatalog.Get("CodeAlta.Shell.FocusModelProvider");
         var fullPromptCommand = ShellCommandCatalog.Get("CodeAlta.Thread.ExpandPrompt");
 
         var sections = ShellHelpContentBuilder.BuildSections();
@@ -46,6 +47,9 @@ public sealed class ShellCommandHelpTests
         var goToPromptEntry = sections
             .SelectMany(static section => section.Entries)
             .Single(candidate => string.Equals(candidate.Label, goToPromptCommand.Label, StringComparison.Ordinal));
+        var modelEntry = sections
+            .SelectMany(static section => section.Entries)
+            .Single(candidate => string.Equals(candidate.Label, modelCommand.Label, StringComparison.Ordinal));
         var fullPromptEntry = sections
             .SelectMany(static section => section.Entries)
             .Single(candidate => string.Equals(candidate.Label, fullPromptCommand.Label, StringComparison.Ordinal));
@@ -63,6 +67,7 @@ public sealed class ShellCommandHelpTests
         CollectionAssert.Contains(goToSidebarEntry.Bindings.ToArray(), "/sidebar");
         CollectionAssert.Contains(goToPromptEntry.Bindings.ToArray(), "/go_to_prompt");
         CollectionAssert.Contains(goToPromptEntry.Bindings.ToArray(), "/prompt");
+        CollectionAssert.Contains(modelEntry.Bindings.ToArray(), "/model");
         CollectionAssert.Contains(fullPromptEntry.Bindings.ToArray(), "/full_prompt");
     }
 

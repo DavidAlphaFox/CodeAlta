@@ -185,6 +185,34 @@ public sealed class ThreadWorkspaceViewTests
     }
 
     [TestMethod]
+    public void FocusModelProviderSelector_FocusesProviderSelect()
+    {
+        var view = CreateThreadWorkspaceView();
+        var backendSelect = GetPrivateField<Select<ChatBackendOption>>(view, "ChatBackendSelect");
+
+        using var terminalSession = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(120, 40)), new TerminalOptions { ImplicitStartInput = true }, force: true);
+        var app = new TerminalApp(
+            view.Root,
+            terminalSession.Instance,
+            new TerminalAppOptions
+            {
+                HostKind = TerminalHostKind.Fullscreen,
+            });
+
+        InvokeTerminalApp(app, "BeginRun");
+        try
+        {
+            view.FocusModelProviderSelector();
+
+            Assert.AreSame(backendSelect, app.FocusedElement);
+        }
+        finally
+        {
+            InvokeTerminalApp(app, "EndRun");
+        }
+    }
+
+    [TestMethod]
     public void CommandBar_DefaultsToSingleLine()
     {
         var view = CreateThreadWorkspaceView();

@@ -66,6 +66,8 @@ internal interface IShellNavigationCommandService
 
     void FocusPrompt();
 
+    void FocusModelProvider();
+
     Task SelectRelativeTabAsync(int offset);
 
     Task ScrollSelectedThreadMessageAsync(ThreadMessageScrollTarget target);
@@ -75,6 +77,7 @@ internal sealed class DelegatingShellNavigationCommandService : IShellNavigation
 {
     private readonly Action _focusSidebar;
     private readonly Action _focusPrompt;
+    private readonly Action _focusModelProvider;
     private readonly Func<Task> _selectTabLeftAsync;
     private readonly Func<Task> _selectTabRightAsync;
     private readonly Func<Task> _scrollToPreviousMessageAsync;
@@ -85,6 +88,7 @@ internal sealed class DelegatingShellNavigationCommandService : IShellNavigation
     public DelegatingShellNavigationCommandService(
         Action focusSidebar,
         Action focusPrompt,
+        Action focusModelProvider,
         Func<Task> selectTabLeftAsync,
         Func<Task> selectTabRightAsync,
         Func<Task> scrollToPreviousMessageAsync,
@@ -94,6 +98,7 @@ internal sealed class DelegatingShellNavigationCommandService : IShellNavigation
     {
         ArgumentNullException.ThrowIfNull(focusSidebar);
         ArgumentNullException.ThrowIfNull(focusPrompt);
+        ArgumentNullException.ThrowIfNull(focusModelProvider);
         ArgumentNullException.ThrowIfNull(selectTabLeftAsync);
         ArgumentNullException.ThrowIfNull(selectTabRightAsync);
         ArgumentNullException.ThrowIfNull(scrollToPreviousMessageAsync);
@@ -102,6 +107,7 @@ internal sealed class DelegatingShellNavigationCommandService : IShellNavigation
         ArgumentNullException.ThrowIfNull(scrollToLastMessageAsync);
         _focusSidebar = focusSidebar;
         _focusPrompt = focusPrompt;
+        _focusModelProvider = focusModelProvider;
         _selectTabLeftAsync = selectTabLeftAsync;
         _selectTabRightAsync = selectTabRightAsync;
         _scrollToPreviousMessageAsync = scrollToPreviousMessageAsync;
@@ -113,6 +119,8 @@ internal sealed class DelegatingShellNavigationCommandService : IShellNavigation
     public void FocusSidebar() => _focusSidebar();
 
     public void FocusPrompt() => _focusPrompt();
+
+    public void FocusModelProvider() => _focusModelProvider();
 
     public Task SelectRelativeTabAsync(int offset) => offset < 0 ? _selectTabLeftAsync() : _selectTabRightAsync();
 

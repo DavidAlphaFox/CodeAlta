@@ -68,6 +68,9 @@ internal sealed class ShellCommandSurfaceCoordinator
     public Task FocusPromptAsync()
         => DispatchShellCommandAsync(new FocusPromptCommand());
 
+    public Task FocusModelProviderAsync()
+        => DispatchShellCommandAsync(new FocusModelProviderCommand());
+
     public void ToggleCommandBarMultiLine()
         => _toggleCommandBarMultiLine();
 
