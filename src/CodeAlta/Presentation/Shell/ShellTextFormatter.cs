@@ -49,7 +49,7 @@ internal static class ShellTextFormatter
 
         return selectedProject is null
             ? "Project draft selected. Choose a project or start typing below."
-            : $"Next thread will start in {selectedProject.DisplayName}.";
+            : $"Next thread will start in {FormatProjectLaunchScope(selectedProject)}.";
     }
 
     public static IReadOnlyList<string> BuildWelcomeGuidanceLines(
@@ -93,5 +93,15 @@ internal static class ShellTextFormatter
         _ = selectedProject;
         _ = globalScopeSelected;
         return "Prompt ready";
+    }
+
+    private static string FormatProjectLaunchScope(ProjectDescriptor project)
+    {
+        if (string.IsNullOrWhiteSpace(project.ProjectPath))
+        {
+            return project.DisplayName;
+        }
+
+        return $"{project.DisplayName} from folder {project.ProjectPath}";
     }
 }

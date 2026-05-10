@@ -343,11 +343,12 @@ public sealed class CodeAltaAppTests
         var project = new ProjectDescriptor
         {
             DisplayName = "CodeAlta",
+            ProjectPath = @"C:\code\CodeAlta",
         };
 
         Assert.AreEqual("Global workspace ready for a new thread.", ShellTextFormatter.BuildWelcomeSubtitle(null, globalScopeSelected: true));
         Assert.AreEqual("Project draft selected. Choose a project or start typing below.", ShellTextFormatter.BuildWelcomeSubtitle(null, globalScopeSelected: false));
-        Assert.AreEqual("Next thread will start in CodeAlta.", ShellTextFormatter.BuildWelcomeSubtitle(project, globalScopeSelected: false));
+        Assert.AreEqual(@"Next thread will start in CodeAlta from folder C:\code\CodeAlta.", ShellTextFormatter.BuildWelcomeSubtitle(project, globalScopeSelected: false));
     }
 
     [TestMethod]
