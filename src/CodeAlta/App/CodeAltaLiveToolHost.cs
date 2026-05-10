@@ -140,7 +140,7 @@ internal sealed class CodeAltaLiveToolHost : IAsyncDisposable
 
             if (providerDefinitions.TryGetValue("copilot", out var copilotProvider) && copilotProvider.Enabled != false)
             {
-                backendFactory.RegisterCopilot(new CopilotAgentBackendOptions());
+                backendFactory.RegisterCopilot(CodeAltaOwnedServices.CreateCopilotBackendOptions(copilotProvider, cacheRoot));
                 backendDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Copilot, copilotProvider.DisplayName ?? "GitHub Copilot"));
             }
 

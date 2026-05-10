@@ -172,7 +172,7 @@ Built-in providers use reserved keys:
 - `providers.codex` → `type = "codex"`
 - `providers.copilot` → `type = "copilot"`
 
-Both reserved providers are present in the model providers dialog even when they are not explicitly configured in `config.toml`. They now default to disabled so a first-time user must explicitly opt into Codex or another provider before starting a thread. Copilot remains visible for existing preferences, but CodeAlta currently keeps it disabled regardless of `config.toml` until the upstream `GitHub.Copilot.SDK` process cleanup issue is fixed.
+Both reserved providers are present in the model providers dialog even when they are not explicitly configured in `config.toml`. They now default to disabled so a first-time user must explicitly opt into Codex or another provider before starting a thread. Copilot remains visible for existing preferences, but CodeAlta currently keeps it disabled regardless of `config.toml` until the upstream `GitHub.Copilot.SDK` process cleanup issue is fixed. Advanced Copilot config can set `cli_path` to use an explicit Copilot CLI executable or `npm_registry` to keep CodeAlta's on-demand npm download/extract flow while using a private or mirrored registry.
 
 Additional local providers can target raw provider SDKs such as:
 
@@ -217,6 +217,10 @@ reasoning_effort = "high"
 [providers.copilot]
 model = "claude-opus-4.6"
 reasoning_effort = "high"
+# Optional: bypass CodeAlta's on-demand Copilot CLI installer.
+# cli_path = "C:/tools/copilot.exe"
+# Optional: keep on-demand install but use a private/mirrored npm registry.
+# npm_registry = "https://registry.npmjs.org"
 
 [providers.openai_chat]
 display_name = "OpenAI"

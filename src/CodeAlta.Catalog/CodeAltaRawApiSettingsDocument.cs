@@ -230,6 +230,18 @@ public sealed class CodeAltaProviderDocument
     public string? ApiUrl { get; set; }
 
     /// <summary>
+    /// Gets or sets the Copilot CLI executable path for the Copilot provider.
+    /// </summary>
+    [JsonPropertyName("cli_path")]
+    public string? CliPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the npm registry URL used to download Copilot CLI packages for the Copilot provider.
+    /// </summary>
+    [JsonPropertyName("npm_registry")]
+    public string? NpmRegistry { get; set; }
+
+    /// <summary>
     /// Gets or sets whether low-level provider protocol tracing is enabled.
     /// </summary>
     [JsonPropertyName("protocol_trace")]

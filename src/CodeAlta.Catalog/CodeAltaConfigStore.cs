@@ -733,6 +733,8 @@ public sealed class CodeAltaConfigStore
         definition.ApiKey = NormalizeText(definition.ApiKey);
         definition.ApiKeyEnv = NormalizeText(definition.ApiKeyEnv);
         definition.ApiUrl = NormalizeText(definition.ApiUrl);
+        definition.CliPath = NormalizeText(definition.CliPath);
+        definition.NpmRegistry = NormalizeText(definition.NpmRegistry);
         if (definition.ProtocolTrace == false)
         {
             definition.ProtocolTrace = null;
@@ -991,9 +993,28 @@ public sealed class CodeAltaConfigStore
             RejectCodexSubscriptionOnlyFields(definition);
         }
 
+        if (!string.Equals(definition.ProviderType, CopilotProviderKey, StringComparison.Ordinal))
+        {
+            RejectUnsupportedField(definition, "cli_path", definition.CliPath);
+            RejectUnsupportedField(definition, "npm_registry", definition.NpmRegistry);
+        }
+
         switch (definition.ProviderType)
         {
             case "codex":
+                RejectUnsupportedField(definition, "api_key", definition.ApiKey);
+                RejectUnsupportedField(definition, "api_key_env", definition.ApiKeyEnv);
+                RejectUnsupportedField(definition, "api_url", definition.ApiUrl);
+                RejectUnsupportedField(definition, "cli_path", definition.CliPath);
+                RejectUnsupportedField(definition, "npm_registry", definition.NpmRegistry);
+                RejectUnsupportedField(definition, "protocol_trace", definition.ProtocolTrace);
+                RejectUnsupportedField(definition, "organization_id", definition.OrganizationId);
+                RejectUnsupportedField(definition, "project_id", definition.ProjectId);
+                RejectUnsupportedField(definition, "project", definition.Project);
+                RejectUnsupportedField(definition, "location", definition.Location);
+                RejectUnsupportedField(definition, "extra_body", definition.ExtraBody);
+                break;
+
             case "copilot":
                 RejectUnsupportedField(definition, "api_key", definition.ApiKey);
                 RejectUnsupportedField(definition, "api_key_env", definition.ApiKeyEnv);
@@ -1063,6 +1084,13 @@ public sealed class CodeAltaConfigStore
             !Uri.TryCreate(definition.ApiUrl, UriKind.Absolute, out _))
         {
             throw new InvalidOperationException($"providers.{definition.ProviderKey} api_url must be an absolute URI.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(definition.NpmRegistry) &&
+            (!Uri.TryCreate(definition.NpmRegistry, UriKind.Absolute, out var npmRegistryUri) ||
+             (npmRegistryUri.Scheme != Uri.UriSchemeHttp && npmRegistryUri.Scheme != Uri.UriSchemeHttps)))
+        {
+            throw new InvalidOperationException($"providers.{definition.ProviderKey} npm_registry must be an absolute HTTP or HTTPS URI.");
         }
 
         if (string.Equals(definition.ProviderType, CodexSubscriptionProviderType, StringComparison.Ordinal) &&
@@ -1415,6 +1443,8 @@ public sealed class CodeAltaConfigStore
                !string.IsNullOrWhiteSpace(definition.ApiKey) ||
                !string.IsNullOrWhiteSpace(definition.ApiKeyEnv) ||
                !string.IsNullOrWhiteSpace(definition.ApiUrl) ||
+               !string.IsNullOrWhiteSpace(definition.CliPath) ||
+               !string.IsNullOrWhiteSpace(definition.NpmRegistry) ||
                definition.ProtocolTrace == true ||
                !string.IsNullOrWhiteSpace(definition.AuthSource) ||
                !string.IsNullOrWhiteSpace(definition.AccountId) ||
@@ -1516,6 +1546,8 @@ public sealed class CodeAltaConfigStore
             ApiKey = definition.ApiKey,
             ApiKeyEnv = definition.ApiKeyEnv,
             ApiUrl = definition.ApiUrl,
+            CliPath = definition.CliPath,
+            NpmRegistry = definition.NpmRegistry,
             ProtocolTrace = definition.ProtocolTrace,
             AuthSource = definition.AuthSource,
             AccountId = definition.AccountId,

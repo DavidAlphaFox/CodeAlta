@@ -281,6 +281,8 @@ internal sealed partial class ModelProviderEditorItemViewModel
             ApiKey = definition.ApiKey,
             ApiKeyEnv = definition.ApiKeyEnv,
             ApiUrl = definition.ApiUrl,
+            CliPath = definition.CliPath,
+            NpmRegistry = definition.NpmRegistry,
             ProtocolTrace = definition.ProtocolTrace,
             OrganizationId = definition.OrganizationId,
             ProjectId = definition.ProjectId,

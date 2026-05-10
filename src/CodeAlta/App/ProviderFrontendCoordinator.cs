@@ -286,7 +286,8 @@ internal sealed class ProviderFrontendCoordinator
 
         if (string.Equals(definition.ProviderType, "copilot", StringComparison.Ordinal))
         {
-            backend = new CopilotAgentBackend(new CopilotAgentBackendOptions());
+            backend = new CopilotAgentBackend(
+                CodeAltaOwnedServices.CreateCopilotBackendOptions(definition, Path.Combine(stateRootPath, "cache")));
             return true;
         }
 

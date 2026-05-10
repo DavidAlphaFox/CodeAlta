@@ -190,7 +190,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 
             if (providerDefinitions.TryGetValue("copilot", out var copilotProvider) && copilotProvider.Enabled != false)
             {
-                backendFactory.RegisterCopilot(new CopilotAgentBackendOptions());
+                backendFactory.RegisterCopilot(CreateCopilotBackendOptions(copilotProvider, cacheRoot));
                 backendDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Copilot, copilotProvider.DisplayName ?? "GitHub Copilot"));
             }
 
@@ -212,6 +212,30 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
                 }
             }
         }
+    }
+
+    internal static CopilotAgentBackendOptions CreateCopilotBackendOptions(
+        CodeAltaProviderDocument definition,
+        string cacheRoot)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentException.ThrowIfNullOrWhiteSpace(cacheRoot);
+
+        var clientOptions = new GitHub.Copilot.SDK.CopilotClientOptions();
+        if (!string.IsNullOrWhiteSpace(definition.CliPath))
+        {
+            clientOptions.CliPath = definition.CliPath.Trim();
+        }
+
+        return new CopilotAgentBackendOptions
+        {
+            ClientOptions = clientOptions,
+            CliInstallOptions = new CopilotCliInstallOptions
+            {
+                LocalRootPath = cacheRoot,
+                NpmRegistryUrl = string.IsNullOrWhiteSpace(definition.NpmRegistry) ? null : definition.NpmRegistry.Trim(),
+            },
+        };
     }
 
     internal static string? ResolveCodexExecutablePath(string? configuredOverridePath)
@@ -292,7 +316,8 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         {
             // Copilot is a process-backed runtime. Replacing the factory is enough for the
             // next cold start; keep an already loaded backend alive across provider saves.
-            _backendFactory.RegisterOrReplaceCopilot(new CopilotAgentBackendOptions());
+            _backendFactory.RegisterOrReplaceCopilot(
+                CreateCopilotBackendOptions(copilotProvider, Path.Combine(CatalogOptions.GlobalRoot, "cache")));
             providerDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Copilot, copilotProvider.DisplayName ?? "GitHub Copilot"));
             expectedBackendIds.Add(AgentBackendIds.Copilot.Value);
         }
