@@ -107,7 +107,9 @@ internal sealed class ThreadExecutionOptionsFactory
                 return backendState.SelectedReasoningEffort;
             });
 
-        var sourceProjectId = _threadSelection.GetSelectedProjectId();
+        var sourceProjectId = projectRoots.Count == 0
+            ? null
+            : _threadSelection.GetSelectedProjectId();
         return new WorkThreadExecutionOptions
         {
             BackendId = backendId,
