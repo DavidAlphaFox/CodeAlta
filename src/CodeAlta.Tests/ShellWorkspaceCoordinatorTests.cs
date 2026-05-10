@@ -82,6 +82,71 @@ public sealed class ShellWorkspaceCoordinatorTests
     }
 
     [TestMethod]
+    public async Task ApplySelectionProjection_FocusesPromptWhenClosingThreadFallsBackToDraft()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var thread = CreateThread("thread-1", "project-1");
+        var threadStateCoordinator = CreateThreadStateCoordinator(options);
+        threadStateCoordinator.ApplyRecoveredCatalogState([CreateProject("project-1", "CodeAlta")], [thread]);
+        threadStateCoordinator.OpenThread(thread.ThreadId);
+
+        var threadSelection = new ThreadSelectionContext(
+            threadStateCoordinator,
+            static (_, _) => Task.CompletedTask,
+            threadId => string.Equals(threadId, threadStateCoordinator.SelectedThreadId, StringComparison.OrdinalIgnoreCase));
+        var deferredActions = new Queue<Action>();
+        var focusedPromptCount = 0;
+        var uiDispatcher = new QueueingUiDispatcher(deferredActions);
+        var workspaceContext = new ShellWorkspaceContext(
+            new DelegatingShellPromptAvailabilityPort(
+                static () => AgentBackendIds.Codex,
+                static () => (false, string.Empty, StatusTone.Info)),
+            new ShellWorkspaceSurfacePort(
+                static () => true,
+                static () => null,
+                static () => null,
+                static _ => { },
+                () => focusedPromptCount++,
+                static _ => { },
+                static _ => { }),
+            new DelegatingShellWorkspaceProjectionPort(
+                threadStateCoordinator.EnsureSelectionDefaults,
+                static () => { },
+                static () => { },
+                static () => { },
+                static () => { },
+                static _ => { },
+                static _ => { },
+                static () => { },
+                static () => { },
+                static () => { }),
+            uiDispatcher);
+        var workspace = new ShellWorkspaceCoordinator(
+            new CodeAltaShellViewModel(),
+            new ThreadWorkspaceViewModel(),
+            new SessionUsageViewModel(),
+            CreateChatBackendStates(),
+            threadSelection,
+            workspaceContext,
+            new State<float>(0));
+
+        workspace.ApplySelectionProjection();
+        Drain(deferredActions);
+        Assert.AreEqual(1, focusedPromptCount);
+
+        await threadStateCoordinator.CloseThreadTabAsync(thread.ThreadId);
+        workspace.ApplySelectionProjection();
+
+        Assert.IsInstanceOfType(threadStateCoordinator.Selection.Target, typeof(WorkspaceTarget.Draft));
+        Assert.AreEqual(1, focusedPromptCount);
+
+        Drain(deferredActions);
+
+        Assert.AreEqual(2, focusedPromptCount);
+    }
+
+    [TestMethod]
     public void ApplySelectionProjection_DraftScopeWithoutConfiguredProviders_DoesNotThrow()
     {
         using var temp = TempDirectory.Create();
@@ -261,6 +326,14 @@ public sealed class ShellWorkspaceCoordinatorTests
             new State<float>(0));
 
         return (workspace, sessionUsage);
+    }
+
+    private static void Drain(Queue<Action> deferredActions)
+    {
+        while (deferredActions.Count > 0)
+        {
+            deferredActions.Dequeue()();
+        }
     }
 
     private static ShellWorkspaceContext CreateMinimalWorkspaceContext(IUiDispatcher uiDispatcher)

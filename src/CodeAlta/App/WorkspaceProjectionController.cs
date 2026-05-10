@@ -155,11 +155,17 @@ internal sealed class WorkspaceProjectionController
 
     private void RefreshDraftThreadPaneContent()
     {
+        var wasDisplayingThread = _displayedThreadId is not null;
         _displayedThreadId = null;
         _workspaceContext.ApplyQueuedPromptProjection();
         _workspaceContext.RefreshModelProviderSelectorsForDraftScope();
         _workspaceContext.SyncPromptDraftText(session: null);
         _workspaceContext.ApplyPromptAvailabilityProjection();
+        if (wasDisplayingThread)
+        {
+            _workspaceContext.DispatchToUiDeferred(_workspaceContext.FocusPromptTarget);
+        }
+
         _statusProjection.SetReadyStatusForCurrentSelection();
     }
 }
