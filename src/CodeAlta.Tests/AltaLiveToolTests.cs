@@ -1219,6 +1219,28 @@ public sealed class AltaLiveToolTests
     }
 
     [TestMethod]
+    public async Task SkillActivate_ProviderManagedBackendReturnsUnsupportedDiagnostic()
+    {
+        using var root = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var backend = new StatefulBackend(AgentBackendIds.Codex);
+        var runtime = CreateRuntime(options, backend);
+        await using var _ = runtime.ConfigureAwait(false);
+        var dispatcher = CreateDispatcher(new AltaServiceCollection()
+            .Add(options)
+            .Add(new ProjectCatalog(options))
+            .Add(new WorkThreadCatalog(options))
+            .Add(runtime));
+        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", AgentBackendIds.Codex.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var threadId = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
+
+        var result = await dispatcher.InvokeAsync(["skill", "activate", "sample-skill", "--session", threadId], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+
+        Assert.AreEqual(AltaExitCodes.Unsupported, result.ExitCode);
+        Assert.AreEqual("skill.activationUnsupported", ReadJsonLines(result.Stdout).Single(line => line.GetProperty("type").GetString() == "alta.error").GetProperty("code").GetString());
+    }
+
+    [TestMethod]
     public async Task SessionVisibility_ProjectScopedAgentCannotInspectOrMutateOtherProjectSessions()
     {
         using var root = TempDirectory.Create();
