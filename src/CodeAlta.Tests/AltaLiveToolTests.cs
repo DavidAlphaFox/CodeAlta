@@ -1228,10 +1228,18 @@ public sealed class AltaLiveToolTests
         var caller = new AltaCallerIdentity { Kind = "agent", SourceProjectId = projectB.Id, SourceThreadId = "other-thread" };
 
         var show = await dispatcher.InvokeAsync(["session", "show", threadId], caller: caller).ConfigureAwait(false);
+        var listOtherProject = await dispatcher.InvokeAsync(["session", "list", "--project", projectA.Id], caller: caller).ConfigureAwait(false);
         var send = await dispatcher.InvokeAsync(["session", "send", threadId, "--message", "cross-project"], caller: caller).ConfigureAwait(false);
+        var createOtherProject = await dispatcher.InvokeAsync(["session", "create", "--project", projectA.Id, "--provider", backendId.Value], caller: caller).ConfigureAwait(false);
+        var createGlobal = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: caller).ConfigureAwait(false);
+        var modelResolve = await dispatcher.InvokeAsync(["model", "resolve", "--same-model-as", threadId], caller: caller).ConfigureAwait(false);
 
         Assert.AreEqual(AltaExitCodes.PolicyDenied, show.ExitCode);
+        Assert.AreEqual(AltaExitCodes.PolicyDenied, listOtherProject.ExitCode);
         Assert.AreEqual(AltaExitCodes.PolicyDenied, send.ExitCode);
+        Assert.AreEqual(AltaExitCodes.PolicyDenied, createOtherProject.ExitCode);
+        Assert.AreEqual(AltaExitCodes.PolicyDenied, createGlobal.ExitCode);
+        Assert.AreEqual(AltaExitCodes.PolicyDenied, modelResolve.ExitCode);
         Assert.IsFalse(backend.SentOptions.Any());
         Assert.IsTrue(ReadJsonLines(show.Stdout).Any(static line => line.GetProperty("type").GetString() == "alta.error" && line.GetProperty("code").GetString() == "policy.visibilityDenied"));
     }

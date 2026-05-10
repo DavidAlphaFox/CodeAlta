@@ -864,6 +864,11 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             {
                 return NotFound(context, "project.notFound", $"Project '{projectFilter}' was not found.");
             }
+
+            if (!CanAccessProject(context, project.Id))
+            {
+                return PermissionDenied(context, "policy.visibilityDenied", $"The caller is not allowed to inspect sessions in project '{project.Id}'.");
+            }
         }
 
         var includeArchived = string.Equals(stateFilter, "archived", StringComparison.OrdinalIgnoreCase) ||
@@ -1118,6 +1123,10 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             {
                 return PermissionDenied(context, "policy.visibilityDenied", $"The caller is not allowed to create sessions in project '{project.Id}'.");
             }
+        }
+        else if (CallerHasProjectScope(context))
+        {
+            return PermissionDenied(context, "policy.visibilityDenied", "Project-scoped callers are not allowed to create global sessions.");
         }
 
         var parentResolution = await ResolveParentThreadIdAsync(context, project, options).ConfigureAwait(false);
@@ -1763,15 +1772,25 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         AltaModelSelection? inherited = null;
         if (!string.IsNullOrWhiteSpace(request.SameModelAsThreadId))
         {
-            inherited = await ResolveThreadModelSelectionAsync(context, request.SameModelAsThreadId).ConfigureAwait(false);
-            if (inherited is null)
+            var inheritedResult = await ResolveThreadModelSelectionAsync(context, request.SameModelAsThreadId).ConfigureAwait(false);
+            if (inheritedResult.ExitCode != AltaExitCodes.Success)
+            {
+                return ModelResolutionResult.Fail(inheritedResult.ExitCode);
+            }
+
+            inherited = inheritedResult.Selection;
+            if (!inheritedResult.Found)
             {
                 return ModelResolutionResult.Fail(NotFound(context, "session.notFound", $"Session '{request.SameModelAsThreadId}' was not found."));
             }
         }
         else if (!string.IsNullOrWhiteSpace(context.Caller.SourceThreadId))
         {
-            inherited = await ResolveThreadModelSelectionAsync(context, context.Caller.SourceThreadId).ConfigureAwait(false);
+            var inheritedResult = await ResolveThreadModelSelectionAsync(context, context.Caller.SourceThreadId).ConfigureAwait(false);
+            if (inheritedResult.ExitCode == AltaExitCodes.Success)
+            {
+                inherited = inheritedResult.Selection;
+            }
         }
 
         var providerKey = FirstNonEmpty(request.ProviderKey, inherited?.ProviderKey, GetDefaultProviderKey(context));
@@ -1806,11 +1825,26 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         };
     }
 
-    private static async Task<AltaModelSelection?> ResolveThreadModelSelectionAsync(AltaCommandContext context, string threadId)
+    private static async Task<ThreadModelSelectionResult> ResolveThreadModelSelectionAsync(AltaCommandContext context, string threadId)
     {
         var infos = await LoadSessionInfosAsync(context).ConfigureAwait(false);
-        var info = infos is null ? null : FindThread(infos, threadId);
-        return info is null ? null : CreateModelSelection(info.Thread, info.Preference);
+        if (infos is null)
+        {
+            return ThreadModelSelectionResult.Fail(AltaExitCodes.ServiceUnavailable);
+        }
+
+        var info = FindThread(infos, threadId);
+        if (info is null)
+        {
+            return ThreadModelSelectionResult.NotFound();
+        }
+
+        if (!CanAccessThread(context, info.Thread))
+        {
+            return ThreadModelSelectionResult.Fail(PermissionDenied(context, "policy.visibilityDenied", $"The caller is not allowed to inspect session '{threadId}'."));
+        }
+
+        return ThreadModelSelectionResult.Success(CreateModelSelection(info.Thread, info.Preference));
     }
 
     private static string? GetDefaultProviderKey(AltaCommandContext context)
@@ -2545,6 +2579,15 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         public static ModelResolutionResult Success(AltaModelSelection selection) => new(AltaExitCodes.Success, selection);
 
         public static ModelResolutionResult Fail(int exitCode) => new(exitCode, null);
+    }
+
+    private sealed record ThreadModelSelectionResult(int ExitCode, bool Found, AltaModelSelection? Selection)
+    {
+        public static ThreadModelSelectionResult Success(AltaModelSelection selection) => new(AltaExitCodes.Success, Found: true, selection);
+
+        public static ThreadModelSelectionResult NotFound() => new(AltaExitCodes.Success, Found: false, null);
+
+        public static ThreadModelSelectionResult Fail(int exitCode) => new(exitCode, Found: false, null);
     }
 
     private sealed record SkillQueryResult(int ExitCode, SkillCatalogQuery? Query)
