@@ -216,6 +216,61 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
+    public async Task OpenAIChatAgentBackend_OmitsReasoningEffortWhenSetToNone()
+    {
+        using var temp = TestTempDirectory.Create();
+        var chatClient = new RecordingOpenAIChatClient(
+            [
+                OpenAIChatModelFactory.StreamingChatCompletionUpdate(
+                    completionId: "chatcmpl-1",
+                    contentUpdate: [ChatMessageContentPart.CreateTextPart("OpenAI chat answer.")],
+                    model: "gpt-chat-test"),
+            ]);
+
+        await using var backend = new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
+        {
+            StateRootPath = temp.Path,
+            Providers =
+            {
+                new OpenAIProviderOptions
+                {
+                    ProviderKey = "compat-provider",
+                    IsDefault = true,
+                    Profile = new LocalAgentProviderProfile
+                    {
+                        SupportsDeveloperRole = true,
+                        SupportsReasoningEffort = true,
+                        SupportsStore = false,
+                        StreamsUsage = true,
+                    },
+                    ChatClientFactory = _ => chatClient,
+                    ModelListAsync = static _ => Task.FromResult<IReadOnlyList<AgentModelInfo>>(
+                    [
+                        new AgentModelInfo("gpt-chat-test", DisplayName: "GPT Chat Test"),
+                    ]),
+                },
+            },
+        });
+
+        await using var session = await backend.CreateSessionAsync(new AgentSessionCreateOptions
+        {
+            Model = "gpt-chat-test",
+            WorkingDirectory = temp.Path,
+            ReasoningEffort = AgentReasoningEffort.None,
+            OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.Deny)),
+        }).ConfigureAwait(false);
+
+        _ = await session.SendAsync(new AgentSendOptions
+        {
+            Input = new AgentInput([new AgentInputItem.Text("Hello")]),
+        }).ConfigureAwait(false);
+
+        Assert.AreEqual(1, chatClient.Requests.Count);
+        Assert.IsNotNull(chatClient.Requests[0].Options);
+        Assert.IsNull(chatClient.Requests[0].Options!.ReasoningEffortLevel);
+    }
+
+    [TestMethod]
     public async Task OpenAIChatAgentBackend_ProtocolTracing_WritesSessionTrace()
     {
         using var temp = TestTempDirectory.Create();
@@ -666,6 +721,75 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
+    public async Task OpenAIResponsesTurnExecutor_NormalizesRotatingCopilotDeltaItemIds()
+    {
+        var streamMessageItem = ResponseItem.CreateAssistantMessageItem(string.Empty, []);
+        streamMessageItem.Id = "msg_stream";
+        var streamReasoningItem = new ReasoningResponseItem(string.Empty)
+        {
+            Id = "rs_stream",
+        };
+        var messageItem = ResponseItem.CreateAssistantMessageItem("Hello world.", []);
+        messageItem.Id = "msg_final";
+        var reasoningItem = new ReasoningResponseItem("Thinking done.")
+        {
+            Id = "rs_final",
+        };
+        var completedResponse = new ResponseResult
+        {
+            Id = "response-copilot",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Model = "gpt-5.5",
+            Status = ResponseStatus.Completed,
+        };
+        completedResponse.OutputItems.Add(messageItem);
+        completedResponse.OutputItems.Add(reasoningItem);
+        var responsesClient = new RecordingOpenAIResponseClient(
+        [
+            [
+                CreateOutputItemAddedUpdate(0, streamMessageItem),
+                CreateOutputTextDeltaUpdate("rotating-message-1", "Hello ", outputIndex: 0),
+                CreateOutputTextDeltaUpdate("rotating-message-2", "world.", outputIndex: 0),
+                CreateOutputItemAddedUpdate(1, streamReasoningItem),
+                CreateReasoningSummaryTextDeltaUpdate("rotating-reasoning-1", "Thinking ", summaryIndex: 0),
+                CreateReasoningSummaryTextDeltaUpdate("rotating-reasoning-2", "done.", summaryIndex: 0),
+                CreateCompletedUpdate(completedResponse),
+            ],
+        ]);
+        var executor = new OpenAIResponsesTurnExecutor(new OpenAIProviderOptions
+        {
+            ProviderKey = "github-copilot-direct",
+            ResponsesClientFactory = _ => responsesClient,
+        });
+        var deltas = new List<LocalAgentTurnDelta>();
+        var request = CreateTurnRequest();
+
+        var response = await executor.ExecuteTurnAsync(
+            request with
+            {
+                Provider = request.Provider with
+                {
+                    ProtocolFamily = "github-copilot-direct",
+                },
+            },
+            (delta, _) =>
+            {
+                deltas.Add(delta);
+                return ValueTask.CompletedTask;
+            }).ConfigureAwait(false);
+
+        CollectionAssert.AreEqual(
+            new[] { "msg_stream", "msg_stream" },
+            deltas.Where(static delta => delta.Kind == AgentContentKind.Assistant).Select(static delta => delta.ContentId).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "rs_stream", "rs_stream" },
+            deltas.Where(static delta => delta.Kind == AgentContentKind.Reasoning).Select(static delta => delta.ContentId).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "msg_stream", "rs_stream" },
+            response.AssistantPartContentIds!.ToArray());
+    }
+
+    [TestMethod]
     public async Task OpenAIResponsesTurnExecutor_SendsInlineImagesWithMediaType()
     {
         var responsesClient = new RecordingOpenAIResponseClient(
@@ -791,8 +915,11 @@ public sealed class OpenAIRawApiAgentBackendTests
                     text: "Answer.",
                     reasoningText: "Thinking.",
                     encryptedReasoning: null,
-                    inputTokens: 33,
-                    outputTokens: 7),
+                    inputTokens: 100,
+                    outputTokens: 7,
+                    cachedInputTokens: 40,
+                    reasoningTokens: 3,
+                    totalTokens: 67),
             ],
         ]);
         var executor = new OpenAIResponsesTurnExecutor(new OpenAIProviderOptions
@@ -806,9 +933,11 @@ public sealed class OpenAIRawApiAgentBackendTests
             static (_, _) => ValueTask.CompletedTask).ConfigureAwait(false);
 
         Assert.IsNotNull(response.Usage);
-        Assert.AreEqual(33L, response.Usage.LastOperation?.InputTokens);
+        Assert.AreEqual(60L, response.Usage.LastOperation?.InputTokens);
         Assert.AreEqual(7L, response.Usage.LastOperation?.OutputTokens);
-        Assert.AreEqual(40L, response.Usage.CurrentTokens);
+        Assert.AreEqual(40L, response.Usage.LastOperation?.CachedInputTokens);
+        Assert.AreEqual(3L, response.Usage.LastOperation?.ReasoningTokens);
+        Assert.AreEqual(107L, response.Usage.CurrentTokens);
         Assert.AreEqual(200000L, response.Usage.TokenLimit);
         Assert.AreEqual(AgentUsageScope.CurrentWindow, response.Usage.Scope);
     }
@@ -2974,7 +3103,10 @@ public sealed class OpenAIRawApiAgentBackendTests
         string reasoningText,
         string? encryptedReasoning,
         int inputTokens = 0,
-        int outputTokens = 0)
+        int outputTokens = 0,
+        int? cachedInputTokens = null,
+        int? reasoningTokens = null,
+        int? totalTokens = null)
     {
         var response = new ResponseResult
         {
@@ -2993,7 +3125,7 @@ public sealed class OpenAIRawApiAgentBackendTests
             {
               "type": "response.completed",
               "sequence_number": 0,
-              "response": {{SerializeResponseWithUsage(response, inputTokens, outputTokens)}}
+              "response": {{SerializeResponseWithUsage(response, inputTokens, outputTokens, cachedInputTokens, reasoningTokens, totalTokens)}}
             }
             """);
     }
@@ -3014,14 +3146,36 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     private static StreamingResponseUpdate CreateOutputTextDeltaUpdate(string itemId, string delta)
+        => CreateOutputTextDeltaUpdate(itemId, delta, outputIndex: 0, contentIndex: 0);
+
+    private static StreamingResponseUpdate CreateOutputTextDeltaUpdate(
+        string itemId,
+        string delta,
+        int outputIndex,
+        int contentIndex = 0)
         => DeserializeStreamingResponseUpdate(
             $$"""
               {
                 "type": "response.output_text.delta",
                 "sequence_number": 1,
                 "item_id": "{{itemId}}",
-                "output_index": 0,
-                "content_index": 0,
+                "output_index": {{outputIndex}},
+                "content_index": {{contentIndex}},
+                "delta": "{{delta}}"
+              }
+              """);
+
+    private static StreamingResponseUpdate CreateReasoningSummaryTextDeltaUpdate(
+        string itemId,
+        string delta,
+        int summaryIndex)
+        => DeserializeStreamingResponseUpdate(
+            $$"""
+              {
+                "type": "response.reasoning_summary_text.delta",
+                "sequence_number": 1,
+                "item_id": "{{itemId}}",
+                "summary_index": {{summaryIndex}},
                 "delta": "{{delta}}"
               }
               """);
@@ -3105,6 +3259,19 @@ public sealed class OpenAIRawApiAgentBackendTests
             }
             """);
 
+    private static StreamingResponseUpdate CreateOutputItemAddedUpdate(
+        int outputIndex,
+        ResponseItem item)
+        => DeserializeStreamingResponseUpdate(
+            $$"""
+            {
+              "type": "response.output_item.added",
+              "sequence_number": 0,
+              "output_index": {{outputIndex}},
+              "item": {{SerializeModel(item)}}
+            }
+            """);
+
     private static StreamingResponseUpdate CreateErrorResponseUpdate(
         string? code,
         string message,
@@ -3159,7 +3326,13 @@ public sealed class OpenAIRawApiAgentBackendTests
             }
             """);
 
-    private static string SerializeResponseWithUsage(ResponseResult response, int inputTokens, int outputTokens)
+    private static string SerializeResponseWithUsage(
+        ResponseResult response,
+        int inputTokens,
+        int outputTokens,
+        int? cachedInputTokens = null,
+        int? reasoningTokens = null,
+        int? totalTokens = null)
     {
         using var source = JsonDocument.Parse(SerializeModel(response));
         using var stream = new MemoryStream();
@@ -3181,7 +3354,23 @@ public sealed class OpenAIRawApiAgentBackendTests
             writer.WriteStartObject();
             writer.WriteNumber("input_tokens", inputTokens);
             writer.WriteNumber("output_tokens", outputTokens);
-            writer.WriteNumber("total_tokens", inputTokens + outputTokens);
+            writer.WriteNumber("total_tokens", totalTokens ?? inputTokens + outputTokens);
+            if (cachedInputTokens is { } cached)
+            {
+                writer.WritePropertyName("input_tokens_details");
+                writer.WriteStartObject();
+                writer.WriteNumber("cached_tokens", cached);
+                writer.WriteEndObject();
+            }
+
+            if (reasoningTokens is { } reasoning)
+            {
+                writer.WritePropertyName("output_tokens_details");
+                writer.WriteStartObject();
+                writer.WriteNumber("reasoning_tokens", reasoning);
+                writer.WriteEndObject();
+            }
+
             writer.WriteEndObject();
             writer.WriteEndObject();
         }

@@ -148,6 +148,10 @@ public sealed class OpenAIProviderOptions
 
     internal Func<string?, ChatClient>? ChatClientFactory { get; set; }
 
+    internal IReadOnlyDictionary<string, string>? ExtraHeaders { get; set; }
+
+    internal HttpClient? HttpClient { get; set; }
+
     internal HttpClient? CodexSubscriptionHttpClient { get; set; }
 
     internal Func<CancellationToken, ValueTask>? CodexSubscriptionCredentialRefreshAsync { get; set; }

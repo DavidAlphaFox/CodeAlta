@@ -110,16 +110,16 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
 
     private static ReasoningOptions? CreateReasoningOptions(LocalAgentTurnRequest request)
     {
-        if (request.ReasoningEffort is null)
+        if (request.ReasoningEffort is not { } reasoningEffort ||
+            !SupportsRequestedReasoningEffort(request, reasoningEffort))
         {
             return null;
         }
 
         return new ReasoningOptions
         {
-            Effort = request.ReasoningEffort.Value switch
+            Effort = reasoningEffort switch
             {
-                AgentReasoningEffort.None => ReasoningEffort.None,
                 AgentReasoningEffort.Minimal => ReasoningEffort.Low,
                 AgentReasoningEffort.Low => ReasoningEffort.Low,
                 AgentReasoningEffort.Medium => ReasoningEffort.Medium,
@@ -129,6 +129,17 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
             },
             Output = ReasoningOutput.Full,
         };
+    }
+
+    private static bool SupportsRequestedReasoningEffort(LocalAgentTurnRequest request, AgentReasoningEffort reasoningEffort)
+    {
+        if (reasoningEffort == AgentReasoningEffort.None)
+        {
+            return false;
+        }
+
+        return request.ModelInfo?.SupportedReasoningEfforts is not { } supportedReasoningEfforts ||
+            supportedReasoningEfforts.Contains(reasoningEffort);
     }
 
     private static string? ComposeInstructions(LocalAgentTurnRequest request)

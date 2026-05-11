@@ -182,15 +182,7 @@ internal static class LocalAgentTokenEstimator
     }
 
     private static long EstimateText(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return 0;
-        }
-
-        var condensedLength = text.Trim().Length;
-        return Math.Max((condensedLength + 3) / 4, 1);
-    }
+        => string.IsNullOrWhiteSpace(text) ? 0 : TokenEstimator.Estimate(text.AsSpan().Trim());
 
     private static long? Sum(long? left, long? right)
         => left.HasValue || right.HasValue ? (left ?? 0) + (right ?? 0) : null;

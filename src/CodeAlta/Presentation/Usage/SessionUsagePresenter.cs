@@ -409,7 +409,7 @@ internal sealed class SessionUsagePresenter
         var added = 0;
 
         added += AddSegment(chart, usage.InputTokens, "Input", Colors.DodgerBlue);
-        added += AddSegment(chart, usage.OutputTokens, "Output", Colors.Orange);
+        added += AddSegment(chart, GetNonReasoningOutputTokens(usage.OutputTokens, usage.ReasoningTokens), "Output", Colors.Orange);
         added += AddSegment(chart, usage.CacheReadTokens, "Cache Read", Colors.LimeGreen);
         added += AddSegment(chart, usage.CacheWriteTokens, "Cache Write", Colors.MediumPurple);
         added += AddSegment(chart, usage.CachedInputTokens, "Cache", Colors.LimeGreen);
@@ -426,7 +426,7 @@ internal sealed class SessionUsagePresenter
         var added = 0;
 
         added += AddSegment(chart, usage.InputTokens, "Input", Colors.DodgerBlue);
-        added += AddSegment(chart, usage.OutputTokens, "Output", Colors.Orange);
+        added += AddSegment(chart, GetNonReasoningOutputTokens(usage.OutputTokens, usage.ReasoningOutputTokens), "Output", Colors.Orange);
         added += AddSegment(chart, usage.CachedInputTokens, "Cache", Colors.LimeGreen);
         added += AddSegment(chart, usage.ReasoningOutputTokens, "Reasoning", Colors.MediumPurple);
 
@@ -455,6 +455,11 @@ internal sealed class SessionUsagePresenter
             ? chart.Style(new BreakdownStyle { SegmentGap = 1 })
             : null;
     }
+
+    private static long? GetNonReasoningOutputTokens(long? outputTokens, long? reasoningTokens)
+        => outputTokens is { } output
+            ? Math.Max(0, output - (reasoningTokens ?? 0))
+            : null;
 
     private static int AddSegment(BreakdownChart chart, long? value, string label, Color color)
     {

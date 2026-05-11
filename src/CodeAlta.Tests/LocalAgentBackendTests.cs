@@ -236,6 +236,82 @@ public sealed class LocalAgentBackendTests
         Assert.AreEqual(AgentUsageScope.LastOperation, repairedSummary.Usage.Scope);
     }
 
+    [TestMethod]
+    public async Task LocalAgentBackend_ResumeSession_RecoversUsageFromPersistedHistoryEvents()
+    {
+        using var temp = TestTempDirectory.Create();
+        var backend = CreateBackend(temp.Path, out var executor);
+        var store = new FileSystemLocalAgentSessionStore(
+            new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var sessionId = "019e17b0-1b23-74a8-b1f1-a532f06c4ef1";
+        var createdAt = DateTimeOffset.Parse("2026-05-11T15:00:00+00:00");
+        var usageUpdatedAt = createdAt.AddMinutes(1);
+        var summary = new LocalAgentSessionSummary
+        {
+            SessionId = sessionId,
+            BackendId = AgentBackendIds.OpenAIResponses,
+            ProtocolFamily = "openai-responses",
+            ProviderKey = "openai",
+            ModelId = "gpt-5.4",
+            WorkingDirectory = "C:\\code\\CodeAlta",
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt,
+        };
+        var state = new LocalAgentSessionState
+        {
+            SessionId = sessionId,
+            ProtocolFamily = "openai-responses",
+            ProviderKey = "openai",
+            UpdatedAt = createdAt,
+        };
+        var usage = new AgentSessionUsage(
+            Window: new AgentWindowUsageSnapshot(203_533, null, 42, "Active context window"),
+            LastOperation: new AgentOperationUsageSnapshot(
+                Model: "gpt-5.4-2026-03-05",
+                InputTokens: 676,
+                OutputTokens: 105,
+                CachedInputTokens: 202_752),
+            Scope: AgentUsageScope.CurrentWindow,
+            Source: AgentUsageSource.LocalProviderUsage,
+            UpdatedAt: usageUpdatedAt);
+
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+        await store.AppendEventsAsync(
+                "openai-responses",
+                "openai",
+                sessionId,
+                [new AgentSessionUpdateEvent(
+                    AgentBackendIds.OpenAIResponses,
+                    sessionId,
+                    usageUpdatedAt,
+                    null,
+                    AgentSessionUpdateKind.UsageUpdated,
+                    "Usage updated.",
+                    Usage: usage)])
+            .ConfigureAwait(false);
+
+        await using var resumedSession = await backend.ResumeSessionAsync(
+            sessionId,
+            new AgentSessionResumeOptions
+            {
+                WorkingDirectory = "C:\\code\\CodeAlta",
+                OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+            }).ConfigureAwait(false);
+
+        var repairedSummary = await store.GetSessionAsync("openai-responses", "openai", sessionId).ConfigureAwait(false);
+        var repairedState = await store.GetStateAsync("openai-responses", "openai", sessionId).ConfigureAwait(false);
+
+        Assert.IsNotNull(repairedSummary?.Usage);
+        Assert.IsNotNull(repairedState?.Usage);
+        Assert.AreEqual(203_533L, repairedSummary.Usage.CurrentTokens);
+        Assert.AreEqual(1050000L, repairedSummary.Usage.TokenLimit);
+        Assert.AreEqual(202_752L, repairedSummary.Usage.LastOperation?.CachedInputTokens);
+        Assert.AreEqual(203_533L, repairedState.Usage.CurrentTokens);
+        Assert.AreEqual(1050000L, repairedState.Usage.TokenLimit);
+        Assert.AreEqual(0, executor.Requests.Count);
+    }
+
     private static LocalAgentBackend CreateBackend(string tempRoot, out RecordingTurnExecutor executor)
     {
         executor = new RecordingTurnExecutor();

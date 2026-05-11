@@ -545,6 +545,38 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
+    public void RecoverUsageFromHistory_UsesUsageEventsOmittedFromInitialRenderWindow()
+    {
+        var timestamp = DateTimeOffset.UtcNow;
+        var usage = new AgentSessionUsage(
+            Window: new AgentWindowUsageSnapshot(203_533, 272_000, 42, "Active context window"),
+            LastOperation: new AgentOperationUsageSnapshot(
+                Model: "gpt-5.5",
+                InputTokens: 676,
+                OutputTokens: 105,
+                CachedInputTokens: 202_752),
+            Scope: AgentUsageScope.CurrentWindow,
+            Source: AgentUsageSource.LocalProviderUsage,
+            UpdatedAt: timestamp.AddSeconds(2));
+        AgentEvent[] history =
+        [
+            new AgentContentCompletedEvent(AgentBackendIds.OpenAIResponses, "session-1", timestamp, null, AgentContentKind.User, "user-1", null, "First prompt"),
+            new AgentContentCompletedEvent(AgentBackendIds.OpenAIResponses, "session-1", timestamp.AddSeconds(1), null, AgentContentKind.Assistant, "assistant-1", null, "First reply"),
+            new AgentSessionUpdateEvent(AgentBackendIds.OpenAIResponses, "session-1", timestamp.AddSeconds(2), null, AgentSessionUpdateKind.UsageUpdated, "Usage updated.", Usage: usage),
+            new AgentContentCompletedEvent(AgentBackendIds.OpenAIResponses, "session-1", timestamp.AddSeconds(3), null, AgentContentKind.User, "user-2", null, "Second prompt"),
+        ];
+
+        var plan = ThreadHistoryCoordinator.CreateInitialLoadPlan(history);
+        var recovered = ThreadHistoryCoordinator.RecoverUsageFromHistory(history);
+
+        Assert.IsFalse(plan.EventsToRender.OfType<AgentSessionUpdateEvent>().Any(static @event => @event.Usage is not null));
+        Assert.IsNotNull(recovered);
+        Assert.AreEqual(203_533L, recovered.CurrentTokens);
+        Assert.AreEqual(272_000L, recovered.TokenLimit);
+        Assert.AreEqual(202_752L, recovered.LastOperation?.CachedInputTokens);
+    }
+
+    [TestMethod]
     public void FindPriorSystemPromptForFirstRenderedSystemPrompt_SeedsPinnedPromptDiff()
     {
         var timestamp = DateTimeOffset.UtcNow;
@@ -1823,6 +1855,19 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
+    public void BuildChatReasoningOptions_UsesNoneWhenModelDoesNotSupportReasoning()
+    {
+        var options = ChatBackendPresentation.BuildReasoningOptions(
+            new AgentModelInfo(
+                "model-a",
+                SupportedReasoningEfforts: []));
+
+        CollectionAssert.AreEqual(
+            new[] { "None" },
+            options.Select(static option => option.Label).ToArray());
+    }
+
+    [TestMethod]
     public void ResolvePreferredReasoningEffort_PrefersHighWhenSupportedAndNoPreferenceIsSet()
     {
         var effort = ChatBackendPresentation.ResolvePreferredReasoningEffort(
@@ -1846,6 +1891,18 @@ public sealed class CodeAltaAppTests
             preferredReasoningEffort: AgentReasoningEffort.Low);
 
         Assert.AreEqual(AgentReasoningEffort.Low, effort);
+    }
+
+    [TestMethod]
+    public void ResolvePreferredReasoningEffort_DropsRequestedEffortWhenModelDoesNotSupportReasoning()
+    {
+        var effort = ChatBackendPresentation.ResolvePreferredReasoningEffort(
+            new AgentModelInfo(
+                "gemini-test",
+                SupportedReasoningEfforts: []),
+            preferredReasoningEffort: AgentReasoningEffort.Low);
+
+        Assert.IsNull(effort);
     }
 
     [TestMethod]

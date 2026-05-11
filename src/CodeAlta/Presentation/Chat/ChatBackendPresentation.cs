@@ -63,9 +63,12 @@ internal static class ChatBackendPresentation
 
     public static List<ChatReasoningOption> BuildReasoningOptions(AgentModelInfo? model)
     {
-        var efforts = model?.SupportedReasoningEfforts is { Count: > 0 } supported
-            ? supported
-            : Enum.GetValues<AgentReasoningEffort>();
+        IEnumerable<AgentReasoningEffort> efforts = model?.SupportedReasoningEfforts switch
+        {
+            { Count: > 0 } supported => supported,
+            { Count: 0 } => [AgentReasoningEffort.None],
+            _ => Enum.GetValues<AgentReasoningEffort>(),
+        };
 
         return efforts
             .Distinct()
@@ -192,7 +195,7 @@ internal static class ChatBackendPresentation
             .Distinct()
             .ToArray();
         if (preferredReasoningEffort is { } requestedEffort &&
-            (supportedReasoningEfforts is null || supportedReasoningEfforts.Length == 0 || supportedReasoningEfforts.Contains(requestedEffort)))
+            (supportedReasoningEfforts is null || supportedReasoningEfforts.Contains(requestedEffort)))
         {
             return requestedEffort;
         }

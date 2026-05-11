@@ -831,7 +831,8 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             runId,
             AgentSessionUpdateKind.UsageUpdated,
             "Usage updated.",
-            Usage: refreshedUsage);
+            // Window refreshes reuse the previous operation for state estimation, but they are not new provider calls.
+            Usage: refreshedUsage with { LastOperation = null });
         await AppendEventsAsync([usageEvent], LocalAgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
         await _store.UpsertStateAsync(_state, cancellationToken).ConfigureAwait(false);
         await _store.UpsertSessionAsync(_summary, cancellationToken).ConfigureAwait(false);
@@ -1169,7 +1170,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
     }
 
     private static int EstimatePromptTokens(string? text)
-        => string.IsNullOrEmpty(text) ? 0 : Math.Max(1, (int)Math.Ceiling(text.Length / 4.0));
+        => checked((int)TokenEstimator.Estimate(text));
 
     private static JsonElement CreateSystemPromptManifest(string effectivePromptHash, AgentSystemPromptStatistics statistics)
     {

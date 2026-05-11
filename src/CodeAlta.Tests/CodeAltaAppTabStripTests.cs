@@ -354,6 +354,69 @@ public sealed class CodeAltaAppTabStripTests
     }
 
     [TestMethod]
+    public void SyncControl_PrunesThreadShellTabsMissingFromCatalog()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var dispatcher = new InlineUiDispatcher();
+        var workspaceView = CreateThreadWorkspaceView();
+        var tabs = new InMemoryShellTabService();
+        tabs.OpenOrGetTab(CreateDescriptor("missing-thread", ShellTabKind.Thread));
+        var threadState = TestThreadStateServices.CreateCoordinator(
+            new ProjectCatalog(options),
+            new WorkThreadCatalog(options),
+            dispatcher,
+            new ShellStateStore(dispatcher));
+        var project = CreateProject("project-1", "CodeAlta");
+        var thread = CreateThread("thread-1", project.Id);
+        threadState.ApplyRecoveredCatalogState([project], [thread]);
+        threadState.OpenThread(thread.ThreadId);
+        var coordinator = CreateCoordinator(tabs, threadState, workspaceView, dispatcher);
+
+        coordinator.SyncControl();
+
+        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("missing-thread"), out _));
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId(thread.ThreadId), out var selectedTab));
+        Assert.IsTrue(selectedTab.IsSelected);
+        CollectionAssert.AreEqual(
+            new[] { thread.ThreadId },
+            workspaceView.ThreadTabControl.Tabs
+                .Select(GetTabPageId)
+                .ToArray());
+    }
+
+    [TestMethod]
+    public void SyncControl_IgnoresReentrantShellTabEventsWhileOpeningThreadTabs()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var dispatcher = new InlineUiDispatcher();
+        var workspaceView = CreateThreadWorkspaceView();
+        var tabs = new InMemoryShellTabService();
+        var threadState = TestThreadStateServices.CreateCoordinator(
+            new ProjectCatalog(options),
+            new WorkThreadCatalog(options),
+            dispatcher,
+            new ShellStateStore(dispatcher));
+        var project = CreateProject("project-1", "CodeAlta");
+        var thread = CreateThread("thread-1", project.Id);
+        threadState.ApplyRecoveredCatalogState([project], [thread]);
+        threadState.OpenThread(thread.ThreadId);
+        var coordinator = CreateCoordinator(tabs, threadState, workspaceView, dispatcher);
+        tabs.TabsChanged += (_, _) => coordinator.SyncControl();
+
+        coordinator.SyncControl();
+
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId(thread.ThreadId), out var selectedTab));
+        Assert.IsTrue(selectedTab.IsSelected);
+        CollectionAssert.AreEqual(
+            new[] { thread.ThreadId },
+            workspaceView.ThreadTabControl.Tabs
+                .Select(GetTabPageId)
+                .ToArray());
+    }
+
+    [TestMethod]
     public void ThreadTabSelection_KeepsPromptPanelAttachedAfterFileEditorTab()
     {
         using var temp = TempDirectory.Create();

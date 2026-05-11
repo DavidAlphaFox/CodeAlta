@@ -122,6 +122,8 @@ internal sealed class OpenAIResponsesTurnExecutor(
                     ResponseResult? completedResponse = null;
                     ResponseResult? latestResponse = null;
                     var streamedOutputItems = new SortedDictionary<int, ResponseItem>();
+                    var streamedOutputItemIds = new Dictionary<int, string>();
+                    int? activeReasoningOutputIndex = null;
                     var sideChannelEvents = new List<OpenAIResponsesWebSocketSideChannelEvent>();
 
                     async Task ProcessStreamAsync(OpenAIResponsesTransport transport)
@@ -145,13 +147,25 @@ internal sealed class OpenAIResponsesTurnExecutor(
                                 case StreamingResponseInProgressUpdate inProgress:
                                     latestResponse = inProgress.Response;
                                     break;
+                                case StreamingResponseOutputItemAddedUpdate outputItemAdded when outputItemAdded.Item is not null:
+                                    TrackStreamingOutputItem(
+                                        outputItemAdded.OutputIndex,
+                                        outputItemAdded.Item,
+                                        streamedOutputItemIds,
+                                        ref activeReasoningOutputIndex);
+                                    break;
                                 case StreamingResponseOutputTextDeltaUpdate outputTextDelta when !string.IsNullOrEmpty(outputTextDelta.Delta):
                                     attemptState.EmittedAssistantDelta = true;
                                     await onUpdate(
                                         new LocalAgentTurnDelta
                                         {
                                             Kind = AgentContentKind.Assistant,
-                                            ContentId = outputTextDelta.ItemId,
+                                            ContentId = ResolveStreamingContentId(
+                                                AgentContentKind.Assistant,
+                                                outputTextDelta.ItemId,
+                                                outputTextDelta.OutputIndex,
+                                                outputTextDelta.ContentIndex,
+                                                streamedOutputItemIds),
                                             Text = outputTextDelta.Delta,
                                             AttemptId = attemptState.DraftAttemptId,
                                         },
@@ -163,7 +177,12 @@ internal sealed class OpenAIResponsesTurnExecutor(
                                         new LocalAgentTurnDelta
                                         {
                                             Kind = AgentContentKind.Assistant,
-                                            ContentId = refusalDelta.ItemId,
+                                            ContentId = ResolveStreamingContentId(
+                                                AgentContentKind.Assistant,
+                                                refusalDelta.ItemId,
+                                                refusalDelta.OutputIndex,
+                                                refusalDelta.ContentIndex,
+                                                streamedOutputItemIds),
                                             Text = refusalDelta.Delta,
                                             AttemptId = attemptState.DraftAttemptId,
                                         },
@@ -175,7 +194,11 @@ internal sealed class OpenAIResponsesTurnExecutor(
                                         new LocalAgentTurnDelta
                                         {
                                             Kind = AgentContentKind.Reasoning,
-                                            ContentId = reasoningSummaryDelta.ItemId,
+                                            ContentId = ResolveStreamingReasoningContentId(
+                                                reasoningSummaryDelta.ItemId,
+                                                reasoningSummaryDelta.OutputIndex,
+                                                streamedOutputItemIds,
+                                                activeReasoningOutputIndex),
                                             Text = reasoningSummaryDelta.Delta,
                                             AttemptId = attemptState.DraftAttemptId,
                                         },
@@ -187,7 +210,12 @@ internal sealed class OpenAIResponsesTurnExecutor(
                                         new LocalAgentTurnDelta
                                         {
                                             Kind = AgentContentKind.Reasoning,
-                                            ContentId = reasoningTextDelta.ItemId,
+                                            ContentId = ResolveStreamingContentId(
+                                                AgentContentKind.Reasoning,
+                                                reasoningTextDelta.ItemId,
+                                                reasoningTextDelta.OutputIndex,
+                                                reasoningTextDelta.ContentIndex,
+                                                streamedOutputItemIds),
                                             Text = reasoningTextDelta.Delta,
                                             AttemptId = attemptState.DraftAttemptId,
                                         },
@@ -201,6 +229,17 @@ internal sealed class OpenAIResponsesTurnExecutor(
                                     }
 
                                     streamedOutputItems[outputItemDone.OutputIndex] = outputItemDone.Item;
+                                    TrackStreamingOutputItem(
+                                        outputItemDone.OutputIndex,
+                                        outputItemDone.Item,
+                                        streamedOutputItemIds,
+                                        ref activeReasoningOutputIndex);
+                                    if (outputItemDone.Item is ReasoningResponseItem &&
+                                        activeReasoningOutputIndex == outputItemDone.OutputIndex)
+                                    {
+                                        activeReasoningOutputIndex = null;
+                                    }
+
                                     break;
                                 case StreamingResponseIncompleteUpdate incomplete:
                                     latestResponse = incomplete.Response;
@@ -232,6 +271,8 @@ internal sealed class OpenAIResponsesTurnExecutor(
                         completedResponse = null;
                         latestResponse = null;
                         streamedOutputItems.Clear();
+                        streamedOutputItemIds.Clear();
+                        activeReasoningOutputIndex = null;
                         sideChannelEvents.Clear();
                         attemptState.ResetAfterTransportFallback();
                         await ProcessStreamAsync(OpenAIResponsesTransport.Http).ConfigureAwait(false);
@@ -261,7 +302,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
                         throw CreateResponseFailureException(completedResponse, "incomplete");
                     }
 
-                    var (assistantMessage, assistantPartContentIds) = MapAssistantMessage(completedResponse);
+                    var (assistantMessage, assistantPartContentIds) = MapAssistantMessage(completedResponse, streamedOutputItemIds);
                     attemptState.CommittedFinalContent = true;
                     UpdateLiveContinuation(request, fullOptions, completedResponse, assistantMessage);
                     WriteCodexConsoleDiagnostic(
@@ -932,6 +973,71 @@ internal sealed class OpenAIResponsesTurnExecutor(
                     .ConfigureAwait(false),
             cancellationToken).ConfigureAwait(false);
 
+    private static void TrackStreamingOutputItem(
+        int outputIndex,
+        ResponseItem item,
+        Dictionary<int, string> outputItemIds,
+        ref int? activeReasoningOutputIndex)
+    {
+        if (!string.IsNullOrWhiteSpace(item.Id) && !outputItemIds.ContainsKey(outputIndex))
+        {
+            outputItemIds[outputIndex] = item.Id;
+        }
+
+        if (item is ReasoningResponseItem)
+        {
+            activeReasoningOutputIndex = outputIndex;
+        }
+    }
+
+    private static string ResolveStreamingContentId(
+        AgentContentKind kind,
+        string? itemId,
+        int outputIndex,
+        int contentIndex,
+        IReadOnlyDictionary<int, string> outputItemIds)
+    {
+        if (outputItemIds.TryGetValue(outputIndex, out var outputItemId) &&
+            !string.IsNullOrWhiteSpace(outputItemId))
+        {
+            return outputItemId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(itemId))
+        {
+            return itemId;
+        }
+
+        return $"responses:{kind.ToString().ToLowerInvariant()}:{outputIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)}:{contentIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
+    private static string ResolveStreamingReasoningContentId(
+        string? itemId,
+        int outputIndex,
+        IReadOnlyDictionary<int, string> outputItemIds,
+        int? activeReasoningOutputIndex)
+    {
+        if (activeReasoningOutputIndex is { } activeOutputIndex &&
+            outputItemIds.TryGetValue(activeOutputIndex, out var activeReasoningItemId) &&
+            !string.IsNullOrWhiteSpace(activeReasoningItemId))
+        {
+            return activeReasoningItemId;
+        }
+
+        if (outputItemIds.TryGetValue(outputIndex, out var outputItemId) &&
+            !string.IsNullOrWhiteSpace(outputItemId))
+        {
+            return outputItemId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(itemId))
+        {
+            return itemId;
+        }
+
+        return $"responses:reasoning:{outputIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
     private static ResponseResult? CreateResponseFromTerminalOrStreamedItems(
         LocalAgentTurnRequest request,
         ResponseResult? completedResponse,
@@ -1022,7 +1128,8 @@ internal sealed class OpenAIResponsesTurnExecutor(
         }
 
         if ((request.Provider.Profile?.SupportsReasoningEffort ?? true) &&
-            request.ReasoningEffort is { } reasoningEffort)
+            request.ReasoningEffort is { } reasoningEffort &&
+            SupportsRequestedReasoningEffort(request, reasoningEffort))
         {
             options.ReasoningOptions = new ResponseReasoningOptions
             {
@@ -1053,6 +1160,17 @@ internal sealed class OpenAIResponsesTurnExecutor(
         }
 
         return options;
+    }
+
+    private static bool SupportsRequestedReasoningEffort(LocalAgentTurnRequest request, AgentReasoningEffort reasoningEffort)
+    {
+        if (reasoningEffort == AgentReasoningEffort.None)
+        {
+            return false;
+        }
+
+        return request.ModelInfo?.SupportedReasoningEfforts is not { } supportedReasoningEfforts ||
+            supportedReasoningEfforts.Contains(reasoningEffort);
     }
 
     private async ValueTask ApplyCodexSubscriptionRequestCustomizationAsync(
@@ -1281,12 +1399,16 @@ internal sealed class OpenAIResponsesTurnExecutor(
             strictModeEnabled: true,
             functionDescription: tool.Spec.Description);
 
-    private static (LocalAgentConversationMessage Message, IReadOnlyList<string?> PartContentIds) MapAssistantMessage(ResponseResult response)
+    private static (LocalAgentConversationMessage Message, IReadOnlyList<string?> PartContentIds) MapAssistantMessage(
+        ResponseResult response,
+        IReadOnlyDictionary<int, string>? streamedOutputItemIds = null)
     {
         var parts = new List<LocalAgentMessagePart>();
         var partContentIds = new List<string?>();
-        foreach (var item in response.OutputItems)
+        for (var outputIndex = 0; outputIndex < response.OutputItems.Count; outputIndex++)
         {
+            var item = response.OutputItems[outputIndex];
+            var stableItemId = ResolveCompletedItemContentId(response, item, outputIndex, streamedOutputItemIds);
             switch (item)
             {
                 case MessageResponseItem message when message.Role == MessageRole.Assistant:
@@ -1307,7 +1429,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
                     if (textBuilder.Length > 0)
                     {
                         parts.Add(new LocalAgentMessagePart.Text(textBuilder.ToString()));
-                        partContentIds.Add(string.IsNullOrWhiteSpace(message.Id) ? response.Id : message.Id);
+                        partContentIds.Add(stableItemId);
                     }
 
                     break;
@@ -1317,7 +1439,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
                         parts.Add(new LocalAgentMessagePart.Reasoning(
                             reasoning.GetSummaryText() ?? string.Empty,
                             string.IsNullOrWhiteSpace(reasoning.EncryptedContent) ? null : reasoning.EncryptedContent));
-                        partContentIds.Add(string.IsNullOrWhiteSpace(reasoning.Id) ? response.Id : reasoning.Id);
+                        partContentIds.Add(stableItemId);
                     }
 
                     break;
@@ -1334,6 +1456,22 @@ internal sealed class OpenAIResponsesTurnExecutor(
         return (new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, parts), partContentIds);
     }
 
+    private static string? ResolveCompletedItemContentId(
+        ResponseResult response,
+        ResponseItem item,
+        int outputIndex,
+        IReadOnlyDictionary<int, string>? streamedOutputItemIds)
+    {
+        if (streamedOutputItemIds is not null &&
+            streamedOutputItemIds.TryGetValue(outputIndex, out var streamedItemId) &&
+            !string.IsNullOrWhiteSpace(streamedItemId))
+        {
+            return streamedItemId;
+        }
+
+        return string.IsNullOrWhiteSpace(item.Id) ? response.Id : item.Id;
+    }
+
     private static AgentSessionUsage? CreateUsage(LocalAgentTurnRequest request, ResponseResult response)
     {
         if (response.Usage is null)
@@ -1341,13 +1479,17 @@ internal sealed class OpenAIResponsesTurnExecutor(
             return null;
         }
 
+        var cachedInputTokens = response.Usage.InputTokenDetails?.CachedTokenCount;
         return LocalAgentUsageFactory.CreateOperationUsage(
             modelId: response.Model,
             modelInfo: request.ModelInfo,
-            inputTokens: response.Usage.InputTokenCount,
+            inputTokens: OpenAIUsageNormalizer.GetFreshInputTokens(response.Usage.InputTokenCount, cachedInputTokens),
             outputTokens: response.Usage.OutputTokenCount,
-            totalTokens: response.Usage.TotalTokenCount,
-            cachedInputTokens: response.Usage.InputTokenDetails?.CachedTokenCount,
+            totalTokens: OpenAIUsageNormalizer.GetTotalTokens(
+                response.Usage.TotalTokenCount,
+                response.Usage.InputTokenCount,
+                response.Usage.OutputTokenCount),
+            cachedInputTokens: cachedInputTokens,
             reasoningTokens: response.Usage.OutputTokenDetails?.ReasoningTokenCount,
             updatedAt: response.CreatedAt == default ? DateTimeOffset.UtcNow : response.CreatedAt);
     }

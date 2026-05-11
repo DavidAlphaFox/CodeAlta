@@ -268,7 +268,7 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
                     sessionId,
                     cancellationToken)
                 .ConfigureAwait(false);
-            (summary, state) = await RepairRecoveredUsageAsync(summary, state, provider, options, cancellationToken).ConfigureAwait(false);
+            (summary, state) = await RepairRecoveredUsageAsync(summary, state, history, provider, options, cancellationToken).ConfigureAwait(false);
 
             return new LocalAgentSession(
                 BackendId,
@@ -355,58 +355,94 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
     private async Task<(LocalAgentSessionSummary Summary, LocalAgentSessionState State)> RepairRecoveredUsageAsync(
         LocalAgentSessionSummary summary,
         LocalAgentSessionState state,
+        IReadOnlyList<AgentEvent> history,
         LocalAgentBackendProviderRegistration provider,
         AgentSessionResumeOptions options,
         CancellationToken cancellationToken)
     {
+        var originalSummaryUsage = summary.Usage;
+        var originalStateUsage = state.Usage;
+        var recoveredUsage = LocalAgentUsageFactory.RecoverUsageFromHistory(history);
+        if (ShouldPreferRecoveredUsage(recoveredUsage, summary.Usage))
+        {
+            summary = summary with { Usage = recoveredUsage };
+        }
+
+        if (ShouldPreferRecoveredUsage(recoveredUsage, state.Usage))
+        {
+            state = state with { Usage = recoveredUsage };
+        }
+
         var effectiveModelId = options.Model ??
                                summary.ModelId ??
                                state.Usage?.LastOperation?.Model ??
                                summary.Usage?.LastOperation?.Model;
-        if (string.IsNullOrWhiteSpace(effectiveModelId))
+        if (!string.IsNullOrWhiteSpace(effectiveModelId))
         {
-            return (summary, state);
-        }
-
-        try
-        {
-            var models = await provider.TurnExecutor.ListModelsAsync(provider.Provider, cancellationToken).ConfigureAwait(false);
-            var modelInfo = AgentModelIdentity.FindBestMatch(models, effectiveModelId);
-            if (modelInfo is null)
+            try
             {
-                return (summary, state);
+                var models = await provider.TurnExecutor.ListModelsAsync(provider.Provider, cancellationToken).ConfigureAwait(false);
+                var modelInfo = AgentModelIdentity.FindBestMatch(models, effectiveModelId);
+                if (modelInfo is not null)
+                {
+                    summary = summary with { Usage = LocalAgentUsageFactory.AttachModelInfo(summary.Usage, modelInfo) };
+                    state = state with { Usage = LocalAgentUsageFactory.AttachModelInfo(state.Usage, modelInfo) };
+                }
             }
-
-            var repairedSummaryUsage = LocalAgentUsageFactory.AttachModelInfo(summary.Usage, modelInfo);
-            var repairedStateUsage = LocalAgentUsageFactory.AttachModelInfo(state.Usage, modelInfo);
-            var summaryChanged = !Equals(repairedSummaryUsage, summary.Usage);
-            var stateChanged = !Equals(repairedStateUsage, state.Usage);
-            if (!summaryChanged && !stateChanged)
+            catch (OperationCanceledException)
             {
-                return (summary, state);
+                throw;
             }
-
-            if (summaryChanged)
+            catch
             {
-                summary = summary with { Usage = repairedSummaryUsage };
-                await _store.UpsertSessionAsync(summary, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (stateChanged)
-            {
-                state = state with { Usage = repairedStateUsage };
-                await _store.UpsertStateAsync(state, cancellationToken).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException)
+
+        var summaryChanged = !Equals(summary.Usage, originalSummaryUsage);
+        var stateChanged = !Equals(state.Usage, originalStateUsage);
+        if (summaryChanged)
         {
-            throw;
+            await _store.UpsertSessionAsync(summary, cancellationToken).ConfigureAwait(false);
         }
-        catch
+
+        if (stateChanged)
         {
+            await _store.UpsertStateAsync(state, cancellationToken).ConfigureAwait(false);
         }
 
         return (summary, state);
+    }
+
+    private static bool ShouldPreferRecoveredUsage(AgentSessionUsage? recovered, AgentSessionUsage? current)
+    {
+        if (recovered is null)
+        {
+            return false;
+        }
+
+        if (current is null)
+        {
+            return true;
+        }
+
+        if (recovered.UpdatedAt != default && current.UpdatedAt != default)
+        {
+            if (recovered.UpdatedAt > current.UpdatedAt)
+            {
+                return true;
+            }
+
+            if (recovered.UpdatedAt < current.UpdatedAt)
+            {
+                return false;
+            }
+        }
+
+        return (current.Window is null && recovered.Window is not null) ||
+               (current.LastOperation is null && recovered.LastOperation is not null) ||
+               (current.RateLimits is null && recovered.RateLimits is not null) ||
+               (current.CurrentTokens is null && recovered.CurrentTokens is not null) ||
+               (current.TokenLimit is null && recovered.TokenLimit is not null);
     }
 
     private static AgentSessionMetadata ToMetadata(

@@ -518,6 +518,105 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
+    public void RefreshForDraftScope_DoesNotUsePreviousThreadProviderSelection()
+    {
+        using var temp = TempDirectory.Create();
+        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
+        var threadSelection = new ThreadSelectionContext(
+            threadStateCoordinator,
+            static (_, _) => Task.CompletedTask,
+            static _ => true);
+        thread.BackendId = "anthropic";
+        thread.ProviderKey = "anthropic";
+        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        tab.BackendId = new AgentBackendId("anthropic");
+
+        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var promptComposerViewModel = new PromptComposerViewModel();
+        AgentBackendDescriptor[] backendDescriptors =
+        [
+            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new AgentBackendId("anthropic"), "Anthropic"),
+        ];
+        var backendStates = ChatBackendPresentation.CreateBackendStates(backendDescriptors);
+        backendStates["openai"].Availability = ChatBackendAvailability.Ready;
+        backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4"));
+        backendStates["anthropic"].Availability = ChatBackendAvailability.Ready;
+        backendStates["anthropic"].Models.Add(new AgentModelInfo("claude-sonnet-4.5"));
+
+        var coordinator = CreateCoordinator(
+            backendDescriptors,
+            workspaceViewModel,
+            promptComposerViewModel,
+            backendStates,
+            static _ => null,
+            threadSelection: threadSelection,
+            applyThreadModelProviderPreference: static _ => { });
+
+        threadStateCoordinator.SelectProjectScope("project-1");
+        coordinator.RefreshForDraftScope(new AgentBackendId("openai"));
+        Assert.AreEqual(0, workspaceViewModel.SelectedModelProviderIndex);
+
+        threadStateCoordinator.OpenThread(thread.ThreadId);
+        coordinator.RefreshForThread(tab);
+        Assert.AreEqual(1, workspaceViewModel.SelectedModelProviderIndex);
+
+        threadStateCoordinator.SelectProjectScope("project-1");
+        coordinator.RefreshForDraftScope();
+
+        Assert.AreEqual(0, workspaceViewModel.SelectedModelProviderIndex);
+    }
+
+    [TestMethod]
+    public void RefreshForDraftScope_DoesNotUsePreviousThreadModelSelection()
+    {
+        using var temp = TempDirectory.Create();
+        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
+        var threadSelection = new ThreadSelectionContext(
+            threadStateCoordinator,
+            static (_, _) => Task.CompletedTask,
+            static _ => true);
+        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+
+        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var promptComposerViewModel = new PromptComposerViewModel();
+        AgentBackendDescriptor[] backendDescriptors =
+        [
+            new(new AgentBackendId("openai"), "OpenAI"),
+        ];
+        var backendStates = ChatBackendPresentation.CreateBackendStates(backendDescriptors);
+        var backendState = backendStates["openai"];
+        backendState.Availability = ChatBackendAvailability.Ready;
+        backendState.Models.Add(new AgentModelInfo("gpt-5.4", DisplayName: "GPT-5.4"));
+        backendState.Models.Add(new AgentModelInfo("gpt-5.4-mini", DisplayName: "GPT-5.4 Mini"));
+
+        var coordinator = CreateCoordinator(
+            backendDescriptors,
+            workspaceViewModel,
+            promptComposerViewModel,
+            backendStates,
+            static _ => null,
+            threadSelection: threadSelection,
+            applyThreadModelProviderPreference: static _ => { });
+
+        threadStateCoordinator.SelectProjectScope("project-1");
+        coordinator.RefreshForDraftScope(new AgentBackendId("openai"));
+        coordinator.OnModelSelectionChanged(newIndex: 1);
+        Assert.AreEqual("gpt-5.4-mini", backendState.SelectedModelId);
+
+        threadStateCoordinator.OpenThread(thread.ThreadId);
+        coordinator.RefreshForThread(tab);
+        coordinator.OnModelSelectionChanged(newIndex: 0);
+        Assert.AreEqual("gpt-5.4", tab.ModelId);
+
+        threadStateCoordinator.SelectProjectScope("project-1");
+        coordinator.RefreshForDraftScope();
+
+        Assert.AreEqual(1, workspaceViewModel.SelectedModelIndex);
+        Assert.AreEqual("gpt-5.4-mini", backendState.SelectedModelId);
+    }
+
+    [TestMethod]
     public void OnReasoningSelectionChanged_ImmediatelyUpdatesSelectedIndexForOpenThread()
     {
         using var temp = TempDirectory.Create();
@@ -575,23 +674,24 @@ public sealed class ModelProviderSelectorCoordinatorTests
         PromptComposerViewModel promptComposerViewModel,
         Dictionary<string, ChatBackendState> backendStates,
         Func<string?, string?> getEffectiveDefaultProviderKey,
-        Func<IReadOnlyList<string>>? getConfiguredProviderKeys = null)
+        Func<IReadOnlyList<string>>? getConfiguredProviderKeys = null,
+        ThreadSelectionContext? threadSelection = null,
+        Action<OpenThreadState>? applyThreadModelProviderPreference = null)
     {
         var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
         var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftModelProviderPreference,
-            static _ => throw new NotSupportedException(),
+            applyThreadModelProviderPreference ?? (static _ => throw new NotSupportedException()),
             static (_, _, _) => { },
             static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
-        var threadSelection = CreateThreadSelectionContext();
         return new ModelProviderSelectorCoordinator(
             backendDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
             selectorState,
-            threadSelection,
+            threadSelection ?? CreateThreadSelectionContext(),
             preferences,
             workspaceRefresh,
             getEffectiveDefaultProviderKey,

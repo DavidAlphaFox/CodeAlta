@@ -291,7 +291,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             ClearThreadStatus,
             ResetThreadTab,
             _threadRuntimeEventCoordinator.HandleAgentEventAsync,
-            thread => _threadStateCoordinator.PersistThreadLocalStateAsync(thread));
+            thread => _threadStateCoordinator.PersistThreadLocalStateAsync(thread),
+            tab => _frontendEvents.Publish(new SessionUsageChangedEvent(tab.Thread.ThreadId)));
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)

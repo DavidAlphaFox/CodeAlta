@@ -83,7 +83,7 @@ public sealed class StatisticsPlugin : PluginBase
                 pluginRuntimeKey = context.Plugin.RuntimeKey,
                 bytes,
                 formattedBytes = FormatBytes(bytes),
-                estimatedTokens = EstimateTokensFromCharacters(value.Length),
+                estimatedTokens = EstimateTokens(value),
                 characterCount = value.Length,
             });
             return new ValueTask<int>(0);
@@ -150,6 +150,14 @@ public sealed class StatisticsPlugin : PluginBase
         ArgumentOutOfRangeException.ThrowIfNegative(characterCount);
         return (characterCount + 3) / 4;
     }
+
+    /// <summary>
+    /// Estimates token count using CodeAlta's shared token-estimation heuristic.
+    /// </summary>
+    /// <param name="text">The text to estimate.</param>
+    /// <returns>The estimated token count.</returns>
+    public static long EstimateTokens(string? text)
+        => TokenEstimator.Estimate(text);
 
     /// <summary>
     /// Formats a byte count with compact binary units.
@@ -603,8 +611,11 @@ public sealed class StatisticsPlugin : PluginBase
                     turn.RunId,
                     turn.Duration,
                     ToolCalls = turn.Tools.Count,
+                    turn.ReportedOperationCount,
                     turn.ReportedInputTokens,
+                    turn.ReportedFreshInputTokens,
                     turn.ReportedOutputTokens,
+                    turn.ReportedReasoningTokens,
                     turn.EstimatedInputTokens,
                     turn.EstimatedOutputTokens,
                     ToolInputCharacters = turn.ToolInput.Characters,
@@ -649,7 +660,7 @@ public sealed class StatisticsPlugin : PluginBase
         private readonly List<DateTimeOffset> _generatedOutputDeltaTimestamps = [];
         private readonly CompactionStatisticsBuilder _compactions = new();
         private readonly StringBuilder _planSnapshotText = new();
-        private AgentOperationUsageSnapshot? _lastOperationUsage;
+        private readonly ProviderUsageAccumulator _providerUsage = new();
         private AgentSystemPromptStatistics? _systemPromptStatistics;
 
         public bool HasEvents { get; private set; }
@@ -677,10 +688,7 @@ public sealed class StatisticsPlugin : PluginBase
                     MessageCounts.SystemPrompt++;
                     break;
                 case AgentSessionUpdateEvent update:
-                    if (update.Usage?.LastOperation is { } usage)
-                    {
-                        _lastOperationUsage = usage;
-                    }
+                    _providerUsage.Add(update.Usage?.LastOperation);
 
                     _compactions.Add(update);
 
@@ -752,8 +760,8 @@ public sealed class StatisticsPlugin : PluginBase
             var toolOutput = ContentStats.Sum(tools.Select(static item => item.Output), unownedToolOutput);
             var generatedOutput = ContentStats.Sum(assistant, reasoning, generatedReasoningSummary, plan, toolInput);
             var outputChars = generatedOutput.Characters;
-            var estimatedInputTokens = EstimateTokensFromCharacters(prompt.Characters + (_systemPromptStatistics?.SystemChars ?? 0) + (_systemPromptStatistics?.DeveloperChars ?? 0));
-            var estimatedOutputTokens = EstimateTokensFromCharacters(outputChars);
+            var estimatedInputTokens = prompt.EstimatedTokens + (_systemPromptStatistics?.SystemApproxTokens ?? 0) + (_systemPromptStatistics?.DeveloperApproxTokens ?? 0);
+            var estimatedOutputTokens = generatedOutput.EstimatedTokens;
             var compactions = _compactions.Build();
             var toolIntervals = tools
                 .Where(static item => item.StartedAt is not null && item.EndedAt is not null && item.EndedAt >= item.StartedAt)
@@ -769,6 +777,7 @@ public sealed class StatisticsPlugin : PluginBase
                 thinkingTime = TimeSpan.Zero;
             }
 
+            var providerUsage = _providerUsage.Build();
             return new TurnStatistics(
                 Key,
                 SessionId,
@@ -802,14 +811,15 @@ public sealed class StatisticsPlugin : PluginBase
                 MessageCounts.Clone(),
                 tools,
                 BuildBuckets(tools),
-                _lastOperationUsage?.InputTokens,
-                _lastOperationUsage?.OutputTokens,
-                _lastOperationUsage?.CachedInputTokens,
-                _lastOperationUsage?.CacheReadTokens,
-                _lastOperationUsage?.CacheWriteTokens,
-                _lastOperationUsage?.ReasoningTokens,
-                _lastOperationUsage?.Model,
-                _lastOperationUsage?.DurationMs,
+                providerUsage.OperationCount,
+                providerUsage.InputTokens,
+                providerUsage.FreshInputTokens,
+                providerUsage.OutputTokens,
+                providerUsage.CachedInputTokens,
+                providerUsage.CacheReadTokens,
+                providerUsage.CacheWriteTokens,
+                providerUsage.ReasoningTokens,
+                providerUsage.DurationMs,
                 _systemPromptStatistics?.SystemApproxTokens,
                 _systemPromptStatistics?.DeveloperApproxTokens,
                 estimatedInputTokens,
@@ -1110,7 +1120,7 @@ public sealed class StatisticsPlugin : PluginBase
         public ContentStatistics Build()
         {
             var text = _completed ?? _deltas.ToString();
-            return new ContentStatistics(kind, contentId, parentActivityId, text.Length, ByteCount(text), EstimateTokensFromCharacters(text.Length));
+            return new ContentStatistics(kind, contentId, parentActivityId, text.Length, ByteCount(text), EstimateTokens(text));
         }
     }
 
@@ -1382,7 +1392,7 @@ public sealed class StatisticsPlugin : PluginBase
         public static ContentStats ForText(string? text)
         {
             var characters = text?.Length ?? 0;
-            return new ContentStats(characters, ByteCount(text), EstimateTokensFromCharacters(characters));
+            return new ContentStats(characters, ByteCount(text), EstimateTokens(text));
         }
 
         public static ContentStats Sum(params ContentStats[] stats)
@@ -1449,6 +1459,110 @@ public sealed class StatisticsPlugin : PluginBase
         long InputCharacters,
         long OutputCharacters);
 
+    private sealed record ProviderUsageSnapshot(
+        int OperationCount,
+        long? InputTokens,
+        long? FreshInputTokens,
+        long? OutputTokens,
+        long? CachedInputTokens,
+        long? CacheReadTokens,
+        long? CacheWriteTokens,
+        long? ReasoningTokens,
+        double? DurationMs);
+
+    private sealed class ProviderUsageAccumulator
+    {
+        private int _operationCount;
+        private long? _inputTokens;
+        private long? _freshInputTokens;
+        private long? _outputTokens;
+        private long? _cachedInputTokens;
+        private long? _cacheReadTokens;
+        private long? _cacheWriteTokens;
+        private long? _reasoningTokens;
+        private double? _durationMs;
+
+        public void Add(AgentOperationUsageSnapshot? usage)
+        {
+            if (usage is null || !HasUsageData(usage))
+            {
+                return;
+            }
+
+            _operationCount++;
+            var cacheInputTokens = GetCacheInputTotal(usage);
+            Add(ref _inputTokens, Sum(usage.InputTokens, cacheInputTokens));
+            Add(ref _freshInputTokens, usage.InputTokens);
+            Add(ref _outputTokens, usage.OutputTokens);
+            Add(ref _cachedInputTokens, usage.CachedInputTokens);
+            Add(ref _cacheReadTokens, usage.CacheReadTokens);
+            Add(ref _cacheWriteTokens, usage.CacheWriteTokens);
+            Add(ref _reasoningTokens, usage.ReasoningTokens);
+            Add(ref _durationMs, usage.DurationMs);
+        }
+
+        public ProviderUsageSnapshot Build()
+            => new(
+                _operationCount,
+                _inputTokens,
+                _freshInputTokens,
+                _outputTokens,
+                _cachedInputTokens,
+                _cacheReadTokens,
+                _cacheWriteTokens,
+                _reasoningTokens,
+                _durationMs);
+
+        private static bool HasUsageData(AgentOperationUsageSnapshot usage)
+            => usage.InputTokens is not null ||
+               usage.OutputTokens is not null ||
+               usage.CachedInputTokens is not null ||
+               usage.CacheReadTokens is not null ||
+               usage.CacheWriteTokens is not null ||
+               usage.ReasoningTokens is not null ||
+               usage.DurationMs is not null;
+
+        private static long? GetCacheInputTotal(AgentOperationUsageSnapshot usage)
+        {
+            if (usage.CacheReadTokens is not null || usage.CacheWriteTokens is not null)
+            {
+                return Sum(usage.CacheReadTokens, usage.CacheWriteTokens);
+            }
+
+            return usage.CachedInputTokens;
+        }
+
+        private static long? Sum(long? left, long? right)
+        {
+            if (left is null && right is null)
+            {
+                return null;
+            }
+
+            return (left ?? 0) + (right ?? 0);
+        }
+
+        private static void Add(ref long? target, long? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            target = (target ?? 0) + value.Value;
+        }
+
+        private static void Add(ref double? target, double? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            target = (target ?? 0) + value.Value;
+        }
+    }
+
     private sealed record TurnStatistics(
         string Key,
         string SessionId,
@@ -1482,13 +1596,14 @@ public sealed class StatisticsPlugin : PluginBase
         MessageCounts MessageCounts,
         IReadOnlyList<ToolCallStatistics> Tools,
         IReadOnlyList<ToolBucketStatistics> Buckets,
+        int ReportedOperationCount,
         long? ReportedInputTokens,
+        long? ReportedFreshInputTokens,
         long? ReportedOutputTokens,
         long? ReportedCachedInputTokens,
         long? ReportedCacheReadTokens,
         long? ReportedCacheWriteTokens,
         long? ReportedReasoningTokens,
-        string? ReportedModel,
         double? ReportedDurationMs,
         int? SystemPromptTokens,
         int? DeveloperPromptTokens,
@@ -1497,7 +1612,31 @@ public sealed class StatisticsPlugin : PluginBase
     {
         public long DisplayInputTokens => ReportedInputTokens ?? EstimatedInputTokens;
 
-        public long DisplayOutputTokens => EstimatedOutputTokens;
+        public long DisplayOutputTokens => ReportedOutputTokens ?? EstimatedOutputTokens;
+
+        public long? ReportedNonReasoningOutputTokens =>
+            ReportedOutputTokens is { } outputTokens && ReportedReasoningTokens is { } reasoningTokens
+                ? Math.Max(0, outputTokens - reasoningTokens)
+                : null;
+
+        public long ObservedReasoningOutputTokens =>
+            Reasoning.EstimatedTokens > 0 ? Reasoning.EstimatedTokens : ReasoningSummary.EstimatedTokens;
+
+        public long ObservedNonReasoningOutputTokens =>
+            ContentStats.Sum(Assistant, Plan, ToolInput).EstimatedTokens;
+
+        public long ObservedGeneratedOutputTokens =>
+            ObservedNonReasoningOutputTokens + ObservedReasoningOutputTokens;
+
+        public long? ProviderObservedOutputDeltaTokens =>
+            ReportedOutputTokens is { } outputTokens
+                ? outputTokens - ObservedGeneratedOutputTokens
+                : null;
+
+        public long? ProviderObservedReasoningDeltaTokens =>
+            ReportedReasoningTokens is { } reasoningTokens
+                ? reasoningTokens - ObservedReasoningOutputTokens
+                : null;
 
         public bool HasReportedUsage => ReportedInputTokens is not null || ReportedOutputTokens is not null || ReportedReasoningTokens is not null;
 
@@ -1622,7 +1761,7 @@ public sealed class StatisticsPlugin : PluginBase
 
         private static string RenderTurnSummarySuffix(TurnStatistics turn)
         {
-            var inputTokenSource = turn.ReportedInputTokens is not null ? "reported" : "estimated ≈ chars/4";
+            var inputTokenSource = turn.ReportedInputTokens is not null ? "provider aggregate" : "estimated heuristic";
             var builder = new StringBuilder();
             builder.Append(" · ")
                 .Append(FormatDuration(turn.Duration))
@@ -1630,17 +1769,25 @@ public sealed class StatisticsPlugin : PluginBase
                 .Append(FormatNumber(turn.DisplayInputTokens))
                 .Append(" in (")
                 .Append(inputTokenSource)
-                .Append(") / ≈")
-                .Append(FormatNumber(turn.DisplayOutputTokens))
-                .Append(" out (estimated generated) · tools ")
+                .Append(") / ");
+            if (turn.ReportedOutputTokens is { } reportedOutputTokens)
+            {
+                builder.Append(FormatNumber(reportedOutputTokens))
+                    .Append(" out (provider aggregate; ≈")
+                    .Append(FormatNumber(turn.EstimatedOutputTokens))
+                    .Append(" observed generated)");
+            }
+            else
+            {
+                builder.Append("≈")
+                    .Append(FormatNumber(turn.EstimatedOutputTokens))
+                    .Append(" out (estimated generated)");
+            }
+
+            builder.Append(" · tools ")
                 .Append(turn.Tools.Count)
                 .Append(" calls / ")
                 .Append(FormatDuration(turn.TotalToolTime));
-            if (turn.ReportedOutputTokens is not null)
-            {
-                builder.Append(" · provider out ")
-                    .Append(FormatNumber(turn.ReportedOutputTokens.Value));
-            }
 
             if (turn.CompactionCount > 0)
             {
@@ -1683,8 +1830,8 @@ public sealed class StatisticsPlugin : PluginBase
                 .Append("| Reasoning | ").Append(FormatSize(turn.Reasoning)).AppendLine(" |")
                 .Append("| Reasoning summary | ").Append(FormatSize(turn.ReasoningSummary)).AppendLine(" |")
                 .Append("| Plan/notice | ").Append(FormatSize(turn.Plan)).AppendLine(" |")
-                .Append("| Tool input (model generated) | ").Append(FormatSize(turn.ToolInput)).AppendLine(" |")
-                .Append("| Generated output | ").Append(FormatSize(turn.GeneratedOutput)).AppendLine(" |")
+                .Append("| Tool input (observed model generated) | ").Append(FormatSize(turn.ToolInput)).AppendLine(" |")
+                .Append("| Observed generated output | ").Append(FormatSize(turn.GeneratedOutput)).AppendLine(" |")
                 .Append("| Tool output | ").Append(FormatSize(turn.ToolOutput)).AppendLine(" |")
                 .Append("| Compactions | ").Append(turn.CompactionCount.ToString(CultureInfo.InvariantCulture)).Append(" / ").Append(FormatDuration(turn.CompactionDuration)).AppendLine(" |")
                 .Append("| First assistant token | ").Append(FormatOptionalDuration(turn.FirstAssistantLatency)).AppendLine(" |")
@@ -1707,12 +1854,20 @@ public sealed class StatisticsPlugin : PluginBase
 
             var builder = new StringBuilder();
             builder.AppendLine("| Usage | Tokens |").AppendLine("| --- | ---: |");
-            AppendTokenLine(builder, "Input (provider reported)", turn.ReportedInputTokens);
-            AppendTokenLine(builder, "Cached input (provider reported)", turn.ReportedCachedInputTokens);
-            AppendTokenLine(builder, "Cache read (provider reported)", turn.ReportedCacheReadTokens);
-            AppendTokenLine(builder, "Cache write (provider reported)", turn.ReportedCacheWriteTokens);
-            AppendTokenLine(builder, "Output (provider reported)", turn.ReportedOutputTokens);
-            AppendTokenLine(builder, "Reasoning (provider reported)", turn.ReportedReasoningTokens);
+            AppendTokenLine(builder, "Provider operations", turn.ReportedOperationCount > 0 ? turn.ReportedOperationCount : null);
+            AppendTokenLine(builder, "Input total (provider aggregate)", turn.ReportedInputTokens);
+            AppendTokenLine(builder, "Fresh input (provider aggregate)", turn.ReportedFreshInputTokens);
+            AppendTokenLine(builder, "Cached input (provider aggregate)", turn.ReportedCachedInputTokens);
+            AppendTokenLine(builder, "Cache read (provider aggregate)", turn.ReportedCacheReadTokens);
+            AppendTokenLine(builder, "Cache write (provider aggregate)", turn.ReportedCacheWriteTokens);
+            AppendTokenLine(builder, "Output total (provider aggregate)", turn.ReportedOutputTokens);
+            AppendTokenLine(builder, "Non-reasoning output (provider aggregate)", turn.ReportedNonReasoningOutputTokens);
+            AppendTokenLine(builder, "Reasoning output (provider aggregate)", turn.ReportedReasoningTokens);
+            AppendTokenLine(builder, "Observed generated estimate", turn.ObservedGeneratedOutputTokens > 0 ? turn.ObservedGeneratedOutputTokens : null);
+            AppendTokenLine(builder, "Observed non-reasoning estimate", turn.ObservedNonReasoningOutputTokens > 0 ? turn.ObservedNonReasoningOutputTokens : null);
+            AppendTokenLine(builder, "Observed reasoning estimate", turn.ObservedReasoningOutputTokens > 0 ? turn.ObservedReasoningOutputTokens : null);
+            AppendSignedTokenLine(builder, "Provider minus observed output", turn.ProviderObservedOutputDeltaTokens);
+            AppendSignedTokenLine(builder, "Provider minus observed reasoning", turn.ProviderObservedReasoningDeltaTokens);
             AppendTokenLine(builder, "System prompt", turn.SystemPromptTokens);
             AppendTokenLine(builder, "Developer prompt", turn.DeveloperPromptTokens);
             return builder.ToString();
@@ -1749,6 +1904,22 @@ public sealed class StatisticsPlugin : PluginBase
             {
                 builder.Append("| ").Append(label).Append(" | ").Append(FormatNumber(value.Value)).AppendLine(" |");
             }
+        }
+
+        private static void AppendSignedTokenLine(StringBuilder builder, string label, long? value)
+        {
+            if (value is null || value.Value == 0)
+            {
+                return;
+            }
+
+            builder.Append("| ").Append(label).Append(" | ");
+            if (value.Value > 0)
+            {
+                builder.Append('+');
+            }
+
+            builder.Append(FormatNumber(value.Value)).AppendLine(" |");
         }
 
         private static string FormatSize(ContentStats stats)

@@ -37,6 +37,11 @@ internal sealed class ThreadTabStripCoordinator
 
     public void SyncControl()
     {
+        if (_syncingPages)
+        {
+            return;
+        }
+
         var tabControl = _threadTabs.GetTabControl();
         if (tabControl is null)
         {
@@ -293,11 +298,25 @@ internal sealed class ThreadTabStripCoordinator
         var workspaceView = _threadTabs.GetWorkspaceView()
             ?? throw new InvalidOperationException("Thread workspace view is not initialized.");
 
+        PruneMissingThreadShellTabs(workspaceView);
         RestoreThreadTabsFromViewState(workspaceView);
         EnsureSelectedThreadSurfaceShellTab(workspaceView);
         EnsureCurrentThreadSurfaceShellTabSelected();
         EnsureSelectedShellTab();
         return ThreadTabStripProjectionBuilder.Build(_shellTabs.GetTabs());
+    }
+
+    private void PruneMissingThreadShellTabs(ThreadWorkspaceView workspaceView)
+    {
+        ArgumentNullException.ThrowIfNull(workspaceView);
+        var missingThreadTabs = _shellTabs.GetTabs()
+            .Where(tab => tab.Kind == ShellTabKind.Thread && _threadSelection.FindThread(tab.TabId.Value) is null)
+            .ToArray();
+        foreach (var tab in missingThreadTabs)
+        {
+            _shellTabs.CloseTabAsync(tab.TabId, ShellTabCloseReason.ThreadDeleted).GetAwaiter().GetResult();
+            workspaceView.RemoveTabPage(tab.TabId.Value);
+        }
     }
 
     private void RestoreThreadTabsFromViewState(ThreadWorkspaceView workspaceView)

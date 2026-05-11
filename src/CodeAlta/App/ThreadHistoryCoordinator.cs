@@ -5,6 +5,7 @@ using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Presentation.Formatting;
 using CodeAlta.Presentation.Timeline;
+using CodeAlta.Presentation.Usage;
 using CodeAlta.Views;
 using XenoAtom.Logging;
 using XenoAtom.Terminal.UI.Controls;
@@ -24,6 +25,7 @@ internal sealed class ThreadHistoryCoordinator
     private readonly Action<OpenThreadState> _resetThreadTab;
     private readonly Func<WorkThreadDescriptor, OpenThreadState, AgentEvent, Task> _handleAgentEventAsync;
     private readonly Func<WorkThreadDescriptor, Task> _persistThreadLocalStateAsync;
+    private readonly Action<OpenThreadState> _notifySessionUsageChanged;
 
     public ThreadHistoryCoordinator(
         WorkThreadRuntimeService runtimeService,
@@ -36,7 +38,8 @@ internal sealed class ThreadHistoryCoordinator
         Action<OpenThreadState> clearThreadStatus,
         Action<OpenThreadState> resetThreadTab,
         Func<WorkThreadDescriptor, OpenThreadState, AgentEvent, Task> handleAgentEventAsync,
-        Func<WorkThreadDescriptor, Task> persistThreadLocalStateAsync)
+        Func<WorkThreadDescriptor, Task> persistThreadLocalStateAsync,
+        Action<OpenThreadState>? notifySessionUsageChanged = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(ensureThreadTab);
@@ -61,6 +64,7 @@ internal sealed class ThreadHistoryCoordinator
         _resetThreadTab = resetThreadTab;
         _handleAgentEventAsync = handleAgentEventAsync;
         _persistThreadLocalStateAsync = persistThreadLocalStateAsync;
+        _notifySessionUsageChanged = notifySessionUsageChanged ?? (static _ => { });
     }
 
     public async Task EnsureLoadedAsync(WorkThreadDescriptor thread, CancellationToken cancellationToken = default)
@@ -130,6 +134,22 @@ internal sealed class ThreadHistoryCoordinator
         return new ThreadHistoryLoadPlan(
             eventsToRender,
             CountRenderableMessages(history.Take(startIndex).Where((_, index) => !pinnedPrefixIndexSet.Contains(index))));
+    }
+
+    public static AgentSessionUsage? RecoverUsageFromHistory(IReadOnlyList<AgentEvent> history)
+    {
+        ArgumentNullException.ThrowIfNull(history);
+
+        AgentSessionUsage? usage = null;
+        foreach (var @event in history)
+        {
+            if (@event is AgentSessionUpdateEvent { Usage: { } updateUsage })
+            {
+                usage = SessionUsageAggregator.Merge(usage, updateUsage);
+            }
+        }
+
+        return usage;
     }
 
     private static IReadOnlyList<int> FindPinnedPrefixEventIndexes(IReadOnlyList<AgentEvent> history, int endIndex)
@@ -384,7 +404,11 @@ internal sealed class ThreadHistoryCoordinator
             var history = await GetHistoryAsync(thread, tab, preferCachedHistory, cancellationToken);
             thread.MessageCount = CountRenderableMessages(history);
             await _persistThreadLocalStateAsync(thread);
+            var previousUsage = tab.Usage;
+            var recoveredUsage = RecoverUsageFromHistory(history);
             _resetThreadTab(tab);
+            tab.Usage = recoveredUsage;
+            var usageChanged = !Equals(previousUsage, recoveredUsage);
 
             var plan = loadOnlyFromLastUserPrompt
                 ? CreateInitialLoadPlan(history)
@@ -407,6 +431,11 @@ internal sealed class ThreadHistoryCoordinator
             tab.Timeline.CompleteInitialBufferedHistory(truncatedHistoryItem);
             tab.Timeline.FlushBufferedHistoryItems();
             tab.HistoryLoaded = true;
+            if (usageChanged)
+            {
+                _notifySessionUsageChanged(tab);
+            }
+
             _clearThreadStatus(tab);
         }
         catch (Exception ex)

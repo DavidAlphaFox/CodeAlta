@@ -104,7 +104,7 @@ public sealed class AnthropicAgentBackend : IAgentBackend, IAgentSharedSessionMe
     /// <inheritdoc />
     public ValueTask DisposeAsync() => _inner.DisposeAsync();
 
-    private static ILocalAgentTurnExecutor CreateTurnExecutor(AnthropicProviderOptions provider)
+    internal static ILocalAgentTurnExecutor CreateTurnExecutor(AnthropicProviderOptions provider)
     {
         return new LocalAgentChatClientTurnExecutor(
             (providerDescriptor, cancellationToken) => CreateChatClientAsync(provider, providerDescriptor, cancellationToken),
@@ -126,8 +126,14 @@ public sealed class AnthropicAgentBackend : IAgentBackend, IAgentSharedSessionMe
         }
 
         var client = CreateSdkClient(provider, providerDescriptor);
+        var chatClient = client.AsIChatClient();
+        if (provider.HttpClient is null)
+        {
+            chatClient = new OwnedChatClient(chatClient, client);
+        }
+
         return ValueTask.FromResult<IChatClient>(
-            WrapChatClient(new OwnedChatClient(client.AsIChatClient(), client), providerDescriptor, useStreamingCompatibilityFallback));
+            WrapChatClient(chatClient, providerDescriptor, useStreamingCompatibilityFallback));
     }
 
     private static async Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(
@@ -159,21 +165,32 @@ public sealed class AnthropicAgentBackend : IAgentBackend, IAgentSharedSessionMe
                 provider.ModelOverrides);
         }
 
-        using var client = CreateSdkClient(provider, providerDescriptor);
-        var results = new List<AgentModelInfo>();
-        var page = await client.Models.List(cancellationToken: cancellationToken).ConfigureAwait(false);
-        while (true)
+        var client = CreateSdkClient(provider, providerDescriptor);
+        try
         {
-            results.AddRange(page.Items.Select(model => ToAgentModelInfo(providerDescriptor, model)));
-            if (!page.HasNext())
+            var results = new List<AgentModelInfo>();
+            var page = await client.Models.List(cancellationToken: cancellationToken).ConfigureAwait(false);
+            while (true)
             {
-                break;
+                results.AddRange(page.Items.Select(model => ToAgentModelInfo(providerDescriptor, model)));
+                if (!page.HasNext())
+                {
+                    break;
+                }
+
+                page = await page.Next(cancellationToken).ConfigureAwait(false);
             }
 
-            page = await page.Next(cancellationToken).ConfigureAwait(false);
+            models = results;
+        }
+        finally
+        {
+            if (provider.HttpClient is null)
+            {
+                client.Dispose();
+            }
         }
 
-        models = results;
         return AgentModelMetadataEnricher.EnrichModels(
             models,
             provider.ModelCatalog,
@@ -188,7 +205,14 @@ public sealed class AnthropicAgentBackend : IAgentBackend, IAgentSharedSessionMe
         var options = new ClientOptions
         {
             ApiKey = provider.ApiKey,
+            AuthToken = provider.AuthToken,
+            ExtraHeaders = provider.ExtraHeaders,
         };
+        if (provider.HttpClient is not null)
+        {
+            options.HttpClient = provider.HttpClient;
+        }
+
         if (provider.BaseUri is not null)
         {
             options.BaseUrl = provider.BaseUri.ToString();
@@ -220,8 +244,14 @@ public sealed class AnthropicAgentBackend : IAgentBackend, IAgentSharedSessionMe
         ArgumentNullException.ThrowIfNull(providerDescriptor);
 
         return HasHost(providerDescriptor.BaseUri, "minimax.io") ||
-            HasHost(providerDescriptor.BaseUri, "minimaxi.com");
+            HasHost(providerDescriptor.BaseUri, "minimaxi.com") ||
+            HasHost(providerDescriptor.BaseUri, "githubcopilot.com") ||
+            HasCopilotApiHost(providerDescriptor.BaseUri) ||
+            providerDescriptor.ProviderKey.Contains("copilot", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool HasCopilotApiHost(Uri? baseUri)
+        => baseUri?.Host.StartsWith("copilot-api.", StringComparison.OrdinalIgnoreCase) == true;
 
     private static bool HasHost(Uri? baseUri, string expectedHost)
     {

@@ -12,20 +12,4 @@ internal static class CopilotDirectHeaders
         headers.TryAddWithoutValidation("Copilot-Integration-Id", "vscode-chat");
     }
 
-    public static void ApplyTurnHeaders(HttpRequestMessage request, string token, bool isAgentInitiated, bool hasVisionInput, bool anthropicMessages)
-    {
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        ApplyStaticHeaders(request.Headers);
-        request.Headers.TryAddWithoutValidation("Openai-Intent", "conversation-edits");
-        request.Headers.TryAddWithoutValidation("X-Initiator", isAgentInitiated ? "agent" : "user");
-        if (hasVisionInput)
-        {
-            request.Headers.TryAddWithoutValidation("Copilot-Vision-Request", "true");
-        }
-
-        if (anthropicMessages)
-        {
-            request.Headers.TryAddWithoutValidation("anthropic-beta", "interleaved-thinking-2025-05-14");
-        }
-    }
 }

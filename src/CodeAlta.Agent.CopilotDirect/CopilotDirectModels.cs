@@ -150,12 +150,21 @@ internal sealed class CopilotModelDiscoveryClient
     private static AgentModelInfo MapModel(CopilotModelItem item, LocalAgentProviderDescriptor providerDescriptor)
     {
         CopilotEndpointDispatcher.TryResolveEndpointKind(item.SupportedEndpoints, item.Capabilities?.Family, out var endpointKind);
-        var efforts = item.Capabilities?.Supports?.ReasoningEffort?
-            .Select(ParseReasoningEffort)
-            .Where(static effort => effort is not null)
-            .Select(static effort => effort!.Value)
-            .Distinct()
-            .ToArray();
+        var efforts = MapReasoningEfforts(item.Capabilities?.Supports);
+        var defaultReasoningEffort = efforts.Count > 0 ? efforts[0] : (AgentReasoningEffort?)null;
+        var supportedReasoningEfforts = efforts.Count > 0 || item.Capabilities?.Supports is not null
+            ? efforts
+            : null;
+        var supportsReasoning = supportedReasoningEfforts is { Count: > 0 } ||
+            item.Capabilities?.Supports?.AdaptiveThinking == true ||
+            item.Capabilities?.Supports?.MaxThinkingBudget is not null ||
+            item.Capabilities?.Supports?.MinThinkingBudget is not null;
+        if (supportedReasoningEfforts is { Count: 0 } && supportsReasoning)
+        {
+            supportedReasoningEfforts = [AgentReasoningEffort.Low, AgentReasoningEffort.Medium, AgentReasoningEffort.High];
+            defaultReasoningEffort = AgentReasoningEffort.Medium;
+        }
+
         var limits = item.Capabilities?.Limits;
         var supports = item.Capabilities?.Supports;
         var capabilities = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -168,6 +177,7 @@ internal sealed class CopilotModelDiscoveryClient
             ["contextWindow"] = limits?.MaxContextWindowTokens,
             ["inputTokenLimit"] = limits?.MaxPromptTokens,
             ["outputTokenLimit"] = limits?.MaxOutputTokens,
+            ["supportsReasoning"] = supportsReasoning,
             ["supportsToolCall"] = supports?.ToolCalls,
             ["supportsVision"] = supports?.Vision ?? limits?.Vision is not null,
             ["supportsStructuredOutput"] = supports?.StructuredOutputs,
@@ -181,9 +191,19 @@ internal sealed class CopilotModelDiscoveryClient
             item.Id,
             DisplayName: string.IsNullOrWhiteSpace(item.Name) ? item.Id : item.Name,
             Provider: providerDescriptor.ProviderKey,
-            DefaultReasoningEffort: efforts is { Length: > 0 } ? efforts[0] : null,
-            SupportedReasoningEfforts: efforts,
+            DefaultReasoningEffort: defaultReasoningEffort,
+            SupportedReasoningEfforts: supportedReasoningEfforts,
             Capabilities: capabilities);
+    }
+
+    private static IReadOnlyList<AgentReasoningEffort> MapReasoningEfforts(CopilotModelSupports? supports)
+    {
+        return supports?.ReasoningEffort?
+            .Select(ParseReasoningEffort)
+            .Where(static effort => effort is not null)
+            .Select(static effort => effort!.Value)
+            .Distinct()
+            .ToArray() ?? [];
     }
 
     private IReadOnlyList<AgentModelInfo> ApplyOverrides(IReadOnlyList<AgentModelInfo> models)
@@ -233,15 +253,24 @@ internal sealed class CopilotModelDiscoveryClient
     }
 
     private static AgentModelInfo CreateSingleModel(string modelId, LocalAgentProviderDescriptor providerDescriptor)
-        => new(
+    {
+        var endpointKind = modelId.Contains("claude", StringComparison.OrdinalIgnoreCase)
+            ? CopilotEndpointKind.AnthropicMessages
+            : CopilotEndpointKind.ChatCompletions;
+        return new AgentModelInfo(
             modelId,
             DisplayName: modelId,
             Provider: providerDescriptor.ProviderKey,
             Capabilities: new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["copilotEndpointKind"] = CopilotEndpointKind.ChatCompletions.ToString(),
-                ["supportedEndpoints"] = new[] { "/chat/completions" },
+                ["copilotEndpointKind"] = endpointKind.ToString(),
+                ["supportedEndpoints"] = endpointKind switch
+                {
+                    CopilotEndpointKind.AnthropicMessages => new[] { "/v1/messages" },
+                    _ => new[] { "/chat/completions" },
+                },
             });
+    }
 
     private static AgentReasoningEffort? ParseReasoningEffort(string? value)
         => value?.Trim().ToLowerInvariant() switch
@@ -296,6 +325,12 @@ internal static class CopilotEndpointDispatcher
 {
     public static bool TryResolveEndpointKind(IReadOnlyList<string>? endpoints, string? family, out CopilotEndpointKind endpointKind)
     {
+        if (endpoints?.Any(static endpoint => string.Equals(endpoint, "/v1/messages", StringComparison.OrdinalIgnoreCase)) == true)
+        {
+            endpointKind = CopilotEndpointKind.AnthropicMessages;
+            return true;
+        }
+
         if (endpoints?.Any(static endpoint => string.Equals(endpoint, "/responses", StringComparison.OrdinalIgnoreCase)) == true)
         {
             endpointKind = CopilotEndpointKind.Responses;
@@ -305,12 +340,6 @@ internal static class CopilotEndpointDispatcher
         if (endpoints?.Any(static endpoint => string.Equals(endpoint, "/chat/completions", StringComparison.OrdinalIgnoreCase)) == true)
         {
             endpointKind = CopilotEndpointKind.ChatCompletions;
-            return true;
-        }
-
-        if (endpoints?.Any(static endpoint => string.Equals(endpoint, "/v1/messages", StringComparison.OrdinalIgnoreCase)) == true)
-        {
-            endpointKind = CopilotEndpointKind.AnthropicMessages;
             return true;
         }
 

@@ -221,18 +221,11 @@ internal sealed class OpenAIChatTurnExecutor(OpenAIProviderOptions provider) : I
         };
 
         if ((request.Provider.Profile?.SupportsReasoningEffort ?? true) &&
-            request.ReasoningEffort is { } reasoningEffort)
+            request.ReasoningEffort is { } reasoningEffort &&
+            SupportsRequestedReasoningEffort(request, reasoningEffort) &&
+            TryMapReasoningEffort(reasoningEffort, out var reasoningEffortLevel))
         {
-            options.ReasoningEffortLevel = reasoningEffort switch
-            {
-                AgentReasoningEffort.None => null,
-                AgentReasoningEffort.Minimal => ChatReasoningEffortLevel.Low,
-                AgentReasoningEffort.Low => ChatReasoningEffortLevel.Low,
-                AgentReasoningEffort.Medium => ChatReasoningEffortLevel.Medium,
-                AgentReasoningEffort.High => ChatReasoningEffortLevel.High,
-                AgentReasoningEffort.XHigh => ChatReasoningEffortLevel.High,
-                _ => null,
-            };
+            options.ReasoningEffortLevel = reasoningEffortLevel;
         }
 
         OpenAIExtraBodyPatchHelper.Apply(ref options.Patch, provider.ExtraBody);
@@ -248,6 +241,38 @@ internal sealed class OpenAIChatTurnExecutor(OpenAIProviderOptions provider) : I
         }
 
         return options;
+    }
+
+    private static bool SupportsRequestedReasoningEffort(LocalAgentTurnRequest request, AgentReasoningEffort reasoningEffort)
+    {
+        if (reasoningEffort == AgentReasoningEffort.None)
+        {
+            return false;
+        }
+
+        return request.ModelInfo?.SupportedReasoningEfforts is not { } supportedReasoningEfforts ||
+            supportedReasoningEfforts.Contains(reasoningEffort);
+    }
+
+    private static bool TryMapReasoningEffort(AgentReasoningEffort reasoningEffort, out ChatReasoningEffortLevel reasoningEffortLevel)
+    {
+        switch (reasoningEffort)
+        {
+            case AgentReasoningEffort.Minimal:
+            case AgentReasoningEffort.Low:
+                reasoningEffortLevel = ChatReasoningEffortLevel.Low;
+                return true;
+            case AgentReasoningEffort.Medium:
+                reasoningEffortLevel = ChatReasoningEffortLevel.Medium;
+                return true;
+            case AgentReasoningEffort.High:
+            case AgentReasoningEffort.XHigh:
+                reasoningEffortLevel = ChatReasoningEffortLevel.High;
+                return true;
+            default:
+                reasoningEffortLevel = default;
+                return false;
+        }
     }
 
     private static ChatMessage MapMessage(

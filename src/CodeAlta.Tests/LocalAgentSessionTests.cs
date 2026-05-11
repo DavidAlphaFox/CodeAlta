@@ -850,6 +850,7 @@ public sealed class LocalAgentSessionTests
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
+        var liveEvents = new List<AgentEvent>();
         using var schema = JsonDocument.Parse("""{"type":"object"}""");
         using var toolArguments = JsonDocument.Parse("""{"size":1}""");
         var initialUsage = CreateWindowUsageSnapshot(currentTokens: 780, tokenLimit: 1000, inputTokens: 760, outputTokens: 20);
@@ -907,6 +908,7 @@ public sealed class LocalAgentSessionTests
                                 [new AgentToolResultItem.Text(new string('x', 420))]))),
                 ],
             });
+        using var subscription = session.Subscribe(liveEvents.Add);
 
         _ = await session.SendAsync(
                 new AgentSendOptions
@@ -914,6 +916,12 @@ public sealed class LocalAgentSessionTests
                     Input = AgentInput.Text("Trigger tool output"),
                 })
             .ConfigureAwait(false);
+
+        Assert.IsTrue(liveEvents.OfType<AgentSessionUpdateEvent>().Any(static evt =>
+            evt.Kind == AgentSessionUpdateKind.UsageUpdated &&
+            evt.Usage?.Window?.Label == "Estimated active context" &&
+            evt.Usage.CurrentTokens > 850 &&
+            evt.Usage.LastOperation is null));
     }
 
     [TestMethod]
@@ -1800,7 +1808,7 @@ public sealed class LocalAgentSessionTests
             settings,
             anchorContentId: "user:latest",
             checkpointTokenEstimate: 64,
-            promptBudgetOverride: 180,
+            promptBudgetOverride: 260,
             keepAnchorOnly: false);
         var anchorOnlyPreparation = LocalAgentCompactionPlanner.Prepare(
             LocalAgentCompactionTrigger.Threshold,
@@ -1812,7 +1820,7 @@ public sealed class LocalAgentSessionTests
             settings,
             anchorContentId: "user:latest",
             checkpointTokenEstimate: 64,
-            promptBudgetOverride: 180,
+            promptBudgetOverride: 260,
             keepAnchorOnly: true);
 
         Assert.IsNotNull(widenedPreparation);

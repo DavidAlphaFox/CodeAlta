@@ -681,7 +681,7 @@ public sealed class SystemPromptBuilder
         => "sp_" + hash.Replace("sha256:", string.Empty, StringComparison.Ordinal).ToLowerInvariant()[..16];
 
     private static int EstimateTokens(string? text)
-        => string.IsNullOrEmpty(text) ? 0 : Math.Max(1, (int)Math.Ceiling(text.Length / 4.0));
+        => checked((int)TokenEstimator.Estimate(text));
 
     private static string? NormalizeOptionalRoot(string? path)
         => string.IsNullOrWhiteSpace(path)

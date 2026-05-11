@@ -49,6 +49,22 @@ internal static class LocalAgentUsageFactory
             UpdatedAt: updatedAt);
     }
 
+    public static AgentSessionUsage? RecoverUsageFromHistory(IReadOnlyList<AgentEvent> history)
+    {
+        ArgumentNullException.ThrowIfNull(history);
+
+        AgentSessionUsage? usage = null;
+        foreach (var @event in history)
+        {
+            if (@event is AgentSessionUpdateEvent { Usage: { } updateUsage })
+            {
+                usage = MergeUsage(usage, updateUsage);
+            }
+        }
+
+        return usage;
+    }
+
     public static AgentSessionUsage? AttachMessageCount(AgentSessionUsage? usage, int? messageCount)
     {
         if (usage?.Window is null || messageCount is not >= 0)
@@ -170,6 +186,74 @@ internal static class LocalAgentUsageFactory
 
     private static long? Sum(long? left, long? right)
         => left.HasValue || right.HasValue ? (left ?? 0) + (right ?? 0) : null;
+
+    private static AgentSessionUsage MergeUsage(AgentSessionUsage? current, AgentSessionUsage incoming)
+    {
+        if (current is null)
+        {
+            return incoming;
+        }
+
+        return new AgentSessionUsage(
+            Window: MergeWindowUsage(current.Window, incoming.Window),
+            LastOperation: MergeOperationUsage(current.LastOperation, incoming.LastOperation),
+            RateLimits: incoming.RateLimits ?? current.RateLimits,
+            Scope: incoming.Scope,
+            Source: incoming.Source,
+            UpdatedAt: incoming.UpdatedAt,
+            Details: incoming.Details ?? current.Details);
+    }
+
+    private static AgentWindowUsageSnapshot? MergeWindowUsage(AgentWindowUsageSnapshot? current, AgentWindowUsageSnapshot? incoming)
+    {
+        if (incoming is null)
+        {
+            return current;
+        }
+
+        if (current is null)
+        {
+            return incoming;
+        }
+
+        return current with
+        {
+            CurrentTokens = incoming.CurrentTokens ?? current.CurrentTokens,
+            TokenLimit = incoming.TokenLimit ?? current.TokenLimit,
+            MessageCount = incoming.MessageCount ?? current.MessageCount,
+            Label = incoming.Label ?? current.Label,
+        };
+    }
+
+    private static AgentOperationUsageSnapshot? MergeOperationUsage(AgentOperationUsageSnapshot? current, AgentOperationUsageSnapshot? incoming)
+    {
+        if (incoming is null)
+        {
+            return current;
+        }
+
+        if (current is null)
+        {
+            return incoming;
+        }
+
+        return current with
+        {
+            Model = incoming.Model ?? current.Model,
+            InputTokens = incoming.InputTokens ?? current.InputTokens,
+            OutputTokens = incoming.OutputTokens ?? current.OutputTokens,
+            CacheReadTokens = incoming.CacheReadTokens ?? current.CacheReadTokens,
+            CacheWriteTokens = incoming.CacheWriteTokens ?? current.CacheWriteTokens,
+            CachedInputTokens = incoming.CachedInputTokens ?? current.CachedInputTokens,
+            ReasoningTokens = incoming.ReasoningTokens ?? current.ReasoningTokens,
+            Cost = incoming.Cost ?? current.Cost,
+            DurationMs = incoming.DurationMs ?? current.DurationMs,
+            Initiator = incoming.Initiator ?? current.Initiator,
+            ParentToolCallId = incoming.ParentToolCallId ?? current.ParentToolCallId,
+            ReasoningEffort = incoming.ReasoningEffort ?? current.ReasoningEffort,
+            Label = incoming.Label ?? current.Label,
+        };
+    }
 
     private static bool TryConvertToInt64(object? value, out long converted)
     {

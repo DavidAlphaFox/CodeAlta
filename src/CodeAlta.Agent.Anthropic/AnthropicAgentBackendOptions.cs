@@ -94,4 +94,10 @@ public sealed class AnthropicProviderOptions
     internal Func<IChatClient>? ChatClientFactory { get; set; }
 
     internal Func<CancellationToken, Task<IReadOnlyList<AgentModelInfo>>>? ModelListAsync { get; set; }
+
+    internal string? AuthToken { get; set; }
+
+    internal IReadOnlyDictionary<string, string>? ExtraHeaders { get; set; }
+
+    internal HttpClient? HttpClient { get; set; }
 }

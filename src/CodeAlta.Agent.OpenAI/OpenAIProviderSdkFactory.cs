@@ -330,6 +330,7 @@ internal static class OpenAIProviderSdkFactory
             Endpoint = provider.BaseUri,
             OrganizationId = provider.OrganizationId,
             ProjectId = provider.ProjectId,
+            Transport = provider.HttpClient is null ? null : new HttpClientPipelineTransport(provider.HttpClient),
             // Codex subscription responses can legitimately sit in model-side reasoning for longer than
             // the SDK pipeline's default per-read timeout. Keep a finite watchdog, but avoid cutting off
             // quiet long-running SSE streams too aggressively.
@@ -341,7 +342,39 @@ internal static class OpenAIProviderSdkFactory
             options.AddPolicy(protocolTrace.CreateHttpPolicy(), PipelinePosition.BeforeTransport);
         }
 
+        if (provider.ExtraHeaders is { Count: > 0 } extraHeaders)
+        {
+            options.AddPolicy(new OpenAIExtraHeadersPolicy(extraHeaders), PipelinePosition.BeforeTransport);
+        }
+
         return options;
+    }
+
+    private sealed class OpenAIExtraHeadersPolicy(IReadOnlyDictionary<string, string> headers) : PipelinePolicy
+    {
+        public override void Process(PipelineMessage message, IReadOnlyList<PipelinePolicy> pipeline, int currentIndex)
+        {
+            Apply(message);
+            ProcessNext(message, pipeline, currentIndex);
+        }
+
+        public override async ValueTask ProcessAsync(PipelineMessage message, IReadOnlyList<PipelinePolicy> pipeline, int currentIndex)
+        {
+            Apply(message);
+            await ProcessNextAsync(message, pipeline, currentIndex).ConfigureAwait(false);
+        }
+
+        private void Apply(PipelineMessage message)
+        {
+            ArgumentNullException.ThrowIfNull(message);
+            foreach (var header in headers)
+            {
+                if (!string.IsNullOrWhiteSpace(header.Key) && header.Value is not null)
+                {
+                    message.Request.Headers.Set(header.Key, header.Value);
+                }
+            }
+        }
     }
 
     private static OpenAIClientOptions CreateResponsesClientOptions(

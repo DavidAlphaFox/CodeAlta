@@ -19,6 +19,8 @@ public sealed class StatisticsPluginTests
         Assert.AreEqual(0, StatisticsPlugin.EstimateTokensFromCharacters(0));
         Assert.AreEqual(1, StatisticsPlugin.EstimateTokensFromCharacters(1));
         Assert.AreEqual(2, StatisticsPlugin.EstimateTokensFromCharacters(8));
+        Assert.AreEqual(1, StatisticsPlugin.EstimateTokens("abcd"));
+        Assert.IsTrue(StatisticsPlugin.EstimateTokens("{\"filePath\":\"/README.md\"}") > StatisticsPlugin.EstimateTokensFromCharacters(25));
         Assert.AreEqual("512 B", StatisticsPlugin.FormatBytes(512));
         Assert.AreEqual("1.5 KB", StatisticsPlugin.FormatBytes(1536));
         Assert.AreEqual("1.0s", StatisticsPlugin.FormatDuration(TimeSpan.FromSeconds(1)));
@@ -75,7 +77,7 @@ public sealed class StatisticsPluginTests
         StringAssert.Contains(result[0].Markdown, "computing");
         var completed = await WaitForDynamicProjectionAsync(result[0]);
         StringAssert.Contains(completed.Markdown, "**Turn statistics**");
-        StringAssert.Contains(completed.Markdown, "estimated ≈ chars/4");
+        StringAssert.Contains(completed.Markdown, "estimated heuristic");
         Assert.AreEqual(1, completed.DetailSections.Count);
         StringAssert.Contains(completed.DetailSections[0].Markdown, "shell");
         StringAssert.Contains(completed.DetailSections[0].Markdown, "Assistant | 11 chars");
@@ -130,10 +132,68 @@ public sealed class StatisticsPluginTests
         var result = await contribution.ProjectAsync(CreateContext(events), CancellationToken.None);
 
         var completed = await WaitForDynamicProjectionAsync(result.Single());
-        StringAssert.Contains(completed.Markdown, "reported");
-        StringAssert.Contains(completed.Markdown, "1,234 in (reported) / ≈6 out (estimated generated)");
-        StringAssert.Contains(completed.Markdown, "provider out 567");
-        StringAssert.Contains(completed.DetailSections.Single().Markdown, "Cached input (provider reported)");
+        StringAssert.Contains(completed.Markdown, "provider aggregate");
+        StringAssert.Contains(completed.Markdown, "1,354 in (provider aggregate) / 567 out (provider aggregate; ≈7 observed generated)");
+        StringAssert.Contains(completed.DetailSections.Single().Markdown, "Cached input (provider aggregate)");
+    }
+
+    [TestMethod]
+    public async Task Projection_AggregatesProviderUsageAcrossTurnOperations()
+    {
+        var plugin = new StatisticsPlugin();
+        var contribution = plugin.GetThreadEventProjections().Single();
+        var backendId = new AgentBackendId("provider-1");
+        var runId = new AgentRunId("run-provider-aggregate");
+        var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
+        var events = new AgentEvent[]
+        {
+            new AgentActivityEvent(backendId, "session-1", startedAt, runId, AgentActivityKind.Turn, AgentActivityPhase.Started, "turn-1", null, "turn", null),
+            new AgentContentCompletedEvent(backendId, "session-1", startedAt.AddMilliseconds(100), runId, AgentContentKind.User, "user-1", "turn-1", "prompt"),
+            new AgentContentCompletedEvent(backendId, "session-1", startedAt.AddMilliseconds(150), runId, AgentContentKind.Assistant, "assistant-1", "turn-1", "response"),
+            new AgentSessionUpdateEvent(
+                backendId,
+                "session-1",
+                startedAt.AddMilliseconds(200),
+                runId,
+                AgentSessionUpdateKind.UsageUpdated,
+                null,
+                Usage: new AgentSessionUsage(
+                    LastOperation: new AgentOperationUsageSnapshot(
+                        InputTokens: 100,
+                        OutputTokens: 50,
+                        CachedInputTokens: 20,
+                        ReasoningTokens: 15))),
+            new AgentSessionUpdateEvent(
+                backendId,
+                "session-1",
+                startedAt.AddMilliseconds(300),
+                runId,
+                AgentSessionUpdateKind.UsageUpdated,
+                null,
+                Usage: new AgentSessionUsage(
+                    LastOperation: new AgentOperationUsageSnapshot(
+                        InputTokens: 10,
+                        OutputTokens: 30,
+                        ReasoningTokens: 5))),
+            new AgentActivityEvent(backendId, "session-1", startedAt.AddSeconds(1), runId, AgentActivityKind.Turn, AgentActivityPhase.Completed, "turn-1", null, "turn", null),
+        };
+
+        var result = await contribution.ProjectAsync(CreateContext(events), CancellationToken.None);
+
+        var completed = await WaitForDynamicProjectionAsync(result.Single());
+        StringAssert.Contains(completed.Markdown, "130 in (provider aggregate) / 80 out (provider aggregate");
+        var detailsMarkdown = completed.DetailSections.Single().Markdown;
+        StringAssert.Contains(detailsMarkdown, "Provider operations | 2");
+        StringAssert.Contains(detailsMarkdown, "Input total (provider aggregate) | 130");
+        StringAssert.Contains(detailsMarkdown, "Fresh input (provider aggregate) | 110");
+        StringAssert.Contains(detailsMarkdown, "Cached input (provider aggregate) | 20");
+        StringAssert.Contains(detailsMarkdown, "Output total (provider aggregate) | 80");
+        StringAssert.Contains(detailsMarkdown, "Non-reasoning output (provider aggregate) | 60");
+        StringAssert.Contains(detailsMarkdown, "Reasoning output (provider aggregate) | 20");
+        StringAssert.Contains(detailsMarkdown, "Observed generated estimate | 2");
+        StringAssert.Contains(detailsMarkdown, "Observed non-reasoning estimate | 2");
+        StringAssert.Contains(detailsMarkdown, "Provider minus observed output | +78");
+        StringAssert.Contains(detailsMarkdown, "Provider minus observed reasoning | +20");
     }
 
     [TestMethod]
@@ -194,10 +254,10 @@ public sealed class StatisticsPluginTests
         var result = await contribution.ProjectAsync(CreateContext(events), CancellationToken.None);
 
         var card = await WaitForDynamicProjectionAsync(result.Single());
-        StringAssert.Contains(card.Markdown, "2 in (estimated ≈ chars/4) / ≈7 out (estimated generated)");
+        StringAssert.Contains(card.Markdown, "2 in (estimated heuristic) / ≈8 out (estimated generated)");
         var detailsMarkdown = card.DetailSections.Single().Markdown;
-        StringAssert.Contains(detailsMarkdown, "Tool input (model generated) | 16 chars");
-        StringAssert.Contains(detailsMarkdown, "Generated output | 25 chars");
+        StringAssert.Contains(detailsMarkdown, "Tool input (observed model generated) | 16 chars");
+        StringAssert.Contains(detailsMarkdown, "Observed generated output | 25 chars");
         StringAssert.Contains(detailsMarkdown, "Tool output | 31 chars");
     }
 
@@ -225,7 +285,7 @@ public sealed class StatisticsPluginTests
         var detailsMarkdown = card.DetailSections.Single().Markdown;
         StringAssert.Contains(detailsMarkdown, "Reasoning | 14 chars");
         StringAssert.Contains(detailsMarkdown, "Reasoning summary | 17 chars");
-        StringAssert.Contains(detailsMarkdown, "Generated output | 16 chars");
+        StringAssert.Contains(detailsMarkdown, "Observed generated output | 16 chars");
     }
 
     [TestMethod]
