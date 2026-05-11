@@ -33,7 +33,6 @@
   <Project Path="AgentMessageDiagnosticApp/AgentMessageDiagnosticApp.csproj" />
   <Project Path="CodeAlta.Agent.Acp/CodeAlta.Agent.Acp.csproj" />
   <Project Path="CodeAlta.Agent.Anthropic/CodeAlta.Agent.Anthropic.csproj" />
-  <Project Path="../../anthropic-sdk-csharp/src/Anthropic/Anthropic.csproj" />
   <Project Path="CodeAlta.Agent.Codex/CodeAlta.Agent.Codex.csproj" />
   <Project Path="CodeAlta.Agent.Copilot/CodeAlta.Agent.Copilot.csproj" />
   <Project Path="CodeAlta.Agent.CopilotDirect/CodeAlta.Agent.CopilotDirect.csproj" />
