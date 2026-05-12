@@ -232,7 +232,8 @@ internal partial class Program
             exitCode,
             truncated: false,
             recordCount: 0,
-            diagnosticCount: 1));
+            diagnosticCount: 1,
+            duration: TimeSpan.Zero));
         AltaJsonlWriter.WriteError(Console.Out, correlationId, code, exitCode, message);
     }
 }

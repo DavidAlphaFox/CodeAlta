@@ -52,7 +52,8 @@ public static class AltaJsonlWriter
         int exitCode,
         bool truncated,
         int recordCount,
-        int diagnosticCount)
+        int diagnosticCount,
+        TimeSpan? duration = null)
         => new(StringComparer.Ordinal)
         {
             ["type"] = "alta.result",
@@ -62,6 +63,7 @@ public static class AltaJsonlWriter
             ["truncated"] = truncated,
             ["recordCount"] = recordCount,
             ["diagnosticCount"] = diagnosticCount,
+            ["durationMs"] = duration is { } value ? Math.Max(0d, value.TotalMilliseconds) : null,
         };
 
     /// <summary>Writes an <c>alta.error</c> diagnostic record.</summary>

@@ -103,7 +103,11 @@ public static class AltaTranscriptFormatter
             truncated,
             recordCount,
             diagnosticCount,
+            durationMs = ToMilliseconds(commandResult.Duration),
         });
+
+    private static double ToMilliseconds(TimeSpan duration)
+        => Math.Max(0d, duration.TotalMilliseconds);
 
     private static void CountRecord(string record, ref int normalCount, ref int diagnosticCount)
     {

@@ -24,6 +24,9 @@ public sealed class AltaLiveToolTests
         Assert.AreEqual("alta.result", lines[0].GetProperty("type").GetString());
         Assert.AreEqual(0, lines[0].GetProperty("exitCode").GetInt32());
         Assert.AreEqual(1, lines[0].GetProperty("recordCount").GetInt32());
+        Assert.IsTrue(lines[0].TryGetProperty("durationMs", out var duration));
+        Assert.IsTrue(duration.GetDouble() >= 0d);
+        Assert.IsTrue(result.Duration >= TimeSpan.Zero);
         Assert.AreEqual("alta.version", lines[1].GetProperty("type").GetString());
     }
 
@@ -37,6 +40,8 @@ public sealed class AltaLiveToolTests
         Assert.AreEqual("alta.result", lines[0].GetProperty("type").GetString());
         Assert.AreEqual(AltaExitCodes.Usage, lines[0].GetProperty("exitCode").GetInt32());
         Assert.AreEqual(1, lines[0].GetProperty("diagnosticCount").GetInt32());
+        Assert.IsTrue(lines[0].TryGetProperty("durationMs", out var duration));
+        Assert.IsTrue(duration.GetDouble() >= 0d);
         Assert.AreEqual("alta.error", lines[1].GetProperty("type").GetString());
         Assert.AreEqual("usage.invalid", lines[1].GetProperty("code").GetString());
         StringAssert.Contains(lines[1].GetProperty("message").GetString(), "no-such-command");

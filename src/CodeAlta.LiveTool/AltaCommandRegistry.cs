@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using XenoAtom.CommandLine;
 
 namespace CodeAlta.LiveTool;
@@ -92,6 +93,7 @@ public sealed class AltaCommandRegistry
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(context);
 
+        var stopwatch = Stopwatch.StartNew();
         var parseApp = CreateCommandApp(context);
         var parseResult = parseApp.Parse(args, new CommandRunConfig { Out = TextWriter.Null, Error = TextWriter.Null });
         if (parseResult.HasErrors)
@@ -112,6 +114,7 @@ public sealed class AltaCommandRegistry
             return CaptureResult(
                 AltaExitCodes.Usage,
                 context,
+                stopwatch.Elapsed,
                 isHelp: false,
                 error: parseResult.Errors[0].Message);
         }
@@ -123,7 +126,7 @@ public sealed class AltaCommandRegistry
                     args,
                     new CommandRunConfig { Out = context.Stdout, Error = context.Stderr })
                 .ConfigureAwait(false);
-            return CaptureResult(exitCode, context, isHelp: true, error: null);
+            return CaptureResult(exitCode, context, stopwatch.Elapsed, isHelp: true, error: null);
         }
 
         int commandExitCode;
@@ -163,12 +166,13 @@ public sealed class AltaCommandRegistry
 
         var firstError = ReadNonEmptyLines(context.Stderr.ToString() ?? string.Empty)
             .FirstOrDefault(line => line.Contains("\"type\":\"alta.error\"", StringComparison.Ordinal));
-        return CaptureResult(commandExitCode, context, isHelp: false, error: firstError);
+        return CaptureResult(commandExitCode, context, stopwatch.Elapsed, isHelp: false, error: firstError);
     }
 
     private static AltaCommandResult CaptureResult(
         int exitCode,
         AltaCommandContext context,
+        TimeSpan duration,
         bool isHelp,
         string? error)
         => new()
@@ -179,6 +183,7 @@ public sealed class AltaCommandRegistry
             IsHelp = isHelp,
             Truncated = false,
             CorrelationId = context.CorrelationId,
+            Duration = duration,
             MaxOutputRecords = context.MaxOutputRecords,
             MaxOutputBytes = context.MaxOutputBytes,
             Error = error,

@@ -137,6 +137,9 @@ public sealed record AltaCommandResult
     /// <summary>Gets the command correlation id.</summary>
     public required string CorrelationId { get; init; }
 
+    /// <summary>Gets the elapsed command execution duration.</summary>
+    public required TimeSpan Duration { get; init; }
+
     /// <summary>Gets the requested maximum output record count, when any.</summary>
     public int? MaxOutputRecords { get; init; }
 

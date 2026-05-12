@@ -40,7 +40,8 @@ internal sealed class PluginAltaServiceBridge : IPluginAltaRuntimeService
                     AltaExitCodes.ServiceUnavailable,
                     truncated: false,
                     recordCount: 0,
-                    diagnosticCount: 1)) + "\n" +
+                    diagnosticCount: 1,
+                    duration: TimeSpan.Zero)) + "\n" +
                     AltaJsonlWriter.Serialize(new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         ["type"] = "alta.error",

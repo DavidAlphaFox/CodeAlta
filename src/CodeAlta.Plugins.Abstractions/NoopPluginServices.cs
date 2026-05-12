@@ -82,7 +82,7 @@ public sealed class NoopPluginAltaService : IPluginAltaService
         return new ValueTask<PluginAltaCommandResult>(new PluginAltaCommandResult
         {
             ExitCode = 5,
-            TranscriptJsonl = $"{{\"type\":\"alta.result\",\"version\":1,\"exitCode\":5,\"correlationId\":\"{correlationId}\",\"truncated\":false,\"recordCount\":0,\"diagnosticCount\":1}}\n{{\"type\":\"alta.error\",\"version\":1,\"correlationId\":\"{correlationId}\",\"code\":\"service.unavailable\",\"exitCode\":5,\"message\":\"The alta plugin service is not available in this host context.\"}}\n",
+            TranscriptJsonl = $"{{\"type\":\"alta.result\",\"version\":1,\"exitCode\":5,\"correlationId\":\"{correlationId}\",\"truncated\":false,\"recordCount\":0,\"diagnosticCount\":1,\"durationMs\":0}}\n{{\"type\":\"alta.error\",\"version\":1,\"correlationId\":\"{correlationId}\",\"code\":\"service.unavailable\",\"exitCode\":5,\"message\":\"The alta plugin service is not available in this host context.\"}}\n",
             Error = "The alta plugin service is not available in this host context.",
         });
     }

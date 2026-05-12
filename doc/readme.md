@@ -100,7 +100,7 @@ alta session tail --help
 alta tool capability list
 ```
 
-Help commands return normal help text. Non-help commands return finite newline-delimited JSON records headed by an `alta.result` record; they do not keep a stream open for future activity. Use small limits when inspecting history so the result stays model-friendly:
+Help commands return normal help text. Non-help commands return finite newline-delimited JSON records headed by an `alta.result` record that includes command execution `durationMs`; they do not keep a stream open for future activity. Use small limits when inspecting history so the result stays model-friendly:
 
 ```text
 alta project list

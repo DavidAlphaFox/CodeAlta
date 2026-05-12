@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -1144,25 +1145,71 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
 
         var includeResult = includes.Contains("result");
         var includeMetrics = includes.Contains("metrics");
-        var successCount = 0;
-        var diagnosticCount = 0;
-        foreach (var id in ids)
+        var reportItems = new SessionReportItem?[ids.Count];
+        var buildTasks = new List<Task<SessionReportItem>>(ids.Count);
+        for (var index = 0; index < ids.Count; index++)
         {
+            var id = ids[index];
             var info = FindThread(infos, id);
             if (info is null)
             {
-                diagnosticCount++;
-                WriteSessionReportDiagnostic(context, id, "session.notFound", AltaExitCodes.NotFound, $"Session '{id}' was not found.");
+                reportItems[index] = SessionReportItem.NotFound(index, id);
                 continue;
             }
 
-            var result = await BuildSessionResultAsync(context, runtime, info, normalizedScope.Value).ConfigureAwait(false);
+            buildTasks.Add(BuildSessionReportItemAsync(context, runtime, info, normalizedScope.Value, index, id));
+        }
+
+        foreach (var item in await Task.WhenAll(buildTasks).ConfigureAwait(false))
+        {
+            reportItems[item.Index] = item;
+        }
+
+        var successCount = 0;
+        var diagnosticCount = 0;
+        foreach (var item in reportItems)
+        {
+            if (item is null)
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrEmpty(item.Diagnostics))
+            {
+                context.Stderr.Write(item.Diagnostics);
+            }
+
+            if (item.Info is null || item.Result is null)
+            {
+                diagnosticCount++;
+                WriteSessionReportDiagnostic(context, item.ThreadId, "session.notFound", AltaExitCodes.NotFound, $"Session '{item.ThreadId}' was not found.");
+                continue;
+            }
+
             successCount++;
-            WriteSessionResult(context, "alta.session.report.item", info, result, includeResult, includeMetrics);
+            WriteSessionResult(context, "alta.session.report.item", item.Info, item.Result, includeResult, includeMetrics);
         }
 
         WriteSessionReportSummary(context, ids.Count, successCount, diagnosticCount, truncated: false);
         return AltaExitCodes.Success;
+    }
+
+    private static async Task<SessionReportItem> BuildSessionReportItemAsync(
+        AltaCommandContext context,
+        WorkThreadRuntimeService runtime,
+        AltaSessionInfo info,
+        SessionMetricsScope scope,
+        int index,
+        string threadId)
+    {
+        using var diagnostics = new StringWriter(CultureInfo.InvariantCulture);
+        var isolatedContext = context with
+        {
+            Stdout = TextWriter.Null,
+            Stderr = diagnostics,
+        };
+        var result = await BuildSessionResultAsync(isolatedContext, runtime, info, scope).ConfigureAwait(false);
+        return SessionReportItem.Success(index, threadId, info, result, diagnostics.ToString());
     }
 
     private static async ValueTask<int> HandleSessionChildrenAsync(AltaCommandContext context, string? threadId, bool recursive)
@@ -3566,6 +3613,20 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         DateTimeOffset? FinalAssistantAt,
         FinalErrorPayload? FinalError,
         SessionMetrics Metrics);
+
+    private sealed record SessionReportItem(
+        int Index,
+        string ThreadId,
+        AltaSessionInfo? Info,
+        SessionResult? Result,
+        string Diagnostics)
+    {
+        public static SessionReportItem Success(int index, string threadId, AltaSessionInfo info, SessionResult result, string diagnostics)
+            => new(index, threadId, info, result, diagnostics);
+
+        public static SessionReportItem NotFound(int index, string threadId)
+            => new(index, threadId, null, null, string.Empty);
+    }
 
     private sealed record FinalErrorPayload(
         string kind,

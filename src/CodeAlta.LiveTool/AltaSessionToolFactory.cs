@@ -267,7 +267,8 @@ public static class AltaSessionToolFactory
             AltaExitCodes.Usage,
             truncated: false,
             recordCount: 0,
-            diagnosticCount: 1));
+            diagnosticCount: 1,
+            duration: TimeSpan.Zero));
         AltaJsonlWriter.WriteError(
             writer,
             correlationId,

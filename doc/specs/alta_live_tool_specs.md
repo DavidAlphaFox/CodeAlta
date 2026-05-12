@@ -102,7 +102,7 @@ The model-visible live-tool description should identify `alta` as an in-process 
 Model-visible tool result shape:
 
 ```jsonl
-{"type":"alta.result","version":1,"exitCode":0,"correlationId":"01HX...","truncated":false}
+{"type":"alta.result","version":1,"exitCode":0,"correlationId":"01HX...","truncated":false,"durationMs":12.3}
 {"type":"alta.session.summary","version":1,"correlationId":"01HX...","count":1,"truncated":false}
 ```
 
@@ -146,7 +146,7 @@ Non-help `alta` commands should always produce newline-delimited JSON (`applicat
 
 For process-style command surfaces, normal result records are written to stdout and diagnostics may be written to stderr. For the agent live tool, optimize for token consumption: do **not** embed those streams as escaped strings inside a larger JSON object. The live tool's model-visible content is a flat JSONL transcript:
 
-1. an `alta.result` header record with `exitCode`, `correlationId`, truncation metadata, and optional counts;
+1. an `alta.result` header record with `exitCode`, `correlationId`, command execution `durationMs`, truncation metadata, and optional counts;
 2. zero or more normal command result records;
 3. zero or more `alta.warning` / `alta.error` diagnostic records.
 
@@ -167,7 +167,7 @@ Errors and warnings should also be JSONL records with types such as `alta.error`
 Example successful live-tool transcript:
 
 ```jsonl
-{"type":"alta.result","version":1,"exitCode":0,"correlationId":"01HX...","truncated":false,"recordCount":2,"diagnosticCount":0}
+{"type":"alta.result","version":1,"exitCode":0,"correlationId":"01HX...","truncated":false,"recordCount":2,"diagnosticCount":0,"durationMs":12.3}
 {"type":"alta.session.item","version":1,"correlationId":"01HX...","threadId":"codex:abc","projectName":"CodeAlta","state":"running"}
 {"type":"alta.session.summary","version":1,"correlationId":"01HX...","count":1,"truncated":false}
 ```
@@ -177,7 +177,7 @@ Invalid command usage is still a non-help command result and should therefore us
 Recommended parse/usage error shape:
 
 ```jsonl
-{"type":"alta.result","version":1,"correlationId":"01HX...","exitCode":2,"truncated":false,"recordCount":0,"diagnosticCount":1}
+{"type":"alta.result","version":1,"correlationId":"01HX...","exitCode":2,"truncated":false,"recordCount":0,"diagnosticCount":1,"durationMs":1.2}
 {"type":"alta.error","version":1,"correlationId":"01HX...","code":"usage.invalidOption","exitCode":2,"commandPath":"alta session list","message":"Unknown option: --stat","usageHint":"Use `alta session list --help` for usage.","suggestions":["--state"]}
 ```
 
