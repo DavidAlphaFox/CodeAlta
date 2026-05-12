@@ -13,6 +13,67 @@ namespace CodeAlta.Tests;
 public sealed class ModelProviderPreferenceCoordinatorTests
 {
     [TestMethod]
+    public void ApplyDraftModelProviderPreference_RestoresRememberedProjectDraftPreference()
+    {
+        using var temp = TempDirectory.Create();
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
+        var backendState = new ChatBackendState(new AgentBackendId("zai"), "ZAI");
+        backendState.Models.Add(new AgentModelInfo(
+            "gpt-5",
+            SupportedReasoningEfforts: [AgentReasoningEffort.Low, AgentReasoningEffort.High]));
+        backendState.Models.Add(new AgentModelInfo(
+            "glm-5.1",
+            SupportedReasoningEfforts: [AgentReasoningEffort.Medium, AgentReasoningEffort.High]));
+
+        var projectA = Path.Combine(temp.Path, "project-a");
+        var projectB = Path.Combine(temp.Path, "project-b");
+        coordinator.RememberGlobalModelProviderPreference(
+            new AgentBackendId("zai"),
+            "glm-5.1",
+            AgentReasoningEffort.Medium,
+            projectA,
+            rememberDraftScope: true);
+        coordinator.RememberGlobalModelProviderPreference(
+            new AgentBackendId("zai"),
+            "gpt-5",
+            AgentReasoningEffort.High,
+            projectB,
+            rememberDraftScope: true);
+
+        coordinator.ApplyDraftModelProviderPreference(backendState, projectB);
+        Assert.AreEqual("gpt-5", backendState.SelectedModelId);
+        Assert.AreEqual(AgentReasoningEffort.High, backendState.SelectedReasoningEffort);
+
+        coordinator.ApplyDraftModelProviderPreference(backendState, projectA);
+
+        Assert.AreEqual("glm-5.1", backendState.SelectedModelId);
+        Assert.AreEqual(AgentReasoningEffort.Medium, backendState.SelectedReasoningEffort);
+    }
+
+    [TestMethod]
+    public void RememberGlobalModelProviderPreference_PersistsDefaultProvider()
+    {
+        using var temp = TempDirectory.Create();
+        File.WriteAllText(
+            Path.Combine(temp.Path, "config.toml"),
+            """
+            [providers.zai]
+            type = "openai-chat"
+            display_name = "ZAI"
+            api_key_env = "TEST_API_KEY"
+            """);
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
+
+        coordinator.RememberGlobalModelProviderPreference(new AgentBackendId("zai"), "glm-5.1", AgentReasoningEffort.High);
+
+        Assert.AreEqual("zai", store.GetEffectiveDefaultProvider());
+        Assert.AreEqual("glm-5.1", store.GetEffectiveProviderPreference("zai").Model);
+        Assert.AreEqual(AgentReasoningEffort.High, store.GetEffectiveProviderPreference("zai").ReasoningEffort);
+    }
+
+    [TestMethod]
     public void ApplyThreadPreference_PrefersPersistedThreadPreferenceOverProviderDefaults()
     {
         using var temp = TempDirectory.Create();

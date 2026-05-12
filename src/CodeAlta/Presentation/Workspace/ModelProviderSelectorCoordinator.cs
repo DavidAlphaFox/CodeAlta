@@ -29,6 +29,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
     private readonly Func<WorkThreadDescriptor, OpenThreadState, AgentBackendId, Task<bool>> _trySwitchThreadBackendAsync;
     private readonly Action _refreshSelectionAndThreadWorkspace;
     private readonly Func<IReadOnlyList<string>>? _getConfiguredProviderKeys;
+    private readonly Dictionary<string, AgentBackendId> _draftBackendIdsByScope = new(StringComparer.OrdinalIgnoreCase);
     private AgentBackendId? _draftBackendId;
     private bool _selectorsRefreshing;
 
@@ -135,6 +136,11 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             var backendId = preferredBackendId ?? GetPreferredDraftBackendId(backendOptions);
             var backendIndex = Math.Max(0, backendOptions.FindIndex(option => string.Equals(option.BackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase)));
             _draftBackendId = backendOptions[backendIndex].BackendId;
+            if (preferredBackendId is not null)
+            {
+                RememberDraftBackendForCurrentScope(_draftBackendId.Value);
+            }
+
             _selectorState.SetModelProviderSelection(backendOptions, backendIndex);
 
             var backendState = _chatBackendStates[backendOptions[backendIndex].BackendId.Value];
@@ -254,8 +260,15 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         var thread = _threadSelection.GetSelectedThread();
         if (thread is null)
         {
-            _draftBackendId = options[newIndex].BackendId;
-            RefreshForDraftScope(_draftBackendId);
+            var selectedBackendId = options[newIndex].BackendId;
+            _draftBackendId = selectedBackendId;
+            RememberDraftBackendForCurrentScope(selectedBackendId);
+            RefreshForDraftScope(selectedBackendId);
+            var draftBackendState = _chatBackendStates[selectedBackendId.Value];
+            _preferences.RememberGlobalPreference(CreatePreference(
+                selectedBackendId,
+                draftBackendState.SelectedModelId,
+                draftBackendState.SelectedReasoningEffort));
             _workspaceRefresh.ApplySessionUsageProjection();
             return;
         }
@@ -457,6 +470,13 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
 
     private AgentBackendId GetPreferredDraftBackendId(IReadOnlyList<ChatBackendOption> backendOptions)
     {
+        if (_draftBackendIdsByScope.TryGetValue(GetCurrentDraftScopeKey(), out var scopedDraftBackendId) &&
+            backendOptions.FirstOrDefault(option => string.Equals(option.BackendId.Value, scopedDraftBackendId.Value, StringComparison.OrdinalIgnoreCase)) is { } scopedDraftBackend &&
+            IsModelProviderReady(scopedDraftBackend.BackendId))
+        {
+            return scopedDraftBackend.BackendId;
+        }
+
         if (_draftBackendId is { } draftBackendId &&
             backendOptions.FirstOrDefault(option => string.Equals(option.BackendId.Value, draftBackendId.Value, StringComparison.OrdinalIgnoreCase)) is { } draftBackend)
         {
@@ -596,4 +616,10 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
                 string.Equals(option.BackendId.Value, configuredProviderKey, StringComparison.OrdinalIgnoreCase))
             ?.BackendId;
     }
+
+    private void RememberDraftBackendForCurrentScope(AgentBackendId backendId)
+        => _draftBackendIdsByScope[GetCurrentDraftScopeKey()] = backendId;
+
+    private string GetCurrentDraftScopeKey()
+        => _threadSelection.GetSelectedProject()?.ProjectPath ?? "__global__";
 }

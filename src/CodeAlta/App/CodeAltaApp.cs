@@ -331,7 +331,12 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         AgentBackendId backendId,
         string? modelId,
         AgentReasoningEffort? reasoningEffort)
-        => _modelProviderPreferences.RememberGlobalModelProviderPreference(backendId, modelId, reasoningEffort);
+        => _modelProviderPreferences.RememberGlobalModelProviderPreference(
+            backendId,
+            modelId,
+            reasoningEffort,
+            GetDraftProjectRoot(),
+            _threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft);
 
     internal void RememberThreadPreference(
         string threadId,

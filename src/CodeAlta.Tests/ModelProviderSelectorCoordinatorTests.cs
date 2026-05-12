@@ -568,6 +568,52 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
+    public void RefreshForDraftScope_RemembersDraftProviderPerScope()
+    {
+        using var temp = TempDirectory.Create();
+        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out _);
+        var threadSelection = new ThreadSelectionContext(
+            threadStateCoordinator,
+            static (_, _) => Task.CompletedTask,
+            static _ => true);
+
+        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var promptComposerViewModel = new PromptComposerViewModel();
+        AgentBackendDescriptor[] backendDescriptors =
+        [
+            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new AgentBackendId("anthropic"), "Anthropic"),
+        ];
+        var backendStates = ChatBackendPresentation.CreateBackendStates(backendDescriptors);
+        backendStates["openai"].Availability = ChatBackendAvailability.Ready;
+        backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4"));
+        backendStates["anthropic"].Availability = ChatBackendAvailability.Ready;
+        backendStates["anthropic"].Models.Add(new AgentModelInfo("claude-sonnet-4.5"));
+
+        var coordinator = CreateCoordinator(
+            backendDescriptors,
+            workspaceViewModel,
+            promptComposerViewModel,
+            backendStates,
+            static _ => null,
+            threadSelection: threadSelection,
+            applyThreadModelProviderPreference: static _ => { });
+
+        threadStateCoordinator.SelectProjectScope("project-1");
+        coordinator.RefreshForDraftScope(new AgentBackendId("anthropic"));
+        Assert.AreEqual(1, workspaceViewModel.SelectedModelProviderIndex);
+
+        threadStateCoordinator.SelectGlobalScope();
+        coordinator.RefreshForDraftScope(new AgentBackendId("openai"));
+        Assert.AreEqual(0, workspaceViewModel.SelectedModelProviderIndex);
+
+        threadStateCoordinator.SelectProjectScope("project-1");
+        coordinator.RefreshForDraftScope();
+
+        Assert.AreEqual(1, workspaceViewModel.SelectedModelProviderIndex);
+    }
+
+    [TestMethod]
     public void RefreshForDraftScope_DoesNotUsePreviousThreadModelSelection()
     {
         using var temp = TempDirectory.Create();

@@ -11,6 +11,7 @@ internal sealed class ModelProviderPreferenceCoordinator
 {
     private readonly CodeAltaConfigStore _configStore;
     private readonly Logger _logger;
+    private readonly Dictionary<string, DraftModelProviderPreference> _draftPreferencesByScope = new(StringComparer.OrdinalIgnoreCase);
 
     public ModelProviderPreferenceCoordinator(CodeAltaConfigStore configStore, Logger logger)
     {
@@ -27,14 +28,23 @@ internal sealed class ModelProviderPreferenceCoordinator
 
         var scopeKey = BuildDraftScopeKey(draftProjectRoot);
         var defaults = _configStore.GetEffectiveProviderPreference(backendState.BackendId.Value, draftProjectRoot);
+        _draftPreferencesByScope.TryGetValue(scopeKey, out var draftPreference);
         var preserveCurrentSelection = string.Equals(backendState.DraftScopeKey, scopeKey, StringComparison.OrdinalIgnoreCase);
-        var preferredModelId = preserveCurrentSelection
+        var matchingDraftPreference = draftPreference is not null &&
+            string.Equals(draftPreference.BackendId.Value, backendState.BackendId.Value, StringComparison.OrdinalIgnoreCase)
+                ? draftPreference
+                : null;
+        var preferredModelId = matchingDraftPreference is not null
+            ? matchingDraftPreference.ModelId ?? defaults.Model
+            : preserveCurrentSelection
             ? backendState.SelectedModelId ?? defaults.Model
             : defaults.Model;
 
         backendState.SelectedModelId = ChatBackendPresentation.ResolvePreferredModelId(backendState.Models, preferredModelId);
         var selectedModel = FindModel(backendState.Models, backendState.SelectedModelId);
-        var preferredReasoningEffort = preserveCurrentSelection
+        var preferredReasoningEffort = matchingDraftPreference is not null
+            ? matchingDraftPreference.ReasoningEffort ?? defaults.ReasoningEffort
+            : preserveCurrentSelection
             ? backendState.SelectedReasoningEffort ?? defaults.ReasoningEffort
             : defaults.ReasoningEffort;
 
@@ -75,11 +85,23 @@ internal sealed class ModelProviderPreferenceCoordinator
     public void RememberGlobalModelProviderPreference(
         AgentBackendId backendId,
         string? modelId,
-        AgentReasoningEffort? reasoningEffort)
+        AgentReasoningEffort? reasoningEffort,
+        string? draftProjectRoot = null,
+        bool rememberDraftScope = false)
     {
+        var normalizedModelId = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
+        if (rememberDraftScope)
+        {
+            _draftPreferencesByScope[BuildDraftScopeKey(draftProjectRoot)] = new DraftModelProviderPreference(
+                backendId,
+                normalizedModelId,
+                reasoningEffort);
+        }
+
         try
         {
-            _configStore.SaveGlobalProviderPreference(backendId.Value, modelId, reasoningEffort);
+            _configStore.SaveGlobalDefaultProvider(backendId.Value);
+            _configStore.SaveGlobalProviderPreference(backendId.Value, normalizedModelId, reasoningEffort);
         }
         catch (Exception ex)
         {
@@ -122,4 +144,9 @@ internal sealed class ModelProviderPreferenceCoordinator
 
     private static string BuildDraftScopeKey(string? draftProjectRoot)
         => draftProjectRoot ?? "__global__";
+
+    private sealed record DraftModelProviderPreference(
+        AgentBackendId BackendId,
+        string? ModelId,
+        AgentReasoningEffort? ReasoningEffort);
 }
