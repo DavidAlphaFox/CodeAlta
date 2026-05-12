@@ -157,8 +157,8 @@ Because v1 commands are finite and non-streaming, the host can emit the `alta.re
 JSONL records must:
 
 - use camelCase property names;
-- include `type` and `version` fields;
-- include `correlationId` when available;
+- include `type` fields;
+- include `version` and `correlationId` when useful for diagnostics or durable per-item correlation, but compact aggregate records may omit them to avoid repeated envelope noise;
 - be complete standalone objects; consumers should not need surrounding arrays;
 - include `truncated = true` and enough cursor/count metadata when output is limited.
 
@@ -467,14 +467,14 @@ alta tool list
 alta tool capability list
 alta provider list
 alta provider model list [--provider <id>]
-alta model list [--provider <id>] [--contains <text>] [--reasoning <effort>] [--supports-tools] [--refs]
+alta model list [--provider <id>] [--contains <text>] [--reasoning <effort>] [--supports-tools] [--detailed]
 alta model show <model-ref>|--model-ref <ref>
 alta model resolve [--model-ref <ref>] [--same-model-as <thread-id>] [--provider <id>] [--model <id>] [--reasoning <effort>]
 alta plugin list
 alta plugin status <runtime-key>
 ```
 
-These are read-only discovery commands that help a global agent understand what CodeAlta can do before creating or steering sessions. `tool status` should describe the live gateway availability, caller scope, and output limits. `tool capability list` summarizes command policy classifications with `alta.tool.capability` records and also emits compact runtime/backend/plugin summaries (`alta.tool.runtimeCapability`, `alta.tool.backendCapability`, and `alta.tool.pluginCapability`) so agents can distinguish available services, registered/configured providers, live-tool injection support, and plugin command availability without treating the command as a replacement for `--help`. `provider model list` and `model list` should emit one `alta.model.item` JSONL record per model, including `modelRef`, requested/effective reasoning, and a reasoning status. `model list --refs` emits compact `alta.model.ref` records for copy/paste workflows. `--contains` is a deterministic substring filter over actual fields such as model id, display name, and model ref; it is not fuzzy natural-language lookup. `model show` and `model resolve` validate exact provider/model/model-ref selections when model metadata is available. `model resolve` should emit a single `alta.model.selection` JSONL record after applying the same precedence rules as `session create`.
+These are read-only discovery commands that help a global agent understand what CodeAlta can do before creating or steering sessions. `tool status` should describe the live gateway availability, caller scope, and output limits. `tool capability list` summarizes command policy classifications with `alta.tool.capability` records and also emits compact runtime/backend/plugin summaries (`alta.tool.runtimeCapability`, `alta.tool.backendCapability`, and `alta.tool.pluginCapability`) so agents can distinguish available services, registered/configured providers, live-tool injection support, and plugin command availability without treating the command as a replacement for `--help`. `provider model list` and `model list` should default to one compact `alta.model.refs` record containing a `modelRefs` array and no per-item envelope fields, so agents can copy exact model refs cheaply. `model list --detailed` emits one `alta.model.item` JSONL record per model, including `modelRef`, requested/effective reasoning, reasoning status, and capabilities. `--refs` remains a compatibility alias for the default compact output. `--contains` is a deterministic substring filter over actual fields such as model id, display name, and model ref; it is not fuzzy natural-language lookup. `model show` and `model resolve` validate exact provider/model/model-ref selections when model metadata is available. `model resolve` should emit a single `alta.model.selection` JSONL record after applying the same precedence rules as `session create`.
 
 Implementation source:
 

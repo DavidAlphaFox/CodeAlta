@@ -742,9 +742,10 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         command.Add("contains=", "Substring filter over model id, display name, and model ref.", value => options.Contains = value);
         command.Add("reasoning=", "Only include models supporting this reasoning effort.", value => options.ReasoningEffort = ParseReasoningOption(value));
         command.Add("supports-tools", "Only include models that report tool-call support.", value => options.SupportsTools = value is not null);
-        command.Add("refs", "Emit compact model-ref records for copy/paste instead of full model metadata.", value => options.RefsOnly = value is not null);
+        command.Add("detailed", "Emit one detailed metadata record per model instead of the compact modelRefs array.", value => options.Detailed = value is not null);
+        command.Add("refs", "Compatibility alias for the default compact modelRefs array.", _ => { });
         command.Add(async (_, _) => await HandleModelListAsync(context, options).ConfigureAwait(false));
-        AddHelpText(command, "Examples: `alta model list --provider anthropic --contains sonnet`; `alta model list --provider codex_subscription --reasoning low --refs`.");
+        AddHelpText(command, "Examples: `alta model list --provider anthropic --contains sonnet`; `alta model list --provider codex_subscription --reasoning low`; `alta model list --provider anthropic --detailed`.");
         return command;
     }
 
@@ -2038,6 +2039,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         }
 
         var count = 0;
+        var modelRefs = options.Detailed ? null : new List<string>();
         foreach (var provider in providers)
         {
             IReadOnlyList<AgentModelInfo> models;
@@ -2055,20 +2057,28 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
                          .Where(model => ModelMatchesFilters(provider.Value, model, options))
                          .OrderBy(static model => model.Id, StringComparer.OrdinalIgnoreCase))
             {
-                if (options.RefsOnly)
+                if (options.Detailed)
                 {
-                    WriteModelRefItem(context, provider.Value, model, options.ReasoningEffort);
+                    WriteModelItem(context, provider.Value, model, options.ReasoningEffort);
                 }
                 else
                 {
-                    WriteModelItem(context, provider.Value, model, options.ReasoningEffort);
+                    modelRefs!.Add(CreateModelRef(provider.Value, model, options.ReasoningEffort));
                 }
 
                 count++;
             }
         }
 
-        WriteSummary(context, "alta.model.summary", count, truncated: false);
+        if (options.Detailed)
+        {
+            WriteSummary(context, "alta.model.summary", count, truncated: false);
+        }
+        else
+        {
+            WriteModelRefs(context, modelRefs ?? []);
+        }
+
         return AltaExitCodes.Success;
     }
 
@@ -3357,19 +3367,17 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         });
     }
 
-    private static void WriteModelRefItem(AltaCommandContext context, string providerKey, AgentModelInfo model, AgentReasoningEffort? requestedReasoning)
+    private static void WriteModelRefs(AltaCommandContext context, IReadOnlyList<string> modelRefs)
+        => AltaJsonlWriter.WriteRecord(context.Stdout, new
+        {
+            type = "alta.model.refs",
+            modelRefs,
+        });
+
+    private static string CreateModelRef(string providerKey, AgentModelInfo model, AgentReasoningEffort? requestedReasoning)
     {
         var reasoning = requestedReasoning ?? model.DefaultReasoningEffort;
-        AltaJsonlWriter.WriteRecord(context.Stdout, new
-        {
-            type = "alta.model.ref",
-            version = 1,
-            correlationId = context.CorrelationId,
-            providerKey,
-            modelId = model.Id,
-            model.DisplayName,
-            modelRef = AltaModelRef.Format(providerKey, model.Id, reasoning),
-        });
+        return AltaModelRef.Format(providerKey, model.Id, reasoning);
     }
 
     private static bool ModelMatchesFilters(string providerKey, AgentModelInfo model, ModelListOptions options)
@@ -3570,7 +3578,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
 
         public bool SupportsTools { get; set; }
 
-        public bool RefsOnly { get; set; }
+        public bool Detailed { get; set; }
     }
 
     private enum SessionMetricsScope

@@ -148,12 +148,13 @@ Model and provider discovery use the same model-ref rules as session creation:
 alta provider list
 alta provider model list --provider codex
 alta model list --provider anthropic --contains sonnet
-alta model list --provider codex_subscription --reasoning low --refs
+alta model list --provider codex_subscription --reasoning low
+alta model list --provider anthropic --detailed
 alta model show --model-ref github-copilot-direct:claude-sonnet-4.6@low
 alta model resolve --model-ref codex_subscription:gpt-5.5@high
 ```
 
-Model discovery remains deterministic and id/ref based. `model list` filters are simple field filters over provider id, model id, display name, model ref, reasoning support, and tool-call support; `--refs` emits compact copy/paste model refs. `model show`/`model resolve` validate exact model refs when model metadata is available and include requested/effective reasoning fields so callers can see whether reasoning was applied, defaulted, or unsupported.
+Model discovery remains deterministic and id/ref based. `model list` filters are simple field filters over provider id, model id, display name, model ref, reasoning support, and tool-call support; by default it emits one compact `modelRefs` array for copy/paste workflows. Use `--detailed` when per-model metadata such as display names, reasoning status, and capabilities is needed. `model show`/`model resolve` validate exact model refs when model metadata is available and include requested/effective reasoning fields so callers can see whether reasoning was applied, defaulted, or unsupported.
 
 Skills are available through the singular `skill` group; compatibility aliases exist for older `skills activate`/`skills_activate` guidance. Activation succeeds only when CodeAlta can inject local-runtime skill context; provider-managed native skill systems report an unsupported-capability diagnostic instead of pretending to activate.
 

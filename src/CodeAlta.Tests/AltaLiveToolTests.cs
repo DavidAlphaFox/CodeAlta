@@ -1298,13 +1298,20 @@ public sealed class AltaLiveToolTests
         factory.Register(backendId, () => backend);
         var dispatcher = CreateDispatcher(new AltaServiceCollection().Add(new AgentHub(factory)));
 
-        var refs = await dispatcher.InvokeAsync(["model", "list", "--provider", backendId.Value, "--contains", "sonnet", "--reasoning", "low", "--supports-tools", "--refs"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var refs = await dispatcher.InvokeAsync(["model", "list", "--provider", backendId.Value, "--contains", "sonnet", "--reasoning", "low", "--supports-tools"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var detailed = await dispatcher.InvokeAsync(["model", "list", "--provider", backendId.Value, "--contains", "sonnet", "--reasoning", "low", "--supports-tools", "--detailed"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var show = await dispatcher.InvokeAsync(["model", "show", "--model-ref", $"{backendId.Value}:claude-sonnet-4.6@low"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
 
         Assert.AreEqual(AltaExitCodes.Success, refs.ExitCode);
-        var refRecord = ReadJsonLines(refs.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.model.ref");
-        Assert.AreEqual("models:claude-sonnet-4.6@low", refRecord.GetProperty("modelRef").GetString());
-        Assert.AreEqual(1, ReadJsonLines(refs.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.model.summary").GetProperty("count").GetInt32());
+        var refRecord = ReadJsonLines(refs.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.model.refs");
+        CollectionAssert.AreEqual(new[] { "models:claude-sonnet-4.6@low" }, refRecord.GetProperty("modelRefs").EnumerateArray().Select(static item => item.GetString()).ToArray());
+        Assert.IsFalse(refRecord.TryGetProperty("correlationId", out _));
+        Assert.IsFalse(refRecord.TryGetProperty("version", out _));
+
+        Assert.AreEqual(AltaExitCodes.Success, detailed.ExitCode);
+        var detailedRecord = ReadJsonLines(detailed.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.model.item");
+        Assert.AreEqual("models:claude-sonnet-4.6@low", detailedRecord.GetProperty("modelRef").GetString());
+        Assert.AreEqual(1, ReadJsonLines(detailed.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.model.summary").GetProperty("count").GetInt32());
 
         Assert.AreEqual(AltaExitCodes.Success, show.ExitCode);
         var showRecord = ReadJsonLines(show.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.model.item");
