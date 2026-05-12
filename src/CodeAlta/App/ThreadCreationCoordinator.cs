@@ -14,7 +14,7 @@ internal sealed class ThreadCreationCoordinator
     private readonly Func<ProjectDescriptor?> _getSelectedProject;
     private readonly Func<ShellSelection> _getSelection;
     private readonly Func<string?> _readDraftTitle;
-    private readonly Func<AgentBackendId, string, IReadOnlyList<string>, WorkThreadExecutionOptions> _buildPreferredExecutionOptions;
+    private readonly Func<AgentBackendId, string, IReadOnlyList<string>, Func<string?>?, WorkThreadExecutionOptions> _buildPreferredExecutionOptions;
     private readonly Action<string, string?, AgentReasoningEffort?, bool> _rememberThreadPreference;
     private readonly Func<WorkThreadDescriptor, Task> _registerCreatedThreadAsync;
     private readonly Action _clearThreadTitleDraft;
@@ -27,7 +27,7 @@ internal sealed class ThreadCreationCoordinator
         Func<ProjectDescriptor?> getSelectedProject,
         Func<ShellSelection> getSelection,
         Func<string?> readDraftTitle,
-        Func<AgentBackendId, string, IReadOnlyList<string>, WorkThreadExecutionOptions> buildPreferredExecutionOptions,
+        Func<AgentBackendId, string, IReadOnlyList<string>, Func<string?>?, WorkThreadExecutionOptions> buildPreferredExecutionOptions,
         Action<string, string?, AgentReasoningEffort?, bool> rememberThreadPreference,
         Func<WorkThreadDescriptor, Task> registerCreatedThreadAsync,
         Action clearThreadTitleDraft,
@@ -64,11 +64,14 @@ internal sealed class ThreadCreationCoordinator
         {
             _setStatus("Creating global thread...", true, StatusTone.Info);
             var title = ResolveTitle(titleOverride);
+            string? createdThreadId = null;
             var executionOptions = _buildPreferredExecutionOptions(
                 _getPreferredBackendId(),
                 _catalogOptions.GlobalRoot,
-                []);
+                [],
+                () => createdThreadId);
             var thread = await _runtimeService.CreateGlobalThreadAsync(executionOptions, title);
+            createdThreadId = thread.ThreadId;
             _rememberThreadPreference(thread.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, false);
             await _registerCreatedThreadAsync(thread);
             _clearThreadTitleDraft();
@@ -98,11 +101,14 @@ internal sealed class ThreadCreationCoordinator
         {
             _setStatus($"Creating thread for '{project.DisplayName}'...", true, StatusTone.Info);
             var title = ResolveTitle(titleOverride);
+            string? createdThreadId = null;
             var executionOptions = _buildPreferredExecutionOptions(
                 _getPreferredBackendId(),
                 project.ProjectPath,
-                [project.ProjectPath]);
+                [project.ProjectPath],
+                () => createdThreadId);
             var thread = await _runtimeService.CreateProjectThreadAsync(project, executionOptions, title);
+            createdThreadId = thread.ThreadId;
             _rememberThreadPreference(thread.ThreadId, executionOptions.Model, executionOptions.ReasoningEffort, false);
             await _registerCreatedThreadAsync(thread);
             _clearThreadTitleDraft();

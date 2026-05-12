@@ -55,7 +55,8 @@ internal sealed class ThreadExecutionOptionsFactory
     public WorkThreadExecutionOptions BuildPreferredExecutionOptions(
         AgentBackendId backendId,
         string workingDirectory,
-        IReadOnlyList<string> projectRoots)
+        IReadOnlyList<string> projectRoots,
+        Func<string?>? sourceThreadIdProvider = null)
     {
         ArgumentNullException.ThrowIfNull(projectRoots);
 
@@ -120,7 +121,7 @@ internal sealed class ThreadExecutionOptionsFactory
             ReasoningEffort = reasoning,
             Tools = CreateAltaTools(
                 backendId,
-                sourceThreadIdProvider: null,
+                sourceThreadIdProvider: sourceThreadIdProvider,
                 sourceProjectIdProvider: () => sourceProjectId,
                 workingDirectoryProvider: () => workingDirectory),
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),

@@ -358,8 +358,9 @@ internal sealed class ThreadCommandCoordinator
     public WorkThreadExecutionOptions BuildPreferredExecutionOptions(
         AgentBackendId backendId,
         string workingDirectory,
-        IReadOnlyList<string> projectRoots)
-        => _promptDispatchCoordinator.BuildPreferredExecutionOptions(backendId, workingDirectory, projectRoots);
+        IReadOnlyList<string> projectRoots,
+        Func<string?>? sourceThreadIdProvider = null)
+        => _promptDispatchCoordinator.BuildPreferredExecutionOptions(backendId, workingDirectory, projectRoots, sourceThreadIdProvider);
 
     public WorkThreadExecutionOptions BuildExecutionOptions(WorkThreadDescriptor thread, OpenThreadState tab)
         => _promptDispatchCoordinator.BuildExecutionOptions(thread, tab);

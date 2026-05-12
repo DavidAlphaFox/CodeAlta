@@ -305,7 +305,7 @@ internal sealed class CodeAltaFrontendComposition
             threadSelectionContext.GetSelectedProject,
             () => threadSelectionContext.Selection,
             static () => null,
-            (backendId, workingDirectory, projectRoots) => threadCommandCoordinator!.BuildPreferredExecutionOptions(backendId, workingDirectory, projectRoots),
+            (backendId, workingDirectory, projectRoots, sourceThreadIdProvider) => threadCommandCoordinator!.BuildPreferredExecutionOptions(backendId, workingDirectory, projectRoots, sourceThreadIdProvider),
             frontend.RememberThreadPreference,
             frontend.RegisterCreatedThreadAsync,
             static () => { },

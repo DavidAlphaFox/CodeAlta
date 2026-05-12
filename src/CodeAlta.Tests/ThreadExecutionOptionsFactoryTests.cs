@@ -44,6 +44,27 @@ public sealed class ThreadExecutionOptionsFactoryTests
         Assert.AreEqual(project.Id, caller.GetProperty("sourceProjectId").GetString());
     }
 
+    [TestMethod]
+    public async Task BuildPreferredExecutionOptions_UsesDeferredSourceThreadProviderForAltaTool()
+    {
+        using var temp = TestTempDirectory.Create();
+        var project = CreateProject("project-a", Path.Combine(temp.Path, "project-a"));
+        Directory.CreateDirectory(project.ProjectPath);
+        var factory = CreateFactory(temp.Path, project);
+        string? createdThreadId = null;
+
+        var options = factory.BuildPreferredExecutionOptions(
+            AgentBackendIds.Codex,
+            project.ProjectPath,
+            [project.ProjectPath],
+            () => createdThreadId);
+        createdThreadId = "canonical-thread-id";
+
+        var caller = await InvokeToolStatusAsync(options).ConfigureAwait(false);
+        Assert.AreEqual(createdThreadId, caller.GetProperty("sourceThreadId").GetString());
+        Assert.AreEqual(project.Id, caller.GetProperty("sourceProjectId").GetString());
+    }
+
     private static ThreadExecutionOptionsFactory CreateFactory(string globalRoot, ProjectDescriptor selectedProject)
     {
         var catalogOptions = new CatalogOptions { GlobalRoot = globalRoot };

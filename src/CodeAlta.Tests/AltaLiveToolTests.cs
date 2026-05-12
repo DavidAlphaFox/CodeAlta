@@ -1402,6 +1402,92 @@ public sealed class AltaLiveToolTests
     }
 
     [TestMethod]
+    public async Task SessionTool_CreateFromRekeyedDraftParentUsesCanonicalLineageAndNotifiesParent()
+    {
+        using var root = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var projectCatalog = new ProjectCatalog(options);
+        var threadCatalog = new WorkThreadCatalog(options);
+        var backend = new StatefulBackend(AgentBackendIds.Codex);
+        var runtime = CreateRuntime(options, backend);
+        await using var _ = runtime.ConfigureAwait(false);
+        var dispatcher = CreateDispatcher(new AltaServiceCollection()
+            .Add(options)
+            .Add(projectCatalog)
+            .Add(threadCatalog)
+            .Add(runtime)
+            .Add<IAltaSessionToolBackendPolicy>(new AltaSessionToolBackendPolicy([AgentBackendIds.Codex.Value])));
+        var timestamp = DateTimeOffset.UtcNow;
+        var parent = new WorkThreadDescriptor
+        {
+            ThreadId = "draft-parent",
+            Kind = WorkThreadKind.GlobalThread,
+            BackendId = AgentBackendIds.Codex.Value,
+            ProviderKey = AgentBackendIds.Codex.Value,
+            WorkingDirectory = root.Path,
+            Title = "Draft parent",
+            Status = WorkThreadStatus.Draft,
+            CreatedAt = timestamp,
+            UpdatedAt = timestamp,
+            LastActiveAt = timestamp,
+        };
+        var parentOptions = new WorkThreadExecutionOptions
+        {
+            BackendId = AgentBackendIds.Codex,
+            ProviderKey = AgentBackendIds.Codex.Value,
+            WorkingDirectory = root.Path,
+            ProjectRoots = [],
+            Tools =
+            [
+                AltaSessionToolFactory.Create(
+                    dispatcher,
+                    new AltaSessionToolOptions
+                    {
+                        SourceThreadIdProvider = () => parent.ThreadId,
+                        WorkingDirectory = root.Path,
+                    }),
+            ],
+            OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+        };
+
+        await runtime.SendAsync(parent, parentOptions, new AgentSendOptions { Input = AgentInput.Text("parent running") }).ConfigureAwait(false);
+        var canonicalParentThreadId = parent.ThreadId;
+        using var createArguments = JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            args = new[] { "session", "create", "--global", "--provider", AgentBackendIds.Codex.Value, "--title", "Child" },
+        }));
+
+        var createResult = await parentOptions.Tools.Single().Handler(CreateInvocation(createArguments.RootElement), CancellationToken.None).ConfigureAwait(false);
+        var createRecord = ReadJsonLines(AssertTextItem(createResult)).Single(static line => line.GetProperty("type").GetString() == "alta.session.created");
+        var childThreadId = createRecord.GetProperty("threadId").GetString()!;
+        var children = await dispatcher.InvokeAsync(["session", "children", canonicalParentThreadId], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var childRun = await dispatcher.InvokeAsync(["session", "send", childThreadId, "--message", "child work"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var childRunId = ReadJsonLines(childRun.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.submitted").GetProperty("runId").GetString()!;
+
+        backend.PublishAssistantCompleted(childThreadId, new AgentRunId(childRunId), "child final result");
+        backend.PublishIdle(childThreadId, new AgentRunId(childRunId));
+
+        Assert.AreEqual("session-1", canonicalParentThreadId);
+        Assert.AreNotEqual("draft-parent", canonicalParentThreadId);
+        Assert.IsNull(backend.CreatedOptions[0].ThreadId, "Provider-managed draft replacement must not request the draft id from the backend.");
+        Assert.IsTrue(createResult.Success, createResult.Error);
+        Assert.AreEqual(canonicalParentThreadId, createRecord.GetProperty("parentThreadId").GetString());
+        Assert.AreNotEqual("draft-parent", createRecord.GetProperty("parentThreadId").GetString());
+        Assert.IsTrue(ReadJsonLines(children.Stdout).Any(line =>
+            line.GetProperty("type").GetString() == "alta.session.item" &&
+            line.GetProperty("threadId").GetString() == childThreadId &&
+            line.GetProperty("parentThreadId").GetString() == canonicalParentThreadId));
+        Assert.IsNotNull(backend.CreatedOptions[1].DeveloperInstructions);
+        StringAssert.Contains(backend.CreatedOptions[1].DeveloperInstructions!, $"Parent thread: `{canonicalParentThreadId}`");
+        await WaitUntilAsync(() => backend.SteeredOptions.Count == 1).ConfigureAwait(false);
+        var parentNotification = ExtractText(backend.SteeredOptions.Single().Input);
+        StringAssert.Contains(parentNotification, $"Source thread: {childThreadId}");
+        StringAssert.Contains(parentNotification, $"Target thread: {canonicalParentThreadId}");
+        StringAssert.Contains(parentNotification, "Kind: answer");
+        StringAssert.Contains(parentNotification, "child final result");
+    }
+
+    [TestMethod]
     public async Task SessionSend_PublishesTimelineFailureWhenRuntimeFailsBeforeRunSubmission()
     {
         using var root = TempDirectory.Create();

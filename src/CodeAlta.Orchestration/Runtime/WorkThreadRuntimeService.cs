@@ -480,14 +480,19 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         agentId = identity.AgentId;
 
         var previousThreadId = string.IsNullOrWhiteSpace(thread.ThreadId) ? null : thread.ThreadId;
+        var replacingDraftSession = previousThreadId is not null && ShouldReplaceDraftSession(thread, options.BackendId);
         if (previousThreadId is null && CanCreateSessionWithRequestedThreadId(options.BackendId))
         {
             thread.ThreadId = Guid.CreateVersion7().ToString();
         }
 
+        var requestedThreadId = replacingDraftSession
+            ? null
+            : NormalizeOptionalText(thread.ThreadId);
+
         var sessionOptions = new AgentSessionResumeOptions
         {
-            ThreadId = string.IsNullOrWhiteSpace(thread.ThreadId) ? null : thread.ThreadId,
+            ThreadId = requestedThreadId,
             ProviderKey = options.ProviderKey ?? thread.ResolvedProviderKey,
             Model = options.Model,
             ReasoningEffort = options.ReasoningEffort,
@@ -505,7 +510,9 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         if (startNewSession)
         {
             var createdSessionId = await _agentHub.StartSessionAsync(agentId, sessionOptions, cancellationToken).ConfigureAwait(false);
-            thread.ThreadId = previousThreadId ?? createdSessionId;
+            thread.ThreadId = string.IsNullOrWhiteSpace(createdSessionId)
+                ? previousThreadId ?? thread.ThreadId
+                : createdSessionId;
         }
         else
         {

@@ -109,8 +109,9 @@ internal sealed class ThreadPromptDispatchCoordinator
     public WorkThreadExecutionOptions BuildPreferredExecutionOptions(
         AgentBackendId backendId,
         string workingDirectory,
-        IReadOnlyList<string> projectRoots)
-        => _executionOptionsFactory.BuildPreferredExecutionOptions(backendId, workingDirectory, projectRoots);
+        IReadOnlyList<string> projectRoots,
+        Func<string?>? sourceThreadIdProvider = null)
+        => _executionOptionsFactory.BuildPreferredExecutionOptions(backendId, workingDirectory, projectRoots, sourceThreadIdProvider);
 
     public static string CreateInitialThreadTitle(string prompt)
     {
