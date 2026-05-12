@@ -33,11 +33,11 @@
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.2" />
     <PackageVersion Include="XenoAtom.CommandLine" Version="2.0.3" />
     <PackageVersion Include="XenoAtom.Logging" Version="1.1.3" />
-    <PackageVersion Include="XenoAtom.Terminal.UI" Version="3.4.0" />
-    <PackageVersion Include="XenoAtom.Terminal.UI.Extensions.CodeEditor.TextMateSharp" Version="3.4.0" />
-    <PackageVersion Include="XenoAtom.Terminal.UI.Extensions.Markdown" Version="3.4.0" />
-    <PackageVersion Include="XenoAtom.Terminal.UI.Extensions.Screenshot" Version="3.4.0" />
-    <PackageVersion Include="XenoAtom.Terminal.UI.Graphics" Version="3.4.0" />
+    <PackageVersion Include="XenoAtom.Terminal.UI" Version="3.4.1" />
+    <PackageVersion Include="XenoAtom.Terminal.UI.Extensions.CodeEditor.TextMateSharp" Version="3.4.1" />
+    <PackageVersion Include="XenoAtom.Terminal.UI.Extensions.Markdown" Version="3.4.1" />
+    <PackageVersion Include="XenoAtom.Terminal.UI.Extensions.Screenshot" Version="3.4.1" />
+    <PackageVersion Include="XenoAtom.Terminal.UI.Graphics" Version="3.4.1" />
     <!-- CodeAltaPluginPackageVersions:End -->
   </ItemGroup>
 </Project>
