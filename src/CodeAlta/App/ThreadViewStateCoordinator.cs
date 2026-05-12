@@ -76,6 +76,15 @@ internal sealed class ThreadViewStateCoordinator
         ArgumentNullException.ThrowIfNull(viewState);
         ArgumentNullException.ThrowIfNull(thread);
 
+        RememberThreadLocalState(viewState, thread);
+        await PersistViewStateAsync(viewState).ConfigureAwait(false);
+    }
+
+    public void RememberThreadLocalState(WorkThreadViewState viewState, WorkThreadDescriptor thread)
+    {
+        ArgumentNullException.ThrowIfNull(viewState);
+        ArgumentNullException.ThrowIfNull(thread);
+
         var localState = viewState.ThreadStates.TryGetValue(thread.ThreadId, out var existingState)
             ? existingState
             : new WorkThreadLocalState();
@@ -85,7 +94,6 @@ internal sealed class ThreadViewStateCoordinator
         localState.CreatedBy = thread.CreatedBy;
         viewState.ThreadStates[thread.ThreadId] = localState;
         viewState.UpdatedAt = DateTimeOffset.UtcNow;
-        await PersistViewStateAsync(viewState).ConfigureAwait(false);
     }
 
     public NavigatorSettings GetNavigatorSettingsSnapshot(WorkThreadViewState viewState)

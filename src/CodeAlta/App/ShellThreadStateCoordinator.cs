@@ -216,6 +216,7 @@ internal sealed class ShellThreadStateCoordinator
         ArgumentNullException.ThrowIfNull(thread);
 
         _viewStateCoordinator.ApplyThreadLocalState([thread], ViewState);
+        _viewStateCoordinator.RememberThreadLocalState(ViewState, thread);
         _catalogStateCoordinator.UpsertThread(thread);
         SyncStateStore(catalogChanged: true);
     }
@@ -418,6 +419,11 @@ internal sealed class ShellThreadStateCoordinator
             var nextThreadId = ViewState.OpenThreadIds.FirstOrDefault();
             ViewState.SelectedThreadId = nextThreadId;
             _selectionCoordinator.ApplyThreadRemovalFallback(nextThreadId, removedThread?.ProjectRef, Projects, Threads);
+            if (!string.IsNullOrWhiteSpace(nextThreadId) && FindThread(nextThreadId) is { } nextThread)
+            {
+                EnsureThreadTab(nextThread);
+                _ = _historyLoader.EnsureThreadHistoryLoadedAsync(nextThread, CancellationToken.None);
+            }
         }
 
         _tabLifecycle.RemoveThreadTabPage(threadId, ShellTabCloseReason.UserDetached);

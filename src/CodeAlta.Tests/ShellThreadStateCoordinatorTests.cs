@@ -150,6 +150,28 @@ public sealed class ShellThreadStateCoordinatorTests
     }
 
     [TestMethod]
+    public void UpsertRuntimeThread_RemembersParentThreadIdForRecovery()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var coordinator = CreateCoordinator(options);
+        var project = CreateProject("project-1", "CodeAlta");
+        var parent = CreateThread("thread-parent", project.Id);
+        var child = CreateThread("thread-child", project.Id);
+        child.ParentThreadId = parent.ThreadId;
+        coordinator.ApplyRecoveredCatalogState([project], [parent]);
+
+        coordinator.UpsertRuntimeThread(child);
+
+        Assert.AreEqual(parent.ThreadId, coordinator.ViewState.ThreadStates[child.ThreadId].ParentThreadId);
+
+        var recoveredChild = CreateThread(child.ThreadId, project.Id);
+        coordinator.ApplyRecoveredCatalogState([project], [parent, recoveredChild]);
+
+        Assert.AreEqual(parent.ThreadId, coordinator.Threads.Single(thread => thread.ThreadId == child.ThreadId).ParentThreadId);
+    }
+
+    [TestMethod]
     public async Task ClosingThreadTab_DoesNotStopThread()
     {
         using var temp = TempDirectory.Create();
@@ -214,6 +236,38 @@ public sealed class ShellThreadStateCoordinatorTests
 
         Assert.AreEqual("thread-1", selectedThreadDuringRemoval);
         Assert.AreEqual("thread-1", coordinator.SelectedThreadId);
+    }
+
+    [TestMethod]
+    public async Task CloseThreadTabAsync_MaterializesFallbackRestoredThread()
+    {
+        using var temp = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var loadedThreadIds = new List<string>();
+        var coordinator = CreateCoordinator(
+            options,
+            ensureThreadHistoryLoadedAsync: (thread, _) =>
+            {
+                loadedThreadIds.Add(thread.ThreadId);
+                return Task.CompletedTask;
+            });
+        var project = CreateProject("project-1", "CodeAlta");
+        var firstThread = CreateThread("thread-1", project.Id);
+        var selectedThread = CreateThread("thread-2", project.Id);
+        coordinator.ViewState = new WorkThreadViewState
+        {
+            OpenThreadIds = [firstThread.ThreadId, selectedThread.ThreadId],
+            SelectedThreadId = selectedThread.ThreadId,
+            Selection = WorkThreadSelectionState.Thread(selectedThread.ThreadId, project.Id),
+        };
+        coordinator.ApplyRecoveredCatalogState([project], [firstThread, selectedThread]);
+        Assert.IsNull(coordinator.FindOpenThread(firstThread.ThreadId));
+
+        await coordinator.CloseThreadTabAsync(selectedThread.ThreadId).ConfigureAwait(false);
+
+        Assert.AreEqual(firstThread.ThreadId, coordinator.SelectedThreadId);
+        Assert.IsNotNull(coordinator.FindOpenThread(firstThread.ThreadId));
+        CollectionAssert.Contains(loadedThreadIds, firstThread.ThreadId);
     }
 
     [TestMethod]
@@ -625,7 +679,8 @@ public sealed class ShellThreadStateCoordinatorTests
         Action<string>? replaceDraftTabWithThread = null,
         Action<string, ShellTabCloseReason>? removeThreadTabPage = null,
         ShellStateStore? stateStore = null,
-        FrontendEventPublisher? frontendEvents = null)
+        FrontendEventPublisher? frontendEvents = null,
+        Func<WorkThreadDescriptor, CancellationToken, Task>? ensureThreadHistoryLoadedAsync = null)
     {
         threadCatalog ??= new WorkThreadCatalog(options);
         return TestThreadStateServices.CreateCoordinator(
@@ -635,6 +690,7 @@ public sealed class ShellThreadStateCoordinatorTests
             stateStore ?? new ShellStateStore(new InlineUiDispatcher()),
             loadPromptDraft: loadPromptDraft,
             deletePromptDraft: deletePromptDraft,
+            ensureThreadHistoryLoadedAsync: ensureThreadHistoryLoadedAsync,
             replaceDraftTabWithThread: replaceDraftTabWithThread,
             removeThreadTabPage: removeThreadTabPage,
             frontendEvents: frontendEvents);
