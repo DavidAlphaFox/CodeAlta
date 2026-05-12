@@ -130,10 +130,13 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             .Select(static group => group.OrderByDescending(static candidate => candidate.IsCodeAltaSession).First())
             .ToArray();
 
-        return deduplicatedByThreadId
+        var threads = deduplicatedByThreadId
             .Select(static candidate => candidate.Thread)
             .OrderByDescending(static thread => thread.LastActiveAt)
             .ToArray();
+
+        await ApplyPersistedThreadLocalStateAsync(threads, cancellationToken).ConfigureAwait(false);
+        return threads;
 
         async Task<(AgentBackendId BackendId, IReadOnlyList<AgentSessionMetadata>? Sessions)> LoadBackendSessionsAsync(AgentBackendId backendId)
         {
@@ -154,6 +157,78 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             {
                 return (backendId, null);
             }
+        }
+    }
+
+    private async Task ApplyPersistedThreadLocalStateAsync(
+        IReadOnlyList<WorkThreadDescriptor> threads,
+        CancellationToken cancellationToken)
+    {
+        foreach (var thread in threads)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            WorkThreadLocalState? localState;
+            try
+            {
+                localState = await _threadCatalog.JournalStore
+                    .ReadLatestStateAsync(thread.ThreadId, thread.CreatedAt, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                continue;
+            }
+
+            if (localState is null)
+            {
+                continue;
+            }
+
+            ApplyPersistedThreadLocalState(thread, localState);
+        }
+    }
+
+    private static void ApplyPersistedThreadLocalState(WorkThreadDescriptor thread, WorkThreadLocalState localState)
+    {
+        if (localState.Archived)
+        {
+            thread.Status = WorkThreadStatus.Archived;
+        }
+
+        if (!string.IsNullOrWhiteSpace(localState.ProviderKey))
+        {
+            var providerKey = localState.ProviderKey.Trim();
+            thread.ProviderKey = providerKey;
+            thread.BackendId = providerKey;
+        }
+
+        if (!string.IsNullOrWhiteSpace(localState.ModelId))
+        {
+            thread.ModelId = localState.ModelId;
+        }
+
+        if (localState.ReasoningEffort is { } reasoningEffort)
+        {
+            thread.ReasoningEffort = reasoningEffort;
+        }
+
+        if (localState.MessageCount is { } messageCount)
+        {
+            thread.MessageCount = messageCount;
+        }
+
+        if (!string.IsNullOrWhiteSpace(localState.ParentThreadId))
+        {
+            thread.ParentThreadId = localState.ParentThreadId;
+        }
+
+        if (localState.CreatedBy is not null)
+        {
+            thread.CreatedBy = localState.CreatedBy;
         }
     }
 
@@ -346,6 +421,8 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             UpdatedAt = now,
             LastActiveAt = now,
             LatestSummary = "Global overview and coordination thread.",
+            ModelId = options.Model,
+            ReasoningEffort = options.ReasoningEffort,
         };
 
         try
@@ -402,6 +479,8 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             UpdatedAt = now,
             LastActiveAt = now,
             LatestSummary = $"Project thread for {project.DisplayName}.",
+            ModelId = options.Model,
+            ReasoningEffort = options.ReasoningEffort,
         };
 
         try
@@ -544,10 +623,15 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         entry = new ThreadSessionEntry(
             thread.ThreadId,
             agentId,
+            thread.Kind,
+            thread.Status,
             options.BackendId,
             options.ProviderKey ?? thread.ResolvedProviderKey,
             thread.ProjectRef,
             thread.ParentThreadId,
+            thread.CreatedBy,
+            thread.CreatedAt,
+            thread.Title,
             options.WorkingDirectory,
             options.Model,
             options.ReasoningEffort,
@@ -660,8 +744,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                         CreatedAt = timestamp,
                     };
 
-                    var viewState = await _threadCatalog.LoadViewStateAsync(actorCancellationToken).ConfigureAwait(false);
-                    var localState = GetOrCreateLocalState(viewState, thread.ThreadId);
+                    var localState = await ReadLatestLocalStateAsync(thread.ThreadId, thread.CreatedAt, actorCancellationToken).ConfigureAwait(false) ?? new WorkThreadLocalState();
                     CopyThreadMetadata(thread, localState);
                     localState.QueuedPrompts ??= [];
                     localState.QueuedPrompts.Add(item);
@@ -677,9 +760,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                     });
 
                     TrimLocalStateHistory(localState);
-                    viewState.ThreadStates[thread.ThreadId] = localState;
-                    viewState.UpdatedAt = timestamp;
-                    await _threadCatalog.SaveViewStateAsync(viewState, actorCancellationToken).ConfigureAwait(false);
+                    await _threadCatalog.JournalStore.AppendStateAsync(thread, localState, actorCancellationToken).ConfigureAwait(false);
                     _events.TryPublish(new WorkThreadQueueRuntimeEvent(
                         thread.ThreadId,
                         timestamp,
@@ -882,18 +963,30 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         return string.Concat(baseText.TrimEnd(), Environment.NewLine, Environment.NewLine, additionalText.Trim());
     }
 
-    private static WorkThreadLocalState GetOrCreateLocalState(WorkThreadViewState viewState, string threadId)
+    private async Task<WorkThreadLocalState?> ReadLatestLocalStateAsync(
+        string threadId,
+        DateTimeOffset createdAt,
+        CancellationToken cancellationToken)
     {
-        if (!viewState.ThreadStates.TryGetValue(threadId, out var state))
+        try
         {
-            state = new WorkThreadLocalState();
+            return await _threadCatalog.JournalStore.ReadLatestStateAsync(threadId, createdAt, cancellationToken).ConfigureAwait(false);
         }
-
-        return state;
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 
     private static void CopyThreadMetadata(WorkThreadDescriptor thread, WorkThreadLocalState localState)
     {
+        localState.ProviderKey = thread.ResolvedProviderKey;
+        localState.ModelId = thread.ModelId;
+        localState.ReasoningEffort = thread.ReasoningEffort;
         localState.Archived = thread.Status == WorkThreadStatus.Archived;
         localState.MessageCount = thread.MessageCount;
         localState.ParentThreadId = thread.ParentThreadId;
@@ -1297,8 +1390,8 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                         return null;
                     }
 
-                    var viewState = await _threadCatalog.LoadViewStateAsync(actorCancellationToken).ConfigureAwait(false);
-                    if (!viewState.ThreadStates.TryGetValue(threadId, out var localState) || localState.QueuedPrompts.Count == 0)
+                    var localState = await ReadLatestLocalStateAsync(threadId, entry.CreatedAt, actorCancellationToken).ConfigureAwait(false);
+                    if (localState is null || localState.QueuedPrompts.Count == 0)
                     {
                         return null;
                     }
@@ -1313,8 +1406,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                     item.State = "submitting";
                     item.DrainedAt = timestamp;
                     item.LastError = null;
-                    viewState.UpdatedAt = timestamp;
-                    await _threadCatalog.SaveViewStateAsync(viewState, actorCancellationToken).ConfigureAwait(false);
+                    await _threadCatalog.JournalStore.AppendStateAsync(entry.ToDescriptor(), localState, actorCancellationToken).ConfigureAwait(false);
                     entry.BeginQueueDrain();
                     PublishQueueChanged(threadId, localState, item, timestamp, isEnqueued: false);
                     return new QueuedPromptDrainWork(entry.AgentId, CloneQueuedPrompt(item));
@@ -1377,8 +1469,13 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                 {
                     try
                     {
-                        var viewState = await _threadCatalog.LoadViewStateAsync(actorCancellationToken).ConfigureAwait(false);
-                        if (!viewState.ThreadStates.TryGetValue(threadId, out var localState))
+                        if (!_entries.TryGetValue(threadId, out var currentEntry))
+                        {
+                            return false;
+                        }
+
+                        var localState = await ReadLatestLocalStateAsync(threadId, currentEntry.CreatedAt, actorCancellationToken).ConfigureAwait(false);
+                        if (localState is null)
                         {
                             return false;
                         }
@@ -1399,8 +1496,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                             }
                         }
 
-                        viewState.UpdatedAt = timestamp;
-                        await _threadCatalog.SaveViewStateAsync(viewState, actorCancellationToken).ConfigureAwait(false);
+                        await _threadCatalog.JournalStore.AppendStateAsync(currentEntry.ToDescriptor(), localState, actorCancellationToken).ConfigureAwait(false);
                         PublishQueueChanged(threadId, localState, item, timestamp, isEnqueued: false);
                         return true;
                     }
@@ -1585,8 +1681,10 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
     {
         try
         {
-            var viewState = await _threadCatalog.LoadViewStateAsync(cancellationToken).ConfigureAwait(false);
-            if (!viewState.ThreadStates.TryGetValue(thread.ThreadId, out var localState))
+            var localState = await _threadCatalog.JournalStore
+                .ReadLatestStateAsync(thread.ThreadId, thread.CreatedAt, cancellationToken)
+                .ConfigureAwait(false);
+            if (localState is null)
             {
                 return;
             }
@@ -1611,7 +1709,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                 thread.MessageCount = localState.MessageCount;
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Text.Json.JsonException)
         {
         }
     }
@@ -1641,8 +1739,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                 async actorCancellationToken =>
                 {
                     var timestamp = DateTimeOffset.UtcNow;
-                    var viewState = await _threadCatalog.LoadViewStateAsync(actorCancellationToken).ConfigureAwait(false);
-                    var localState = GetOrCreateLocalState(viewState, thread.ThreadId);
+                    var localState = await ReadLatestLocalStateAsync(thread.ThreadId, thread.CreatedAt, actorCancellationToken).ConfigureAwait(false) ?? new WorkThreadLocalState();
                     CopyThreadMetadata(thread, localState);
                     localState.PromptProvenance ??= [];
                     localState.PromptProvenance.Add(new WorkThreadPromptProvenance
@@ -1657,9 +1754,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
                     });
 
                     TrimLocalStateHistory(localState);
-                    viewState.ThreadStates[thread.ThreadId] = localState;
-                    viewState.UpdatedAt = timestamp;
-                    await _threadCatalog.SaveViewStateAsync(viewState, actorCancellationToken).ConfigureAwait(false);
+                    await _threadCatalog.JournalStore.AppendStateAsync(thread, localState, actorCancellationToken).ConfigureAwait(false);
                     return true;
                 },
                 cancellationToken)
@@ -1951,18 +2046,15 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
 
     private async Task UpdateThreadLocalStateAsync(WorkThreadDescriptor thread, CancellationToken cancellationToken)
     {
-        var viewState = await _threadCatalog.LoadViewStateAsync(cancellationToken).ConfigureAwait(false);
-        var localState = viewState.ThreadStates.TryGetValue(thread.ThreadId, out var existingState)
-            ? existingState
-            : new WorkThreadLocalState();
+        var localState = await ReadLatestLocalStateAsync(thread.ThreadId, thread.CreatedAt, cancellationToken).ConfigureAwait(false) ?? new WorkThreadLocalState();
+        localState.ProviderKey = thread.ResolvedProviderKey;
+        localState.ModelId = thread.ModelId;
+        localState.ReasoningEffort = thread.ReasoningEffort;
         localState.Archived = thread.Status == WorkThreadStatus.Archived;
         localState.MessageCount = thread.MessageCount;
         localState.ParentThreadId = thread.ParentThreadId;
         localState.CreatedBy = thread.CreatedBy;
-        viewState.ThreadStates[thread.ThreadId] = localState;
-
-        viewState.UpdatedAt = DateTimeOffset.UtcNow;
-        await _threadCatalog.SaveViewStateAsync(viewState, cancellationToken).ConfigureAwait(false);
+        await _threadCatalog.JournalStore.AppendStateAsync(thread, localState, cancellationToken).ConfigureAwait(false);
     }
 
     private sealed class ThreadSessionEntry
@@ -1970,10 +2062,15 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         public ThreadSessionEntry(
             string threadId,
             AgentId agentId,
+            WorkThreadKind kind,
+            WorkThreadStatus status,
             AgentBackendId backendId,
             string providerKey,
             string? projectId,
             string? parentThreadId,
+            AltaActorProvenance? createdBy,
+            DateTimeOffset createdAt,
+            string title,
             string workingDirectory,
             string? model,
             AgentReasoningEffort? reasoningEffort,
@@ -1984,10 +2081,15 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         {
             ThreadId = threadId;
             AgentId = agentId;
+            Kind = kind;
+            Status = status;
             BackendId = backendId;
             ProviderKey = providerKey;
             ProjectId = projectId;
             ParentThreadId = parentThreadId;
+            CreatedBy = createdBy;
+            CreatedAt = createdAt;
+            Title = title;
             WorkingDirectory = workingDirectory;
             Model = model;
             ReasoningEffort = reasoningEffort;
@@ -2001,6 +2103,10 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
 
         public AgentId AgentId { get; }
 
+        public WorkThreadKind Kind { get; }
+
+        public WorkThreadStatus Status { get; }
+
         public AgentBackendId BackendId { get; }
 
         public string ProviderKey { get; }
@@ -2008,6 +2114,12 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         public string? ProjectId { get; }
 
         public string? ParentThreadId { get; }
+
+        public AltaActorProvenance? CreatedBy { get; }
+
+        public DateTimeOffset CreatedAt { get; }
+
+        public string Title { get; }
 
         public string WorkingDirectory { get; }
 
@@ -2038,6 +2150,26 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         private readonly HashSet<string> _sentParentFinalKeys = new(StringComparer.Ordinal);
 
         public bool HasActiveRun => ActiveRunId is not null;
+
+        public WorkThreadDescriptor ToDescriptor()
+            => new()
+            {
+                ThreadId = ThreadId,
+                Kind = Kind,
+                BackendId = BackendId.Value,
+                ProviderKey = ProviderKey,
+                ProjectRef = ProjectId,
+                ParentThreadId = ParentThreadId,
+                CreatedBy = CreatedBy,
+                WorkingDirectory = WorkingDirectory,
+                Title = Title,
+                Status = IsTerminated ? WorkThreadStatus.Archived : Status,
+                CreatedAt = CreatedAt,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                LastActiveAt = LastTerminalEventAt == DateTimeOffset.MinValue ? CreatedAt : LastTerminalEventAt,
+                ModelId = Model,
+                ReasoningEffort = ReasoningEffort,
+            };
 
         public bool Matches(WorkThreadExecutionOptions options)
         {

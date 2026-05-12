@@ -95,6 +95,8 @@ internal sealed class ThreadProviderSwitchCoordinator
         var oldThreadBackendId = thread.BackendId;
         var oldThreadProviderKey = thread.ProviderKey;
         var oldThreadUpdatedAt = thread.UpdatedAt;
+        var oldThreadModelId = thread.ModelId;
+        var oldThreadReasoningEffort = thread.ReasoningEffort;
         var oldTabBackendId = tab.BackendId;
         var oldTabModelId = tab.ModelId;
         var oldTabReasoningEffort = tab.ReasoningEffort;
@@ -112,6 +114,8 @@ internal sealed class ThreadProviderSwitchCoordinator
         try
         {
             await _applyThreadPreferenceAsync(tab);
+            thread.ModelId = tab.ModelId;
+            thread.ReasoningEffort = tab.ReasoningEffort;
             if (!string.IsNullOrWhiteSpace(oldThreadId))
             {
                 await _detachThreadSessionAsync(oldThreadId);
@@ -122,6 +126,8 @@ internal sealed class ThreadProviderSwitchCoordinator
             thread.BackendId = oldThreadBackendId;
             thread.ProviderKey = oldThreadProviderKey;
             thread.UpdatedAt = oldThreadUpdatedAt;
+            thread.ModelId = oldThreadModelId;
+            thread.ReasoningEffort = oldThreadReasoningEffort;
             tab.BackendId = oldTabBackendId;
             tab.ModelId = oldTabModelId;
             tab.ReasoningEffort = oldTabReasoningEffort;

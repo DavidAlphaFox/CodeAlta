@@ -12,6 +12,7 @@
     <InternalsVisibleTo Include="CodeAlta.Agent.Anthropic" />
     <InternalsVisibleTo Include="CodeAlta.Agent.GoogleGenAI" />
     <InternalsVisibleTo Include="CodeAlta.Agent.OpenAI" />
+    <InternalsVisibleTo Include="CodeAlta.Catalog" />
     <InternalsVisibleTo Include="CodeAlta.Tests" />
   </ItemGroup>
 

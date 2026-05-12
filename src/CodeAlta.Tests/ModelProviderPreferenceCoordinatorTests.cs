@@ -28,31 +28,36 @@ public sealed class ModelProviderPreferenceCoordinatorTests
 
         var projectA = Path.Combine(temp.Path, "project-a");
         var projectB = Path.Combine(temp.Path, "project-b");
+        var viewState = new WorkThreadViewState();
         coordinator.RememberGlobalModelProviderPreference(
+            viewState,
             new AgentBackendId("zai"),
             "glm-5.1",
             AgentReasoningEffort.Medium,
             projectA,
+            draftProjectId: "project-a",
             rememberDraftScope: true);
         coordinator.RememberGlobalModelProviderPreference(
+            viewState,
             new AgentBackendId("zai"),
             "gpt-5",
             AgentReasoningEffort.High,
             projectB,
+            draftProjectId: "project-b",
             rememberDraftScope: true);
 
-        coordinator.ApplyDraftModelProviderPreference(backendState, projectB);
+        coordinator.ApplyDraftModelProviderPreference(backendState, viewState, projectB, "project-b");
         Assert.AreEqual("gpt-5", backendState.SelectedModelId);
         Assert.AreEqual(AgentReasoningEffort.High, backendState.SelectedReasoningEffort);
 
-        coordinator.ApplyDraftModelProviderPreference(backendState, projectA);
+        coordinator.ApplyDraftModelProviderPreference(backendState, viewState, projectA, "project-a");
 
         Assert.AreEqual("glm-5.1", backendState.SelectedModelId);
         Assert.AreEqual(AgentReasoningEffort.Medium, backendState.SelectedReasoningEffort);
     }
 
     [TestMethod]
-    public void RememberGlobalModelProviderPreference_PersistsDefaultProvider()
+    public void RememberGlobalModelProviderPreference_PersistsGlobalProjectPreferenceWithoutChangingConfigDefaultProvider()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
@@ -65,12 +70,21 @@ public sealed class ModelProviderPreferenceCoordinatorTests
             """);
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
         var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
+        var viewState = new WorkThreadViewState();
 
-        coordinator.RememberGlobalModelProviderPreference(new AgentBackendId("zai"), "glm-5.1", AgentReasoningEffort.High);
+        coordinator.RememberGlobalModelProviderPreference(
+            viewState,
+            new AgentBackendId("zai"),
+            "glm-5.1",
+            AgentReasoningEffort.High,
+            rememberDraftScope: true);
 
-        Assert.AreEqual("zai", store.GetEffectiveDefaultProvider());
-        Assert.AreEqual("glm-5.1", store.GetEffectiveProviderPreference("zai").Model);
-        Assert.AreEqual(AgentReasoningEffort.High, store.GetEffectiveProviderPreference("zai").ReasoningEffort);
+        Assert.IsNull(store.GetEffectiveDefaultProvider());
+        Assert.IsTrue(viewState.ProjectPreferences.TryGetValue(ModelProviderPreferenceCoordinator.GlobalProjectPreferenceKey, out var preference));
+        Assert.AreEqual("zai", preference.ProviderKey);
+        Assert.AreEqual("glm-5.1", preference.ModelId);
+        Assert.AreEqual(AgentReasoningEffort.High, preference.ReasoningEffort);
+        Assert.IsFalse(File.ReadAllText(Path.Combine(temp.Path, "config.toml")).Contains("default_provider", StringComparison.Ordinal));
     }
 
     [TestMethod]

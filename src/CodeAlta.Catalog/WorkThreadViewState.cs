@@ -34,22 +34,28 @@ public sealed class WorkThreadViewState
     public DateTimeOffset UpdatedAt { get; set; }
 
     /// <summary>
-    /// Gets or sets per-thread execution preferences restored by the terminal UI.
+    /// Gets or sets per-project execution preferences restored by the terminal UI.
     /// </summary>
-    [JsonPropertyName("thread_preferences")]
+    [JsonPropertyName("project_preferences")]
+    public Dictionary<string, WorkThreadPreference> ProjectPreferences { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Gets transient legacy per-thread execution preferences. This property is intentionally not serialized.
+    /// </summary>
+    [JsonIgnore]
     public Dictionary<string, WorkThreadPreference> ThreadPreferences { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Gets transient legacy thread state. This property is intentionally not serialized.
+    /// </summary>
+    [JsonIgnore]
+    public Dictionary<string, WorkThreadLocalState> ThreadStates { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets or sets machine-local navigator settings.
     /// </summary>
     [JsonPropertyName("navigator")]
     public NavigatorSettings Navigator { get; set; } = new();
-
-    /// <summary>
-    /// Gets or sets machine-local thread metadata tracked outside backend-owned sessions.
-    /// </summary>
-    [JsonPropertyName("thread_states")]
-    public Dictionary<string, WorkThreadLocalState> ThreadStates { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Validates the view state.
@@ -89,25 +95,14 @@ public sealed class WorkThreadViewState
             throw new ArgumentException("Selected thread id must mirror the persisted selection.", nameof(SelectedThreadId));
         }
 
-        var invalidPreferenceKey = ThreadPreferences.Keys.FirstOrDefault(string.IsNullOrWhiteSpace);
+        var invalidPreferenceKey = ProjectPreferences.Keys.FirstOrDefault(string.IsNullOrWhiteSpace);
         if (invalidPreferenceKey is not null)
         {
-            throw new ArgumentException("Thread preference keys must be non-empty.", nameof(ThreadPreferences));
+            throw new ArgumentException("Project preference keys must be non-empty.", nameof(ProjectPreferences));
         }
 
         Navigator ??= new NavigatorSettings();
         Navigator.Validate();
-
-        var invalidThreadStateKey = ThreadStates.Keys.FirstOrDefault(string.IsNullOrWhiteSpace);
-        if (invalidThreadStateKey is not null)
-        {
-            throw new ArgumentException("Thread state keys must be non-empty.", nameof(ThreadStates));
-        }
-
-        foreach (var state in ThreadStates.Values)
-        {
-            state.Validate();
-        }
     }
 }
 
@@ -246,6 +241,24 @@ public enum WorkThreadDraftScope
 /// </summary>
 public sealed class WorkThreadLocalState
 {
+    /// <summary>
+    /// Gets or sets the provider key selected for this thread.
+    /// </summary>
+    [JsonPropertyName("provider_key")]
+    public string? ProviderKey { get; set; }
+
+    /// <summary>
+    /// Gets or sets the thread model identifier.
+    /// </summary>
+    [JsonPropertyName("model_id")]
+    public string? ModelId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the thread reasoning effort.
+    /// </summary>
+    [JsonPropertyName("reasoning_effort")]
+    public AgentReasoningEffort? ReasoningEffort { get; set; }
+
     /// <summary>
     /// Gets or sets a value indicating whether the thread is archived locally.
     /// </summary>
@@ -481,10 +494,16 @@ public sealed class WorkThreadPromptProvenance
 }
 
 /// <summary>
-/// Describes a persisted model and reasoning override for a thread.
+/// Describes a persisted provider, model, and reasoning preference.
 /// </summary>
 public sealed class WorkThreadPreference
 {
+    /// <summary>
+    /// Gets or sets the preferred provider key.
+    /// </summary>
+    [JsonPropertyName("provider_key")]
+    public string? ProviderKey { get; set; }
+
     /// <summary>
     /// Gets or sets the preferred model identifier.
     /// </summary>

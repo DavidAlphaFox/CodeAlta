@@ -215,8 +215,11 @@ internal sealed class ShellThreadStateCoordinator
     {
         ArgumentNullException.ThrowIfNull(thread);
 
-        _viewStateCoordinator.ApplyThreadLocalState([thread], ViewState);
-        _viewStateCoordinator.RememberThreadLocalState(ViewState, thread);
+        _viewStateCoordinator.ApplyThreadLocalState([thread], ViewState, readJournal: false);
+        var localState = _viewStateCoordinator.RememberThreadLocalState(ViewState, thread);
+        global::CodeAlta.CodeAltaTaskMonitor.Observe(
+            _viewStateCoordinator.PersistThreadLocalStateSnapshotAsync(thread, localState),
+            $"Persist local state for thread {thread.ThreadId}");
         _catalogStateCoordinator.UpsertThread(thread);
         SyncStateStore(catalogChanged: true);
     }

@@ -1,7 +1,7 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 
 namespace CodeAlta.Agent.LocalRuntime;
 
@@ -12,12 +12,16 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
 {
     private const string SessionSummaryEventType = "local.sessionSummary";
     private const string SessionStateEventType = "local.sessionState";
+    private const string CodeAltaThreadHeaderEventType = "codealta.threadHeader";
+    private const string CodeAltaThreadStateEventType = "codealta.threadState";
+    private const int MetadataProbeHeadByteCount = 64 * 1024;
+    private const int MetadataProbeTailByteCount = 256 * 1024;
 
     private static readonly UTF8Encoding Utf8WithoutBom = new(encoderShouldEmitUTF8Identifier: false);
-    private static readonly ConcurrentDictionary<string, CachedSessionProjection> MetadataProjectionCache = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly LocalAgentRuntimePathLayout _layout;
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _pathLocks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly LocalAgentSessionJournalFile _journalFile;
+    private readonly ConcurrentDictionary<string, CachedSessionProjection> _metadataProjectionCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _sessionFiles = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -29,6 +33,7 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
     {
         ArgumentNullException.ThrowIfNull(layout);
         _layout = layout;
+        _journalFile = new LocalAgentSessionJournalFile();
     }
 
     /// <inheritdoc />
@@ -241,25 +246,26 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
             return false;
         }
 
-        var pathLock = GetPathLock(sessionFile);
-        await pathLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (!File.Exists(sessionFile))
-            {
-                return false;
-            }
+        var deleted = false;
+        await _journalFile.WithPathLockAsync(
+                sessionFile,
+                () =>
+                {
+                    if (!File.Exists(sessionFile))
+                    {
+                        return Task.CompletedTask;
+                    }
 
-            File.Delete(sessionFile);
-            _sessionFiles.TryRemove(sessionId, out _);
-            InvalidateMetadataProjectionCache(sessionFile);
-            DeleteEmptySessionDirectories(Path.GetDirectoryName(sessionFile));
-            return true;
-        }
-        finally
-        {
-            pathLock.Release();
-        }
+                    File.Delete(sessionFile);
+                    _sessionFiles.TryRemove(sessionId, out _);
+                    InvalidateMetadataProjectionCache(sessionFile);
+                    DeleteEmptySessionDirectories(Path.GetDirectoryName(sessionFile));
+                    deleted = true;
+                    return Task.CompletedTask;
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return deleted;
     }
 
     private async Task<string> GetOrCreateSessionFilePathAsync(
@@ -366,7 +372,7 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
         var cacheKey = Path.GetFullPath(sessionFile);
         var before = GetFileStamp(sessionFile);
         if (before is not null &&
-            MetadataProjectionCache.TryGetValue(cacheKey, out var cached) &&
+            _metadataProjectionCache.TryGetValue(cacheKey, out var cached) &&
             cached.Stamp == before)
         {
             return cached.Projection;
@@ -376,7 +382,7 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
         var after = GetFileStamp(sessionFile);
         if (before is not null && before == after)
         {
-            MetadataProjectionCache[cacheKey] = new CachedSessionProjection(before.Value, projection);
+            _metadataProjectionCache[cacheKey] = new CachedSessionProjection(before.Value, projection);
         }
 
         return projection;
@@ -389,16 +395,7 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
         LocalAgentSessionSummary? summary = null;
         LocalAgentSessionState? state = null;
 
-        await using var stream = new FileStream(
-            sessionFile,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite,
-            bufferSize: 4096,
-            useAsync: true);
-        using var reader = new StreamReader(stream, Utf8WithoutBom, detectEncodingFromByteOrderMarks: true);
-        string? line;
-        while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
+        foreach (var line in await ReadMetadataProbeLinesAsync(sessionFile, cancellationToken).ConfigureAwait(false))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(line))
@@ -411,13 +408,21 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
                 using var document = JsonDocument.Parse(line);
                 ProjectMetadataSnapshot(document.RootElement, ref summary, ref state);
             }
-            catch (JsonException) when (reader.Peek() < 0)
+            catch (JsonException)
             {
-                break;
             }
         }
 
         return new SessionProjection(summary, state, []);
+    }
+
+    private static async Task<IReadOnlyList<string>> ReadMetadataProbeLinesAsync(
+        string sessionFile,
+        CancellationToken cancellationToken)
+    {
+        var lines = new List<string>(await ReadHeadLinesAsync(sessionFile, MetadataProbeHeadByteCount, cancellationToken).ConfigureAwait(false));
+        lines.AddRange(await ReadTailLinesAsync(sessionFile, MetadataProbeTailByteCount, cancellationToken).ConfigureAwait(false));
+        return lines;
     }
 
     private async Task<SessionProjection> ProjectSessionFileWithHistoryAsync(
@@ -451,6 +456,11 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
                         state = snapshot;
                     }
 
+                    continue;
+                }
+
+                if (rawEvent.BackendEventType is CodeAltaThreadHeaderEventType or CodeAltaThreadStateEventType)
+                {
                     continue;
                 }
             }
@@ -508,7 +518,7 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
             path,
             FileMode.Open,
             FileAccess.Read,
-            FileShare.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete,
             bufferSize: 4096,
             useAsync: true);
         using var reader = new StreamReader(stream, Utf8WithoutBom, detectEncodingFromByteOrderMarks: true);
@@ -536,6 +546,105 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
         }
     }
 
+    private static async Task<IReadOnlyList<string>> ReadTailLinesAsync(
+        string path,
+        int byteCount,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096,
+            useAsync: true);
+        var length = stream.Length;
+        var count = (int)Math.Min(byteCount, length);
+        if (count == 0)
+        {
+            return [];
+        }
+
+        var buffer = ArrayPool<byte>.Shared.Rent(count);
+        try
+        {
+            stream.Seek(-count, SeekOrigin.End);
+            var read = 0;
+            while (read < count)
+            {
+                var current = await stream.ReadAsync(buffer.AsMemory(read, count - read), cancellationToken).ConfigureAwait(false);
+                if (current == 0)
+                {
+                    break;
+                }
+
+                read += current;
+            }
+
+            var text = Utf8WithoutBom.GetString(buffer, 0, read);
+            if (count < length)
+            {
+                var firstNewline = text.IndexOf('\n');
+                text = firstNewline >= 0 ? text[(firstNewline + 1)..] : string.Empty;
+            }
+
+            return text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static async Task<IReadOnlyList<string>> ReadHeadLinesAsync(
+        string path,
+        int byteCount,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096,
+            useAsync: true);
+        var length = stream.Length;
+        var count = (int)Math.Min(byteCount, length);
+        if (count == 0)
+        {
+            return [];
+        }
+
+        var buffer = ArrayPool<byte>.Shared.Rent(count);
+        try
+        {
+            var read = 0;
+            while (read < count)
+            {
+                var current = await stream.ReadAsync(buffer.AsMemory(read, count - read), cancellationToken).ConfigureAwait(false);
+                if (current == 0)
+                {
+                    break;
+                }
+
+                read += current;
+            }
+
+            var text = Utf8WithoutBom.GetString(buffer, 0, read);
+            if (count < length)
+            {
+                var lastNewline = text.LastIndexOf('\n');
+                text = lastNewline >= 0 ? text[..lastNewline] : string.Empty;
+            }
+
+            return text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
     private async Task AppendLinesAsync(
         string path,
         IReadOnlyList<string> lines,
@@ -545,29 +654,9 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
             ?? throw new InvalidOperationException($"Path '{path}' did not resolve to a parent directory.");
         Directory.CreateDirectory(directory);
 
-        var pathLock = GetPathLock(path);
-        await pathLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await using var stream = new FileStream(
-                path,
-                FileMode.Append,
-                FileAccess.Write,
-                FileShare.Read,
-                bufferSize: 4096,
-                useAsync: true);
-            await using var writer = new StreamWriter(stream, Utf8WithoutBom);
-            foreach (var line in lines)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await writer.WriteLineAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            pathLock.Release();
-            InvalidateMetadataProjectionCache(path);
-        }
+        await _journalFile.AppendLinesAsync(path, lines, Utf8WithoutBom, cancellationToken)
+            .ConfigureAwait(false);
+        InvalidateMetadataProjectionCache(path);
     }
 
     private static FileStamp? GetFileStamp(string path)
@@ -578,74 +667,8 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
             : null;
     }
 
-    private static void InvalidateMetadataProjectionCache(string path)
-        => MetadataProjectionCache.TryRemove(Path.GetFullPath(path), out _);
-
-    private async Task WriteFileAtomicallyAsync(
-        string path,
-        string content,
-        CancellationToken cancellationToken)
-    {
-        var directory = Path.GetDirectoryName(path)
-            ?? throw new InvalidOperationException($"Path '{path}' did not resolve to a parent directory.");
-        Directory.CreateDirectory(directory);
-
-        var pathLock = GetPathLock(path);
-        await pathLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var tempPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
-            try
-            {
-                await File.WriteAllTextAsync(tempPath, content, Utf8WithoutBom, cancellationToken).ConfigureAwait(false);
-
-                if (File.Exists(path))
-                {
-                    try
-                    {
-                        File.Replace(tempPath, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
-                    }
-                    catch (PlatformNotSupportedException)
-                    {
-                        File.Move(tempPath, path, overwrite: true);
-                    }
-                }
-                else
-                {
-                    File.Move(tempPath, path);
-                }
-            }
-            finally
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
-        }
-        finally
-        {
-            pathLock.Release();
-        }
-    }
-
-    private SemaphoreSlim GetPathLock(string path)
-        => _pathLocks.GetOrAdd(path, static _ => new SemaphoreSlim(initialCount: 1, maxCount: 1));
-
-    private static async Task<T?> ReadJsonFileAsync<T>(
-        string path,
-        JsonTypeInfo<T> typeInfo,
-        CancellationToken cancellationToken)
-    {
-        await using var stream = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite,
-            bufferSize: 4096,
-            useAsync: true);
-        return await JsonSerializer.DeserializeAsync(stream, typeInfo, cancellationToken).ConfigureAwait(false);
-    }
+    private void InvalidateMetadataProjectionCache(string path)
+        => _metadataProjectionCache.TryRemove(Path.GetFullPath(path), out _);
 
     private static bool MatchesScope(LocalAgentSessionSummary summary, string protocolFamily, string providerKey)
     {

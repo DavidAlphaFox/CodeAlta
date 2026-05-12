@@ -1,8 +1,10 @@
 using CodeAlta.Agent;
+using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Catalog;
 using CodeAlta.Catalog.Bootstrap;
 using CodeAlta.Catalog.Skills;
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace CodeAlta.Catalog.Tests;
 
@@ -474,6 +476,172 @@ public sealed class CatalogInfrastructureTests
     }
 
     [TestMethod]
+    public async Task WorkThreadJournalStore_ImmutableHeaderOmitsDerivedStateFields()
+    {
+        using var root = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var catalog = new WorkThreadCatalog(options);
+        var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
+        var thread = new WorkThreadDescriptor
+        {
+            ThreadId = "thread-header-test",
+            Kind = WorkThreadKind.ProjectThread,
+            BackendId = "codex",
+            ProviderKey = "codex",
+            ProjectRef = Guid.CreateVersion7().ToString(),
+            ParentThreadId = "thread-parent",
+            WorkingDirectory = @"C:\code\repo-main",
+            Title = "Header test",
+            Status = WorkThreadStatus.Active,
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt.AddMinutes(5),
+            LastActiveAt = createdAt.AddMinutes(10),
+            LatestSummary = "Later summary",
+            MessageCount = 42,
+        };
+
+        await catalog.JournalStore.EnsureHeaderAsync(thread).ConfigureAwait(false);
+        await catalog.JournalStore.AppendStateAsync(thread, new WorkThreadLocalState { MessageCount = 42 }).ConfigureAwait(false);
+
+        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(thread.ThreadId, thread.CreatedAt);
+        var firstLine = File.ReadLines(path).First();
+        using var document = JsonDocument.Parse(firstLine);
+        Assert.AreEqual(WorkThreadJournalStore.ThreadHeaderEventType, document.RootElement.GetProperty("backendEventType").GetString());
+        var raw = document.RootElement.GetProperty("raw");
+        Assert.IsFalse(raw.TryGetProperty("updated_at", out _));
+        Assert.IsFalse(raw.TryGetProperty("last_active_at", out _));
+        Assert.IsFalse(raw.TryGetProperty("latest_summary", out _));
+        Assert.IsFalse(raw.TryGetProperty("message_count", out _));
+        Assert.IsFalse(raw.TryGetProperty("model_id", out _));
+        Assert.IsFalse(raw.TryGetProperty("reasoning_effort", out _));
+        Assert.AreEqual("thread-parent", raw.GetProperty("parent_thread_id").GetString());
+    }
+
+    [TestMethod]
+    public async Task WorkThreadJournalStore_ConcurrentBackendAndCatalogWrites_DoNotThrow()
+    {
+        using var root = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var catalog = new WorkThreadCatalog(options);
+        var sessionStore = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(options.GlobalRoot));
+        var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
+        var thread = new WorkThreadDescriptor
+        {
+            ThreadId = "thread-concurrent-log-test",
+            Kind = WorkThreadKind.ProjectThread,
+            BackendId = "codex",
+            ProviderKey = "codex",
+            WorkingDirectory = @"C:\code\repo-main",
+            Title = "Concurrent log test",
+            Status = WorkThreadStatus.Active,
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt,
+            LastActiveAt = createdAt,
+        };
+
+        var writes = Enumerable.Range(0, 40)
+            .Select(index => index % 2 == 0
+                ? sessionStore.UpsertSessionAsync(
+                    new LocalAgentSessionSummary
+                    {
+                        SessionId = thread.ThreadId,
+                        BackendId = new AgentBackendId(thread.BackendId),
+                        ProtocolFamily = "local",
+                        ProviderKey = "codex",
+                        CreatedAt = createdAt,
+                        UpdatedAt = createdAt.AddSeconds(index),
+                    })
+                : catalog.JournalStore.AppendStateAsync(thread, new WorkThreadLocalState { MessageCount = index }))
+            .ToArray();
+
+        await Task.WhenAll(writes).ConfigureAwait(false);
+
+        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(thread.ThreadId, thread.CreatedAt);
+        var lines = File.ReadLines(path).ToArray();
+        Assert.AreEqual(41, lines.Length);
+        using var firstLine = JsonDocument.Parse(lines[0]);
+        Assert.AreEqual(WorkThreadJournalStore.ThreadHeaderEventType, firstLine.RootElement.GetProperty("backendEventType").GetString());
+    }
+
+    [TestMethod]
+    public async Task WorkThreadJournalStore_PrependsHeaderWhenBackendCreatedJournalFirst()
+    {
+        using var root = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var catalog = new WorkThreadCatalog(options);
+        var sessionStore = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(options.GlobalRoot));
+        var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
+        var thread = new WorkThreadDescriptor
+        {
+            ThreadId = "thread-backend-first-test",
+            Kind = WorkThreadKind.ProjectThread,
+            BackendId = "codex",
+            ProviderKey = "codex",
+            WorkingDirectory = @"C:\code\repo-main",
+            Title = "Backend first test",
+            Status = WorkThreadStatus.Active,
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt,
+            LastActiveAt = createdAt,
+        };
+
+        await sessionStore.UpsertSessionAsync(
+                new LocalAgentSessionSummary
+                {
+                    SessionId = thread.ThreadId,
+                    BackendId = new AgentBackendId(thread.BackendId),
+                    ProtocolFamily = "local",
+                    ProviderKey = "codex",
+                    CreatedAt = createdAt,
+                    UpdatedAt = createdAt,
+                })
+            .ConfigureAwait(false);
+
+        await catalog.JournalStore.AppendStateAsync(thread, new WorkThreadLocalState { MessageCount = 7 }).ConfigureAwait(false);
+
+        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(thread.ThreadId, thread.CreatedAt);
+        var lines = File.ReadLines(path).ToArray();
+        Assert.AreEqual(3, lines.Length);
+        using var firstLine = JsonDocument.Parse(lines[0]);
+        Assert.AreEqual(WorkThreadJournalStore.ThreadHeaderEventType, firstLine.RootElement.GetProperty("backendEventType").GetString());
+        var latestState = await catalog.JournalStore.ReadLatestStateAsync(thread.ThreadId, thread.CreatedAt).ConfigureAwait(false);
+        Assert.IsNotNull(latestState);
+        Assert.AreEqual(7, latestState.MessageCount);
+    }
+
+    [TestMethod]
+    public async Task WorkThreadJournalStore_ReadLatestStateFindsStateBeyondInitialTailProbe()
+    {
+        using var root = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var catalog = new WorkThreadCatalog(options);
+        var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
+        var thread = new WorkThreadDescriptor
+        {
+            ThreadId = "thread-tail-probe-test",
+            Kind = WorkThreadKind.ProjectThread,
+            BackendId = "codex",
+            ProviderKey = "codex",
+            WorkingDirectory = @"C:\code\repo-main",
+            Title = "Tail probe test",
+            Status = WorkThreadStatus.Active,
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt,
+            LastActiveAt = createdAt,
+        };
+
+        await catalog.JournalStore.AppendStateAsync(thread, new WorkThreadLocalState { MessageCount = 99 }).ConfigureAwait(false);
+        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(thread.ThreadId, thread.CreatedAt);
+        var padding = new string('x', 70 * 1024);
+        await File.AppendAllTextAsync(path, $"{{\"$type\":\"raw\",\"backendId\":\"codex\",\"sessionId\":\"{thread.ThreadId}\",\"timestamp\":\"{createdAt:O}\",\"backendEventType\":\"padding\",\"raw\":{{\"value\":\"{padding}\"}}}}{Environment.NewLine}").ConfigureAwait(false);
+
+        var latestState = await catalog.JournalStore.ReadLatestStateAsync(thread.ThreadId, thread.CreatedAt).ConfigureAwait(false);
+
+        Assert.IsNotNull(latestState);
+        Assert.AreEqual(99, latestState.MessageCount);
+    }
+
+    [TestMethod]
     public async Task WorkThreadCatalog_ViewStateRoundTrip_Works()
     {
         using var root = TempDirectory.Create();
@@ -485,10 +653,11 @@ public sealed class CatalogInfrastructureTests
             Selection = WorkThreadSelectionState.Thread("platform-search-review", "project-1"),
             SelectedThreadId = "platform-search-review",
             UpdatedAt = new DateTimeOffset(2026, 03, 10, 13, 0, 0, TimeSpan.Zero),
-            ThreadPreferences = new Dictionary<string, WorkThreadPreference>(StringComparer.OrdinalIgnoreCase)
+            ProjectPreferences = new Dictionary<string, WorkThreadPreference>(StringComparer.OrdinalIgnoreCase)
             {
-                ["platform-search-review"] = new WorkThreadPreference
+                ["project-1"] = new WorkThreadPreference
                 {
+                    ProviderKey = "zai",
                     ModelId = "gpt-5.4",
                     ReasoningEffort = AgentReasoningEffort.High,
                 },
@@ -526,21 +695,13 @@ public sealed class CatalogInfrastructureTests
         Assert.AreEqual("platform-search-review", reloaded.Selection.ThreadId);
         Assert.AreEqual("project-1", reloaded.Selection.ProjectId);
         Assert.AreEqual(viewState.SelectedThreadId, reloaded.SelectedThreadId);
-        Assert.AreEqual("gpt-5.4", reloaded.ThreadPreferences["platform-search-review"].ModelId);
-        Assert.AreEqual(AgentReasoningEffort.High, reloaded.ThreadPreferences["platform-search-review"].ReasoningEffort);
+        Assert.AreEqual("zai", reloaded.ProjectPreferences["project-1"].ProviderKey);
+        Assert.AreEqual("gpt-5.4", reloaded.ProjectPreferences["project-1"].ModelId);
+        Assert.AreEqual(AgentReasoningEffort.High, reloaded.ProjectPreferences["project-1"].ReasoningEffort);
         Assert.AreEqual(NavigatorProjectSortMode.Date, reloaded.Navigator.SortMode);
         Assert.AreEqual(8, reloaded.Navigator.RecentThreadsPerProject);
-        Assert.IsTrue(reloaded.ThreadStates["platform-search-review"].Archived);
-        Assert.AreEqual(42, reloaded.ThreadStates["platform-search-review"].MessageCount);
-        Assert.AreEqual("codex:parent", reloaded.ThreadStates["platform-search-review"].ParentThreadId);
-        var createdBy = reloaded.ThreadStates["platform-search-review"].CreatedBy;
-        if (createdBy is null)
-        {
-            Assert.Fail("Expected thread provenance to round-trip through view state.");
-        }
-
-        Assert.AreEqual("agent", createdBy.Kind);
-        Assert.AreEqual("correlation-viewstate", createdBy.CorrelationId);
+        Assert.AreEqual(0, reloaded.ThreadPreferences.Count);
+        Assert.AreEqual(0, reloaded.ThreadStates.Count);
     }
 
     [TestMethod]

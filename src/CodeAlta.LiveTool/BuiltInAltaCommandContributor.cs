@@ -2387,8 +2387,8 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
     private static AltaModelSelection CreateModelSelection(WorkThreadDescriptor thread, WorkThreadPreference? preference)
     {
         var providerKey = thread.ResolvedProviderKey;
-        var modelId = preference?.ModelId;
-        var reasoning = preference?.ReasoningEffort;
+        var modelId = preference?.ModelId ?? thread.ModelId;
+        var reasoning = preference?.ReasoningEffort ?? thread.ReasoningEffort;
         return new AltaModelSelection
         {
             ProviderKey = providerKey,
@@ -2545,22 +2545,39 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             return;
         }
 
-        var viewState = await threadCatalog.LoadViewStateAsync(context.CancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(selection.ModelId) && selection.ReasoningEffort is null)
+        var header = (await threadCatalog.JournalStore.ListHeadersAsync(context.CancellationToken).ConfigureAwait(false))
+            .FirstOrDefault(candidate => string.Equals(candidate.ThreadId, threadId, StringComparison.OrdinalIgnoreCase));
+        if (header is null)
         {
-            viewState.ThreadPreferences.Remove(threadId);
-        }
-        else
-        {
-            viewState.ThreadPreferences[threadId] = new WorkThreadPreference
-            {
-                ModelId = selection.ModelId,
-                ReasoningEffort = selection.ReasoningEffort,
-            };
+            return;
         }
 
-        viewState.UpdatedAt = DateTimeOffset.UtcNow;
-        await threadCatalog.SaveViewStateAsync(viewState, context.CancellationToken).ConfigureAwait(false);
+        var state = await threadCatalog.JournalStore
+            .ReadLatestStateAsync(threadId, header.CreatedAt, context.CancellationToken)
+            .ConfigureAwait(false) ?? new WorkThreadLocalState();
+        state.ProviderKey = selection.ProviderKey;
+        state.ModelId = selection.ModelId;
+        state.ReasoningEffort = selection.ReasoningEffort;
+        await threadCatalog.JournalStore.AppendStateAsync(header.ToDescriptor(), state, context.CancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<WorkThreadLocalState?> TryReadThreadJournalStateAsync(
+        WorkThreadCatalog threadCatalog,
+        string threadId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var header = (await threadCatalog.JournalStore.ListHeadersAsync(cancellationToken).ConfigureAwait(false))
+                .FirstOrDefault(candidate => string.Equals(candidate.ThreadId, threadId, StringComparison.OrdinalIgnoreCase));
+            return header is null
+                ? null
+                : await threadCatalog.JournalStore.ReadLatestStateAsync(threadId, header.CreatedAt, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 
     private static async Task PersistPromptProvenanceAsync(
@@ -2576,10 +2593,21 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             return;
         }
 
-        var viewState = await threadCatalog.LoadViewStateAsync(context.CancellationToken).ConfigureAwait(false);
-        var localState = viewState.ThreadStates.TryGetValue(thread.ThreadId, out var existingState)
-            ? existingState
-            : new WorkThreadLocalState();
+        WorkThreadLocalState? localState = null;
+        try
+        {
+            localState = await threadCatalog.JournalStore
+                .ReadLatestStateAsync(thread.ThreadId, thread.CreatedAt, context.CancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Text.Json.JsonException)
+        {
+        }
+
+        localState ??= new WorkThreadLocalState();
+        localState.ProviderKey = thread.ResolvedProviderKey;
+        localState.ModelId = thread.ModelId;
+        localState.ReasoningEffort = thread.ReasoningEffort;
         localState.Archived = thread.Status == WorkThreadStatus.Archived;
         localState.MessageCount = thread.MessageCount;
         localState.ParentThreadId = thread.ParentThreadId;
@@ -2602,9 +2630,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             localState.PromptProvenance.RemoveRange(0, localState.PromptProvenance.Count - MaxPromptProvenanceRecords);
         }
 
-        viewState.ThreadStates[thread.ThreadId] = localState;
-        viewState.UpdatedAt = DateTimeOffset.UtcNow;
-        await threadCatalog.SaveViewStateAsync(viewState, context.CancellationToken).ConfigureAwait(false);
+        await threadCatalog.JournalStore.AppendStateAsync(thread, localState, context.CancellationToken).ConfigureAwait(false);
     }
 
     private static bool IsAgentCaller(AltaCommandContext context)

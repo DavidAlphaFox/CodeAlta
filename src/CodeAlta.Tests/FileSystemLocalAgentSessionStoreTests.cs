@@ -146,6 +146,37 @@ public sealed class FileSystemLocalAgentSessionStoreTests
         Assert.AreEqual("resp_cached", refreshedState.ProviderSessionId);
     }
 
+    [TestMethod]
+    public async Task ListSessionsAsync_UsesMetadataProbeWithoutParsingWholeJournal()
+    {
+        using var temp = TestTempDirectory.Create();
+        var layout = new LocalAgentRuntimePathLayout(temp.Path);
+        var store = new FileSystemLocalAgentSessionStore(layout);
+        var session = CreateSession("session-metadata-probe", createdAt: "2026-04-06T10:00:00+00:00", updatedAt: "2026-04-06T10:00:00+00:00");
+        var sessionFile = layout.GetSessionFilePath(session.SessionId, session.CreatedAt);
+        Directory.CreateDirectory(Path.GetDirectoryName(sessionFile)!);
+        await File.WriteAllTextAsync(
+                sessionFile,
+                $"{{\"$type\":\"raw\",\"backendEventType\":\"codealta.threadHeader\",\"raw\":{{\"thread_id\":\"{session.SessionId}\"}}}}{Environment.NewLine}")
+            .ConfigureAwait(false);
+        await store.UpsertSessionAsync(session).ConfigureAwait(false);
+
+        var padding = new string('x', 300 * 1024);
+        await File.AppendAllTextAsync(
+                sessionFile,
+                $"{{not-json}}{Environment.NewLine}{{\"$type\":\"raw\",\"backendEventType\":\"padding\",\"raw\":{{\"value\":\"{padding}\"}}}}{Environment.NewLine}")
+            .ConfigureAwait(false);
+
+        var updatedSession = session with { UpdatedAt = DateTimeOffset.Parse("2026-04-06T12:00:00+00:00") };
+        await store.UpsertSessionAsync(updatedSession).ConfigureAwait(false);
+
+        var sessions = await store.ListSessionsAsync("openai", "openai").ConfigureAwait(false);
+
+        Assert.AreEqual(1, sessions.Count);
+        Assert.AreEqual("session-metadata-probe", sessions[0].SessionId);
+        Assert.AreEqual(DateTimeOffset.Parse("2026-04-06T12:00:00+00:00"), sessions[0].UpdatedAt);
+    }
+
     private static LocalAgentSessionSummary CreateSession(string sessionId, string createdAt, string updatedAt)
     {
         using var metadata = JsonDocument.Parse("""{"profile":"default"}""");

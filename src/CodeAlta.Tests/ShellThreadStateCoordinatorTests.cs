@@ -23,6 +23,9 @@ public sealed class ShellThreadStateCoordinatorTests
             {
                 ["thread-1"] = new WorkThreadLocalState
                 {
+                    ProviderKey = "zai",
+                    ModelId = "glm-5.1",
+                    ReasoningEffort = AgentReasoningEffort.High,
                     Archived = true,
                     MessageCount = 12,
                 },
@@ -32,12 +35,16 @@ public sealed class ShellThreadStateCoordinatorTests
         coordinator.ApplyRecoveredCatalogState([], [CreateThread("thread-1")]);
 
         var thread = coordinator.Threads.Single();
+        Assert.AreEqual("zai", thread.BackendId);
+        Assert.AreEqual("zai", thread.ProviderKey);
+        Assert.AreEqual("glm-5.1", thread.ModelId);
+        Assert.AreEqual(AgentReasoningEffort.High, thread.ReasoningEffort);
         Assert.AreEqual(WorkThreadStatus.Archived, thread.Status);
         Assert.AreEqual(12, thread.MessageCount);
     }
 
     [TestMethod]
-    public async Task PersistThreadLocalStateAsync_StoresArchivedAndMessageCountInViewState()
+    public async Task PersistThreadLocalStateAsync_AppendsArchivedAndMessageCountToJournalState()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
@@ -46,13 +53,21 @@ public sealed class ShellThreadStateCoordinatorTests
         coordinator.ViewState = new WorkThreadViewState();
 
         var thread = CreateThread("thread-1");
+        thread.ProviderKey = "zai";
+        thread.BackendId = "zai";
+        thread.ModelId = "glm-5.1";
+        thread.ReasoningEffort = AgentReasoningEffort.High;
         thread.Status = WorkThreadStatus.Archived;
         thread.MessageCount = 6;
         await coordinator.PersistThreadLocalStateAsync(thread).ConfigureAwait(false);
 
-        var reloaded = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
-        Assert.IsTrue(reloaded.ThreadStates["thread-1"].Archived);
-        Assert.AreEqual(6, reloaded.ThreadStates["thread-1"].MessageCount);
+        var reloaded = await threadCatalog.JournalStore.ReadLatestStateAsync(thread.ThreadId, thread.CreatedAt).ConfigureAwait(false);
+        Assert.IsNotNull(reloaded);
+        Assert.AreEqual("zai", reloaded.ProviderKey);
+        Assert.AreEqual("glm-5.1", reloaded.ModelId);
+        Assert.AreEqual(AgentReasoningEffort.High, reloaded.ReasoningEffort);
+        Assert.IsTrue(reloaded.Archived);
+        Assert.AreEqual(6, reloaded.MessageCount);
     }
 
     [TestMethod]
@@ -622,7 +637,7 @@ public sealed class ShellThreadStateCoordinatorTests
 
         var persistedViewState = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
         Assert.IsFalse(persistedViewState.ThreadStates.ContainsKey("thread-1"));
-        Assert.IsTrue(persistedViewState.ThreadStates.ContainsKey("thread-2"));
+        Assert.IsFalse(persistedViewState.ThreadStates.ContainsKey("thread-2"));
     }
 
     [TestMethod]

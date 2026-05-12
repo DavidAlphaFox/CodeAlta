@@ -39,7 +39,7 @@ internal sealed class ShellCatalogStateCoordinator
         var projects = await _projectCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
         var threads = await _threadCatalog.LoadInternalAsync(cancellationToken).ConfigureAwait(false);
         var viewState = await _viewStateCoordinator.LoadViewStateAsync(cancellationToken).ConfigureAwait(false);
-        _viewStateCoordinator.ApplyThreadLocalState(threads, viewState);
+        await _viewStateCoordinator.ApplyThreadLocalStateAsync(threads, viewState, cancellationToken: cancellationToken).ConfigureAwait(false);
         return new ShellThreadStateCoordinator.InitialCatalogState(projects, threads, viewState);
     }
 
@@ -63,7 +63,7 @@ internal sealed class ShellCatalogStateCoordinator
         ArgumentNullException.ThrowIfNull(viewState);
 
         _projects = projects;
-        _threads = _viewStateCoordinator.ApplyThreadLocalState(threads, viewState);
+        _threads = _viewStateCoordinator.ApplyThreadLocalState(threads, viewState, readJournal: false);
         if (pruneMissingThreads)
         {
             _OpenThreadStateStore.PruneRetainedThreadState(_threads);

@@ -9,6 +9,8 @@ namespace CodeAlta.App;
 
 internal sealed class ModelProviderPreferenceCoordinator
 {
+    public const string GlobalProjectPreferenceKey = "4b03e143-8c55-4bcb-a08d-6fc2f99f1b2a";
+
     private readonly CodeAltaConfigStore _configStore;
     private readonly Logger _logger;
     private readonly Dictionary<string, DraftModelProviderPreference> _draftPreferencesByScope = new(StringComparer.OrdinalIgnoreCase);
@@ -22,31 +24,46 @@ internal sealed class ModelProviderPreferenceCoordinator
         _logger = logger;
     }
 
-    public void ApplyDraftModelProviderPreference(ChatBackendState backendState, string? draftProjectRoot)
+    public void ApplyDraftModelProviderPreference(
+        ChatBackendState backendState,
+        WorkThreadViewState viewState,
+        string? draftProjectRoot,
+        string? draftProjectId)
     {
         ArgumentNullException.ThrowIfNull(backendState);
+        ArgumentNullException.ThrowIfNull(viewState);
 
         var scopeKey = BuildDraftScopeKey(draftProjectRoot);
+        var projectPreferenceKey = BuildProjectPreferenceKey(draftProjectId);
         var defaults = _configStore.GetEffectiveProviderPreference(backendState.BackendId.Value, draftProjectRoot);
         _draftPreferencesByScope.TryGetValue(scopeKey, out var draftPreference);
+        viewState.ProjectPreferences.TryGetValue(projectPreferenceKey, out var projectPreference);
         var preserveCurrentSelection = string.Equals(backendState.DraftScopeKey, scopeKey, StringComparison.OrdinalIgnoreCase);
         var matchingDraftPreference = draftPreference is not null &&
             string.Equals(draftPreference.BackendId.Value, backendState.BackendId.Value, StringComparison.OrdinalIgnoreCase)
                 ? draftPreference
                 : null;
+        var matchingProjectPreference = projectPreference is not null &&
+            string.Equals(projectPreference.ProviderKey, backendState.BackendId.Value, StringComparison.OrdinalIgnoreCase)
+                ? projectPreference
+                : null;
         var preferredModelId = matchingDraftPreference is not null
             ? matchingDraftPreference.ModelId ?? defaults.Model
-            : preserveCurrentSelection
-            ? backendState.SelectedModelId ?? defaults.Model
-            : defaults.Model;
+            : matchingProjectPreference is not null
+                ? matchingProjectPreference.ModelId ?? defaults.Model
+                : preserveCurrentSelection
+                    ? backendState.SelectedModelId ?? defaults.Model
+                    : defaults.Model;
 
         backendState.SelectedModelId = ChatBackendPresentation.ResolvePreferredModelId(backendState.Models, preferredModelId);
         var selectedModel = FindModel(backendState.Models, backendState.SelectedModelId);
         var preferredReasoningEffort = matchingDraftPreference is not null
             ? matchingDraftPreference.ReasoningEffort ?? defaults.ReasoningEffort
-            : preserveCurrentSelection
-            ? backendState.SelectedReasoningEffort ?? defaults.ReasoningEffort
-            : defaults.ReasoningEffort;
+            : matchingProjectPreference is not null
+                ? matchingProjectPreference.ReasoningEffort ?? defaults.ReasoningEffort
+                : preserveCurrentSelection
+                    ? backendState.SelectedReasoningEffort ?? defaults.ReasoningEffort
+                    : defaults.ReasoningEffort;
 
         backendState.SelectedReasoningEffort = ChatBackendPresentation.ResolvePreferredReasoningEffort(selectedModel, preferredReasoningEffort);
         backendState.DraftScopeKey = scopeKey;
@@ -83,12 +100,15 @@ internal sealed class ModelProviderPreferenceCoordinator
     }
 
     public void RememberGlobalModelProviderPreference(
+        WorkThreadViewState viewState,
         AgentBackendId backendId,
         string? modelId,
         AgentReasoningEffort? reasoningEffort,
         string? draftProjectRoot = null,
+        string? draftProjectId = null,
         bool rememberDraftScope = false)
     {
+        ArgumentNullException.ThrowIfNull(viewState);
         var normalizedModelId = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
         if (rememberDraftScope)
         {
@@ -96,16 +116,13 @@ internal sealed class ModelProviderPreferenceCoordinator
                 backendId,
                 normalizedModelId,
                 reasoningEffort);
-        }
-
-        try
-        {
-            _configStore.SaveGlobalDefaultProvider(backendId.Value);
-            _configStore.SaveGlobalProviderPreference(backendId.Value, normalizedModelId, reasoningEffort);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "Failed to save CodeAlta backend preferences.");
+            viewState.ProjectPreferences[BuildProjectPreferenceKey(draftProjectId)] = new WorkThreadPreference
+            {
+                ProviderKey = backendId.Value,
+                ModelId = normalizedModelId,
+                ReasoningEffort = reasoningEffort,
+            };
+            viewState.UpdatedAt = DateTimeOffset.UtcNow;
         }
     }
 
@@ -144,6 +161,9 @@ internal sealed class ModelProviderPreferenceCoordinator
 
     private static string BuildDraftScopeKey(string? draftProjectRoot)
         => draftProjectRoot ?? "__global__";
+
+    private static string BuildProjectPreferenceKey(string? projectId)
+        => string.IsNullOrWhiteSpace(projectId) ? GlobalProjectPreferenceKey : projectId.Trim();
 
     private sealed record DraftModelProviderPreference(
         AgentBackendId BackendId,

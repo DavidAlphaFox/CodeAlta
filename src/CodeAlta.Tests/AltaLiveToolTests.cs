@@ -581,8 +581,8 @@ public sealed class AltaLiveToolTests
             line.GetProperty("path").GetString() == "plugin-spawn");
         Assert.IsTrue(pluginPolicy.GetProperty("isMutating").GetBoolean());
         Assert.AreEqual(AltaExitCodes.Success, result.ExitCode);
-        var viewState = await new WorkThreadCatalog(options).LoadViewStateAsync().ConfigureAwait(false);
-        var createdState = viewState.ThreadStates.Values.Single();
+        var createdHeader = (await new WorkThreadCatalog(options).JournalStore.ListHeadersAsync().ConfigureAwait(false)).Single();
+        var createdState = await ReadJournalStateAsync(new WorkThreadCatalog(options), createdHeader.ThreadId).ConfigureAwait(false);
         Assert.AreEqual("plugin", createdState.CreatedBy?.Kind);
         Assert.AreEqual("creator-plugin", createdState.CreatedBy?.PluginRuntimeKey);
         Assert.AreEqual(project.Id, createdState.CreatedBy?.SourceProjectId);
@@ -717,8 +717,8 @@ public sealed class AltaLiveToolTests
 
         Assert.AreEqual(AltaExitCodes.Success, result.ExitCode);
         Assert.AreEqual("plugin prompt", ExtractText(backend.SentOptions.Single().Input));
-        var viewState = await new WorkThreadCatalog(options).LoadViewStateAsync().ConfigureAwait(false);
-        var provenance = viewState.ThreadStates[targetThreadId!].PromptProvenance.Single();
+        var state = await ReadJournalStateAsync(new WorkThreadCatalog(options), targetThreadId!).ConfigureAwait(false);
+        var provenance = state.PromptProvenance.Single();
         Assert.IsFalse(provenance.Queued);
         Assert.AreEqual("send", provenance.Kind);
         Assert.AreEqual("plugin", provenance.SubmittedBy?.Kind);
@@ -761,25 +761,28 @@ public sealed class AltaLiveToolTests
                     ReasoningEffort = AgentReasoningEffort.Low,
                 },
             },
-            ThreadStates =
-            {
-                [child.ThreadId] = new WorkThreadLocalState
-                {
-                    ParentThreadId = parent.ThreadId,
-                    CreatedBy = new AltaActorProvenance
-                    {
-                        Kind = "agent",
-                        SourceThreadId = parent.ThreadId,
-                        SourceProjectId = project.Id,
-                        SourceAgentId = "agent:parent",
-                        CorrelationId = "correlation-child",
-                        CreatedAt = createdAt.AddMinutes(1),
-                    },
-                    MessageCount = 7,
-                },
-                [archived.ThreadId] = new WorkThreadLocalState { Archived = true },
-            },
         }).ConfigureAwait(false);
+        await AppendJournalStateAsync(threadCatalog, child, new WorkThreadLocalState
+        {
+            ParentThreadId = parent.ThreadId,
+            CreatedBy = new AltaActorProvenance
+            {
+                Kind = "agent",
+                SourceThreadId = parent.ThreadId,
+                SourceProjectId = project.Id,
+                SourceAgentId = "agent:parent",
+                CorrelationId = "correlation-child",
+                CreatedAt = createdAt.AddMinutes(1),
+            },
+            MessageCount = 7,
+        }).ConfigureAwait(false);
+        await AppendJournalStateAsync(threadCatalog, parent, new WorkThreadLocalState
+        {
+            ProviderKey = AgentBackendIds.Codex.Value,
+            ModelId = "gpt-test",
+            ReasoningEffort = AgentReasoningEffort.Low,
+        }).ConfigureAwait(false);
+        await AppendJournalStateAsync(threadCatalog, archived, new WorkThreadLocalState { Archived = true }).ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
             .Add(options)
             .Add(projectCatalog)
@@ -850,13 +853,7 @@ public sealed class AltaLiveToolTests
         await runtime.SendAsync(runningThread, executionOptions, new AgentSendOptions { Input = AgentInput.Text("keep running") }).ConfigureAwait(false);
 
         var threadCatalog = new WorkThreadCatalog(options);
-        await threadCatalog.SaveViewStateAsync(new WorkThreadViewState
-        {
-            ThreadStates =
-            {
-                [archivedThread.ThreadId] = new WorkThreadLocalState { Archived = true },
-            },
-        }).ConfigureAwait(false);
+        await AppendJournalStateAsync(threadCatalog, archivedThread, new WorkThreadLocalState { Archived = true }).ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
             .Add(options)
             .Add(new ProjectCatalog(options))
@@ -1301,9 +1298,9 @@ public sealed class AltaLiveToolTests
         Assert.AreEqual(project.Id, materializedEvent.Thread.ProjectRef);
         Assert.AreEqual(parentThreadId, materializedEvent.Thread.ParentThreadId);
         Assert.AreEqual("agent", materializedEvent.Thread.CreatedBy?.Kind);
-        var viewState = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
-        Assert.AreEqual("gpt-parent", viewState.ThreadPreferences[childThreadId].ModelId);
-        Assert.AreEqual(AgentReasoningEffort.High, viewState.ThreadPreferences[childThreadId].ReasoningEffort);
+        var childState = await ReadJournalStateAsync(threadCatalog, childThreadId).ConfigureAwait(false);
+        Assert.AreEqual("gpt-parent", childState.ModelId);
+        Assert.AreEqual(AgentReasoningEffort.High, childState.ReasoningEffort);
     }
 
     [TestMethod]
@@ -1371,16 +1368,11 @@ public sealed class AltaLiveToolTests
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
         };
         var sourceThread = await runtime.CreateGlobalThreadAsync(executionOptions, "Source").ConfigureAwait(false);
-        await threadCatalog.SaveViewStateAsync(new WorkThreadViewState
+        await AppendJournalStateAsync(threadCatalog, sourceThread, new WorkThreadLocalState
         {
-            ThreadPreferences =
-            {
-                [sourceThread.ThreadId] = new WorkThreadPreference
-                {
-                    ModelId = "gpt-caller",
-                    ReasoningEffort = AgentReasoningEffort.High,
-                },
-            },
+            ProviderKey = backendId.Value,
+            ModelId = "gpt-caller",
+            ReasoningEffort = AgentReasoningEffort.High,
         }).ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
             .Add(options)
@@ -1603,8 +1595,8 @@ public sealed class AltaLiveToolTests
         Assert.AreEqual(1, backend.CompactCount);
         Assert.AreEqual("alta.session.join", ReadJsonLines(join.Stdout).Single(line => line.GetProperty("type").GetString() == "alta.session.join").GetProperty("type").GetString());
 
-        var viewState = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
-        var provenance = viewState.ThreadStates[threadId].PromptProvenance;
+        var state = await ReadJournalStateAsync(threadCatalog, threadId).ConfigureAwait(false);
+        var provenance = state.PromptProvenance;
         CollectionAssert.AreEqual(new[] { "send", "steer", "message", "request" }, provenance.Select(static item => item.Kind).ToArray());
         Assert.IsTrue(provenance.All(static item => item.SubmittedBy?.Kind == "agent"));
     }
@@ -1657,8 +1649,8 @@ public sealed class AltaLiveToolTests
         StringAssert.Contains(final, "final result");
         Assert.IsFalse(final.Contains("<notify-parent>", StringComparison.OrdinalIgnoreCase));
 
-        var viewState = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
-        var provenance = viewState.ThreadStates[parent.ThreadId].PromptProvenance;
+        var state = await ReadJournalStateAsync(threadCatalog, parent.ThreadId).ConfigureAwait(false);
+        var provenance = state.PromptProvenance;
         Assert.AreEqual(2, provenance.Count(item => item.Kind == "parent-notify" && item.SubmittedBy?.SourceThreadId == child.ThreadId));
         Assert.IsTrue(provenance.Where(static item => item.Kind == "parent-notify").All(static item => !item.Queued));
     }
@@ -1697,8 +1689,8 @@ public sealed class AltaLiveToolTests
         Assert.AreEqual(0, backend.SteeredOptions.Count);
         StringAssert.Contains(ExtractText(backend.SentOptions[1].Input), "Kind: answer");
         StringAssert.Contains(ExtractText(backend.SentOptions[1].Input), "queued final result");
-        var queuedState = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
-        var queued = queuedState.ThreadStates[parent.ThreadId].QueuedPrompts.Single();
+        var queuedState = await ReadJournalStateAsync(threadCatalog, parent.ThreadId).ConfigureAwait(false);
+        var queued = queuedState.QueuedPrompts.Single();
         Assert.AreEqual("parent-notify", queued.Kind);
         Assert.AreEqual("submitted", queued.State);
         Assert.IsFalse(string.IsNullOrWhiteSpace(queued.RunId));
@@ -1740,8 +1732,8 @@ public sealed class AltaLiveToolTests
         Assert.AreEqual(0, backend.SteeredOptions.Count);
         StringAssert.Contains(ExtractText(backend.SentOptions[1].Input), "Kind: error");
         StringAssert.Contains(ExtractText(backend.SentOptions[1].Input), "Run cancelled before the assistant response completed.");
-        var queuedState = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
-        var queued = queuedState.ThreadStates[parent.ThreadId].QueuedPrompts.Single();
+        var queuedState = await ReadJournalStateAsync(threadCatalog, parent.ThreadId).ConfigureAwait(false);
+        var queued = queuedState.QueuedPrompts.Single();
         Assert.AreEqual("parent-notify", queued.Kind);
         Assert.AreEqual("submitted", queued.State);
         Assert.IsFalse(string.IsNullOrWhiteSpace(queued.RunId));
@@ -1780,8 +1772,7 @@ public sealed class AltaLiveToolTests
         Assert.IsTrue(queuedRecord.TryGetProperty("queueItemId", out var queueItemId));
         Assert.IsFalse(string.IsNullOrWhiteSpace(queueItemId.GetString()));
         Assert.AreEqual(1, ReadJsonLines(show.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.detail").GetProperty("queuedPromptCount").GetInt32());
-        var viewState = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
-        var state = viewState.ThreadStates[threadId];
+        var state = await ReadJournalStateAsync(threadCatalog, threadId).ConfigureAwait(false);
         var item = state.QueuedPrompts.Single();
         Assert.AreEqual(queueItemId.GetString(), item.QueueItemId);
         Assert.AreEqual("queued", item.State);
@@ -1794,12 +1785,12 @@ public sealed class AltaLiveToolTests
         backend.PublishIdle(ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!, new AgentRunId("run-1"));
         await WaitUntilAsync(() => backend.SentOptions.Count == 2).ConfigureAwait(false);
         Assert.AreEqual("queued prompt", ExtractText(backend.SentOptions[1].Input));
-        var drainedState = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
-        var drainedItem = drainedState.ThreadStates[threadId].QueuedPrompts.Single();
+        var drainedState = await ReadJournalStateAsync(threadCatalog, threadId).ConfigureAwait(false);
+        var drainedItem = drainedState.QueuedPrompts.Single();
         Assert.AreEqual("submitted", drainedItem.State);
         Assert.IsFalse(string.IsNullOrWhiteSpace(drainedItem.RunId));
         Assert.IsNotNull(drainedItem.DrainedAt);
-        Assert.AreEqual(drainedItem.RunId, drainedState.ThreadStates[threadId].PromptProvenance.Single(static entry => entry.Queued).RunId);
+        Assert.AreEqual(drainedItem.RunId, drainedState.PromptProvenance.Single(static entry => entry.Queued).RunId);
     }
 
     [TestMethod]
@@ -2047,8 +2038,8 @@ public sealed class AltaLiveToolTests
 
         Assert.AreEqual(2, backend.SentOptions.Count);
         Assert.AreEqual("queued prompt one", ExtractText(backend.SentOptions[1].Input));
-        var viewState = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
-        var queuedPrompts = viewState.ThreadStates[threadId].QueuedPrompts;
+        var state = await ReadJournalStateAsync(threadCatalog, threadId).ConfigureAwait(false);
+        var queuedPrompts = state.QueuedPrompts;
         Assert.AreEqual("submitted", queuedPrompts[0].State);
         Assert.AreEqual("queued", queuedPrompts[1].State);
     }
@@ -2431,6 +2422,18 @@ public sealed class AltaLiveToolTests
 
         return values;
     }
+
+    private static async Task<WorkThreadLocalState> ReadJournalStateAsync(WorkThreadCatalog catalog, string threadId)
+    {
+        var header = (await catalog.JournalStore.ListHeadersAsync().ConfigureAwait(false))
+            .Single(candidate => string.Equals(candidate.ThreadId, threadId, StringComparison.OrdinalIgnoreCase));
+        var state = await catalog.JournalStore.ReadLatestStateAsync(threadId, header.CreatedAt).ConfigureAwait(false);
+        Assert.IsNotNull(state);
+        return state;
+    }
+
+    private static async Task AppendJournalStateAsync(WorkThreadCatalog catalog, WorkThreadDescriptor thread, WorkThreadLocalState state)
+        => await catalog.JournalStore.AppendStateAsync(thread, state).ConfigureAwait(false);
 
     private static string ExtractText(AgentInput input)
         => ((AgentInputItem.Text)input.Items.Single()).Value;

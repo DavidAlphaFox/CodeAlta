@@ -26,6 +26,7 @@ internal sealed class ThreadHistoryCoordinator
     private readonly Func<WorkThreadDescriptor, OpenThreadState, AgentEvent, Task> _handleAgentEventAsync;
     private readonly Func<WorkThreadDescriptor, Task> _persistThreadLocalStateAsync;
     private readonly Action<OpenThreadState> _notifySessionUsageChanged;
+    private readonly Action<WorkThreadDescriptor, OpenThreadState, IReadOnlyList<AgentEvent>> _projectLoadedHistory;
 
     public ThreadHistoryCoordinator(
         WorkThreadRuntimeService runtimeService,
@@ -39,7 +40,8 @@ internal sealed class ThreadHistoryCoordinator
         Action<OpenThreadState> resetThreadTab,
         Func<WorkThreadDescriptor, OpenThreadState, AgentEvent, Task> handleAgentEventAsync,
         Func<WorkThreadDescriptor, Task> persistThreadLocalStateAsync,
-        Action<OpenThreadState>? notifySessionUsageChanged = null)
+        Action<OpenThreadState>? notifySessionUsageChanged = null,
+        Action<WorkThreadDescriptor, OpenThreadState, IReadOnlyList<AgentEvent>>? projectLoadedHistory = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(ensureThreadTab);
@@ -65,6 +67,7 @@ internal sealed class ThreadHistoryCoordinator
         _handleAgentEventAsync = handleAgentEventAsync;
         _persistThreadLocalStateAsync = persistThreadLocalStateAsync;
         _notifySessionUsageChanged = notifySessionUsageChanged ?? (static _ => { });
+        _projectLoadedHistory = projectLoadedHistory ?? (static (_, _, _) => { });
     }
 
     public async Task EnsureLoadedAsync(WorkThreadDescriptor thread, CancellationToken cancellationToken = default)
@@ -423,11 +426,18 @@ internal sealed class ThreadHistoryCoordinator
             }
 
             tab.Timeline.BeginBufferedHistoryLoad();
+            var renderedEventCount = 0;
             foreach (var @event in plan.EventsToRender)
             {
                 await _handleAgentEventAsync(thread, tab, @event);
+                renderedEventCount++;
+                if (renderedEventCount % 50 == 0)
+                {
+                    await Task.Yield();
+                }
             }
 
+            _projectLoadedHistory(thread, tab, tab.RenderedHistoryEvents);
             tab.Timeline.CompleteInitialBufferedHistory(truncatedHistoryItem);
             tab.Timeline.FlushBufferedHistoryItems();
             tab.HistoryLoaded = true;

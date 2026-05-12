@@ -25,7 +25,13 @@ public sealed class WorkThreadCatalog
 
         _options = options;
         _serializer = serializer ?? new WorkThreadYamlSerializer();
+        JournalStore = new WorkThreadJournalStore(options);
     }
+
+    /// <summary>
+    /// Gets the session journal metadata store.
+    /// </summary>
+    public WorkThreadJournalStore JournalStore { get; }
 
     /// <summary>
     /// Loads all legacy host-owned internal thread records.

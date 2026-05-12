@@ -293,7 +293,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             ResetThreadTab,
             _threadRuntimeEventCoordinator.HandleAgentEventAsync,
             thread => _threadStateCoordinator.PersistThreadLocalStateAsync(thread),
-            tab => _frontendEvents.Publish(new SessionUsageChangedEvent(tab.Thread.ThreadId)));
+            tab => _frontendEvents.Publish(new SessionUsageChangedEvent(tab.Thread.ThreadId)),
+            _threadRuntimeEventCoordinator.ProjectLoadedHistory);
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -318,11 +319,16 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             ? null
             : GetSelectedProject()?.ProjectPath;
 
+    private string? GetDraftProjectId()
+        => _threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true }
+            ? null
+            : GetSelectedProject()?.Id;
+
     private string? GetThreadProjectRoot(WorkThreadDescriptor thread)
         => GetProjectById(thread.ProjectRef)?.ProjectPath;
 
     internal void ApplyDraftModelProviderPreference(ChatBackendState backendState)
-        => _modelProviderPreferences.ApplyDraftModelProviderPreference(backendState, GetDraftProjectRoot());
+        => _modelProviderPreferences.ApplyDraftModelProviderPreference(backendState, _viewState, GetDraftProjectRoot(), GetDraftProjectId());
 
     internal void ApplyThreadPreference(OpenThreadState tab)
         => _modelProviderPreferences.ApplyThreadPreference(tab, _viewState, GetThreadProjectRoot(tab.Thread), _chatBackendStates);
@@ -331,12 +337,17 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         AgentBackendId backendId,
         string? modelId,
         AgentReasoningEffort? reasoningEffort)
-        => _modelProviderPreferences.RememberGlobalModelProviderPreference(
+    {
+        _modelProviderPreferences.RememberGlobalModelProviderPreference(
+            _viewState,
             backendId,
             modelId,
             reasoningEffort,
             GetDraftProjectRoot(),
+            GetDraftProjectId(),
             _threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft);
+        _ = PersistViewStateAsync();
+    }
 
     internal void RememberThreadPreference(
         string threadId,
@@ -345,6 +356,25 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         bool persistNow)
     {
         _modelProviderPreferences.RememberThreadPreference(_viewState, threadId, modelId, reasoningEffort);
+        var tab = _threadStateCoordinator.FindOpenThread(threadId);
+        var thread = tab?.Thread ?? _threadStateCoordinator.FindThread(threadId);
+        if (thread is not null)
+        {
+            var providerKey = tab?.BackendId.Value ?? thread.ResolvedProviderKey;
+            if (!string.IsNullOrWhiteSpace(providerKey))
+            {
+                thread.ProviderKey = providerKey;
+                thread.BackendId = providerKey;
+            }
+
+            thread.ModelId = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
+            thread.ReasoningEffort = reasoningEffort;
+            if (persistNow)
+            {
+                _ = _threadStateCoordinator.PersistThreadLocalStateAsync(thread);
+            }
+        }
+
         if (persistNow)
         {
             _ = PersistViewStateAsync();

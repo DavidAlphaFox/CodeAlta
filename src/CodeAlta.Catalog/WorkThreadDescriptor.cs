@@ -98,6 +98,18 @@ public sealed class WorkThreadDescriptor
     public string? LatestSummary { get; set; }
 
     /// <summary>
+    /// Gets or sets the thread model identifier when known.
+    /// </summary>
+    [JsonPropertyName("model_id")]
+    public string? ModelId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the thread reasoning effort when known.
+    /// </summary>
+    [JsonPropertyName("reasoning_effort")]
+    public CodeAlta.Agent.AgentReasoningEffort? ReasoningEffort { get; set; }
+
+    /// <summary>
     /// Gets or sets the cached number of displayable messages when known.
     /// </summary>
     [JsonPropertyName("message_count")]

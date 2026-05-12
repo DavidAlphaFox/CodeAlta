@@ -135,6 +135,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
         var coordinator = CreateCoordinator(thread, tab, pluginAgentEventObserver: observer);
 
         await coordinator.HandleAgentEventAsync(thread, tab, displayedEvent);
+        coordinator.ProjectLoadedHistory(thread, tab, tab.RenderedHistoryEvents);
         await observer.WaitForProjectionAsync();
 
         CollectionAssert.AreEqual(new[] { displayedEvent }, observer.ProjectedEvents?.ToArray());

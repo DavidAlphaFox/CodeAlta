@@ -52,7 +52,7 @@ internal sealed class AltaSessionQueryService : IAltaSessionQueryService
         var results = new List<AltaSessionInfo>(threads.Count);
         foreach (var thread in threads)
         {
-            var localState = TryGetLocalState(viewState, thread.ThreadId);
+            var localState = await TryGetLocalStateAsync(threadCatalog, viewState, thread, context.CancellationToken).ConfigureAwait(false);
             var preference = TryGetPreference(viewState, thread.ThreadId);
             var isRunning = runtime is not null && await runtime.HasActiveRunAsync(thread, context.CancellationToken).ConfigureAwait(false);
             var hasActiveSession = isRunning || (runtime is not null && await runtime.HasActiveCoordinatorSessionAsync(thread.ThreadId, context.CancellationToken).ConfigureAwait(false));
@@ -76,14 +76,52 @@ internal sealed class AltaSessionQueryService : IAltaSessionQueryService
                 thread.CreatedBy = localState.CreatedBy;
             }
 
+            if (!string.IsNullOrWhiteSpace(localState?.ProviderKey))
+            {
+                thread.ProviderKey = localState.ProviderKey;
+            }
+
+            if (!string.IsNullOrWhiteSpace(localState?.ModelId))
+            {
+                thread.ModelId = localState.ModelId;
+            }
+
+            if (localState?.ReasoningEffort is not null)
+            {
+                thread.ReasoningEffort = localState.ReasoningEffort;
+            }
+
             results.Add(new AltaSessionInfo(thread, localState, preference, isRunning, hasActiveSession, ResolveState(thread, isRunning, hasActiveSession)));
         }
 
         return results;
     }
 
-    private static WorkThreadLocalState? TryGetLocalState(WorkThreadViewState? viewState, string threadId)
-        => viewState is not null && viewState.ThreadStates.TryGetValue(threadId, out var state) ? state : null;
+    private static async Task<WorkThreadLocalState?> TryGetLocalStateAsync(
+        WorkThreadCatalog? threadCatalog,
+        WorkThreadViewState? viewState,
+        WorkThreadDescriptor thread,
+        CancellationToken cancellationToken)
+    {
+        if (threadCatalog is not null)
+        {
+            try
+            {
+                var journalState = await threadCatalog.JournalStore
+                    .ReadLatestStateAsync(thread.ThreadId, thread.CreatedAt, cancellationToken)
+                    .ConfigureAwait(false);
+                if (journalState is not null)
+                {
+                    return journalState;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Text.Json.JsonException)
+            {
+            }
+        }
+
+        return viewState is not null && viewState.ThreadStates.TryGetValue(thread.ThreadId, out var state) ? state : null;
+    }
 
     private static WorkThreadPreference? TryGetPreference(WorkThreadViewState? viewState, string threadId)
         => viewState is not null && viewState.ThreadPreferences.TryGetValue(threadId, out var preference) ? preference : null;

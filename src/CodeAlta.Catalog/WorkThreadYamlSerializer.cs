@@ -74,14 +74,17 @@ public sealed class WorkThreadYamlSerializer
         [JsonPropertyName("updated_at")]
         public DateTimeOffset? UpdatedAt { get; set; }
 
+        [JsonPropertyName("project_preferences")]
+        public Dictionary<string, WorkThreadPreference>? ProjectPreferences { get; set; }
+
         [JsonPropertyName("thread_preferences")]
-        public Dictionary<string, WorkThreadPreference>? ThreadPreferences { get; set; }
+        public Dictionary<string, WorkThreadPreference>? LegacyThreadPreferences { get; set; }
 
         [JsonPropertyName("navigator")]
         public NavigatorSettings? Navigator { get; set; }
 
         [JsonPropertyName("thread_states")]
-        public Dictionary<string, WorkThreadLocalState>? ThreadStates { get; set; }
+        public Dictionary<string, WorkThreadLocalState>? LegacyThreadStates { get; set; }
     }
 
     /// <summary>
@@ -184,15 +187,19 @@ public sealed class WorkThreadYamlSerializer
             Selection = selection,
             SelectedThreadId = selection.Surface == WorkThreadSelectionSurface.Thread ? selection.ThreadId : null,
             UpdatedAt = document.UpdatedAt ?? default,
-            ThreadPreferences = document.ThreadPreferences?.ToDictionary(
+            ProjectPreferences = document.ProjectPreferences?.ToDictionary(
                 static entry => entry.Key,
                 static entry => entry.Value,
                 StringComparer.OrdinalIgnoreCase) ?? new Dictionary<string, WorkThreadPreference>(StringComparer.OrdinalIgnoreCase),
-            Navigator = document.Navigator ?? new NavigatorSettings(),
-            ThreadStates = document.ThreadStates?.ToDictionary(
+            ThreadPreferences = document.LegacyThreadPreferences?.ToDictionary(
+                static entry => entry.Key,
+                static entry => entry.Value,
+                StringComparer.OrdinalIgnoreCase) ?? new Dictionary<string, WorkThreadPreference>(StringComparer.OrdinalIgnoreCase),
+            ThreadStates = document.LegacyThreadStates?.ToDictionary(
                 static entry => entry.Key,
                 static entry => entry.Value,
                 StringComparer.OrdinalIgnoreCase) ?? new Dictionary<string, WorkThreadLocalState>(StringComparer.OrdinalIgnoreCase),
+            Navigator = document.Navigator ?? new NavigatorSettings(),
         };
     }
 
@@ -212,9 +219,8 @@ public sealed class WorkThreadYamlSerializer
                 ? viewState.Selection.ThreadId
                 : null,
             UpdatedAt = viewState.UpdatedAt,
-            ThreadPreferences = viewState.ThreadPreferences,
+            ProjectPreferences = viewState.ProjectPreferences,
             Navigator = viewState.Navigator,
-            ThreadStates = viewState.ThreadStates,
         };
 
         return YamlSerializer.Serialize(document);
