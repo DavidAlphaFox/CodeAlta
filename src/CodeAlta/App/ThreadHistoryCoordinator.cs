@@ -27,6 +27,7 @@ internal sealed class ThreadHistoryCoordinator
     private readonly Func<WorkThreadDescriptor, Task> _persistThreadLocalStateAsync;
     private readonly Action<OpenThreadState> _notifySessionUsageChanged;
     private readonly Action<WorkThreadDescriptor, OpenThreadState, IReadOnlyList<AgentEvent>> _projectLoadedHistory;
+    private readonly Func<Func<Task>, Task> _dispatchToUiAsync;
 
     public ThreadHistoryCoordinator(
         WorkThreadRuntimeService runtimeService,
@@ -41,7 +42,8 @@ internal sealed class ThreadHistoryCoordinator
         Func<WorkThreadDescriptor, OpenThreadState, AgentEvent, Task> handleAgentEventAsync,
         Func<WorkThreadDescriptor, Task> persistThreadLocalStateAsync,
         Action<OpenThreadState>? notifySessionUsageChanged = null,
-        Action<WorkThreadDescriptor, OpenThreadState, IReadOnlyList<AgentEvent>>? projectLoadedHistory = null)
+        Action<WorkThreadDescriptor, OpenThreadState, IReadOnlyList<AgentEvent>>? projectLoadedHistory = null,
+        Func<Func<Task>, Task>? dispatchToUiAsync = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(ensureThreadTab);
@@ -68,6 +70,7 @@ internal sealed class ThreadHistoryCoordinator
         _persistThreadLocalStateAsync = persistThreadLocalStateAsync;
         _notifySessionUsageChanged = notifySessionUsageChanged ?? (static _ => { });
         _projectLoadedHistory = projectLoadedHistory ?? (static (_, _, _) => { });
+        _dispatchToUiAsync = dispatchToUiAsync ?? (static action => action());
     }
 
     public async Task EnsureLoadedAsync(WorkThreadDescriptor thread, CancellationToken cancellationToken = default)
@@ -96,13 +99,13 @@ internal sealed class ThreadHistoryCoordinator
         }
 
         tab.Timeline.ReplaceTruncatedHistoryLoadButton();
-        await RebuildAsync(
+        await Task.Run(
+            () => RebuildAsync(
                 thread,
                 tab,
                 loadOnlyFromLastUserPrompt: false,
                 preferCachedHistory: true,
-                CancellationToken.None)
-            ;
+                CancellationToken.None));
     }
 
     public static bool CanLoadThreadHistory(WorkThreadDescriptor thread)
@@ -367,7 +370,7 @@ internal sealed class ThreadHistoryCoordinator
             return existingTask.WaitAsync(cancellationToken);
         }
 
-        var loadTask = LoadCoreAsync(thread, tab, cancellationToken);
+        var loadTask = Task.Run(() => LoadCoreAsync(thread, tab, cancellationToken));
         tab.HistoryLoadTask = loadTask;
         return loadTask.WaitAsync(cancellationToken);
     }
@@ -393,60 +396,80 @@ internal sealed class ThreadHistoryCoordinator
         bool preferCachedHistory,
         CancellationToken cancellationToken)
     {
-        tab.HistoryLoading = true;
+        IReadOnlyList<AgentEvent>? cachedHistory = null;
+        WorkThreadExecutionOptions? executionOptions = null;
         try
         {
-            _setThreadStatus(
-                tab,
-                loadOnlyFromLastUserPrompt
-                    ? $"Loading thread '{thread.Title}'..."
-                    : $"Loading previous messages from '{thread.Title}'...",
-                true,
-                StatusTone.Info);
+            await _dispatchToUiAsync(
+                    () =>
+                    {
+                        tab.HistoryLoading = true;
+                        _setThreadStatus(
+                            tab,
+                            loadOnlyFromLastUserPrompt
+                                ? $"Loading thread '{thread.Title}'..."
+                                : $"Loading previous messages from '{thread.Title}'...",
+                            true,
+                            StatusTone.Info);
+                        if (preferCachedHistory && tab.HistoryEvents is { Count: > 0 } historyEvents)
+                        {
+                            cachedHistory = historyEvents.ToList();
+                        }
 
-            var history = await GetHistoryAsync(thread, tab, preferCachedHistory, cancellationToken);
+                        executionOptions = _buildExecutionOptions(thread, tab);
+                        return Task.CompletedTask;
+                    })
+                .ConfigureAwait(false);
+
+            var history = await GetHistoryAsync(thread, cachedHistory, executionOptions!, cancellationToken).ConfigureAwait(false);
             thread.MessageCount = CountRenderableMessages(history);
-            await _persistThreadLocalStateAsync(thread);
-            var previousUsage = tab.Usage;
+            await _persistThreadLocalStateAsync(thread).ConfigureAwait(false);
             var recoveredUsage = RecoverUsageFromHistory(history);
-            _resetThreadTab(tab);
-            tab.Usage = recoveredUsage;
-            var usageChanged = !Equals(previousUsage, recoveredUsage);
-
             var plan = loadOnlyFromLastUserPrompt
                 ? CreateInitialLoadPlan(history)
                 : new ThreadHistoryLoadPlan(history, OmittedMessageCount: 0);
-            tab.Session.LastRenderedSystemPromptEvent = FindPriorSystemPromptForFirstRenderedSystemPrompt(history, plan.EventsToRender);
-            DocumentFlowItem? truncatedHistoryItem = null;
-            if (plan.OmittedMessageCount > 0)
-            {
-                truncatedHistoryItem = tab.Timeline.CreateTruncatedHistoryItem(
-                    plan.OmittedMessageCount,
-                    () => _ = LoadEarlierAsync(thread.ThreadId));
-            }
+            await _dispatchToUiAsync(
+                    async () =>
+                    {
+                        tab.HistoryEvents = history.ToList();
+                        var previousUsage = tab.Usage;
+                        _resetThreadTab(tab);
+                        tab.Usage = recoveredUsage;
+                        var usageChanged = !Equals(previousUsage, recoveredUsage);
 
-            tab.Timeline.BeginBufferedHistoryLoad();
-            var renderedEventCount = 0;
-            foreach (var @event in plan.EventsToRender)
-            {
-                await _handleAgentEventAsync(thread, tab, @event);
-                renderedEventCount++;
-                if (renderedEventCount % 50 == 0)
-                {
-                    await Task.Yield();
-                }
-            }
+                        tab.Session.LastRenderedSystemPromptEvent = FindPriorSystemPromptForFirstRenderedSystemPrompt(history, plan.EventsToRender);
+                        DocumentFlowItem? truncatedHistoryItem = null;
+                        if (plan.OmittedMessageCount > 0)
+                        {
+                            truncatedHistoryItem = tab.Timeline.CreateTruncatedHistoryItem(
+                                plan.OmittedMessageCount,
+                                () => _ = LoadEarlierAsync(thread.ThreadId));
+                        }
 
-            _projectLoadedHistory(thread, tab, tab.RenderedHistoryEvents);
-            tab.Timeline.CompleteInitialBufferedHistory(truncatedHistoryItem);
-            tab.Timeline.FlushBufferedHistoryItems();
-            tab.HistoryLoaded = true;
-            if (usageChanged)
-            {
-                _notifySessionUsageChanged(tab);
-            }
+                        tab.Timeline.BeginBufferedHistoryLoad();
+                        var renderedEventCount = 0;
+                        foreach (var @event in plan.EventsToRender)
+                        {
+                            await _handleAgentEventAsync(thread, tab, @event);
+                            renderedEventCount++;
+                            if (renderedEventCount % 25 == 0)
+                            {
+                                await Task.Yield();
+                            }
+                        }
 
-            _clearThreadStatus(tab);
+                        tab.Timeline.CompleteInitialBufferedHistory(truncatedHistoryItem);
+                        tab.Timeline.FlushBufferedHistoryItems();
+                        tab.HistoryLoaded = true;
+                        if (usageChanged)
+                        {
+                            _notifySessionUsageChanged(tab);
+                        }
+
+                        _clearThreadStatus(tab);
+                    })
+                .ConfigureAwait(false);
+            _projectLoadedHistory(thread, tab, plan.EventsToRender);
         }
         catch (Exception ex)
         {
@@ -455,35 +478,45 @@ internal sealed class ThreadHistoryCoordinator
                 CodeAltaApp.UiLogger.Error(ex, $"Failed to load history for thread {thread.ThreadId}");
             }
 
-            _resetThreadTab(tab);
-            tab.Timeline.FlushBufferedHistoryItems();
-            tab.Timeline.RenderFailure($"Failed to load history: {ex.Message}");
-            _setThreadStatus(tab, $"Failed to load '{thread.Title}': {ex.Message}", false, StatusTone.Error);
+            await _dispatchToUiAsync(
+                    () =>
+                    {
+                        _resetThreadTab(tab);
+                        tab.Timeline.FlushBufferedHistoryItems();
+                        tab.Timeline.RenderFailure($"Failed to load history: {ex.Message}");
+                        _setThreadStatus(tab, $"Failed to load '{thread.Title}': {ex.Message}", false, StatusTone.Error);
+                        return Task.CompletedTask;
+                    })
+                .ConfigureAwait(false);
         }
         finally
         {
-            tab.HistoryLoading = false;
-            tab.HistoryLoadTask = null;
-            tab.Timeline.ClearBufferedHistory();
+            await _dispatchToUiAsync(
+                    () =>
+                    {
+                        tab.HistoryLoading = false;
+                        tab.HistoryLoadTask = null;
+                        tab.Timeline.ClearBufferedHistory();
+                        return Task.CompletedTask;
+                    })
+                .ConfigureAwait(false);
         }
     }
 
     private async Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(
         WorkThreadDescriptor thread,
-        OpenThreadState tab,
-        bool preferCachedHistory,
+        IReadOnlyList<AgentEvent>? cachedHistory,
+        WorkThreadExecutionOptions executionOptions,
         CancellationToken cancellationToken)
     {
-        if (preferCachedHistory && tab.HistoryEvents is { Count: > 0 } cachedHistory)
+        if (cachedHistory is not null)
         {
             return cachedHistory;
         }
 
-        var executionOptions = _buildExecutionOptions(thread, tab);
-        await _runtimeService.EnsureCoordinatorSessionAsync(thread, executionOptions, cancellationToken);
-        var history = (await _runtimeService.GetHistoryAsync(thread.ThreadId, cancellationToken)).ToList();
-        tab.HistoryEvents = history;
-        return history;
+        ArgumentNullException.ThrowIfNull(executionOptions);
+        await _runtimeService.EnsureCoordinatorSessionAsync(thread, executionOptions, cancellationToken).ConfigureAwait(false);
+        return (await _runtimeService.GetHistoryAsync(thread.ThreadId, cancellationToken).ConfigureAwait(false)).ToList();
     }
 
     private static bool ShouldDisplayCompletedHistoryContent(AgentContentCompletedEvent completed)

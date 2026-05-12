@@ -32,6 +32,16 @@ internal static class UiDispatch
         dispatcher.Post(action);
     }
 
+    public static Task InvokeAsync(IUiDispatcher dispatcher, Func<Task> action, bool allowInline = false)
+    {
+        ArgumentNullException.ThrowIfNull(dispatcher);
+        ArgumentNullException.ThrowIfNull(action);
+
+        return allowInline || dispatcher.CheckAccess()
+            ? action()
+            : dispatcher.InvokeAsync(action).Unwrap();
+    }
+
     public static T Invoke<T>(IUiDispatcher dispatcher, Func<T> action)
     {
         ArgumentNullException.ThrowIfNull(dispatcher);

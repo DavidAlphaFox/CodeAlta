@@ -490,9 +490,9 @@ public sealed class ArchitectureGuardrailTests
             "App/CodeAltaShellController.cs:356:var startupProviderLoadTask = Task.Run(",
             "App/CodeAltaApp.cs:349:_ = PersistViewStateAsync();",
             "App/CodeAltaApp.cs:350:_ = PersistViewStateAsync();",
-            "App/CodeAltaApp.cs:380:_ = PersistViewStateAsync();",
+            "App/CodeAltaApp.cs:381:_ = PersistViewStateAsync();",
             "App/CodeAltaApp.cs:423:_ = OpenModelProvidersAsync();",
-            "App/CodeAltaApp.cs:453:_ = OpenModelProvidersAsync();",
+            "App/CodeAltaApp.cs:454:_ = OpenModelProvidersAsync();",
             "App/RuntimeEventPump.cs:34:_pumpTask = Task.Run(",
             "App/ShellThreadStateCoordinator.cs:319:_ = RestoreStartupThreadHistoryAsync(threadId, cancellationToken);",
             "App/ShellThreadStateCoordinator.cs:322:_ = RestoreStartupThreadHistoryAsync(threadId, cancellationToken);",
@@ -511,6 +511,8 @@ public sealed class ArchitectureGuardrailTests
             "App/SidebarCoordinator.cs:300:_ = CommitInlineRenameAsync(row, projectId, displayName, previousTitle);",
             "App/ThreadPromptDispatchCoordinator.cs:178:_ = RecordResolvedReferenceUsageAsync(promptInput.ResolvedReferences);",
             "App/ThreadPromptDraftPersistenceCoordinator.cs:83:_ = PersistPromptDraftAsync(threadId, normalizedPrompt, cancellationSource);",
+            "App/ThreadHistoryCoordinator.cs:102:await Task.Run(",
+            "App/ThreadHistoryCoordinator.cs:373:var loadTask = Task.Run(() => LoadCoreAsync(thread, tab, cancellationToken));",
             "App/ThreadRuntimeEventCoordinator.cs:232:Task.Run(async () =>",
             "App/ThreadRuntimeEventCoordinator.cs:249:Task.Run(async () =>",
             "App/ThreadRuntimeEventCoordinator.cs:461:_ = InvalidateProjectFileSearchAsync(thread.WorkingDirectory);",
@@ -1097,6 +1099,7 @@ public sealed class ArchitectureGuardrailTests
                     not "App/KnownProjectImporter.cs" and
                     not "App/RuntimeEventPump.cs" and
                     not "App/ShellCatalogStateCoordinator.cs" and
+                    not "App/ThreadHistoryCoordinator.cs" and
                     not "App/ThreadPromptDispatchCoordinator.cs" and
                     not "App/ThreadPromptDraftPersistenceCoordinator.cs" and
                     not "App/ThreadViewStateCoordinator.cs" and

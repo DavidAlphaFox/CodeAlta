@@ -294,7 +294,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             _threadRuntimeEventCoordinator.HandleAgentEventAsync,
             thread => _threadStateCoordinator.PersistThreadLocalStateAsync(thread),
             tab => _frontendEvents.Publish(new SessionUsageChangedEvent(tab.Thread.ThreadId)),
-            _threadRuntimeEventCoordinator.ProjectLoadedHistory);
+            _threadRuntimeEventCoordinator.ProjectLoadedHistory,
+            DispatchToUiAsync);
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -572,6 +573,13 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         => _workspaceCoordinator.SetShellInitialized(isInitialized);
 
     internal void DispatchToUi(Action action) { ArgumentNullException.ThrowIfNull(action); var dispatcher = GetUiDispatcher(); UiDispatch.Post(dispatcher, action, allowInline: ShouldRunInlineOnCurrentThread(dispatcher.CheckAccess(), _terminalLoopCoordinator.HasStarted)); }
+    internal Task DispatchToUiAsync(Func<Task> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        var dispatcher = GetUiDispatcher();
+        return UiDispatch.InvokeAsync(dispatcher, action, ShouldRunInlineOnCurrentThread(dispatcher.CheckAccess(), _terminalLoopCoordinator.HasStarted));
+    }
+
     internal void DispatchToUiDeferred(Action action) { ArgumentNullException.ThrowIfNull(action); _deferredUiActionQueue.Enqueue(action); }
 
     internal static bool CanAccessBindableState(bool dispatcherHasAccess, bool terminalLoopStarted)
