@@ -29,6 +29,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
     private readonly Func<WorkThreadDescriptor, OpenThreadState, AgentBackendId, Task<bool>> _trySwitchThreadBackendAsync;
     private readonly Action _refreshSelectionAndThreadWorkspace;
     private readonly Func<IReadOnlyList<string>>? _getConfiguredProviderKeys;
+    private readonly Func<ModelProviderPreference?> _getDraftModelProviderPreference;
     private readonly Dictionary<string, AgentBackendId> _draftBackendIdsByScope = new(StringComparer.OrdinalIgnoreCase);
     private AgentBackendId? _draftBackendId;
     private bool _selectorsRefreshing;
@@ -46,7 +47,8 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         Func<WorkThreadDescriptor, OpenThreadState, bool>? canSelectThreadBackend = null,
         Func<WorkThreadDescriptor, OpenThreadState, AgentBackendId, Task<bool>>? trySwitchThreadBackendAsync = null,
         Action? refreshSelectionAndThreadWorkspace = null,
-        Func<IReadOnlyList<string>>? getConfiguredProviderKeys = null)
+        Func<IReadOnlyList<string>>? getConfiguredProviderKeys = null,
+        Func<ModelProviderPreference?>? getDraftModelProviderPreference = null)
         : this(
             ChatBackendPresentation.CreateBackendStates().Values
                 .Select(static state => new AgentBackendDescriptor(state.BackendId, state.DisplayName))
@@ -63,7 +65,8 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             canSelectThreadBackend,
             trySwitchThreadBackendAsync,
             refreshSelectionAndThreadWorkspace,
-            getConfiguredProviderKeys)
+            getConfiguredProviderKeys,
+            getDraftModelProviderPreference)
     {
     }
 
@@ -81,7 +84,8 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         Func<WorkThreadDescriptor, OpenThreadState, bool>? canSelectThreadBackend = null,
         Func<WorkThreadDescriptor, OpenThreadState, AgentBackendId, Task<bool>>? trySwitchThreadBackendAsync = null,
         Action? refreshSelectionAndThreadWorkspace = null,
-        Func<IReadOnlyList<string>>? getConfiguredProviderKeys = null)
+        Func<IReadOnlyList<string>>? getConfiguredProviderKeys = null,
+        Func<ModelProviderPreference?>? getDraftModelProviderPreference = null)
     {
         ArgumentNullException.ThrowIfNull(backendDescriptors);
         ArgumentNullException.ThrowIfNull(workspaceViewModel);
@@ -108,6 +112,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         _trySwitchThreadBackendAsync = trySwitchThreadBackendAsync ?? ((_, _, _) => Task.FromResult(false));
         _refreshSelectionAndThreadWorkspace = refreshSelectionAndThreadWorkspace ?? (() => { });
         _getConfiguredProviderKeys = getConfiguredProviderKeys;
+        _getDraftModelProviderPreference = getDraftModelProviderPreference ?? (static () => null);
     }
 
     public void RefreshForDraftScope(AgentBackendId? preferredBackendId = null)
@@ -475,6 +480,13 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             IsModelProviderReady(scopedDraftBackend.BackendId))
         {
             return scopedDraftBackend.BackendId;
+        }
+
+        if (_getDraftModelProviderPreference() is { } draftPreference &&
+            backendOptions.FirstOrDefault(option =>
+                string.Equals(option.BackendId.Value, draftPreference.ModelProviderId.Value, StringComparison.OrdinalIgnoreCase)) is { } persistedDraftBackend)
+        {
+            return persistedDraftBackend.BackendId;
         }
 
         if (_draftBackendId is { } draftBackendId &&

@@ -223,7 +223,12 @@ internal sealed class CodeAltaFrontendComposition
             () => configStore.LoadGlobalProviderDefinitions(includeDisabled: true)
                 .Where(static definition => definition.Enabled != false)
                 .Select(static definition => definition.ProviderKey)
-                .ToArray());
+                .ToArray(),
+            () => modelProviderPreferences.GetDraftModelProviderPreference(
+                threadStateCoordinator.ViewState,
+                threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true }
+                    ? null
+                    : threadStateCoordinator.GetSelectedProject()?.Id));
 
         ThreadPromptQueueCoordinator? threadPromptQueueCoordinator = null;
         ThreadCommandCoordinator? threadCommandCoordinator = null;

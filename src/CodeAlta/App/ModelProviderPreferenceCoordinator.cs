@@ -55,7 +55,9 @@ internal sealed class ModelProviderPreferenceCoordinator
                     ? backendState.SelectedModelId ?? defaults.Model
                     : defaults.Model;
 
-        backendState.SelectedModelId = ChatBackendPresentation.ResolvePreferredModelId(backendState.Models, preferredModelId);
+        backendState.SelectedModelId = backendState.Models.Count == 0
+            ? preferredModelId
+            : ChatBackendPresentation.ResolvePreferredModelId(backendState.Models, preferredModelId);
         var selectedModel = FindModel(backendState.Models, backendState.SelectedModelId);
         var preferredReasoningEffort = matchingDraftPreference is not null
             ? matchingDraftPreference.ReasoningEffort ?? defaults.ReasoningEffort
@@ -67,6 +69,21 @@ internal sealed class ModelProviderPreferenceCoordinator
 
         backendState.SelectedReasoningEffort = ChatBackendPresentation.ResolvePreferredReasoningEffort(selectedModel, preferredReasoningEffort);
         backendState.DraftScopeKey = scopeKey;
+    }
+
+    public ModelProviderPreference? GetDraftModelProviderPreference(
+        WorkThreadViewState viewState,
+        string? draftProjectId)
+    {
+        ArgumentNullException.ThrowIfNull(viewState);
+
+        return viewState.ProjectPreferences.TryGetValue(BuildProjectPreferenceKey(draftProjectId), out var preference) &&
+            !string.IsNullOrWhiteSpace(preference.ProviderKey)
+                ? new ModelProviderPreference(
+                    new ModelProviderId(preference.ProviderKey.Trim()),
+                    preference.ModelId,
+                    preference.ReasoningEffort)
+                : null;
     }
 
     public void ApplyThreadPreference(
@@ -89,9 +106,12 @@ internal sealed class ModelProviderPreferenceCoordinator
             return;
         }
 
-        tab.ModelId = ChatBackendPresentation.ResolvePreferredModelId(
-            backendState.Models,
-            tab.ModelId);
+        if (backendState.Models.Count > 0)
+        {
+            tab.ModelId = ChatBackendPresentation.ResolvePreferredModelId(
+                backendState.Models,
+                tab.ModelId);
+        }
 
         var selectedModel = FindModel(backendState.Models, tab.ModelId);
         tab.ReasoningEffort = ChatBackendPresentation.ResolvePreferredReasoningEffort(

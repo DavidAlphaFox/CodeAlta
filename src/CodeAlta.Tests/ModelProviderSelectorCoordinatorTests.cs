@@ -113,6 +113,49 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
+    public void RefreshForDraftScope_RestoresPersistedDraftProviderBeforeConfiguredDefaultProvider()
+    {
+        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var promptComposerViewModel = new PromptComposerViewModel();
+        AgentBackendDescriptor[] backendDescriptors =
+        [
+            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new AgentBackendId("anthropic"), "Anthropic"),
+        ];
+        var backendStates = ChatBackendPresentation.CreateBackendStates(backendDescriptors);
+        backendStates["openai"].Availability = ChatBackendAvailability.Ready;
+        backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4"));
+        backendStates["anthropic"].Availability = ChatBackendAvailability.Connecting;
+
+        var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
+        var preferences = new FrontendModelProviderPreferencePort(
+            ApplyDraftModelProviderPreference,
+            static _ => throw new NotSupportedException(),
+            static (_, _, _) => { },
+            static (_, _, _, _) => { });
+        var coordinator = new ModelProviderSelectorCoordinator(
+            backendDescriptors,
+            workspaceViewModel,
+            promptComposerViewModel,
+            backendStates,
+            selectorState,
+            CreateThreadSelectionContext(),
+            preferences,
+            new WorkspaceRefreshContext(static _ => { }),
+            static _ => "openai",
+            static () => { },
+            getDraftModelProviderPreference: static () => new ModelProviderPreference(
+                new ModelProviderId("anthropic"),
+                "claude-sonnet-4.5",
+                AgentReasoningEffort.High));
+
+        coordinator.RefreshForDraftScope();
+
+        Assert.AreEqual(1, workspaceViewModel.SelectedModelProviderIndex);
+        Assert.AreEqual("Anthropic", workspaceViewModel.ModelProviderOptions[workspaceViewModel.SelectedModelProviderIndex].Label);
+    }
+
+    [TestMethod]
     public void GetPreferredModelProviderId_FallsBackToFirstReadyProviderDeterministically()
     {
         var workspaceViewModel = new ThreadWorkspaceViewModel();

@@ -57,6 +57,42 @@ public sealed class ModelProviderPreferenceCoordinatorTests
     }
 
     [TestMethod]
+    public void ApplyDraftModelProviderPreference_PreservesPersistedModelBeforeModelDiscovery()
+    {
+        using var temp = TempDirectory.Create();
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
+        var viewState = new WorkThreadViewState
+        {
+            ProjectPreferences = new Dictionary<string, WorkThreadPreference>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["project-a"] = new()
+                {
+                    ProviderKey = "zai",
+                    ModelId = "glm-5.1",
+                    ReasoningEffort = AgentReasoningEffort.Medium,
+                },
+            },
+        };
+        var backendState = new ChatBackendState(new AgentBackendId("zai"), "ZAI");
+
+        coordinator.ApplyDraftModelProviderPreference(backendState, viewState, draftProjectRoot: null, draftProjectId: "project-a");
+
+        Assert.AreEqual("glm-5.1", backendState.SelectedModelId);
+        Assert.AreEqual(AgentReasoningEffort.Medium, backendState.SelectedReasoningEffort);
+
+        backendState.Models.Add(new AgentModelInfo("gpt-5"));
+        backendState.Models.Add(new AgentModelInfo(
+            "glm-5.1",
+            SupportedReasoningEfforts: [AgentReasoningEffort.Low, AgentReasoningEffort.Medium]));
+
+        coordinator.ApplyDraftModelProviderPreference(backendState, viewState, draftProjectRoot: null, draftProjectId: "project-a");
+
+        Assert.AreEqual("glm-5.1", backendState.SelectedModelId);
+        Assert.AreEqual(AgentReasoningEffort.Medium, backendState.SelectedReasoningEffort);
+    }
+
+    [TestMethod]
     public void RememberGlobalModelProviderPreference_PersistsGlobalProjectPreferenceWithoutChangingConfigDefaultProvider()
     {
         using var temp = TempDirectory.Create();
