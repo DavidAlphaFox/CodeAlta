@@ -814,11 +814,6 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         AgentModelInfo? modelInfo,
         CancellationToken cancellationToken)
     {
-        if (_state.Usage is null)
-        {
-            return;
-        }
-
         var providerConversation = CreateProviderConversation();
         var estimate = LocalAgentTokenEstimator.EstimatePromptTokens(
             systemMessage,
@@ -840,6 +835,8 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             return;
         }
 
+        var shouldEmitPredictiveUpdate = providerConversation.Messages.Any(static message => message.Role is LocalAgentConversationRole.Tool);
+
         _state = _state with
         {
             Usage = refreshedUsage,
@@ -851,16 +848,19 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             UpdatedAt = DateTimeOffset.UtcNow,
         };
 
-        var usageEvent = new AgentSessionUpdateEvent(
-            BackendId,
-            SessionId,
-            DateTimeOffset.UtcNow,
-            runId,
-            AgentSessionUpdateKind.UsageUpdated,
-            "Usage updated.",
-            // Window refreshes reuse the previous operation for state estimation, but they are not new provider calls.
-            Usage: refreshedUsage with { LastOperation = null });
-        await AppendEventsAsync([usageEvent], LocalAgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
+        if (shouldEmitPredictiveUpdate)
+        {
+            var usageEvent = new AgentSessionUpdateEvent(
+                BackendId,
+                SessionId,
+                DateTimeOffset.UtcNow,
+                runId,
+                AgentSessionUpdateKind.UsageUpdated,
+                "Usage updated.",
+                Usage: refreshedUsage with { LastOperation = null });
+            await AppendEventsAsync([usageEvent], LocalAgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
+        }
+
         await _store.UpsertStateAsync(_state, cancellationToken).ConfigureAwait(false);
         await _store.UpsertSessionAsync(_summary, cancellationToken).ConfigureAwait(false);
     }
@@ -1365,19 +1365,14 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         }
 
         var budget = LocalAgentTokenBudgetResolver.Resolve(modelInfo, settings);
-        if (budget.UsablePromptBudget is null)
+        if (budget.InputContextLimit is null)
         {
             return;
         }
 
-        if (budget.UsablePromptBudget <= 0)
+        if (budget.InputContextLimit <= 0)
         {
-            throw new InvalidOperationException("The resolved prompt budget is not usable after reserved output and overhead tokens.");
-        }
-
-        if (budget.OutputTokenLimit is not null && settings.ReservedOutputTokens > budget.OutputTokenLimit.Value)
-        {
-            throw new InvalidOperationException("The reserved output token budget exceeds the model's output token limit.");
+            throw new InvalidOperationException("The resolved input-context limit is not usable.");
         }
 
         var estimate = LocalAgentTokenEstimator.EstimatePromptTokens(
@@ -1385,7 +1380,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             developerInstructions,
             _conversation,
             _state.Usage);
-        var thresholdTokens = Math.Max((long)Math.Floor(budget.UsablePromptBudget.Value * settings.TriggerThreshold), 1);
+        var thresholdTokens = Math.Max((long)Math.Floor(budget.InputContextLimit.Value * settings.Ratio), 1);
         if (estimate.Tokens < thresholdTokens)
         {
             return;
@@ -1416,14 +1411,9 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         }
 
         var budget = LocalAgentTokenBudgetResolver.Resolve(modelInfo, settings);
-        if (budget.UsablePromptBudget is <= 0)
+        if (budget.InputContextLimit is <= 0)
         {
-            throw new InvalidOperationException("The resolved prompt budget is not usable after reserved output and overhead tokens.");
-        }
-
-        if (budget.OutputTokenLimit is not null && settings.ReservedOutputTokens > budget.OutputTokenLimit.Value)
-        {
-            throw new InvalidOperationException("The reserved output token budget exceeds the model's output token limit.");
+            throw new InvalidOperationException("The resolved input-context limit is not usable.");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -1442,7 +1432,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             now,
             currentPromptEstimate.IsEstimated ? "Estimated active context" : "Active context window");
         var checkpointContentId = $"compaction:{Guid.CreateVersion7()}";
-        var summaryOutputTokens = GetCompactionSummaryOutputTokens(settings, budget);
+        var summarizerMaxOutputTokens = GetCompactionSummarizerMaxOutputTokens(settings, budget);
         LocalAgentCompactionPreparation? preparation = null;
         LocalAgentCompactionResult? result = null;
         LocalAgentCompactionCheckpoint? checkpoint = null;
@@ -1452,11 +1442,8 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
 
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            long? promptBudgetOverride = attempt == 0 ? null : budget.UsablePromptBudget ?? currentPromptTokens;
+            long? promptBudgetOverride = attempt == 0 ? null : budget.InputContextLimit ?? currentPromptTokens;
             var keepAnchorOnly = attempt == 2;
-            var plannerSettings = attempt < 2
-                ? settings with { AllowOversizedAnchorReduction = false }
-                : settings;
             try
             {
                 preparation = LocalAgentCompactionPlanner.Prepare(
@@ -1466,11 +1453,12 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                     _conversation,
                     planningUsage,
                     budget,
-                    plannerSettings,
+                    settings,
                     FindLatestUserContentId(),
                     checkpointTokenEstimate,
                     promptBudgetOverride,
-                    keepAnchorOnly);
+                    keepAnchorOnly,
+                    allowOversizedAnchorReduction: attempt == 2);
             }
             catch (InvalidOperationException) when (attempt < 2)
             {
@@ -1514,7 +1502,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                     preparation,
                     _history,
                     latestUserRequest,
-                    summaryOutputTokens,
+                    summarizerMaxOutputTokens,
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -1584,11 +1572,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             var compressionRatio = summaryResult.TokensBefore > 0
                 ? (double)tokensAfter / summaryResult.TokensBefore
                 : (double?)null;
-            if (FitsResolvedPromptBudget(tokensAfter, budget) &&
-                (trigger is not LocalAgentCompactionTrigger.Threshold ||
-                 compressionRatio is null ||
-                 compressionRatio <= settings.TargetContextRatioMax ||
-                 attempt >= 2))
+            if (FitsResolvedPromptBudget(tokensAfter, budget))
             {
                 result = summaryResult with
                 {
@@ -1650,12 +1634,6 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         var completionMessage = result.MessagesSummarized == 0 && result.SerializerStatistics.OmittedAttachmentCount > 0
             ? $"{trigger} local compaction compacted inline media attachments in retained context."
             : $"{trigger} local compaction summarized {result.MessagesSummarized} messages.";
-        if (result.CompressionRatio is { } realizedCompressionRatio &&
-            realizedCompressionRatio > settings.TargetContextRatioMax)
-        {
-            completionMessage += $" Post-compaction ratio {realizedCompressionRatio:P1} exceeded target {settings.TargetContextRatioMax:P1} because retained context remained expensive.";
-        }
-
         var completed = new AgentSessionUpdateEvent(
             BackendId,
             SessionId,
@@ -1679,20 +1657,23 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             PostCompactionTokens: result.TokensAfter);
     }
 
-    private static int GetCompactionSummaryOutputTokens(
+    private static int GetCompactionSummarizerMaxOutputTokens(
         LocalAgentCompactionSettings settings,
         LocalAgentTokenBudget budget)
     {
-        var desired = settings.SummaryOutputTokens > 0
-            ? settings.SummaryOutputTokens
-            : LocalAgentCompactionSettings.Default.SummaryOutputTokens;
-        var reservedCap = settings.ReservedOutputTokens > 0
-            ? Math.Min(desired, settings.ReservedOutputTokens)
-            : desired;
-        var providerCap = budget.OutputTokenLimit is > 0
-            ? Math.Min(reservedCap, (int)budget.OutputTokenLimit.Value)
-            : reservedCap;
-        return Math.Max(providerCap, 1);
+        _ = settings;
+
+        if (budget.MaxOutputTokens is > 0)
+        {
+            return (int)Math.Min(budget.MaxOutputTokens.Value, int.MaxValue);
+        }
+
+        if (budget.InputContextLimit is > 0)
+        {
+            return (int)Math.Clamp((long)Math.Ceiling(budget.InputContextLimit.Value * 0.05d), 1L, int.MaxValue);
+        }
+
+        return 1;
     }
 
     private static JsonElement CreateCompactionDetailsElement(LocalAgentCompactionCheckpoint checkpoint)
@@ -1779,23 +1760,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
 
     private static bool FitsResolvedPromptBudget(long promptTokens, LocalAgentTokenBudget budget)
     {
-        if (budget.ContextWindow is not null &&
-            promptTokens + budget.ReservedOutputTokens + budget.ReservedOverheadTokens > budget.ContextWindow.Value)
-        {
-            return false;
-        }
-
-        if (budget.InputTokenLimit is not null && promptTokens > budget.InputTokenLimit.Value)
-        {
-            return false;
-        }
-
-        if (budget.OutputTokenLimit is not null && budget.ReservedOutputTokens > budget.OutputTokenLimit.Value)
-        {
-            return false;
-        }
-
-        return true;
+        return budget.InputContextLimit is null || promptTokens <= budget.InputContextLimit.Value;
     }
 
     private static AgentSessionUsage? CreateCompactionUsage(
@@ -1807,9 +1772,11 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         return new AgentSessionUsage(
             Window: new AgentWindowUsageSnapshot(
                 CurrentTokens: result.TokensAfter,
-                TokenLimit: budget.ContextWindow,
+                TokenLimit: budget.InputContextLimit,
                 MessageCount: messageCount,
-                Label: "Post-compaction window"),
+                Label: "Post-compaction window",
+                TotalContextEnvelope: budget.TotalContextEnvelope,
+                MaxOutputTokens: budget.MaxOutputTokens),
             LastOperation: previousUsage?.LastOperation,
             RateLimits: previousUsage?.RateLimits,
             Scope: AgentUsageScope.Compaction,

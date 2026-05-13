@@ -38,9 +38,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
             reasoning_input_field_name = " reasoning_content "
 
             [providers.OpenRouter.compaction]
-            reserved_output_tokens = 2048
-            summary_output_tokens = 768
-            target_context_ratio_max = 0.08
+            ratio = 0.95
 
             [providers.OpenRouter.model_overrides." gpt-5 "]
             display_name = " GPT-5 "
@@ -85,9 +83,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
             openRouter.Profile.ReasoningFieldNames);
         Assert.AreEqual("reasoning_content", openRouter.Profile.ReasoningInputFieldName);
         Assert.IsNotNull(openRouter.Compaction);
-        Assert.AreEqual(2048, openRouter.Compaction!.ReservedOutputTokens);
-        Assert.AreEqual(768, openRouter.Compaction.SummaryOutputTokens);
-        Assert.AreEqual(0.08d, openRouter.Compaction.TargetContextRatioMax!.Value, 0.0001d);
+        Assert.AreEqual(0.95d, openRouter.Compaction!.Ratio!.Value, 0.0001d);
         Assert.IsNotNull(openRouter.ModelOverrides);
         Assert.IsTrue(openRouter.ModelOverrides!.TryGetValue("gpt-5", out var modelOverride));
         Assert.IsNotNull(modelOverride);
@@ -102,7 +98,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
     }
 
     [TestMethod]
-    public void LoadGlobalProviderDefinitions_InvalidCompactionThreshold_Throws()
+    public void LoadGlobalProviderDefinitions_InvalidCompactionRatio_Throws()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
@@ -113,8 +109,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
             api_key_env = "OPENAI_API_KEY"
 
             [providers.openai.compaction]
-            trigger_threshold = 0.5
-            target_threshold = 0.5
+            ratio = 1.5
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -138,8 +133,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
         var openAi = providers.Single(static provider => string.Equals(provider.ProviderKey, "openai", StringComparison.OrdinalIgnoreCase));
         var compaction = openAi.Compaction;
         Assert.IsNotNull(compaction);
-        Assert.AreEqual(0.85d, compaction!.TriggerThreshold!.Value, 0.0001d);
-        Assert.AreEqual(0.50d, compaction.TargetThreshold!.Value, 0.0001d);
+        Assert.AreEqual(0.95d, compaction!.Ratio!.Value, 0.0001d);
     }
 
     [TestMethod]

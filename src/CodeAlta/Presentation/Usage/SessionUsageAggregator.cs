@@ -54,6 +54,8 @@ internal static class SessionUsageAggregator
             TokenLimit = incoming.TokenLimit ?? current.TokenLimit,
             MessageCount = incoming.MessageCount ?? current.MessageCount,
             Label = incoming.Label ?? current.Label,
+            TotalContextEnvelope = incoming.TotalContextEnvelope ?? current.TotalContextEnvelope,
+            MaxOutputTokens = incoming.MaxOutputTokens ?? current.MaxOutputTokens,
         };
     }
 

@@ -201,7 +201,7 @@ internal static class ChatMarkdownFormatter
         var messagesAfter = GetIntProperty(details, "messagesAfter");
         var summaryCalls = GetIntProperty(details, "summaryCallCount");
         var chunkCount = GetIntProperty(details, "chunkCount");
-        var summaryInputTokens = GetLongProperty(details, "summaryPromptInputTokens");
+        var summaryPromptTokens = GetLongProperty(details, "summaryPromptInputTokens");
         var summaryIncludedMessages = GetIntProperty(details, "summaryPromptIncludedMessageCount");
         var summaryTotalMessages = GetIntProperty(details, "summaryPromptTotalMessageCount");
         var summaryMaxOutputTokens = GetIntProperty(details, "summaryMaxOutputTokens");
@@ -267,7 +267,7 @@ internal static class ChatMarkdownFormatter
             .Append(FormatNullableNumber(chunkCount))
             .Append(chunkCount == 1 ? " chunk" : " chunks")
             .Append(", input ~")
-            .Append(FormatNullableNumber(summaryInputTokens))
+            .Append(FormatNullableNumber(summaryPromptTokens))
             .Append(" tokens, output budget ")
             .Append(FormatNullableNumber(summaryMaxOutputTokens))
             .AppendLine(" tokens");

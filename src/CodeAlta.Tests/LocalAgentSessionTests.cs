@@ -1372,8 +1372,8 @@ public sealed class LocalAgentSessionTests
             [],
             usage: null).Tokens;
         var anchorTokens = LocalAgentTokenEstimator.EstimateMessage(secondUserMessage);
-        var usablePromptBudget = (fixedTokens + 64 + anchorTokens + 20) * 2L;
-        var triggerThreshold = Math.Max(0.20d, Math.Min(0.95d, (estimatedPromptTokens - 1d) / usablePromptBudget));
+        var inputContextLimit = (fixedTokens + 64 + anchorTokens + 20) * 2L;
+        var compactionRatio = Math.Max(0.20d, Math.Min(0.95d, (estimatedPromptTokens - 1d) / inputContextLimit));
 
         var preparation = LocalAgentCompactionPlanner.Prepare(
             LocalAgentCompactionTrigger.Threshold,
@@ -1382,22 +1382,14 @@ public sealed class LocalAgentSessionTests
             conversation,
             usage: null,
             new LocalAgentTokenBudget(
-                ContextWindow: usablePromptBudget + 20 + 10,
-                InputTokenLimit: usablePromptBudget,
-                OutputTokenLimit: 128,
-                UsablePromptBudget: usablePromptBudget,
-                ReservedOutputTokens: 20,
-                ReservedOverheadTokens: 10),
-            new LocalAgentCompactionSettings(
-                Enabled: true,
-                TriggerThreshold: triggerThreshold,
-                TargetThreshold: 0.50,
-                ReservedOutputTokens: 20,
-                ReservedOverheadTokens: 10,
-                KeepLastUserMessage: true,
-                AllowSplitTurn: true)
+                TotalContextEnvelope: inputContextLimit + 20 + 10,
+                InputContextLimit: inputContextLimit,
+                MaxOutputTokens: 128),
+            LocalAgentCompactionSettings.Default with
             {
-                RecentSuffixTargetTokens = (int)(fixedTokens + 64 + anchorTokens + 20),
+                Ratio = compactionRatio,
+                KeepLastUserMessage = true,
+                AllowSplitTurn = true,
             },
             anchorContentId: "user:2");
 
@@ -1427,20 +1419,15 @@ public sealed class LocalAgentSessionTests
             conversation,
             usage: null,
             new LocalAgentTokenBudget(
-                ContextWindow: 2000,
-                InputTokenLimit: 500,
-                OutputTokenLimit: 128,
-                UsablePromptBudget: 500,
-                ReservedOutputTokens: 32,
-                ReservedOverheadTokens: 32),
-            new LocalAgentCompactionSettings(
-                Enabled: true,
-                TriggerThreshold: 0.80,
-                TargetThreshold: 0.50,
-                ReservedOutputTokens: 32,
-                ReservedOverheadTokens: 32,
-                KeepLastUserMessage: false,
-                AllowSplitTurn: true),
+                TotalContextEnvelope: 2000,
+                InputContextLimit: 500,
+                MaxOutputTokens: 128),
+            LocalAgentCompactionSettings.Default with
+            {
+                Ratio = 0.80,
+                KeepLastUserMessage = false,
+                AllowSplitTurn = true,
+            },
             checkpointTokenEstimate: 64,
             promptBudgetOverride: lastMessageTokens + 96);
 
@@ -1469,20 +1456,15 @@ public sealed class LocalAgentSessionTests
             conversation,
             usage: null,
             new LocalAgentTokenBudget(
-                ContextWindow: 2000,
-                InputTokenLimit: 300,
-                OutputTokenLimit: 128,
-                UsablePromptBudget: 300,
-                ReservedOutputTokens: 32,
-                ReservedOverheadTokens: 32),
-            new LocalAgentCompactionSettings(
-                Enabled: true,
-                TriggerThreshold: 0.80,
-                TargetThreshold: 0.50,
-                ReservedOutputTokens: 32,
-                ReservedOverheadTokens: 32,
-                KeepLastUserMessage: true,
-                AllowSplitTurn: false),
+                TotalContextEnvelope: 2000,
+                InputContextLimit: 300,
+                MaxOutputTokens: 128),
+            LocalAgentCompactionSettings.Default with
+            {
+                Ratio = 0.80,
+                KeepLastUserMessage = true,
+                AllowSplitTurn = false,
+            },
             anchorContentId: "user:latest",
             checkpointTokenEstimate: 64,
             promptBudgetOverride: 120));
@@ -1504,7 +1486,7 @@ public sealed class LocalAgentSessionTests
             [
                 new LocalAgentMessagePart.ToolResult(
                     "call-old",
-                    new AgentToolResult(true, [new AgentToolResultItem.Text("old output marker " + new string('a', 400))])),
+                    new AgentToolResult(true, [new AgentToolResultItem.Text("old output marker " + new string('a', 8_000))])),
             ]);
         var recentAssistant = new LocalAgentConversationMessage(
             LocalAgentConversationRole.Assistant,
@@ -1532,24 +1514,15 @@ public sealed class LocalAgentSessionTests
             IsSplitTurn: false,
             TokensBefore: new LocalAgentTokenEstimate(1000, "test", IsEstimated: true),
             PreviousSummary: null);
-        var settings = LocalAgentCompactionSettings.Default with
-        {
-            ToolResultCharsPerItem = 80,
-            ToolResultCharsTotal = 90,
-            ReasoningCharsPerItem = 40,
-            ReasoningCharsTotal = 40,
-        };
-
         var result = LocalAgentCompactionSerializer.BuildSummaryRequestBody(
             preparation,
             latestUserRequest: "Finish the fix",
             readFiles: [],
             modifiedFiles: [],
-            settings);
+            LocalAgentCompactionSettings.Default);
 
         StringAssert.Contains(result.UserMessage, "build failed");
         StringAssert.Contains(result.UserMessage, "callId=call-old");
-        Assert.IsTrue(result.Statistics.OmittedToolResultCount >= 1);
         StringAssert.Contains(result.UserMessage, "[Assistant reasoning summary]");
     }
 
@@ -1557,7 +1530,7 @@ public sealed class LocalAgentSessionTests
     public void LocalAgentCompactionSerializer_BuildSummaryRequestBody_EnforcesGlobalToolOutputCapAcrossManyOutputs()
     {
         var messagesToSummarize = new List<LocalAgentConversationMessage>();
-        foreach (var index in Enumerable.Range(1, 4))
+        foreach (var index in Enumerable.Range(1, 8))
         {
             messagesToSummarize.Add(
                 new LocalAgentConversationMessage(
@@ -1570,9 +1543,9 @@ public sealed class LocalAgentSessionTests
                         new LocalAgentMessagePart.ToolResult(
                             $"call-{index}",
                             new AgentToolResult(
-                                Success: index == 4,
-                                [new AgentToolResultItem.Text($"result {index}: " + new string((char)('a' + index), 240))],
-                                Error: index == 4 ? null : $"error {index}")),
+                                Success: true,
+                                [new AgentToolResultItem.Text($"result {index}: " + new string((char)('a' + index), 2_000))],
+                                Error: null)),
                     ]));
         }
 
@@ -1591,15 +1564,11 @@ public sealed class LocalAgentSessionTests
             latestUserRequest: "Continue",
             readFiles: [],
             modifiedFiles: [],
-            LocalAgentCompactionSettings.Default with
-            {
-                ToolResultCharsPerItem = 120,
-                ToolResultCharsTotal = 180,
-            });
+            LocalAgentCompactionSettings.Default);
 
-        Assert.IsTrue(result.Statistics.SerializedToolResultCharacters <= 180);
-        Assert.IsTrue(result.Statistics.OmittedToolResultCount >= 2);
-        StringAssert.Contains(result.UserMessage, "callId=call-4");
+        Assert.IsTrue(result.Statistics.SerializedToolResultCharacters <= 6_000);
+        Assert.IsTrue(result.Statistics.OmittedToolResultCount >= 1);
+        StringAssert.Contains(result.UserMessage, "callId=call-8");
     }
 
     [TestMethod]
@@ -1607,19 +1576,11 @@ public sealed class LocalAgentSessionTests
     {
         var preparation = new LocalAgentCompactionPreparation(
             Trigger: LocalAgentCompactionTrigger.Manual,
-            MessagesToSummarize:
-            [
-                new LocalAgentConversationMessage(
+            MessagesToSummarize: Enumerable.Range(1, 6)
+                .Select(index => new LocalAgentConversationMessage(
                     LocalAgentConversationRole.Assistant,
-                    [
-                        new LocalAgentMessagePart.Reasoning("First long reasoning block " + new string('x', 300)),
-                    ]),
-                new LocalAgentConversationMessage(
-                    LocalAgentConversationRole.Assistant,
-                    [
-                        new LocalAgentMessagePart.Reasoning("Second long reasoning block " + new string('y', 300)),
-                    ]),
-            ],
+                    [new LocalAgentMessagePart.Reasoning($"Reasoning block {index} " + new string((char)('a' + index), 1_200))]))
+                .ToArray(),
             TurnPrefixMessages: [],
             MessagesToKeep: [],
             AnchorContentId: null,
@@ -1632,13 +1593,9 @@ public sealed class LocalAgentSessionTests
             latestUserRequest: "Continue",
             readFiles: [],
             modifiedFiles: [],
-            LocalAgentCompactionSettings.Default with
-            {
-                ReasoningCharsPerItem = 80,
-                ReasoningCharsTotal = 80,
-            });
+            LocalAgentCompactionSettings.Default);
 
-        Assert.IsTrue(result.Statistics.SerializedReasoningCharacters <= 80);
+        Assert.IsTrue(result.Statistics.SerializedReasoningCharacters <= 3_000);
         Assert.IsTrue(result.Statistics.OmittedReasoningCount >= 1);
         StringAssert.Contains(result.UserMessage, "[Assistant reasoning summary]");
     }
@@ -1811,7 +1768,7 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
-    public void LocalAgentCompactionPlanner_Preparation_UsesRecentSuffixTargetTokens()
+    public void LocalAgentCompactionPlanner_Preparation_KeepsNewestMessageWithoutAnchor()
     {
         var conversation = new[]
         {
@@ -1823,7 +1780,6 @@ public sealed class LocalAgentSessionTests
             new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, [new LocalAgentMessagePart.Text("a3")]),
         };
 
-        var retainedTarget = LocalAgentTokenEstimator.EstimateMessage(conversation[^1]) + LocalAgentTokenEstimator.EstimateMessage(conversation[^2]) + 32;
         var preparation = LocalAgentCompactionPlanner.Prepare(
             LocalAgentCompactionTrigger.Threshold,
             systemMessage: null,
@@ -1831,25 +1787,19 @@ public sealed class LocalAgentSessionTests
             conversation,
             usage: null,
             new LocalAgentTokenBudget(
-                ContextWindow: 4096,
-                InputTokenLimit: 4096,
-                OutputTokenLimit: 512,
-                UsablePromptBudget: 4096,
-                ReservedOutputTokens: 64,
-                ReservedOverheadTokens: 64),
+                TotalContextEnvelope: 4096,
+                InputContextLimit: 4096,
+                MaxOutputTokens: 512),
             (LocalAgentCompactionSettings.Default with
             {
-                RecentSuffixTargetTokens = (int)(retainedTarget + 64),
                 KeepLastUserMessage = false,
             }),
             checkpointTokenEstimate: 64);
 
         Assert.IsNotNull(preparation);
-        Assert.AreEqual(2, preparation!.MessagesToKeep.Count);
-        Assert.AreEqual(LocalAgentConversationRole.User, preparation.MessagesToKeep[0].Role);
-        Assert.AreEqual(LocalAgentConversationRole.Assistant, preparation.MessagesToKeep[1].Role);
-        StringAssert.Contains(Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(preparation.MessagesToKeep[0].Parts.Single()).Value, "u3");
-        StringAssert.Contains(Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(preparation.MessagesToKeep[1].Parts.Single()).Value, "a3");
+        Assert.AreEqual(1, preparation!.MessagesToKeep.Count);
+        Assert.AreEqual(LocalAgentConversationRole.Assistant, preparation.MessagesToKeep[0].Role);
+        StringAssert.Contains(Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(preparation.MessagesToKeep[0].Parts.Single()).Value, "a3");
     }
 
     [TestMethod]
@@ -1864,16 +1814,10 @@ public sealed class LocalAgentSessionTests
         };
 
         var budget = new LocalAgentTokenBudget(
-            ContextWindow: 4096,
-            InputTokenLimit: 4096,
-            OutputTokenLimit: 256,
-            UsablePromptBudget: 4096,
-            ReservedOutputTokens: 64,
-            ReservedOverheadTokens: 64);
-        var settings = LocalAgentCompactionSettings.Default with
-        {
-            RecentSuffixTargetTokens = 96,
-        };
+            TotalContextEnvelope: 4096,
+            InputContextLimit: 4096,
+            MaxOutputTokens: 256);
+        var settings = LocalAgentCompactionSettings.Default;
 
         var widenedPreparation = LocalAgentCompactionPlanner.Prepare(
             LocalAgentCompactionTrigger.Threshold,
@@ -1908,7 +1852,7 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
-    public void LocalAgentCompactionPlanner_LargeToolHeavyConversation_StaysWithinV2CompressionTargets()
+    public void LocalAgentCompactionPlanner_LargeToolHeavyConversation_FitsInputLimit()
     {
         var conversation = new List<LocalAgentConversationMessage>
         {
@@ -1935,10 +1879,7 @@ public sealed class LocalAgentSessionTests
 
         conversation.Add(new LocalAgentConversationMessage(LocalAgentConversationRole.User, [new LocalAgentMessagePart.Text("Latest request")]));
 
-        var settings = LocalAgentCompactionSettings.Default with
-        {
-            RecentSuffixTargetTokens = 160,
-        };
+        var settings = LocalAgentCompactionSettings.Default;
         var preparation = LocalAgentCompactionPlanner.Prepare(
             LocalAgentCompactionTrigger.Threshold,
             systemMessage: null,
@@ -1946,12 +1887,9 @@ public sealed class LocalAgentSessionTests
             conversation,
             usage: null,
             new LocalAgentTokenBudget(
-                ContextWindow: 400_000,
-                InputTokenLimit: 400_000,
-                OutputTokenLimit: 4_096,
-                UsablePromptBudget: 400_000,
-                ReservedOutputTokens: settings.ReservedOutputTokens,
-                ReservedOverheadTokens: settings.ReservedOverheadTokens),
+                TotalContextEnvelope: 400_000,
+                InputContextLimit: 400_000,
+                MaxOutputTokens: 4_096),
             settings,
             anchorContentId: "user:latest",
             checkpointTokenEstimate: 128);
@@ -1999,14 +1937,11 @@ public sealed class LocalAgentSessionTests
             developerInstructions: null,
             compactedConversation,
             usage: null).Tokens;
-        var ratio = (double)tokensAfter / preparation.TokensBefore.Tokens;
-
-        Assert.IsTrue(ratio <= 0.06d, $"Expected a representative large tool-heavy session to compact to 6% or less, but got {ratio:P2}.");
-        Assert.IsTrue(ratio <= settings.TargetContextRatioMax, $"Expected the post-compaction ratio {ratio:P2} to stay within the v2 max target {settings.TargetContextRatioMax:P2}.");
+        Assert.IsTrue(tokensAfter <= 400_000);
     }
 
     [TestMethod]
-    public void LocalAgentCompactionPlanner_Preparation_ReducesOversizedLatestUserAnchorWhenConfigured()
+    public void LocalAgentCompactionPlanner_Preparation_ReducesOversizedLatestUserAnchorByDefault()
     {
         var conversation = new[]
         {
@@ -2022,17 +1957,10 @@ public sealed class LocalAgentSessionTests
             conversation,
             usage: null,
             new LocalAgentTokenBudget(
-                ContextWindow: 800,
-                InputTokenLimit: 400,
-                OutputTokenLimit: 128,
-                UsablePromptBudget: 280,
-                ReservedOutputTokens: 64,
-                ReservedOverheadTokens: 64),
-            LocalAgentCompactionSettings.Default with
-            {
-                AllowOversizedAnchorReduction = true,
-                RecentSuffixTargetTokens = 160,
-            },
+                TotalContextEnvelope: 800,
+                InputContextLimit: 400,
+                MaxOutputTokens: 128),
+            LocalAgentCompactionSettings.Default,
             anchorContentId: "user:latest",
             checkpointTokenEstimate: 64,
             promptBudgetOverride: 200);
@@ -2454,14 +2382,11 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
-    public async Task LocalAgentSession_CompactAsync_PassesConfiguredSummaryOutputTokenLimitToSummarizer()
+    public async Task LocalAgentSession_CompactAsync_PassesModelSummaryOutputTokenLimitToSummarizer()
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
-        {
-            SummaryOutputTokens = 320,
-        });
+        var provider = CreateProvider();
         var summary = CreateSummary("session-summary-output-limit");
         var state = CreateState("session-summary-output-limit");
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
@@ -2476,7 +2401,15 @@ public sealed class LocalAgentSessionTests
             [],
             store,
             new ScriptedTurnExecutor(
-                [new AgentModelInfo("gpt-5.4", "GPT-5.4")],
+                [new AgentModelInfo(
+                    "gpt-5.4",
+                    "GPT-5.4",
+                    Capabilities: new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        ["contextWindow"] = 4096L,
+                        ["inputTokenLimit"] = 3072L,
+                        ["outputTokenLimit"] = 320L,
+                    })],
                 (request, _, _) =>
                 {
                     observedMaxOutputTokens.Add(request.MaxOutputTokens);
@@ -2537,15 +2470,11 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
-    public async Task LocalAgentSession_CompactAsync_ReportsCompressionRatioWhenAboveTargetMax()
+    public async Task LocalAgentSession_CompactAsync_AllowsLargeNecessaryCheckpointWhenItFits()
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
-        {
-            TargetContextRatioMax = 0.01,
-            RecentSuffixTargetTokens = 16_000,
-        });
+        var provider = CreateProvider();
         var summary = CreateSummary("session-ratio-reported");
         var state = CreateState("session-ratio-reported");
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
@@ -2612,21 +2541,15 @@ public sealed class LocalAgentSessionTests
         var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);
         Assert.IsNotNull(outcome);
         Assert.IsTrue(outcome.Success);
-        StringAssert.Contains(outcome.Message, "Post-compaction ratio");
-        StringAssert.Contains(outcome.Message, "exceeded target");
+        StringAssert.Contains(outcome.Message, "Manual local compaction summarized");
     }
 
     [TestMethod]
-    public async Task LocalAgentSession_CompactAsync_ClampsSummaryOutputTokensToProviderLimit()
+    public async Task LocalAgentSession_CompactAsync_UsesProviderSummaryOutputTokenLimit()
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
-        {
-            SummaryOutputTokens = 320,
-            ReservedOutputTokens = 64,
-            RecentSuffixTargetTokens = 160,
-        });
+        var provider = CreateProvider();
         var summary = CreateSummary("session-summary-output-clamped");
         var state = CreateState("session-summary-output-clamped");
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
@@ -2716,12 +2639,7 @@ public sealed class LocalAgentSessionTests
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
-        {
-            SummaryInputTokens = 360,
-            RecentSuffixTargetTokens = 180,
-            MaxChunkPasses = 4,
-        });
+        var provider = CreateProvider();
         var summary = CreateSummary("session-chunked-compaction");
         var state = CreateState("session-chunked-compaction");
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
@@ -2736,7 +2654,15 @@ public sealed class LocalAgentSessionTests
             [],
             store,
             new ScriptedTurnExecutor(
-                [new AgentModelInfo("gpt-5.4", "GPT-5.4")],
+                [new AgentModelInfo(
+                    "gpt-5.4",
+                    "GPT-5.4",
+                    Capabilities: new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        ["contextWindow"] = 4096L,
+                        ["inputTokenLimit"] = 360L,
+                        ["outputTokenLimit"] = 512L,
+                    })],
                 (request, _, _) =>
                 {
                     var payload = Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(request.Conversation[0].Parts.Single()).Value;
@@ -2808,7 +2734,7 @@ public sealed class LocalAgentSessionTests
         var history = await store.ReadEventsAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
         var checkpointEvent = history
             .OfType<AgentRawEvent>()
-            .Single(static evt => evt.BackendEventType == "local.compactionCheckpoint");
+            .Last(static evt => evt.BackendEventType == "local.compactionCheckpoint");
         var checkpoint = checkpointEvent.Raw.Deserialize(AgentJsonSerializerContext.Default.LocalAgentCompactionCheckpoint);
         Assert.IsNotNull(checkpoint);
         Assert.IsTrue(checkpoint!.ChunkCount > 1);
@@ -2819,12 +2745,7 @@ public sealed class LocalAgentSessionTests
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
-        {
-            SummaryInputTokens = 120,
-            RecentSuffixTargetTokens = 180,
-            MaxChunkPasses = 1,
-        });
+        var provider = CreateProvider();
         var summary = CreateSummary("session-summary-input-target");
         var state = CreateState("session-summary-input-target");
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
@@ -2910,7 +2831,7 @@ public sealed class LocalAgentSessionTests
         Assert.IsNotNull(outcome);
         Assert.IsTrue(outcome.Success);
         Assert.AreEqual(1, summaryPayloads.Count);
-        Assert.IsTrue(LocalAgentTokenEstimator.EstimateTextTokens(summaryPayloads[0]) > provider.Compaction!.SummaryInputTokens);
+        Assert.IsTrue(LocalAgentTokenEstimator.EstimateTextTokens(summaryPayloads[0]) > 120);
     }
 
     [TestMethod]
@@ -2920,14 +2841,7 @@ public sealed class LocalAgentSessionTests
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
         var provider = CreateProvider(LocalAgentCompactionSettings.Default with
         {
-            TriggerThreshold = 0.60,
-            ReservedOutputTokens = 128,
-            ReservedOverheadTokens = 96,
-            RecentSuffixTargetTokens = 160,
-            SummaryInputTokens = 320,
-            SummaryOutputTokens = 320,
-            MaxChunkPasses = 4,
-            AllowOversizedAnchorReduction = true,
+            Ratio = 0.60,
         });
         var summary = CreateSummary("session-oversized-anchor");
         var state = CreateState("session-oversized-anchor");
@@ -2965,13 +2879,13 @@ public sealed class LocalAgentSessionTests
                           - Update the compaction system for large sessions.
                           ## Explicit Requirements
                           - Preserve recent knowledge.
-                          - Keep configurable compaction targets.
+                          - Keep the configurable compaction ratio.
                           - Cover very large prompts and oversized attachments.
                           ## Files and Identifiers
                           - doc/specs/agent_compaction_specs.md
                           - tmp/agent_compaction_plan_v2.md
                           ## Exact Literals and Errors
-                          - "target_context_ratio_ideal = 0.03"
+                          - "ratio = 0.95"
                           """
                         : """
                           ## Objective
@@ -3116,16 +3030,11 @@ public sealed class LocalAgentSessionTests
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider(new LocalAgentCompactionSettings(
-            Enabled: true,
-            TriggerThreshold: 0.80,
-            TargetThreshold: 0.50,
-            ReservedOutputTokens: 32,
-            ReservedOverheadTokens: 32,
-            KeepLastUserMessage: true,
-            AllowSplitTurn: true)
+        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
         {
-            RecentSuffixTargetTokens = 160,
+            Ratio = 0.80,
+            KeepLastUserMessage = true,
+            AllowSplitTurn = true,
         });
         var summary = CreateSummary("session-summary-too-large");
         var state = CreateState("session-summary-too-large");
@@ -3205,10 +3114,7 @@ public sealed class LocalAgentSessionTests
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
-        {
-            RecentSuffixTargetTokens = 160,
-        });
+        var provider = CreateProvider();
         var summary = CreateSummary("session-summary-empty");
         var state = CreateState("session-summary-empty");
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
@@ -3268,10 +3174,7 @@ public sealed class LocalAgentSessionTests
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
-        {
-            RecentSuffixTargetTokens = 160,
-        });
+        var provider = CreateProvider();
         var summary = CreateSummary("session-summary-malformed");
         var state = CreateState("session-summary-malformed");
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
@@ -3459,14 +3362,12 @@ public sealed class LocalAgentSessionTests
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider(new LocalAgentCompactionSettings(
-            Enabled: true,
-            TriggerThreshold: 0.95,
-            TargetThreshold: 0.50,
-            ReservedOutputTokens: 10,
-            ReservedOverheadTokens: 10,
-            KeepLastUserMessage: true,
-            AllowSplitTurn: true));
+        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
+        {
+            Ratio = 0.95,
+            KeepLastUserMessage = true,
+            AllowSplitTurn = true,
+        });
         var summary = CreateSummary("session-overflow");
         var state = CreateState("session-overflow");
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);

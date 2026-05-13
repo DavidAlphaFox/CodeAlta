@@ -117,9 +117,10 @@ public sealed class OpenAIRawApiAgentBackendTests
         Assert.IsTrue(history.OfType<AgentContentCompletedEvent>().Any(static e => e.Kind == AgentContentKind.ToolOutput && e.Content == "README contents"));
         Assert.IsTrue(history.OfType<AgentContentCompletedEvent>().Any(static e => e.Kind == AgentContentKind.Reasoning && e.Content == "Looked at the file."));
         Assert.IsTrue(history.OfType<AgentContentCompletedEvent>().Any(static e => e.Kind == AgentContentKind.Assistant && e.Content == "Inspection complete."));
-        var usageEvent = history.OfType<AgentSessionUpdateEvent>().Single(static e => e.Kind == AgentSessionUpdateKind.UsageUpdated);
+        var usageEvent = history.OfType<AgentSessionUpdateEvent>().Last(static e => e.Kind == AgentSessionUpdateKind.UsageUpdated);
         Assert.IsNotNull(usageEvent.Usage);
-        Assert.AreEqual(33L, usageEvent.Usage.CurrentTokens);
+        Assert.IsTrue(usageEvent.Usage.CurrentTokens > 33L);
+        Assert.AreEqual(33L, usageEvent.Usage.LastOperation?.InputTokens + usageEvent.Usage.LastOperation?.OutputTokens);
         Assert.AreEqual(200000L, usageEvent.Usage.TokenLimit);
         Assert.AreEqual(4, usageEvent.Usage.MessageCount);
 
@@ -206,7 +207,8 @@ public sealed class OpenAIRawApiAgentBackendTests
         Assert.IsTrue(history.OfType<AgentContentCompletedEvent>().Any(static e => e.Kind == AgentContentKind.Assistant && e.Content == "OpenAI chat answer."));
         var usageEvent = history.OfType<AgentSessionUpdateEvent>().Single(static e => e.Kind == AgentSessionUpdateKind.UsageUpdated);
         Assert.IsNotNull(usageEvent.Usage);
-        Assert.AreEqual(18L, usageEvent.Usage.CurrentTokens);
+        Assert.IsTrue(usageEvent.Usage.CurrentTokens > 18L);
+        Assert.AreEqual(18L, usageEvent.Usage.LastOperation?.InputTokens + usageEvent.Usage.LastOperation?.OutputTokens);
         Assert.AreEqual(128000L, usageEvent.Usage.TokenLimit);
         Assert.AreEqual(2, usageEvent.Usage.MessageCount);
 

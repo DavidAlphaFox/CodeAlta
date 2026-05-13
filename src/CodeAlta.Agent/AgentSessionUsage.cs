@@ -49,14 +49,18 @@ public sealed record AgentSessionUsage(
 /// Represents a normalized context-window usage snapshot.
 /// </summary>
 /// <param name="CurrentTokens">The current number of tokens in the window when known.</param>
-/// <param name="TokenLimit">The total window size when known.</param>
+/// <param name="TokenLimit">The active input-context limit when known.</param>
 /// <param name="MessageCount">The number of messages currently contributing to the window when known.</param>
 /// <param name="Label">The UI label describing the window snapshot.</param>
+/// <param name="TotalContextEnvelope">The optional advertised input-plus-output model envelope.</param>
+/// <param name="MaxOutputTokens">The optional maximum output-token limit.</param>
 public sealed record AgentWindowUsageSnapshot(
     long? CurrentTokens,
     long? TokenLimit,
     int? MessageCount,
-    string? Label = null);
+    string? Label = null,
+    long? TotalContextEnvelope = null,
+    long? MaxOutputTokens = null);
 
 /// <summary>
 /// Represents normalized usage for the most recent meaningful model operation.

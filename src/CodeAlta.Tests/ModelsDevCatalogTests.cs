@@ -320,8 +320,9 @@ public sealed class ModelsDevCatalogTests
             .OfType<AgentSessionUpdateEvent>()
             .Single(static e => e.Kind == AgentSessionUpdateKind.UsageUpdated);
 
-        Assert.AreEqual(24L, usageEvent.Usage?.CurrentTokens);
-        Assert.AreEqual(200000L, usageEvent.Usage?.TokenLimit);
+        Assert.IsTrue(usageEvent.Usage?.CurrentTokens > 24L);
+        Assert.AreEqual(24L, usageEvent.Usage?.LastOperation?.InputTokens + usageEvent.Usage?.LastOperation?.OutputTokens);
+        Assert.AreEqual(136000L, usageEvent.Usage?.TokenLimit);
     }
 
     [TestMethod]

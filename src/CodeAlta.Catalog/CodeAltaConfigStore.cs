@@ -46,27 +46,7 @@ public sealed class CodeAltaConfigStore
     private static readonly CodeAltaProviderCompactionDocument DefaultCompaction = new()
     {
         Enabled = LocalAgentCompactionSettings.DefaultEnabled,
-        TriggerThreshold = LocalAgentCompactionSettings.DefaultTriggerThreshold,
-        TargetThreshold = LocalAgentCompactionSettings.DefaultTargetThreshold,
-        ReservedOutputTokens = LocalAgentCompactionSettings.DefaultReservedOutputTokens,
-        ReservedOverheadTokens = LocalAgentCompactionSettings.DefaultReservedOverheadTokens,
-        KeepLastUserMessage = LocalAgentCompactionSettings.DefaultKeepLastUserMessage,
-        AllowSplitTurn = LocalAgentCompactionSettings.DefaultAllowSplitTurn,
-        TargetContextRatioIdeal = LocalAgentCompactionSettings.DefaultTargetContextRatioIdeal,
-        TargetContextRatioMax = LocalAgentCompactionSettings.DefaultTargetContextRatioMax,
-        RecentSuffixTargetTokens = LocalAgentCompactionSettings.DefaultRecentSuffixTargetTokens,
-        SummaryOutputTokens = LocalAgentCompactionSettings.DefaultSummaryOutputTokens,
-        SummaryInputTokens = LocalAgentCompactionSettings.DefaultSummaryInputTokens,
-        ToolResultCharsPerItem = LocalAgentCompactionSettings.DefaultToolResultCharsPerItem,
-        ToolResultCharsTotal = LocalAgentCompactionSettings.DefaultToolResultCharsTotal,
-        ReasoningCharsPerItem = LocalAgentCompactionSettings.DefaultReasoningCharsPerItem,
-        ReasoningCharsTotal = LocalAgentCompactionSettings.DefaultReasoningCharsTotal,
-        ReasoningMode = "adaptive",
-        MaxChunkPasses = LocalAgentCompactionSettings.DefaultMaxChunkPasses,
-        AllowOversizedAnchorReduction = LocalAgentCompactionSettings.DefaultAllowOversizedAnchorReduction,
-        PreferRecentMessages = LocalAgentCompactionSettings.DefaultPreferRecentMessages,
-        PreferRecentToolOutputs = LocalAgentCompactionSettings.DefaultPreferRecentToolOutputs,
-        DropMessagesOnlyWhenSummaryInputExceedsBudget = LocalAgentCompactionSettings.DefaultDropMessagesOnlyWhenSummaryInputExceedsBudget,
+        Ratio = LocalAgentCompactionSettings.DefaultRatio,
     };
 
     private readonly CatalogOptions _options;
@@ -1795,27 +1775,7 @@ public sealed class CodeAltaConfigStore
             : new CodeAltaProviderCompactionDocument
             {
                 Enabled = compaction.Enabled,
-                TriggerThreshold = compaction.TriggerThreshold,
-                TargetThreshold = compaction.TargetThreshold,
-                ReservedOutputTokens = compaction.ReservedOutputTokens,
-                ReservedOverheadTokens = compaction.ReservedOverheadTokens,
-                KeepLastUserMessage = compaction.KeepLastUserMessage,
-                AllowSplitTurn = compaction.AllowSplitTurn,
-                TargetContextRatioIdeal = compaction.TargetContextRatioIdeal,
-                TargetContextRatioMax = compaction.TargetContextRatioMax,
-                RecentSuffixTargetTokens = compaction.RecentSuffixTargetTokens,
-                SummaryOutputTokens = compaction.SummaryOutputTokens,
-                SummaryInputTokens = compaction.SummaryInputTokens,
-                ToolResultCharsPerItem = compaction.ToolResultCharsPerItem,
-                ToolResultCharsTotal = compaction.ToolResultCharsTotal,
-                ReasoningCharsPerItem = compaction.ReasoningCharsPerItem,
-                ReasoningCharsTotal = compaction.ReasoningCharsTotal,
-                ReasoningMode = compaction.ReasoningMode,
-                MaxChunkPasses = compaction.MaxChunkPasses,
-                AllowOversizedAnchorReduction = compaction.AllowOversizedAnchorReduction,
-                PreferRecentMessages = compaction.PreferRecentMessages,
-                PreferRecentToolOutputs = compaction.PreferRecentToolOutputs,
-                DropMessagesOnlyWhenSummaryInputExceedsBudget = compaction.DropMessagesOnlyWhenSummaryInputExceedsBudget,
+                Ratio = compaction.Ratio,
             };
     }
 
@@ -1827,7 +1787,6 @@ public sealed class CodeAltaConfigStore
         }
 
         var normalized = CloneCompaction(compaction);
-        normalized.ReasoningMode = NormalizeCompactionReasoningMode(normalized.ReasoningMode);
         return IsEmptyCompaction(normalized) ? null : normalized;
     }
 
@@ -1845,109 +1804,9 @@ public sealed class CodeAltaConfigStore
             pruned.Enabled = null;
         }
 
-        if (pruned.TriggerThreshold == LocalAgentCompactionSettings.DefaultTriggerThreshold)
+        if (pruned.Ratio == LocalAgentCompactionSettings.DefaultRatio)
         {
-            pruned.TriggerThreshold = null;
-        }
-
-        if (pruned.TargetThreshold == LocalAgentCompactionSettings.DefaultTargetThreshold)
-        {
-            pruned.TargetThreshold = null;
-        }
-
-        if (pruned.ReservedOutputTokens == LocalAgentCompactionSettings.DefaultReservedOutputTokens)
-        {
-            pruned.ReservedOutputTokens = null;
-        }
-
-        if (pruned.ReservedOverheadTokens == LocalAgentCompactionSettings.DefaultReservedOverheadTokens)
-        {
-            pruned.ReservedOverheadTokens = null;
-        }
-
-        if (pruned.KeepLastUserMessage == LocalAgentCompactionSettings.DefaultKeepLastUserMessage)
-        {
-            pruned.KeepLastUserMessage = null;
-        }
-
-        if (pruned.AllowSplitTurn == LocalAgentCompactionSettings.DefaultAllowSplitTurn)
-        {
-            pruned.AllowSplitTurn = null;
-        }
-
-        if (pruned.TargetContextRatioIdeal == LocalAgentCompactionSettings.DefaultTargetContextRatioIdeal)
-        {
-            pruned.TargetContextRatioIdeal = null;
-        }
-
-        if (pruned.TargetContextRatioMax == LocalAgentCompactionSettings.DefaultTargetContextRatioMax)
-        {
-            pruned.TargetContextRatioMax = null;
-        }
-
-        if (pruned.RecentSuffixTargetTokens == LocalAgentCompactionSettings.DefaultRecentSuffixTargetTokens)
-        {
-            pruned.RecentSuffixTargetTokens = null;
-        }
-
-        if (pruned.SummaryOutputTokens == LocalAgentCompactionSettings.DefaultSummaryOutputTokens)
-        {
-            pruned.SummaryOutputTokens = null;
-        }
-
-        if (pruned.SummaryInputTokens == LocalAgentCompactionSettings.DefaultSummaryInputTokens)
-        {
-            pruned.SummaryInputTokens = null;
-        }
-
-        if (pruned.ToolResultCharsPerItem == LocalAgentCompactionSettings.DefaultToolResultCharsPerItem)
-        {
-            pruned.ToolResultCharsPerItem = null;
-        }
-
-        if (pruned.ToolResultCharsTotal == LocalAgentCompactionSettings.DefaultToolResultCharsTotal)
-        {
-            pruned.ToolResultCharsTotal = null;
-        }
-
-        if (pruned.ReasoningCharsPerItem == LocalAgentCompactionSettings.DefaultReasoningCharsPerItem)
-        {
-            pruned.ReasoningCharsPerItem = null;
-        }
-
-        if (pruned.ReasoningCharsTotal == LocalAgentCompactionSettings.DefaultReasoningCharsTotal)
-        {
-            pruned.ReasoningCharsTotal = null;
-        }
-
-        if (string.Equals(pruned.ReasoningMode, "adaptive", StringComparison.Ordinal))
-        {
-            pruned.ReasoningMode = null;
-        }
-
-        if (pruned.MaxChunkPasses == LocalAgentCompactionSettings.DefaultMaxChunkPasses)
-        {
-            pruned.MaxChunkPasses = null;
-        }
-
-        if (pruned.AllowOversizedAnchorReduction == LocalAgentCompactionSettings.DefaultAllowOversizedAnchorReduction)
-        {
-            pruned.AllowOversizedAnchorReduction = null;
-        }
-
-        if (pruned.PreferRecentMessages == LocalAgentCompactionSettings.DefaultPreferRecentMessages)
-        {
-            pruned.PreferRecentMessages = null;
-        }
-
-        if (pruned.PreferRecentToolOutputs == LocalAgentCompactionSettings.DefaultPreferRecentToolOutputs)
-        {
-            pruned.PreferRecentToolOutputs = null;
-        }
-
-        if (pruned.DropMessagesOnlyWhenSummaryInputExceedsBudget == LocalAgentCompactionSettings.DefaultDropMessagesOnlyWhenSummaryInputExceedsBudget)
-        {
-            pruned.DropMessagesOnlyWhenSummaryInputExceedsBudget = null;
+            pruned.Ratio = null;
         }
 
         return IsEmptyCompaction(pruned) ? null : pruned;
@@ -1958,27 +1817,37 @@ public sealed class CodeAltaConfigStore
         ArgumentNullException.ThrowIfNull(compaction);
 
         return compaction.Enabled is null &&
-               compaction.TriggerThreshold is null &&
-               compaction.TargetThreshold is null &&
-               compaction.ReservedOutputTokens is null &&
-               compaction.ReservedOverheadTokens is null &&
-               compaction.KeepLastUserMessage is null &&
-               compaction.AllowSplitTurn is null &&
-               compaction.TargetContextRatioIdeal is null &&
-               compaction.TargetContextRatioMax is null &&
-               compaction.RecentSuffixTargetTokens is null &&
-               compaction.SummaryOutputTokens is null &&
-               compaction.SummaryInputTokens is null &&
-               compaction.ToolResultCharsPerItem is null &&
-               compaction.ToolResultCharsTotal is null &&
-               compaction.ReasoningCharsPerItem is null &&
-               compaction.ReasoningCharsTotal is null &&
-               compaction.ReasoningMode is null &&
-               compaction.MaxChunkPasses is null &&
-               compaction.AllowOversizedAnchorReduction is null &&
-               compaction.PreferRecentMessages is null &&
-               compaction.PreferRecentToolOutputs is null &&
-               compaction.DropMessagesOnlyWhenSummaryInputExceedsBudget is null;
+               compaction.Ratio is null;
+    }
+
+    private static CodeAltaProviderCompactionDocument NormalizeAndCompleteCompactionSettings(
+        CodeAltaProviderCompactionDocument? compaction,
+        CodeAltaProviderCompactionDocument? inherited)
+    {
+        var merged = CloneCompaction(inherited);
+        var normalized = compaction is null ? null : CloneCompaction(compaction);
+
+        if (normalized is not null)
+        {
+            merged.Enabled = normalized.Enabled ?? merged.Enabled;
+            merged.Ratio = normalized.Ratio ?? merged.Ratio;
+        }
+
+        merged.Enabled ??= LocalAgentCompactionSettings.DefaultEnabled;
+        merged.Ratio ??= LocalAgentCompactionSettings.DefaultRatio;
+
+        ValidateCompaction(merged);
+        return merged;
+    }
+
+    private static void ValidateCompaction(CodeAltaProviderCompactionDocument compaction)
+    {
+        ArgumentNullException.ThrowIfNull(compaction);
+
+        if (compaction.Ratio is not > 0 or > 1)
+        {
+            throw new InvalidOperationException("provider compaction ratio must be > 0 and <= 1.");
+        }
     }
 
     private static Dictionary<string, CodeAltaProviderModelOverrideDocument>? CloneModelOverrides(
@@ -2006,165 +1875,6 @@ public sealed class CodeAltaConfigStore
             },
             StringComparer.OrdinalIgnoreCase);
     }
-
-    private static CodeAltaProviderCompactionDocument NormalizeAndCompleteCompactionSettings(
-        CodeAltaProviderCompactionDocument? compaction,
-        CodeAltaProviderCompactionDocument? inherited)
-    {
-        var merged = CloneCompaction(inherited);
-        var normalized = compaction is null ? null : CloneCompaction(compaction);
-
-        if (normalized is not null)
-        {
-            merged.Enabled = normalized.Enabled ?? merged.Enabled;
-            merged.TriggerThreshold = normalized.TriggerThreshold ?? merged.TriggerThreshold;
-            merged.TargetThreshold = normalized.TargetThreshold ?? merged.TargetThreshold;
-            merged.ReservedOutputTokens = normalized.ReservedOutputTokens ?? merged.ReservedOutputTokens;
-            merged.ReservedOverheadTokens = normalized.ReservedOverheadTokens ?? merged.ReservedOverheadTokens;
-            merged.KeepLastUserMessage = normalized.KeepLastUserMessage ?? merged.KeepLastUserMessage;
-            merged.AllowSplitTurn = normalized.AllowSplitTurn ?? merged.AllowSplitTurn;
-            merged.TargetContextRatioIdeal = normalized.TargetContextRatioIdeal ?? merged.TargetContextRatioIdeal;
-            merged.TargetContextRatioMax = normalized.TargetContextRatioMax ?? merged.TargetContextRatioMax;
-            merged.RecentSuffixTargetTokens = normalized.RecentSuffixTargetTokens ?? merged.RecentSuffixTargetTokens;
-            merged.SummaryOutputTokens = normalized.SummaryOutputTokens ?? merged.SummaryOutputTokens;
-            merged.SummaryInputTokens = normalized.SummaryInputTokens ?? merged.SummaryInputTokens;
-            merged.ToolResultCharsPerItem = normalized.ToolResultCharsPerItem ?? merged.ToolResultCharsPerItem;
-            merged.ToolResultCharsTotal = normalized.ToolResultCharsTotal ?? merged.ToolResultCharsTotal;
-            merged.ReasoningCharsPerItem = normalized.ReasoningCharsPerItem ?? merged.ReasoningCharsPerItem;
-            merged.ReasoningCharsTotal = normalized.ReasoningCharsTotal ?? merged.ReasoningCharsTotal;
-            merged.ReasoningMode = NormalizeCompactionReasoningMode(normalized.ReasoningMode) ?? merged.ReasoningMode;
-            merged.MaxChunkPasses = normalized.MaxChunkPasses ?? merged.MaxChunkPasses;
-            merged.AllowOversizedAnchorReduction = normalized.AllowOversizedAnchorReduction ?? merged.AllowOversizedAnchorReduction;
-            merged.PreferRecentMessages = normalized.PreferRecentMessages ?? merged.PreferRecentMessages;
-            merged.PreferRecentToolOutputs = normalized.PreferRecentToolOutputs ?? merged.PreferRecentToolOutputs;
-            merged.DropMessagesOnlyWhenSummaryInputExceedsBudget = normalized.DropMessagesOnlyWhenSummaryInputExceedsBudget ?? merged.DropMessagesOnlyWhenSummaryInputExceedsBudget;
-        }
-
-        merged.Enabled ??= LocalAgentCompactionSettings.DefaultEnabled;
-        merged.TriggerThreshold ??= LocalAgentCompactionSettings.DefaultTriggerThreshold;
-        merged.TargetThreshold ??= LocalAgentCompactionSettings.DefaultTargetThreshold;
-        merged.ReservedOutputTokens ??= LocalAgentCompactionSettings.DefaultReservedOutputTokens;
-        merged.ReservedOverheadTokens ??= LocalAgentCompactionSettings.DefaultReservedOverheadTokens;
-        merged.KeepLastUserMessage ??= LocalAgentCompactionSettings.DefaultKeepLastUserMessage;
-        merged.AllowSplitTurn ??= LocalAgentCompactionSettings.DefaultAllowSplitTurn;
-        merged.TargetContextRatioIdeal ??= LocalAgentCompactionSettings.DefaultTargetContextRatioIdeal;
-        merged.TargetContextRatioMax ??= LocalAgentCompactionSettings.DefaultTargetContextRatioMax;
-        merged.RecentSuffixTargetTokens ??= LocalAgentCompactionSettings.DefaultRecentSuffixTargetTokens;
-        merged.SummaryOutputTokens ??= LocalAgentCompactionSettings.DefaultSummaryOutputTokens;
-        merged.SummaryInputTokens ??= LocalAgentCompactionSettings.DefaultSummaryInputTokens;
-        merged.ToolResultCharsPerItem ??= LocalAgentCompactionSettings.DefaultToolResultCharsPerItem;
-        merged.ToolResultCharsTotal ??= LocalAgentCompactionSettings.DefaultToolResultCharsTotal;
-        merged.ReasoningCharsPerItem ??= LocalAgentCompactionSettings.DefaultReasoningCharsPerItem;
-        merged.ReasoningCharsTotal ??= LocalAgentCompactionSettings.DefaultReasoningCharsTotal;
-        merged.ReasoningMode = NormalizeCompactionReasoningMode(merged.ReasoningMode) ?? "adaptive";
-        merged.MaxChunkPasses ??= LocalAgentCompactionSettings.DefaultMaxChunkPasses;
-        merged.AllowOversizedAnchorReduction ??= LocalAgentCompactionSettings.DefaultAllowOversizedAnchorReduction;
-        merged.PreferRecentMessages ??= LocalAgentCompactionSettings.DefaultPreferRecentMessages;
-        merged.PreferRecentToolOutputs ??= LocalAgentCompactionSettings.DefaultPreferRecentToolOutputs;
-        merged.DropMessagesOnlyWhenSummaryInputExceedsBudget ??= LocalAgentCompactionSettings.DefaultDropMessagesOnlyWhenSummaryInputExceedsBudget;
-
-        ValidateCompaction(merged);
-        return merged;
-    }
-
-    private static void ValidateCompaction(CodeAltaProviderCompactionDocument compaction)
-    {
-        ArgumentNullException.ThrowIfNull(compaction);
-
-        if (compaction.TriggerThreshold is not > 0 or > 1)
-        {
-            throw new InvalidOperationException("provider compaction trigger_threshold must be > 0 and <= 1.");
-        }
-
-        if (compaction.TargetThreshold is not > 0)
-        {
-            throw new InvalidOperationException("provider compaction target_threshold must be > 0.");
-        }
-
-        if (compaction.TargetThreshold >= compaction.TriggerThreshold)
-        {
-            throw new InvalidOperationException("provider compaction target_threshold must be less than trigger_threshold.");
-        }
-
-        if (compaction.ReservedOutputTokens < 0)
-        {
-            throw new InvalidOperationException("provider compaction reserved_output_tokens must be >= 0.");
-        }
-
-        if (compaction.ReservedOverheadTokens < 0)
-        {
-            throw new InvalidOperationException("provider compaction reserved_overhead_tokens must be >= 0.");
-        }
-
-        if (compaction.TargetContextRatioIdeal is not > 0 or > 1)
-        {
-            throw new InvalidOperationException("provider compaction target_context_ratio_ideal must be > 0 and <= 1.");
-        }
-
-        if (compaction.TargetContextRatioMax is not > 0 or > 1)
-        {
-            throw new InvalidOperationException("provider compaction target_context_ratio_max must be > 0 and <= 1.");
-        }
-
-        if (compaction.TargetContextRatioIdeal > compaction.TargetContextRatioMax)
-        {
-            throw new InvalidOperationException("provider compaction target_context_ratio_ideal must be <= target_context_ratio_max.");
-        }
-
-        if (compaction.RecentSuffixTargetTokens is not > 0)
-        {
-            throw new InvalidOperationException("provider compaction recent_suffix_target_tokens must be > 0.");
-        }
-
-        if (compaction.SummaryOutputTokens is not > 0)
-        {
-            throw new InvalidOperationException("provider compaction summary_output_tokens must be > 0.");
-        }
-
-        if (compaction.SummaryInputTokens is not > 0)
-        {
-            throw new InvalidOperationException("provider compaction summary_input_tokens must be > 0.");
-        }
-
-        if (compaction.ToolResultCharsPerItem is < 0)
-        {
-            throw new InvalidOperationException("provider compaction tool_result_chars_per_item must be >= 0.");
-        }
-
-        if (compaction.ToolResultCharsTotal is < 0)
-        {
-            throw new InvalidOperationException("provider compaction tool_result_chars_total must be >= 0.");
-        }
-
-        if (compaction.ReasoningCharsPerItem is < 0)
-        {
-            throw new InvalidOperationException("provider compaction reasoning_chars_per_item must be >= 0.");
-        }
-
-        if (compaction.ReasoningCharsTotal is < 0)
-        {
-            throw new InvalidOperationException("provider compaction reasoning_chars_total must be >= 0.");
-        }
-
-        if (compaction.MaxChunkPasses is not > 0)
-        {
-            throw new InvalidOperationException("provider compaction max_chunk_passes must be > 0.");
-        }
-
-        if (NormalizeCompactionReasoningMode(compaction.ReasoningMode) is null)
-        {
-            throw new InvalidOperationException("provider compaction reasoning_mode must be one of: none, adaptive, summary_only.");
-        }
-    }
-
-    private static string? NormalizeCompactionReasoningMode(string? value)
-        => value?.Trim().ToLowerInvariant() switch
-        {
-            "none" => "none",
-            "adaptive" => "adaptive",
-            "summary_only" => "summary_only",
-            _ => null,
-        };
 
     private static void ThrowIfLegacyConfigShapeDetected(string content, string? sourcePath)
     {

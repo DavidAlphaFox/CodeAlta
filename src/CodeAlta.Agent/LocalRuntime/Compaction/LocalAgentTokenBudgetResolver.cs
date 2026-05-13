@@ -33,30 +33,35 @@ internal static class LocalAgentTokenBudgetResolver
         var contextWindow = TryReadCapability(modelInfo, ContextWindowCapabilityKeys);
         var inputTokenLimit = TryReadCapability(modelInfo, InputTokenCapabilityKeys);
         var outputTokenLimit = TryReadCapability(modelInfo, OutputTokenCapabilityKeys);
-        long? usablePromptBudget = null;
-
-        if (contextWindow is not null)
-        {
-            usablePromptBudget = contextWindow.Value - settings.ReservedOutputTokens - settings.ReservedOverheadTokens;
-        }
-
-        if (inputTokenLimit is not null)
-        {
-            usablePromptBudget = usablePromptBudget is null
-                ? inputTokenLimit
-                : Math.Min(usablePromptBudget.Value, inputTokenLimit.Value);
-        }
+        var inputContextLimit = ResolveInputContextLimit(contextWindow, inputTokenLimit, outputTokenLimit);
 
         return new LocalAgentTokenBudget(
-            ContextWindow: contextWindow,
-            InputTokenLimit: inputTokenLimit,
-            OutputTokenLimit: outputTokenLimit,
-            UsablePromptBudget: usablePromptBudget,
-            ReservedOutputTokens: settings.ReservedOutputTokens,
-            ReservedOverheadTokens: settings.ReservedOverheadTokens);
+            TotalContextEnvelope: contextWindow,
+            InputContextLimit: inputContextLimit,
+            MaxOutputTokens: outputTokenLimit);
     }
 
-    private static long? TryReadCapability(AgentModelInfo? modelInfo, IReadOnlyList<string> keys)
+    internal static long? ResolveInputContextLimit(long? contextWindow, long? inputTokenLimit, long? outputTokenLimit)
+    {
+        if (inputTokenLimit is > 0)
+        {
+            return inputTokenLimit.Value;
+        }
+
+        if (contextWindow is not > 0)
+        {
+            return null;
+        }
+
+        if (outputTokenLimit is > 0 && outputTokenLimit.Value < contextWindow.Value)
+        {
+            return Math.Max(contextWindow.Value - outputTokenLimit.Value, 1L);
+        }
+
+        return contextWindow.Value;
+    }
+
+    internal static long? TryReadCapability(AgentModelInfo? modelInfo, IReadOnlyList<string> keys)
     {
         if (modelInfo?.Capabilities is not { Count: > 0 } capabilities)
         {
@@ -99,7 +104,7 @@ internal static class LocalAgentTokenBudgetResolver
                 converted = intValue;
                 return true;
             case uint uintValue:
-                converted = uintValue;
+                converted = (long)uintValue;
                 return true;
             case long longValue:
                 converted = longValue;

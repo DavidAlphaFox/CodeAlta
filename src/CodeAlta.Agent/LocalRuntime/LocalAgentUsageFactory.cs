@@ -1,18 +1,9 @@
+using CodeAlta.Agent.LocalRuntime.Compaction;
+
 namespace CodeAlta.Agent.LocalRuntime;
 
 internal static class LocalAgentUsageFactory
 {
-    private static readonly string[] ContextWindowCapabilityKeys =
-    [
-        "contextWindow",
-        "contextWindowTokens",
-        "context_length",
-        "contextLength",
-        "inputTokenLimit",
-        "maxInputTokens",
-        "tokenLimit",
-    ];
-
     public static AgentSessionUsage CreateOperationUsage(
         string? modelId,
         AgentModelInfo? modelInfo,
@@ -24,13 +15,16 @@ internal static class LocalAgentUsageFactory
         DateTimeOffset updatedAt)
     {
         var currentTokens = totalTokens ?? Sum(inputTokens, outputTokens);
-        var tokenLimit = GetContextWindowTokenLimit(modelInfo);
+        var budget = GetModelTokenBudget(modelInfo);
+        var tokenLimit = budget.InputContextLimit;
         var window = currentTokens is not null || tokenLimit is not null
             ? new AgentWindowUsageSnapshot(
                 CurrentTokens: currentTokens,
                 TokenLimit: tokenLimit,
                 MessageCount: null,
-                Label: tokenLimit is not null ? "Active context window" : "Estimated active context")
+                Label: tokenLimit is not null ? "Active context window" : "Estimated active context",
+                TotalContextEnvelope: budget.TotalContextEnvelope,
+                MaxOutputTokens: budget.MaxOutputTokens)
             : null;
 
         return new AgentSessionUsage(
@@ -78,7 +72,9 @@ internal static class LocalAgentUsageFactory
                 CurrentTokens: usage.Window.CurrentTokens,
                 TokenLimit: usage.Window.TokenLimit,
                 MessageCount: messageCount,
-                Label: usage.Window.Label),
+                Label: usage.Window.Label,
+                TotalContextEnvelope: usage.Window.TotalContextEnvelope,
+                MaxOutputTokens: usage.Window.MaxOutputTokens),
         };
     }
 
@@ -89,7 +85,8 @@ internal static class LocalAgentUsageFactory
             return null;
         }
 
-        var tokenLimit = usage.Window?.TokenLimit ?? GetContextWindowTokenLimit(modelInfo);
+        var budget = GetModelTokenBudget(modelInfo);
+        var tokenLimit = usage.Window?.TokenLimit ?? budget.InputContextLimit;
         if (tokenLimit is null)
         {
             return usage;
@@ -101,7 +98,9 @@ internal static class LocalAgentUsageFactory
             CurrentTokens: currentTokens,
             TokenLimit: tokenLimit,
             MessageCount: usage.Window?.MessageCount,
-            Label: label);
+            Label: label,
+            TotalContextEnvelope: usage.Window?.TotalContextEnvelope ?? budget.TotalContextEnvelope,
+            MaxOutputTokens: usage.Window?.MaxOutputTokens ?? budget.MaxOutputTokens);
         if (Equals(window, usage.Window))
         {
             return usage;
@@ -129,7 +128,8 @@ internal static class LocalAgentUsageFactory
             return usage;
         }
 
-        var tokenLimit = usage?.Window?.TokenLimit ?? GetContextWindowTokenLimit(modelInfo);
+        var budget = GetModelTokenBudget(modelInfo);
+        var tokenLimit = usage?.Window?.TokenLimit ?? budget.InputContextLimit;
         if (currentTokens is null && tokenLimit is null)
         {
             return usage;
@@ -142,7 +142,9 @@ internal static class LocalAgentUsageFactory
             CurrentTokens: currentTokens,
             TokenLimit: tokenLimit,
             MessageCount: messageCount,
-            Label: resolvedLabel);
+            Label: resolvedLabel,
+            TotalContextEnvelope: usage?.Window?.TotalContextEnvelope ?? budget.TotalContextEnvelope,
+            MaxOutputTokens: usage?.Window?.MaxOutputTokens ?? budget.MaxOutputTokens);
         if (usage is not null &&
             Equals(window, usage.Window) &&
             usage.Scope == AgentUsageScope.CurrentWindow)
@@ -161,27 +163,9 @@ internal static class LocalAgentUsageFactory
         };
     }
 
-    private static long? GetContextWindowTokenLimit(AgentModelInfo? modelInfo)
+    private static LocalAgentTokenBudget GetModelTokenBudget(AgentModelInfo? modelInfo)
     {
-        if (modelInfo?.Capabilities is not { Count: > 0 } capabilities)
-        {
-            return null;
-        }
-
-        foreach (var key in ContextWindowCapabilityKeys)
-        {
-            if (!capabilities.TryGetValue(key, out var rawValue))
-            {
-                continue;
-            }
-
-            if (TryConvertToInt64(rawValue, out var value) && value > 0)
-            {
-                return value;
-            }
-        }
-
-        return null;
+        return LocalAgentTokenBudgetResolver.Resolve(modelInfo, LocalAgentCompactionSettings.Default);
     }
 
     private static long? Sum(long? left, long? right)
@@ -222,6 +206,8 @@ internal static class LocalAgentUsageFactory
             TokenLimit = incoming.TokenLimit ?? current.TokenLimit,
             MessageCount = incoming.MessageCount ?? current.MessageCount,
             Label = incoming.Label ?? current.Label,
+            TotalContextEnvelope = incoming.TotalContextEnvelope ?? current.TotalContextEnvelope,
+            MaxOutputTokens = incoming.MaxOutputTokens ?? current.MaxOutputTokens,
         };
     }
 
@@ -255,49 +241,4 @@ internal static class LocalAgentUsageFactory
         };
     }
 
-    private static bool TryConvertToInt64(object? value, out long converted)
-    {
-        switch (value)
-        {
-            case byte byteValue:
-                converted = byteValue;
-                return true;
-            case sbyte sbyteValue:
-                converted = sbyteValue;
-                return true;
-            case short shortValue:
-                converted = shortValue;
-                return true;
-            case ushort ushortValue:
-                converted = ushortValue;
-                return true;
-            case int intValue:
-                converted = intValue;
-                return true;
-            case uint uintValue:
-                converted = (long)uintValue;
-                return true;
-            case long longValue:
-                converted = longValue;
-                return true;
-            case ulong ulongValue when ulongValue <= long.MaxValue:
-                converted = (long)ulongValue;
-                return true;
-            case float floatValue when floatValue is >= long.MinValue and <= long.MaxValue:
-                converted = (long)floatValue;
-                return true;
-            case double doubleValue when doubleValue is >= long.MinValue and <= long.MaxValue:
-                converted = (long)doubleValue;
-                return true;
-            case decimal decimalValue when decimalValue is >= long.MinValue and <= long.MaxValue:
-                converted = (long)decimalValue;
-                return true;
-            case string stringValue when long.TryParse(stringValue, out var parsed):
-                converted = parsed;
-                return true;
-            default:
-                converted = default;
-                return false;
-        }
-    }
 }

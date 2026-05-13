@@ -88,7 +88,8 @@ public sealed class RawApiAgentBackendTests
         Assert.IsTrue(history.OfType<AgentContentCompletedEvent>().Any(static e => e.Kind == AgentContentKind.Reasoning && e.Content == "thinking"));
         Assert.IsTrue(history.OfType<AgentContentCompletedEvent>().Any(static e => e.Kind == AgentContentKind.Assistant && e.Content == "Anthropic answer."));
         var usageEvent = history.OfType<AgentSessionUpdateEvent>().Single(static e => e.Kind == AgentSessionUpdateKind.UsageUpdated);
-        Assert.AreEqual(24L, usageEvent.Usage?.CurrentTokens);
+        Assert.IsTrue(usageEvent.Usage?.CurrentTokens > 24L);
+        Assert.AreEqual(24L, usageEvent.Usage?.LastOperation?.InputTokens + usageEvent.Usage?.LastOperation?.OutputTokens);
         Assert.AreEqual(200000L, usageEvent.Usage?.TokenLimit);
         Assert.IsNotNull(client.LastOptions);
         StringAssert.Contains(client.LastOptions.Instructions, "System instructions");
@@ -259,7 +260,8 @@ public sealed class RawApiAgentBackendTests
         Assert.IsTrue(reasoningEvent.Details.HasValue);
         Assert.AreEqual("google-signature", reasoningEvent.Details.Value.GetProperty("protectedData").GetString());
         var usageEvent = history.OfType<AgentSessionUpdateEvent>().Single(static e => e.Kind == AgentSessionUpdateKind.UsageUpdated);
-        Assert.AreEqual(42L, usageEvent.Usage?.CurrentTokens);
+        Assert.IsTrue(usageEvent.Usage?.CurrentTokens >= 42L);
+        Assert.AreEqual(42L, usageEvent.Usage?.LastOperation?.InputTokens + usageEvent.Usage?.LastOperation?.OutputTokens);
         Assert.AreEqual(1000000L, usageEvent.Usage?.TokenLimit);
 
         var rawAssistant = history.OfType<AgentRawEvent>().Single(static e => e.BackendEventType == "local.assistantMessage");

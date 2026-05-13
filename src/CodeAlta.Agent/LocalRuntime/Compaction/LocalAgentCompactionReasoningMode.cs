@@ -1,12 +1,9 @@
-using System.Text.Json.Serialization;
-
 namespace CodeAlta.Agent.LocalRuntime.Compaction;
 
 /// <summary>
 /// Controls how compaction includes assistant reasoning content.
 /// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter<LocalAgentCompactionReasoningMode>))]
-public enum LocalAgentCompactionReasoningMode
+internal enum LocalAgentCompactionReasoningMode
 {
     /// <summary>
     /// Never include reasoning in serialized compaction input.

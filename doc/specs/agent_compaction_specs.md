@@ -185,30 +185,24 @@ Resolution order:
 
 ### 9.2 Safe request formula
 
-The next request is safe only if:
+The next request is safe only if the projected active prompt fits the resolved input side:
 
 ```text
-promptTokens + reservedOutputTokens + reservedOverheadTokens <= contextWindow
+projectedActiveContextTokens <= inputContextLimit
 ```
 
-and, when known:
+When an explicit `inputTokenLimit` is known, it is the input-context limit. If only a total context envelope and max output are known, the input-context limit is derived as `contextWindow - outputTokenLimit`. If only `contextWindow` is known, that value is treated as the practical input limit.
+
+### 9.3 Input context budget
 
 ```text
-promptTokens <= inputTokenLimit
-reservedOutputTokens <= outputTokenLimit
+inputContextLimit =
+  inputTokenLimit
+  ?? (contextWindow - outputTokenLimit when both are known)
+  ?? contextWindow
 ```
 
-### 9.3 Usable prompt budget
-
-```text
-usablePromptBudget =
-  min(
-    contextWindow - reservedOutputTokens - reservedOverheadTokens,
-    inputTokenLimit if known
-  )
-```
-
-If `usablePromptBudget <= 0`, compaction cannot fix the request.
+If `inputContextLimit <= 0`, compaction cannot fix the request.
 
 ### 9.4 Unknown-limit behavior
 
@@ -225,42 +219,38 @@ If limits are unknown:
 
 The runtime must treat these budgets separately:
 
-1. **request fit budget**: what the next real model request may safely send
-2. **post-compaction target budget**: how small the rebuilt active context should become
-3. **summary request input budget**: how large the summarizer input is allowed to be
-4. **summary response budget**: how many output tokens the summarizer may emit
+1. **input-context limit**: the denominator used for active-context pressure and automatic compaction
+2. **total context envelope**: optional provider/model metadata for the advertised input-plus-output window
+3. **max output tokens**: optional provider/model metadata used when a generation call needs an output cap
 
 These must not be conflated.
 
-The post-compaction target numbers and summary-input optimization targets must all be configurable.
+The input-context limit is resolved from explicit `inputTokenLimit` / `maxInputTokens` metadata when available, otherwise from `contextWindow - outputTokenLimit` when both values are known, and finally from `contextWindow` alone as the practical input limit. The total envelope and max output tokens are metadata only; they must not become the primary percentage denominator.
 
 ### 10.2 Recommended defaults
 
-Recommended defaults:
+Recommended user-facing default:
 
-- `trigger_threshold = 0.85`
-- `reserved_output_tokens = 4096`
-- `reserved_overhead_tokens = 2048`
-- `target_context_ratio_ideal = 0.03`
-- `target_context_ratio_max = 0.10`
-- `recent_suffix_target_tokens = 16000-24000` with `20000` as the default center point
-- `summary_input_token_limit = 20000-24000` when provider capacity allows it
-- `summary_output_token_limit = 768-1536` depending on model size and split-turn complexity
-- `keep_last_user_message = true`
-- `allow_split_turn = true`
+- `enabled = true`
+- `ratio = 0.95`
 
-These are defaults only. Deployments must be able to override them globally and per provider.
+Automatic threshold compaction starts when:
+
+```text
+floor(inputContextLimit * ratio) <= projectedActiveContextTokens
+```
+
+Manual compaction remains available independently of the automatic threshold setting.
 
 Rationale:
 
-- the default scale should keep enough recent context and reserve enough summarizer/response capacity so threshold compaction does not feel artificially starved
-- CodeAlta should pair this larger scale with strict omission-first summary behavior rather than transcript-like summary output
-- the original v2 example values (`summary_output_tokens = 512`, `summary_input_tokens = 12000`) are likely too conservative as general defaults for long coding sessions
-- CodeAlta should instead pair a **larger summarizer input budget** with **stronger omission/global-cap logic**, so it can read enough context without reproducing transcript-like checkpoints
+- `0.95` is intentionally close to the safe input side once output headroom is no longer borrowed from the denominator.
+- CodeAlta should pair this threshold with strict omission-first summary behavior rather than transcript-like summary output.
+- Summary input/output fit should derive from model/provider limits, not provider configuration token knobs.
 
 ### 10.3 Summary output bound
 
-The summarizer call must use an explicit provider-specific output limit:
+When a provider requires an explicit summarizer output limit, the summarizer call must derive it from provider/model metadata:
 
 - OpenAI-compatible: `max_output_tokens`, `max_completion_tokens`, or equivalent abstraction
 - Anthropic: `max_tokens`
@@ -743,10 +733,7 @@ If it still does not fit:
 - optionally regenerate a smaller checkpoint
 - or fail clearly
 
-If the rebuilt prompt fits but its realized compression ratio still exceeds the configured target ceiling because the retained suffix remains expensive, the runtime should:
-
-- accept the result only when no stricter safe fallback remains
-- record that the realized ratio exceeded the target ceiling in diagnostics/compaction messaging
+If the rebuilt prompt fits the input-context limit, a larger realized compression ratio is acceptable when the information is needed to continue safely. The runtime may record the realized compression ratio as diagnostic metadata, but it must not reject or warn solely because the ratio exceeds an old fixed ceiling such as 10%.
 
 ### 22.2 Checkpoint quality validation
 
@@ -754,7 +741,7 @@ The runtime should reject or retry clearly bad checkpoints, for example:
 
 - empty summary
 - summary dominated by raw copied tool output
-- summary that exceeds configured checkpoint caps
+- summary that does not fit the resolved model/provider request limits
 - summary missing all critical sections
 
 ## 23. Configuration
@@ -766,41 +753,14 @@ Recommended normalized shape:
 ```toml
 [providers.openai.compaction]
 enabled = true
-trigger_threshold = 0.85
-reserved_output_tokens = 4096
-reserved_overhead_tokens = 2048
-keep_last_user_message = true
-allow_split_turn = true
-
-# New v2 controls
-target_context_ratio_ideal = 0.03
-target_context_ratio_max = 0.10
-recent_suffix_target_tokens = 20000
-summary_output_tokens = 1024
-summary_input_tokens = 24000
-tool_result_chars_per_item = 1200
-tool_result_chars_total = 6000
-reasoning_chars_per_item = 600
-reasoning_chars_total = 3000
-reasoning_mode = "adaptive" # none | adaptive | summary_only
-max_chunk_passes = 4
-allow_oversized_anchor_reduction = true
+ratio = 0.95
 ```
 
 Notes:
 
-- `recent_suffix_target_tokens` is the “keep recent raw context” control and should guide how much verbatim recent context the planner tries to preserve
-- `summary_input_tokens` should usually be set high enough that threshold compaction can summarize the full canonical non-delta selected history when it fits
-- `summary_input_tokens` is an optimization target for serializer reduction and chunking, not a local correctness limit; if bounded optimization cannot fit the target, compaction should still proceed unless the actual provider/model context limit is reached
-- the larger defaults above do **not** mean serializer output should become verbose; global omission caps and recency-aware prioritization remain mandatory
-
-Additional recommended policy flags:
-
-```toml
-prefer_recent_messages = true
-prefer_recent_tool_outputs = true
-drop_messages_only_when_summary_input_exceeds_budget = true
-```
+- `ratio` is measured against the resolved input-context limit, not the advertised total input-plus-output envelope.
+- Fixed retained-suffix, summary-input, summary-output, reserved-token, and post-compaction target-ratio fields are not part of the provider configuration surface.
+- Internal serializer caps and bounded chunking safeguards may still exist, but they are implementation policy rather than user-facing configuration.
 
 ## 24. Edge cases that must be covered
 
@@ -809,9 +769,9 @@ At minimum:
 1. no compaction when under threshold
 2. threshold compaction when limits are known
 3. unknown-limit behavior
-4. threshold compaction keeps the full canonical non-delta history when it fits the summary-input budget
-5. message dropping does not occur when the selected canonical history fits
-6. recency bias prefers newer messages and newer tool outputs when reduction is necessary
+4. threshold compaction uses the projected active context estimate and input-context denominator
+5. sparse/missing provider usage still triggers from local estimates
+6. retained context preserves required structural anchors rather than a fixed recent suffix
 7. latest user message preserved when it fits
 8. latest user message reduced when it does not fit
 9. split-turn compaction for an oversized turn

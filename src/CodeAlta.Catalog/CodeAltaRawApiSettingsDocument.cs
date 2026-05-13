@@ -65,68 +65,8 @@ public sealed class CodeAltaProviderCompactionDocument
     [JsonPropertyName("enabled")]
     public bool? Enabled { get; set; }
 
-    [JsonPropertyName("trigger_threshold")]
-    public double? TriggerThreshold { get; set; }
-
-    [JsonPropertyName("target_threshold")]
-    public double? TargetThreshold { get; set; }
-
-    [JsonPropertyName("reserved_output_tokens")]
-    public int? ReservedOutputTokens { get; set; }
-
-    [JsonPropertyName("reserved_overhead_tokens")]
-    public int? ReservedOverheadTokens { get; set; }
-
-    [JsonPropertyName("keep_last_user_message")]
-    public bool? KeepLastUserMessage { get; set; }
-
-    [JsonPropertyName("allow_split_turn")]
-    public bool? AllowSplitTurn { get; set; }
-
-    [JsonPropertyName("target_context_ratio_ideal")]
-    public double? TargetContextRatioIdeal { get; set; }
-
-    [JsonPropertyName("target_context_ratio_max")]
-    public double? TargetContextRatioMax { get; set; }
-
-    [JsonPropertyName("recent_suffix_target_tokens")]
-    public int? RecentSuffixTargetTokens { get; set; }
-
-    [JsonPropertyName("summary_output_tokens")]
-    public int? SummaryOutputTokens { get; set; }
-
-    [JsonPropertyName("summary_input_tokens")]
-    public int? SummaryInputTokens { get; set; }
-
-    [JsonPropertyName("tool_result_chars_per_item")]
-    public int? ToolResultCharsPerItem { get; set; }
-
-    [JsonPropertyName("tool_result_chars_total")]
-    public int? ToolResultCharsTotal { get; set; }
-
-    [JsonPropertyName("reasoning_chars_per_item")]
-    public int? ReasoningCharsPerItem { get; set; }
-
-    [JsonPropertyName("reasoning_chars_total")]
-    public int? ReasoningCharsTotal { get; set; }
-
-    [JsonPropertyName("reasoning_mode")]
-    public string? ReasoningMode { get; set; }
-
-    [JsonPropertyName("max_chunk_passes")]
-    public int? MaxChunkPasses { get; set; }
-
-    [JsonPropertyName("allow_oversized_anchor_reduction")]
-    public bool? AllowOversizedAnchorReduction { get; set; }
-
-    [JsonPropertyName("prefer_recent_messages")]
-    public bool? PreferRecentMessages { get; set; }
-
-    [JsonPropertyName("prefer_recent_tool_outputs")]
-    public bool? PreferRecentToolOutputs { get; set; }
-
-    [JsonPropertyName("drop_messages_only_when_summary_input_exceeds_budget")]
-    public bool? DropMessagesOnlyWhenSummaryInputExceedsBudget { get; set; }
+    [JsonPropertyName("ratio")]
+    public double? Ratio { get; set; }
 }
 
 /// <summary>

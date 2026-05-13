@@ -2,6 +2,8 @@ namespace CodeAlta.Agent.LocalRuntime.Compaction;
 
 internal static class LocalAgentCompactionPlanner
 {
+    private const bool DefaultReduceOversizedAnchors = true;
+
     public static LocalAgentCompactionPreparation? Prepare(
         LocalAgentCompactionTrigger trigger,
         string? systemMessage,
@@ -13,7 +15,8 @@ internal static class LocalAgentCompactionPlanner
         string? anchorContentId = null,
         long? checkpointTokenEstimate = null,
         long? promptBudgetOverride = null,
-        bool keepAnchorOnly = false)
+        bool keepAnchorOnly = false,
+        bool allowOversizedAnchorReduction = DefaultReduceOversizedAnchors)
     {
         ArgumentNullException.ThrowIfNull(conversation);
         ArgumentNullException.ThrowIfNull(settings);
@@ -40,7 +43,7 @@ internal static class LocalAgentCompactionPlanner
             ?? (previousSummary is null
                 ? 64L
                 : Math.Max(LocalAgentTokenEstimator.EstimateCheckpointTokens(previousSummary), 64L));
-        var promptBudget = ResolveRetainedPromptBudget(tokensBefore.Tokens, budget.UsablePromptBudget, settings, promptBudgetOverride);
+        var promptBudget = ResolveRetainedPromptBudget(tokensBefore.Tokens, budget.InputContextLimit, promptBudgetOverride);
         var fixedTokenCost = LocalAgentTokenEstimator.EstimatePromptTokens(
             systemMessage,
             developerInstructions,
@@ -60,7 +63,7 @@ internal static class LocalAgentCompactionPlanner
                 groups,
                 anchorGroupIndex,
                 availableForRetained,
-                settings.AllowOversizedAnchorReduction);
+                allowOversizedAnchorReduction);
         }
         else
         {
@@ -69,7 +72,7 @@ internal static class LocalAgentCompactionPlanner
                 anchorGroupIndex,
                 settings.AllowSplitTurn,
                 availableForRetained,
-                settings.AllowOversizedAnchorReduction);
+                allowOversizedAnchorReduction);
         }
 
         var retainedIndexes = turnPrefixIndexes.Concat(suffixIndexes).ToHashSet();
@@ -104,8 +107,7 @@ internal static class LocalAgentCompactionPlanner
 
     private static long ResolveRetainedPromptBudget(
         long tokensBefore,
-        long? usablePromptBudget,
-        LocalAgentCompactionSettings settings,
+        long? inputContextLimit,
         long? promptBudgetOverride)
     {
         if (promptBudgetOverride is > 0)
@@ -113,13 +115,10 @@ internal static class LocalAgentCompactionPlanner
             return promptBudgetOverride.Value;
         }
 
-        var resolvedPromptBudget = usablePromptBudget is > 0
-            ? usablePromptBudget.Value
+        var resolvedPromptBudget = inputContextLimit is > 0
+            ? inputContextLimit.Value
             : Math.Max(tokensBefore / 2, 1L);
-        var preferredRetainedBudget = settings.RecentSuffixTargetTokens > 0
-            ? settings.RecentSuffixTargetTokens
-            : Math.Max((long)Math.Floor(resolvedPromptBudget * settings.TargetThreshold), 1L);
-        return Math.Max(Math.Min(resolvedPromptBudget, preferredRetainedBudget), 1L);
+        return Math.Max(resolvedPromptBudget, 1L);
     }
 
     private static (IReadOnlyList<int> TurnPrefixIndexes, IReadOnlyList<int> SuffixIndexes, bool IsSplitTurn, int? OversizedAnchorGroupIndex) BuildPlan(
@@ -136,14 +135,14 @@ internal static class LocalAgentCompactionPlanner
 
         if (anchorGroupIndex is null)
         {
-            return ([], BuildContiguousSuffix(groups, availableForRetained), false, null);
+            return ([], groups[^1].Tokens <= availableForRetained ? [groups.Count - 1] : [], false, null);
         }
 
         var anchoredSuffixIndexes = BuildSuffixFromStart(groups, anchorGroupIndex.Value);
         var anchoredSuffixTokens = SumTokens(groups, anchoredSuffixIndexes);
         if (anchoredSuffixTokens <= availableForRetained)
         {
-            return ([], BuildContiguousSuffix(groups, availableForRetained, maximumStartIndex: anchorGroupIndex.Value), false, null);
+            return ([], anchoredSuffixIndexes, false, null);
         }
 
         if (!allowSplitTurn)

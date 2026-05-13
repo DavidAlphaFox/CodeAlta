@@ -211,7 +211,15 @@ The preferred workflow is now the in-app model providers dialog (`Ctrl+G Ctrl+M`
 - can save, reload from disk, and test a provider before applying changes
 - preserves advanced TOML settings such as `profile`, `compaction`, `extra_body`, `model_overrides`, and `protocol_trace` even though those advanced settings are still edited manually today
 
-When CodeAlta writes `config.toml` back, it now omits properties that match built-in defaults such as `enabled = true`, reserved-provider `type`/`display_name`, and default compaction values.
+When CodeAlta writes `config.toml` back, it now omits properties that match built-in defaults such as `enabled = true`, reserved-provider `type`/`display_name`, and default compaction values. Local raw-API compaction uses a simplified optional block; automatic compaction starts when the projected active context reaches `inputTokenLimit * ratio`, defaulting to `0.95`:
+
+```toml
+[providers.openai_responses.compaction]
+enabled = true
+ratio = 0.95
+```
+
+The context-usage indicator uses the same input-token denominator. If only a total `context_window` is known it is treated as the practical input limit; if both total context and output limit are known, CodeAlta derives the input side from `context_window - output_token_limit` unless an explicit input limit is configured.
 
 Default provider selection is configured separately:
 

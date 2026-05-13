@@ -2148,7 +2148,7 @@ public sealed class CodeAltaAppTests
             var summary = SessionUsageAggregator.FormatSummary(usage);
 
             Assert.AreEqual("[dim]Context[/] [success]42%[/]", indicator);
-            Assert.AreEqual("50,000 / 120,000 tokens (41.7%)", summary);
+            Assert.AreEqual("50,000 / 120,000 input tokens (41.7%)", summary);
         }
         finally
         {
@@ -2174,7 +2174,7 @@ public sealed class CodeAltaAppTests
         var summary = SessionUsageAggregator.FormatSummary(usage);
 
         Assert.AreEqual("[dim]Context[/] [success]16%[/]", indicator);
-        Assert.AreEqual("40,473 / 258,400 tokens (15.7%)", summary);
+        Assert.AreEqual("40,473 / 258,400 input tokens (15.7%)", summary);
     }
 
     [TestMethod]
@@ -2200,7 +2200,7 @@ public sealed class CodeAltaAppTests
         var markdown = SessionUsageAggregator.BuildMarkdown(usage, "Codex", "gpt-5.4");
 
         Assert.AreEqual("[dim]Context[/] [warning]78%[/]", indicator);
-        StringAssert.Contains(markdown, "Window: 200,535 / 258,400 tokens (77.6%)");
+        StringAssert.Contains(markdown, "Active context: 200,535 / 258,400 input tokens (77.6%)");
         StringAssert.Contains(markdown, "Thread total: total 33,641,433");
     }
 
@@ -2340,7 +2340,13 @@ public sealed class CodeAltaAppTests
 
             var markdown = SessionUsageAggregator.BuildMarkdown(
                 new AgentSessionUsage(
-                    Window: new AgentWindowUsageSnapshot(50000, 120000, 12, "Active context window"),
+                    Window: new AgentWindowUsageSnapshot(
+                        50000,
+                        120000,
+                        12,
+                        "Active context window",
+                        TotalContextEnvelope: 400000,
+                        MaxOutputTokens: 128000),
                     LastOperation: new AgentOperationUsageSnapshot(
                         InputTokens: 1000,
                         OutputTokens: 200,
@@ -2371,7 +2377,8 @@ public sealed class CodeAltaAppTests
             StringAssert.Contains(markdown, "## Usage breakdown: 12 messages");
             StringAssert.Contains(markdown, "## Limits");
             StringAssert.Contains(markdown, "## Backend-specific details");
-            StringAssert.Contains(markdown, "50,000 / 120,000 tokens (41.7%)");
+            StringAssert.Contains(markdown, "50,000 / 120,000 input tokens (41.7%)");
+            StringAssert.Contains(markdown, "Model envelope: 400,000 total tokens; max output 128,000 tokens");
             StringAssert.Contains(markdown, "Last turn: input 1,000");
             StringAssert.Contains(markdown, "42% used");
             Assert.IsFalse(markdown.Contains("## Summary", StringComparison.Ordinal));

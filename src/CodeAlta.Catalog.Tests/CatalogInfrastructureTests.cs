@@ -764,27 +764,7 @@ public sealed class CatalogInfrastructureTests
 
             [providers.codex.compaction]
             enabled = true
-            trigger_threshold = 0.85
-            target_threshold = 0.5
-            reserved_output_tokens = 4096
-            reserved_overhead_tokens = 2048
-            keep_last_user_message = true
-            allow_split_turn = true
-            target_context_ratio_ideal = 0.03
-            target_context_ratio_max = 0.1
-            recent_suffix_target_tokens = 20000
-            summary_output_tokens = 1024
-            summary_input_tokens = 24000
-            tool_result_chars_per_item = 1200
-            tool_result_chars_total = 6000
-            reasoning_chars_per_item = 600
-            reasoning_chars_total = 3000
-            reasoning_mode = "adaptive"
-            max_chunk_passes = 4
-            allow_oversized_anchor_reduction = true
-            prefer_recent_messages = true
-            prefer_recent_tool_outputs = true
-            drop_messages_only_when_summary_input_exceeds_budget = true
+            ratio = 0.95
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = root.Path });

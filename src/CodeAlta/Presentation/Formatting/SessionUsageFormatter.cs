@@ -38,8 +38,8 @@ internal static class SessionUsageFormatter
 
         var limit = FormatNumber(window.TokenLimit);
         return usage.WindowUsagePercentage is { } percentage
-            ? FormattableString.Invariant($"{current} / {limit} tokens ({percentage:0.#}%)")
-            : $"{current} / {limit} tokens";
+            ? FormattableString.Invariant($"{current} / {limit} input tokens ({percentage:0.#}%)")
+            : $"{current} / {limit} input tokens";
     }
 
     public static string BuildMarkdown(AgentSessionUsage? usage, string backendName, string? modelName)
@@ -384,7 +384,11 @@ internal static class SessionUsageFormatter
             .AppendLine();
         if (usage.Window is not null)
         {
-            builder.Append("- Window: ").AppendLine(FormatSummary(usage));
+            builder.Append("- Active context: ").AppendLine(FormatSummary(usage));
+            if (TryFormatModelEnvelope(usage.Window, out var modelEnvelope))
+            {
+                builder.Append("- Model envelope: ").AppendLine(modelEnvelope);
+            }
         }
 
         if (usage.LastOperation is { } operation)
@@ -525,5 +529,22 @@ internal static class SessionUsageFormatter
                 }
             }
         }
+    }
+
+    private static bool TryFormatModelEnvelope(AgentWindowUsageSnapshot window, out string modelEnvelope)
+    {
+        var parts = new List<string>();
+        if (window.TotalContextEnvelope is { } totalContextEnvelope)
+        {
+            parts.Add($"{FormatNumber(totalContextEnvelope)} total tokens");
+        }
+
+        if (window.MaxOutputTokens is { } maxOutputTokens)
+        {
+            parts.Add($"max output {FormatNumber(maxOutputTokens)} tokens");
+        }
+
+        modelEnvelope = string.Join("; ", parts);
+        return parts.Count > 0;
     }
 }

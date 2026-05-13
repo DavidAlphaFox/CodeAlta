@@ -8,12 +8,9 @@ internal enum LocalAgentCompactionTrigger
 }
 
 internal sealed record LocalAgentTokenBudget(
-    long? ContextWindow,
-    long? InputTokenLimit,
-    long? OutputTokenLimit,
-    long? UsablePromptBudget,
-    int ReservedOutputTokens,
-    int ReservedOverheadTokens);
+    long? TotalContextEnvelope,
+    long? InputContextLimit,
+    long? MaxOutputTokens);
 
 internal sealed record LocalAgentTokenEstimate(
     long Tokens,

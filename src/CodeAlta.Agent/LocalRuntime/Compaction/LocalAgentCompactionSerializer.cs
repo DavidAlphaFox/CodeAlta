@@ -6,6 +6,12 @@ namespace CodeAlta.Agent.LocalRuntime.Compaction;
 
 internal static class LocalAgentCompactionSerializer
 {
+    private const int ToolExcerptPerItemCharacterLimit = 1_200;
+    private const int ToolExcerptTotalCharacterLimit = 6_000;
+    private const int ReasoningExcerptPerItemCharacterLimit = 600;
+    private const int ReasoningExcerptTotalCharacterLimit = 3_000;
+    private const LocalAgentCompactionReasoningMode ReasoningMode = LocalAgentCompactionReasoningMode.Adaptive;
+
     private static readonly string[] HighSignalKeywords =
     [
         "error",
@@ -41,7 +47,7 @@ internal static class LocalAgentCompactionSerializer
         var retainedPrefixUnits = LocalAgentCompactionCanonicalizer.Normalize(preparation.TurnPrefixMessages);
         var retainedSuffixUnits = LocalAgentCompactionCanonicalizer.Normalize(preparation.MessagesToKeep);
 
-        var state = new SerializationState(settings, oversizedAnchorReduced);
+        var state = new SerializationState(oversizedAnchorReduced);
         AllocateExpensiveParts(summarizedUnits, retainedPrefixUnits, retainedSuffixUnits, state);
 
         var builder = new StringBuilder();
@@ -102,7 +108,7 @@ internal static class LocalAgentCompactionSerializer
         AddRankedUnits(rankedUnits, retainedPrefixUnits, SectionRank.RetainedPrefix, ref recency);
         AddRankedUnits(rankedUnits, retainedSuffixUnits, SectionRank.RetainedSuffix, ref recency);
 
-        foreach (var rankedUnit in OrderRankedUnits(rankedUnits, state.Settings))
+        foreach (var rankedUnit in OrderRankedUnits(rankedUnits))
         {
             if (rankedUnit.Unit is LocalAgentCompactionToolInteractionUnit { IsCollapsed: true })
             {
@@ -142,25 +148,14 @@ internal static class LocalAgentCompactionSerializer
         }
     }
 
-    private static IOrderedEnumerable<RankedUnit> OrderRankedUnits(
-        IEnumerable<RankedUnit> rankedUnits,
-        LocalAgentCompactionSettings settings)
+    private static IOrderedEnumerable<RankedUnit> OrderRankedUnits(IEnumerable<RankedUnit> rankedUnits)
     {
         ArgumentNullException.ThrowIfNull(rankedUnits);
-        ArgumentNullException.ThrowIfNull(settings);
 
-        var ordered = rankedUnits.OrderByDescending(static item => item.Priority);
-        if (settings.PreferRecentToolOutputs)
-        {
-            ordered = ordered.ThenByDescending(static item => item.ContainsToolResult ? item.Recency : int.MinValue);
-        }
-
-        if (settings.PreferRecentMessages)
-        {
-            ordered = ordered.ThenByDescending(static item => item.Recency);
-        }
-
-        return ordered;
+        return rankedUnits
+            .OrderByDescending(static item => item.Priority)
+            .ThenByDescending(static item => item.ContainsToolResult ? item.Recency : int.MinValue)
+            .ThenByDescending(static item => item.Recency);
     }
 
     private static int ComputePriority(LocalAgentCompactionUnit unit, SectionRank sectionRank)
@@ -190,14 +185,14 @@ internal static class LocalAgentCompactionSerializer
 
     private static void AllocateToolResult(LocalAgentConversationMessage message, int partIndex, LocalAgentMessagePart.ToolResult toolResult, SerializationState state)
     {
-        if (state.Settings.ToolResultCharsPerItem <= 0 || state.RemainingToolCharacters <= 0)
+        if (ToolExcerptPerItemCharacterLimit <= 0 || state.RemainingToolCharacters <= 0)
         {
             state.OmittedToolResultCount++;
             return;
         }
 
         var rendered = RenderToolResult(toolResult.Result);
-        var excerpt = CreateToolExcerpt(rendered, state.Settings.ToolResultCharsPerItem);
+        var excerpt = CreateToolExcerpt(rendered, ToolExcerptPerItemCharacterLimit);
         if (string.IsNullOrWhiteSpace(excerpt))
         {
             state.OmittedToolResultCount++;
@@ -222,8 +217,7 @@ internal static class LocalAgentCompactionSerializer
 
     private static void AllocateReasoning(LocalAgentConversationMessage message, int partIndex, LocalAgentMessagePart.Reasoning reasoning, SerializationState state)
     {
-        if (state.Settings.ReasoningMode is LocalAgentCompactionReasoningMode.None ||
-            !string.IsNullOrWhiteSpace(reasoning.ProtectedData) ||
+        if (!string.IsNullOrWhiteSpace(reasoning.ProtectedData) ||
             string.IsNullOrWhiteSpace(reasoning.Value))
         {
             if (!string.IsNullOrWhiteSpace(reasoning.Value) || !string.IsNullOrWhiteSpace(reasoning.ProtectedData))
@@ -234,13 +228,13 @@ internal static class LocalAgentCompactionSerializer
             return;
         }
 
-        if (state.Settings.ReasoningCharsPerItem <= 0 || state.RemainingReasoningCharacters <= 0)
+        if (ReasoningExcerptPerItemCharacterLimit <= 0 || state.RemainingReasoningCharacters <= 0)
         {
             state.OmittedReasoningCount++;
             return;
         }
 
-        var excerpt = CreateReasoningExcerpt(reasoning.Value!, state.Settings.ReasoningCharsPerItem, state.Settings.ReasoningMode);
+        var excerpt = CreateReasoningExcerpt(reasoning.Value!, ReasoningExcerptPerItemCharacterLimit, ReasoningMode);
         if (string.IsNullOrWhiteSpace(excerpt))
         {
             state.OmittedReasoningCount++;
@@ -610,19 +604,17 @@ internal static class LocalAgentCompactionSerializer
         return builder.ToString().Trim();
     }
 
-    private sealed class SerializationState(LocalAgentCompactionSettings settings, bool reducedOversizedAnchor)
+    private sealed class SerializationState(bool reducedOversizedAnchor)
     {
-        public LocalAgentCompactionSettings Settings { get; } = settings;
-
         public Dictionary<LocalAgentConversationMessage, Dictionary<int, string>> ToolResultExcerpts { get; }
             = new(ReferenceEqualityComparer.Instance);
 
         public Dictionary<LocalAgentConversationMessage, Dictionary<int, string>> ReasoningExcerpts { get; }
             = new(ReferenceEqualityComparer.Instance);
 
-        public int RemainingToolCharacters { get; set; } = Math.Max(settings.ToolResultCharsTotal, 0);
+        public int RemainingToolCharacters { get; set; } = Math.Max(ToolExcerptTotalCharacterLimit, 0);
 
-        public int RemainingReasoningCharacters { get; set; } = Math.Max(settings.ReasoningCharsTotal, 0);
+        public int RemainingReasoningCharacters { get; set; } = Math.Max(ReasoningExcerptTotalCharacterLimit, 0);
 
         public int OmittedToolResultCount { get; set; }
 
