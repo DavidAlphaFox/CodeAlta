@@ -141,7 +141,7 @@ internal sealed class ChatBackendInitializationCoordinator
     {
         try
         {
-            await RefreshAsync(descriptor.BackendId, cancellationToken).ConfigureAwait(false);
+            await RefreshAsync(descriptor.BackendId, descriptor.DisplayName, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -150,8 +150,14 @@ internal sealed class ChatBackendInitializationCoordinator
     }
 
     private async Task RefreshAsync(AgentBackendId backendId, CancellationToken cancellationToken)
+        => await RefreshAsync(backendId, displayName: null, cancellationToken).ConfigureAwait(false);
+
+    private async Task RefreshAsync(
+        AgentBackendId backendId,
+        string? displayName,
+        CancellationToken cancellationToken)
     {
-        var state = _chatBackendStates[backendId.Value];
+        var state = await EnsureBackendStateAsync(backendId, displayName, cancellationToken).ConfigureAwait(false);
         if (CanReuseLoadedBackendState(backendId, state))
         {
             _setBackendSessionLoadingEnabled?.Invoke(backendId, true);
@@ -212,6 +218,41 @@ internal sealed class ChatBackendInitializationCoordinator
                     PublishProviderStateChanged(backendId);
                 });
         }
+    }
+
+    private async Task<ChatBackendState> EnsureBackendStateAsync(
+        AgentBackendId backendId,
+        string? displayName,
+        CancellationToken cancellationToken)
+    {
+        if (_chatBackendStates.TryGetValue(backendId.Value, out var state))
+        {
+            return state;
+        }
+
+        var completion = new TaskCompletionSource<ChatBackendState>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _dispatchToUi(
+            () =>
+            {
+                try
+                {
+                    if (!_chatBackendStates.TryGetValue(backendId.Value, out var state))
+                    {
+                        state = new ChatBackendState(
+                            backendId,
+                            string.IsNullOrWhiteSpace(displayName) ? backendId.Value : displayName.Trim());
+                        _chatBackendStates[backendId.Value] = state;
+                    }
+
+                    completion.SetResult(state);
+                }
+                catch (Exception ex)
+                {
+                    completion.SetException(ex);
+                }
+            });
+
+        return await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private IDisposable? SubscribeCodexProgressIfNeeded(AgentBackendId backendId, ChatBackendState state)

@@ -125,6 +125,29 @@ public sealed class ChatBackendInitializationCoordinatorTests
     }
 
     [TestMethod]
+    public async Task InitializeAsync_CreatesMissingBackendStateBeforeRefreshingModels()
+    {
+        var backendId = new AgentBackendId("gemini");
+        var backendFactory = new AgentBackendFactory();
+        var backend = new CountingBackend(backendId);
+        backendFactory.Register(backendId, () => backend);
+        await using var hub = new AgentHub(backendFactory);
+        var states = new Dictionary<string, ChatBackendState>(StringComparer.OrdinalIgnoreCase);
+        var coordinator = CreateCoordinator(
+            hub,
+            [new AgentBackendDescriptor(backendId, "Gemini")],
+            states);
+
+        await coordinator.InitializeAsync(CancellationToken.None).ConfigureAwait(false);
+
+        Assert.IsTrue(states.TryGetValue(backendId.Value, out var state));
+        Assert.AreEqual("Gemini", state.DisplayName);
+        Assert.AreEqual(1, backend.ListModelsCount);
+        Assert.AreEqual(ChatBackendAvailability.Ready, state.Availability);
+        CollectionAssert.AreEqual(new[] { "new-model" }, state.Models.Select(static model => model.Id).ToArray());
+    }
+
+    [TestMethod]
     public async Task InitializeAsync_DropsStaleQueuedProviderInitializationStatus()
     {
         var backendId = new AgentBackendId("openai");

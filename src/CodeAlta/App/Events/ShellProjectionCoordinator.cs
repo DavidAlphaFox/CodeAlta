@@ -94,7 +94,10 @@ internal sealed class ShellProjectionCoordinator : IDisposable
                 _promptAvailabilityProjection.ApplyPromptAvailabilityProjection();
                 break;
             case PromptAvailabilityChangedEvent:
+                _promptAvailabilityProjection.ApplyPromptAvailabilityProjection();
+                break;
             case ModelProviderStateChangedEvent:
+                _workspaceProjections.ApplySelectionProjection();
                 _promptAvailabilityProjection.ApplyPromptAvailabilityProjection();
                 break;
             case PromptFocusRequestedEvent:

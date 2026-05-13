@@ -101,7 +101,7 @@ internal sealed class ThreadCommandCoordinator
         _pluginHostBridge = pluginHostBridge;
         var permissionRequests = new ThreadPermissionRequestCoordinator(threadSelection, commandContext);
         var userInputRequests = new ThreadUserInputRequestCoordinator(threadSelection, commandContext);
-        _executionOptionsFactory = new ThreadExecutionOptionsFactory(catalogOptions, backendDescriptors, chatBackendStates, threadSelection, selectorState, permissionRequests, userInputRequests, altaServices, altaToolBackendIds);
+        _executionOptionsFactory = new ThreadExecutionOptionsFactory(catalogOptions, chatBackendStates, threadSelection, permissionRequests, userInputRequests, altaServices, altaToolBackendIds);
         _promptDispatchCoordinator = new ThreadPromptDispatchCoordinator(
             runtimeService,
             _executionOptionsFactory,

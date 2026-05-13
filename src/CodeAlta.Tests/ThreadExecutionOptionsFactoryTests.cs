@@ -8,7 +8,6 @@ using CodeAlta.LiveTool;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Threading;
-using CodeAlta.ViewModels;
 
 namespace CodeAlta.Tests;
 
@@ -65,6 +64,67 @@ public sealed class ThreadExecutionOptionsFactoryTests
         Assert.AreEqual(project.Id, caller.GetProperty("sourceProjectId").GetString());
     }
 
+    [TestMethod]
+    public void BuildPreferredExecutionOptions_UsesCanonicalProviderStateForDraftThreadCreation()
+    {
+        using var temp = TestTempDirectory.Create();
+        var catalogOptions = new CatalogOptions { GlobalRoot = temp.Path };
+        var uiDispatcher = new InlineUiDispatcher();
+        var threadState = TestThreadStateServices.CreateCoordinator(
+            new ProjectCatalog(catalogOptions),
+            new WorkThreadCatalog(catalogOptions),
+            uiDispatcher,
+            new ShellStateStore(uiDispatcher));
+        threadState.ApplyInitialCatalogState(new ShellThreadStateCoordinator.InitialCatalogState([], [], new WorkThreadViewState()));
+        var selection = new ThreadSelectionContext(
+            threadState,
+            static (_, _) => Task.CompletedTask,
+            static _ => false);
+        var backendState = new ChatBackendState(AgentBackendIds.Codex, "Codex")
+        {
+            Availability = ChatBackendAvailability.Ready,
+            SelectedModelId = "gpt-selected",
+            SelectedReasoningEffort = AgentReasoningEffort.High,
+        };
+        backendState.Models.Add(new AgentModelInfo(
+            "gpt-wrong",
+            SupportedReasoningEfforts: [AgentReasoningEffort.Low]));
+        backendState.Models.Add(new AgentModelInfo(
+            "gpt-selected",
+            SupportedReasoningEfforts: [AgentReasoningEffort.High]));
+        var factory = new ThreadExecutionOptionsFactory(
+            catalogOptions,
+            new Dictionary<string, ChatBackendState>(StringComparer.Ordinal)
+            {
+                [AgentBackendIds.Codex.Value] = backendState,
+            },
+            selection,
+            new ThreadPermissionRequestCoordinator(selection, CreateCommandContext(uiDispatcher)),
+            new ThreadUserInputRequestCoordinator(selection, CreateCommandContext(uiDispatcher)));
+
+        var options = factory.BuildPreferredExecutionOptions(AgentBackendIds.Codex, temp.Path, []);
+
+        Assert.AreEqual("gpt-selected", options.Model);
+        Assert.AreEqual(AgentReasoningEffort.High, options.ReasoningEffort);
+    }
+
+    [TestMethod]
+    public void BuildPreferredExecutionOptions_AllowsProviderBeforeStateCatalogSyncs()
+    {
+        using var temp = TestTempDirectory.Create();
+        var project = CreateProject("project-a", Path.Combine(temp.Path, "project-a"));
+        Directory.CreateDirectory(project.ProjectPath);
+        var factory = CreateFactory(temp.Path, project);
+        var backendId = new AgentBackendId("gemini");
+
+        var options = factory.BuildPreferredExecutionOptions(backendId, temp.Path, []);
+
+        Assert.AreEqual(backendId, options.BackendId);
+        Assert.AreEqual("gemini", options.ProviderKey);
+        Assert.IsNull(options.Model);
+        Assert.IsNull(options.ReasoningEffort);
+    }
+
     private static ThreadExecutionOptionsFactory CreateFactory(string globalRoot, ProjectDescriptor selectedProject)
     {
         var catalogOptions = new CatalogOptions { GlobalRoot = globalRoot };
@@ -84,12 +144,10 @@ public sealed class ThreadExecutionOptionsFactoryTests
             threadState,
             static (_, _) => Task.CompletedTask,
             static _ => false);
-        var selectorState = new ModelProviderSelectorStateStore(new ThreadWorkspaceViewModel(), uiDispatcher);
         var services = new AltaServiceCollection();
         var commandContext = CreateCommandContext(uiDispatcher);
         return new ThreadExecutionOptionsFactory(
             catalogOptions,
-            [new AgentBackendDescriptor(AgentBackendIds.Codex, "Codex")],
             new Dictionary<string, ChatBackendState>(StringComparer.Ordinal)
             {
                 [AgentBackendIds.Codex.Value] = new ChatBackendState(AgentBackendIds.Codex, "Codex")
@@ -99,7 +157,6 @@ public sealed class ThreadExecutionOptionsFactoryTests
                 },
             },
             selection,
-            selectorState,
             new ThreadPermissionRequestCoordinator(selection, commandContext),
             new ThreadUserInputRequestCoordinator(selection, commandContext),
             services,

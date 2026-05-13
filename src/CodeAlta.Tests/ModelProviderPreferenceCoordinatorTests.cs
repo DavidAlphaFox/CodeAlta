@@ -177,6 +177,75 @@ public sealed class ModelProviderPreferenceCoordinatorTests
         Assert.AreEqual(AgentReasoningEffort.Medium, tab.ReasoningEffort);
     }
 
+    [TestMethod]
+    public void ApplyThreadPreference_PreservesPersistedModelMissingFromCatalog()
+    {
+        using var temp = TempDirectory.Create();
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
+        AgentBackendDescriptor[] backendDescriptors =
+        [
+            new AgentBackendDescriptor(new AgentBackendId("zai"), "ZAI"),
+        ];
+        var backendStates = ChatBackendPresentation.CreateBackendStates(backendDescriptors);
+        backendStates["zai"].Models.Add(new AgentModelInfo("gpt-5", DisplayName: "GPT-5"));
+        var tab = CreateOpenThreadState("thread-1", "zai");
+        var viewState = new WorkThreadViewState
+        {
+            ThreadPreferences = new Dictionary<string, WorkThreadPreference>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["thread-1"] = new WorkThreadPreference
+                {
+                    ModelId = "glm-5.1",
+                    ReasoningEffort = AgentReasoningEffort.Medium,
+                },
+            },
+        };
+
+        coordinator.ApplyThreadPreference(tab, viewState, threadProjectRoot: null, backendStates);
+
+        Assert.AreEqual("glm-5.1", tab.ModelId);
+        Assert.AreEqual(AgentReasoningEffort.Medium, tab.ReasoningEffort);
+    }
+
+    [TestMethod]
+    public void ApplyThreadPreference_PrefersDescriptorModelOverProviderDefaults()
+    {
+        using var temp = TempDirectory.Create();
+        File.WriteAllText(
+            Path.Combine(temp.Path, "config.toml"),
+            """
+            [providers.zai]
+            type = "openai-chat"
+            display_name = "ZAI"
+            api_key_env = "TEST_API_KEY"
+            model = "gpt-5"
+            reasoning_effort = "high"
+            """);
+
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
+        AgentBackendDescriptor[] backendDescriptors =
+        [
+            new AgentBackendDescriptor(new AgentBackendId("zai"), "ZAI"),
+        ];
+        var backendStates = ChatBackendPresentation.CreateBackendStates(backendDescriptors);
+        backendStates["zai"].Models.Add(new AgentModelInfo(
+            "gpt-5",
+            SupportedReasoningEfforts: [AgentReasoningEffort.High]));
+        backendStates["zai"].Models.Add(new AgentModelInfo(
+            "glm-5.1",
+            SupportedReasoningEfforts: [AgentReasoningEffort.Medium]));
+        var tab = CreateOpenThreadState("thread-1", "zai");
+        tab.Thread.ModelId = "glm-5.1";
+        tab.Thread.ReasoningEffort = AgentReasoningEffort.Medium;
+
+        coordinator.ApplyThreadPreference(tab, new WorkThreadViewState(), threadProjectRoot: null, backendStates);
+
+        Assert.AreEqual("glm-5.1", tab.ModelId);
+        Assert.AreEqual(AgentReasoningEffort.Medium, tab.ReasoningEffort);
+    }
+
     private static OpenThreadState CreateOpenThreadState(string threadId, string providerKey)
     {
         var thread = new WorkThreadDescriptor

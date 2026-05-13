@@ -68,7 +68,7 @@ public sealed class ShellProjectionCoordinatorTests
     }
 
     [TestMethod]
-    public void Publish_ModelProviderChanged_RefreshesPromptAvailability()
+    public void Publish_ModelProviderChanged_RefreshesSelectionAndPromptAvailability()
     {
         var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
@@ -76,7 +76,7 @@ public sealed class ShellProjectionCoordinatorTests
 
         publisher.Publish(new ModelProviderStateChangedEvent("provider"));
 
-        CollectionAssert.AreEqual(new[] { "prompt" }, projections.Calls);
+        CollectionAssert.AreEqual(new[] { "selection", "prompt" }, projections.Calls);
     }
 
     [TestMethod]

@@ -769,6 +769,9 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         };
 
         var startNewSession = previousThreadId is null || ShouldReplaceDraftSession(thread, options.BackendId);
+        var canStartReplacementSession = !startNewSession &&
+            await CanStartReplacementSessionForMissingResumeAsync(options.BackendId, cancellationToken).ConfigureAwait(false);
+
         if (startNewSession)
         {
             var createdSessionId = await _agentHub.StartSessionAsync(agentId, sessionOptions, cancellationToken).ConfigureAwait(false);
@@ -778,7 +781,16 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         }
         else
         {
-            var resumedSessionId = await _agentHub.ResumeSessionAsync(agentId, thread.ThreadId, sessionOptions, cancellationToken).ConfigureAwait(false);
+            string resumedSessionId;
+            try
+            {
+                resumedSessionId = await _agentHub.ResumeSessionAsync(agentId, thread.ThreadId, sessionOptions, cancellationToken).ConfigureAwait(false);
+            }
+            catch (KeyNotFoundException) when (canStartReplacementSession)
+            {
+                resumedSessionId = await _agentHub.StartSessionAsync(agentId, sessionOptions, cancellationToken).ConfigureAwait(false);
+            }
+
             if (previousThreadId is null)
             {
                 thread.ThreadId = resumedSessionId;
@@ -1349,6 +1361,29 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
 
     private static bool CanCreateSessionWithRequestedThreadId(AgentBackendId backendId)
         => !string.Equals(backendId.Value, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase);
+
+    private async Task<bool> CanStartReplacementSessionForMissingResumeAsync(
+        AgentBackendId backendId,
+        CancellationToken cancellationToken)
+    {
+        if (IsProviderManagedBackend(backendId) || !CanCreateSessionWithRequestedThreadId(backendId))
+        {
+            return false;
+        }
+
+        try
+        {
+            return await _agentHub.UsesSharedSessionMetadataStoreAsync(backendId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     private async Task<ProjectDescriptor?> ResolveProjectAsync(WorkThreadDescriptor thread, CancellationToken cancellationToken)
     {

@@ -55,9 +55,7 @@ internal sealed class ModelProviderPreferenceCoordinator
                     ? backendState.SelectedModelId ?? defaults.Model
                     : defaults.Model;
 
-        backendState.SelectedModelId = backendState.Models.Count == 0
-            ? preferredModelId
-            : ChatBackendPresentation.ResolvePreferredModelId(backendState.Models, preferredModelId);
+        backendState.SelectedModelId = ResolveModelSelection(backendState.Models, preferredModelId);
         var selectedModel = FindModel(backendState.Models, backendState.SelectedModelId);
         var preferredReasoningEffort = matchingDraftPreference is not null
             ? matchingDraftPreference.ReasoningEffort ?? defaults.ReasoningEffort
@@ -98,19 +96,14 @@ internal sealed class ModelProviderPreferenceCoordinator
 
         viewState.ThreadPreferences.TryGetValue(tab.Thread.ThreadId, out var persistedPreference);
         var defaults = _configStore.GetEffectiveProviderPreference(tab.BackendId.Value, threadProjectRoot);
-        tab.ModelId ??= persistedPreference?.ModelId ?? defaults.Model;
-        tab.ReasoningEffort ??= persistedPreference?.ReasoningEffort ?? defaults.ReasoningEffort;
+        chatBackendStates.TryGetValue(tab.BackendId.Value, out var backendState);
+        var preferredModelId = tab.ModelId ?? tab.Thread.ModelId ?? persistedPreference?.ModelId ?? defaults.Model;
+        tab.ModelId = ResolveModelSelection(backendState?.Models ?? [], preferredModelId);
+        tab.ReasoningEffort ??= tab.Thread.ReasoningEffort ?? persistedPreference?.ReasoningEffort ?? defaults.ReasoningEffort;
 
-        if (!chatBackendStates.TryGetValue(tab.BackendId.Value, out var backendState))
+        if (backendState is null)
         {
             return;
-        }
-
-        if (backendState.Models.Count > 0)
-        {
-            tab.ModelId = ChatBackendPresentation.ResolvePreferredModelId(
-                backendState.Models,
-                tab.ModelId);
         }
 
         var selectedModel = FindModel(backendState.Models, tab.ModelId);
@@ -177,6 +170,18 @@ internal sealed class ModelProviderPreferenceCoordinator
         return string.IsNullOrWhiteSpace(modelId)
             ? null
             : models.FirstOrDefault(model => string.Equals(model.Id, modelId, StringComparison.Ordinal));
+    }
+
+    private static string? ResolveModelSelection(IReadOnlyList<AgentModelInfo> models, string? preferredModelId)
+    {
+        ArgumentNullException.ThrowIfNull(models);
+
+        if (!string.IsNullOrWhiteSpace(preferredModelId))
+        {
+            return preferredModelId.Trim();
+        }
+
+        return ChatBackendPresentation.ResolvePreferredModelId(models, preferredModelId);
     }
 
     private static string BuildDraftScopeKey(string? draftProjectRoot)
