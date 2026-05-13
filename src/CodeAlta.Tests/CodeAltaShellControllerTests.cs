@@ -208,6 +208,48 @@ public sealed class CodeAltaShellControllerTests
     }
 
     [TestMethod]
+    public async Task InitializeAsync_ReconcilesCompleteSessionCatalogAfterProgressiveStartupRecovery()
+    {
+        var log = new List<string>();
+        var codexBackendId = new AgentBackendId("codex");
+        var slowBackendId = new AgentBackendId("slow");
+        var shell = new FakeShell(log);
+        var importer = new FakeProgressImporter(log, codexBackendId, slowBackendId, blockSecondImport: false);
+        var project = new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" };
+        var parent = CreateThread("thread-parent", backendId: codexBackendId.Value);
+        var children = Enumerable.Range(1, 8)
+            .Select(index =>
+            {
+                var child = CreateThread($"thread-child-{index}", backendId: codexBackendId.Value);
+                child.ParentThreadId = parent.ThreadId;
+                child.LastActiveAt = parent.LastActiveAt.AddMinutes(index);
+                return child;
+            })
+            .ToArray();
+        var completeThreads = new[] { parent }.Concat(children).ToArray();
+        var progressiveThreads = new[] { parent }.Concat(children.Take(2)).ToArray();
+        var threadSource = new FakeRecoverableThreadSource(log, completeThreads, progressiveThreads);
+        var controller = new CodeAltaShellController(
+            shell,
+            importer,
+            new FakeProjectCatalogStore(log, [project]),
+            threadSource,
+            new FakeWorkThreadDeleter(log),
+            [
+                new AgentBackendDescriptor(codexBackendId, "Codex"),
+                new AgentBackendDescriptor(slowBackendId, "Slow"),
+            ]);
+        controller.AttachUiDispatcher(new FakeUiDispatcher());
+
+        await controller.InitializeAsync(CancellationToken.None);
+
+        CollectionAssert.Contains(log, "ThreadSource.Stream:codex");
+        CollectionAssert.Contains(log, "ThreadSource.List");
+        var finalCatalogApplication = log.Last(entry => entry.StartsWith("Shell.ApplyRecoveredCatalogState:", StringComparison.Ordinal));
+        Assert.AreEqual("Shell.ApplyRecoveredCatalogState:1:9", finalCatalogApplication);
+    }
+
+    [TestMethod]
     public async Task ApplyRuntimeEventAsync_RoutesEventThroughDispatcher()
     {
         var log = new List<string>();
@@ -902,7 +944,10 @@ public sealed class CodeAltaShellControllerTests
         }
     }
 
-    private sealed class FakeRecoverableThreadSource(List<string> log, IReadOnlyList<WorkThreadDescriptor> threads) : IRecoverableThreadSource
+    private sealed class FakeRecoverableThreadSource(
+        List<string> log,
+        IReadOnlyList<WorkThreadDescriptor> threads,
+        IReadOnlyList<WorkThreadDescriptor>? providerScopedThreads = null) : IRecoverableThreadSource
     {
         public async IAsyncEnumerable<WorkThreadDescriptor> StreamRecoverableThreadsAsync(
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
@@ -920,7 +965,7 @@ public sealed class CodeAltaShellControllerTests
             Func<AgentBackendId, bool>? shouldListBackendSessions,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            var filteredThreads = threads
+            var filteredThreads = (providerScopedThreads ?? threads)
                 .Where(thread => shouldListBackendSessions?.Invoke(new AgentBackendId(thread.BackendId)) != false)
                 .ToArray();
             LogBackendList(filteredThreads, "ThreadSource.Stream");

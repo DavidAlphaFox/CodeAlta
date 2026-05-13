@@ -133,7 +133,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             .OrderBy(static backendId => IsProviderManagedBackend(backendId) ? 1 : 0)
             .ToArray();
 
-        var cacheKey = BuildRecoverableThreadCacheKey(backendIds);
+        var cacheKey = BuildRecoverableThreadCacheKey(backendIds, projects);
         var cachedThreads = await TryGetRecoverableThreadCacheAsync(cacheKey, cancellationToken).ConfigureAwait(false);
         if (cachedThreads is not null)
         {
@@ -272,8 +272,31 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         }
     }
 
-    private static string BuildRecoverableThreadCacheKey(IReadOnlyList<AgentBackendId> backendIds)
-        => string.Join('\n', backendIds.Select(static backendId => backendId.Value));
+    private static string BuildRecoverableThreadCacheKey(
+        IReadOnlyList<AgentBackendId> backendIds,
+        IReadOnlyList<ProjectDescriptor> projects)
+    {
+        var builder = new StringBuilder();
+        foreach (var backendId in backendIds)
+        {
+            builder.Append("backend:")
+                .Append(backendId.Value)
+                .Append('\n');
+        }
+
+        foreach (var project in projects
+                     .OrderBy(static project => project.Id, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(static project => project.ProjectPath, StringComparer.OrdinalIgnoreCase))
+        {
+            builder.Append("project:")
+                .Append(project.Id)
+                .Append('|')
+                .Append(NormalizePath(project.ProjectPath))
+                .Append('\n');
+        }
+
+        return builder.ToString();
+    }
 
     private static void ApplyPersistedThreadLocalState(WorkThreadDescriptor thread, WorkThreadLocalState localState)
     {

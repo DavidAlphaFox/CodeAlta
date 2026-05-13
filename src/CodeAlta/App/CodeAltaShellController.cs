@@ -437,10 +437,8 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
                 .ToArray();
             await Task.WhenAll(providerTasks).ConfigureAwait(false);
 
+            var threads = await LoadCompleteRecoveredThreadsAsync(recoveredThreads, cancellationToken).ConfigureAwait(false);
             var projects = await _projectCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
-            var threads = recoveredThreads.Values
-                .OrderByDescending(static thread => thread.LastActiveAt)
-                .ToArray();
 
             await UiDispatcher.InvokeAsync(
                     () =>
@@ -586,6 +584,31 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
             }
 
             return;
+        }
+    }
+
+    private async Task<IReadOnlyList<WorkThreadDescriptor>> LoadCompleteRecoveredThreadsAsync(
+        Dictionary<string, WorkThreadDescriptor> recoveredThreads,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _recoverableThreadSource.ListRecoverableThreadsAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (LogManager.IsInitialized && CodeAltaApp.UiLogger.IsEnabled(LogLevel.Debug))
+            {
+                CodeAltaApp.UiLogger.Debug(ex, "Failed to load complete recovered session catalog after provider startup; using progressive startup snapshot.");
+            }
+
+            return recoveredThreads.Values
+                .OrderByDescending(static thread => thread.LastActiveAt)
+                .ToArray();
         }
     }
 
