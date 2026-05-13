@@ -234,7 +234,7 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         await ReloadCatalogAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<bool> DeleteThreadAsync(string threadId, CancellationToken cancellationToken)
+    public async Task<DeleteThreadResult> DeleteThreadAsync(string threadId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
 
@@ -242,9 +242,17 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         var thread = threads.FirstOrDefault(candidate => string.Equals(candidate.ThreadId, threadId, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Thread '{threadId}' was not found.");
 
-        var deletedByBackend = await _threadDeleter.DeleteThreadAsync(thread, cancellationToken).ConfigureAwait(false);
+        var threadsToDelete = CollectThreadSubtree(thread, threads);
+        var deletedByBackend = false;
+        foreach (var candidate in threadsToDelete)
+        {
+            deletedByBackend |= await _threadDeleter.DeleteThreadAsync(candidate, cancellationToken).ConfigureAwait(false);
+        }
+
         await ReloadCatalogAsync(cancellationToken).ConfigureAwait(false);
-        return deletedByBackend;
+        return new DeleteThreadResult(
+            threadsToDelete.Select(static candidate => candidate.ThreadId).ToArray(),
+            deletedByBackend);
     }
 
     public async Task<DeleteProjectResult> DeleteProjectAsync(string projectId, CancellationToken cancellationToken)
@@ -288,6 +296,40 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
 
     private IUiDispatcher UiDispatcher
         => _uiDispatcher ?? throw new InvalidOperationException("The UI dispatcher must be attached before shell operations begin.");
+
+    private static IReadOnlyList<WorkThreadDescriptor> CollectThreadSubtree(
+        WorkThreadDescriptor root,
+        IReadOnlyList<WorkThreadDescriptor> threads)
+    {
+        var byParentId = threads
+            .Where(static thread => !string.IsNullOrWhiteSpace(thread.ParentThreadId))
+            .GroupBy(static thread => thread.ParentThreadId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<WorkThreadDescriptor>();
+        Collect(root);
+        result.Reverse();
+        return result;
+
+        void Collect(WorkThreadDescriptor thread)
+        {
+            if (!visited.Add(thread.ThreadId))
+            {
+                return;
+            }
+
+            result.Add(thread);
+            if (!byParentId.TryGetValue(thread.ThreadId, out var children))
+            {
+                return;
+            }
+
+            foreach (var child in children)
+            {
+                Collect(child);
+            }
+        }
+    }
 
     private void ScheduleRuntimeEventDrain()
     {

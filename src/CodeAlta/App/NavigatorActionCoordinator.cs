@@ -213,8 +213,8 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         try
         {
             _setStatus($"Deleting thread '{thread.Title}'...", true, StatusTone.Info);
-            await _shellController.DeleteThreadAsync(thread.ThreadId, CancellationToken.None);
-            await _threadStateCoordinator.RemoveDeletedThreadArtifactsAsync([thread.ThreadId]);
+            var result = await _shellController.DeleteThreadAsync(thread.ThreadId, CancellationToken.None);
+            await _threadStateCoordinator.RemoveDeletedThreadArtifactsAsync(result.DeletedThreadIds);
         }
         catch (Exception ex)
         {
@@ -241,12 +241,24 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         try
         {
             _setStatus($"Deleting {threadIds.Count} thread(s)...", true, StatusTone.Info);
+            var deletedThreadIds = new List<string>();
+            var deletedThreadIdSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var threadId in threadIds)
             {
-                await _shellController.DeleteThreadAsync(threadId, CancellationToken.None);
+                if (deletedThreadIdSet.Contains(threadId))
+                {
+                    continue;
+                }
+
+                var result = await _shellController.DeleteThreadAsync(threadId, CancellationToken.None);
+                deletedThreadIds.AddRange(result.DeletedThreadIds);
+                foreach (var deletedThreadId in result.DeletedThreadIds)
+                {
+                    deletedThreadIdSet.Add(deletedThreadId);
+                }
             }
 
-            await _threadStateCoordinator.RemoveDeletedThreadArtifactsAsync(threadIds);
+            await _threadStateCoordinator.RemoveDeletedThreadArtifactsAsync(deletedThreadIds);
             _setReadyStatusForCurrentSelection();
         }
         catch (Exception ex)

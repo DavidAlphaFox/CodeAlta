@@ -601,11 +601,41 @@ public sealed class CodeAltaShellControllerTests
             deleter);
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
-        var deletedByBackend = await controller.DeleteThreadAsync(thread.ThreadId, CancellationToken.None);
+        var result = await controller.DeleteThreadAsync(thread.ThreadId, CancellationToken.None);
 
-        Assert.IsTrue(deletedByBackend);
+        Assert.IsTrue(result.DeletedByBackend);
+        CollectionAssert.AreEqual(new[] { thread.ThreadId }, result.DeletedThreadIds.ToArray());
         Assert.AreEqual(thread.ThreadId, deleter.DeletedThreadIds.Single());
         CollectionAssert.Contains(log, "Shell.ApplyRecoveredCatalogState:0:1");
+    }
+
+    [TestMethod]
+    public async Task DeleteThreadAsync_DeletesChildThreadsBeforeParent()
+    {
+        var log = new List<string>();
+        var shell = new FakeShell(log);
+        var parent = CreateThread("thread-parent");
+        var child = CreateThread("thread-child");
+        var grandchild = CreateThread("thread-grandchild");
+        var sibling = CreateThread("thread-sibling");
+        child.ParentThreadId = parent.ThreadId;
+        grandchild.ParentThreadId = child.ThreadId;
+        var deleter = new FakeWorkThreadDeleter(log) { DeleteResult = true };
+        var controller = new CodeAltaShellController(
+            shell,
+            new FakeImporter(log),
+            new FakeProjectCatalogStore(log, []),
+            new FakeRecoverableThreadSource(log, [parent, child, grandchild, sibling]),
+            deleter);
+        controller.AttachUiDispatcher(new FakeUiDispatcher());
+
+        var result = await controller.DeleteThreadAsync(parent.ThreadId, CancellationToken.None);
+
+        CollectionAssert.AreEqual(
+            new[] { grandchild.ThreadId, child.ThreadId, parent.ThreadId },
+            result.DeletedThreadIds.ToArray());
+        CollectionAssert.AreEqual(result.DeletedThreadIds.ToArray(), deleter.DeletedThreadIds.ToArray());
+        Assert.IsFalse(deleter.DeletedThreadIds.Contains(sibling.ThreadId));
     }
 
     [TestMethod]
