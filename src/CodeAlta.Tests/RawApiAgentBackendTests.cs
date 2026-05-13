@@ -5,6 +5,9 @@ using CodeAlta.Agent.Anthropic;
 using CodeAlta.Agent.GoogleGenAI;
 using CodeAlta.Agent.LocalRuntime;
 using Microsoft.Extensions.AI;
+using AnthropicDisplay = Anthropic.Models.Messages.Display;
+using AnthropicEffort = Anthropic.Models.Messages.Effort;
+using AnthropicMessageCreateParams = Anthropic.Models.Messages.MessageCreateParams;
 
 namespace CodeAlta.Tests;
 
@@ -184,6 +187,112 @@ public sealed class RawApiAgentBackendTests
         var history = await session.GetHistoryAsync().ConfigureAwait(false);
         Assert.IsTrue(history.OfType<AgentContentCompletedEvent>().Any(static e => e.Kind == AgentContentKind.Reasoning && e.Content == "thinking"));
         Assert.IsTrue(history.OfType<AgentContentCompletedEvent>().Any(static e => e.Kind == AgentContentKind.Assistant && e.Content == "Anthropic answer."));
+    }
+
+    [TestMethod]
+    public async Task AnthropicAgentBackend_UsesAdaptiveThinkingForOpus47Reasoning()
+    {
+        using var temp = TestTempDirectory.Create();
+        var client = new RecordingChatClient(
+        [
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextContent("Anthropic answer.")])
+            {
+                MessageId = "anthropic-message",
+                ResponseId = "anthropic-response",
+                ConversationId = "anthropic-conversation",
+                ModelId = "claude-opus-4-7",
+            },
+        ]);
+
+        await using var backend = new AnthropicAgentBackend(new AnthropicAgentBackendOptions
+        {
+            StateRootPath = temp.Path,
+            Providers =
+            {
+                new AnthropicProviderOptions
+                {
+                    ProviderKey = "anthropic",
+                    IsDefault = true,
+                    ChatClientFactory = () => client,
+                    ModelListAsync = static _ => Task.FromResult<IReadOnlyList<AgentModelInfo>>(
+                    [
+                        new AgentModelInfo("claude-opus-4-7", DisplayName: "Claude Opus 4.7"),
+                    ]),
+                },
+            },
+        });
+
+        await using var session = await backend.CreateSessionAsync(new AgentSessionCreateOptions
+        {
+            Model = "claude-opus-4-7",
+            ReasoningEffort = AgentReasoningEffort.High,
+            WorkingDirectory = temp.Path,
+            OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+        }).ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions
+        {
+            Input = new AgentInput([new AgentInputItem.Text("Hello")]),
+        }).ConfigureAwait(false);
+
+        Assert.IsNotNull(client.LastOptions?.RawRepresentationFactory);
+        var createParams = Assert.IsInstanceOfType<AnthropicMessageCreateParams>(client.LastOptions.RawRepresentationFactory(client));
+        Assert.IsNotNull(createParams.Thinking);
+        Assert.IsTrue(createParams.Thinking.TryPickAdaptive(out var adaptive));
+        Assert.IsNotNull(adaptive);
+        Assert.AreEqual(AnthropicDisplay.Summarized, adaptive.Display?.Value());
+        Assert.AreEqual(AnthropicEffort.High, createParams.OutputConfig?.Effort?.Value());
+    }
+
+    [TestMethod]
+    public async Task AnthropicAgentBackend_MapsOpus46XHighReasoningToAdaptiveMaxEffort()
+    {
+        using var temp = TestTempDirectory.Create();
+        var client = new RecordingChatClient(
+        [
+            new ChatResponseUpdate(ChatRole.Assistant, [new TextContent("Anthropic answer.")])
+            {
+                MessageId = "anthropic-message",
+                ResponseId = "anthropic-response",
+                ConversationId = "anthropic-conversation",
+                ModelId = "claude-opus-4-6",
+            },
+        ]);
+
+        await using var backend = new AnthropicAgentBackend(new AnthropicAgentBackendOptions
+        {
+            StateRootPath = temp.Path,
+            Providers =
+            {
+                new AnthropicProviderOptions
+                {
+                    ProviderKey = "anthropic",
+                    IsDefault = true,
+                    ChatClientFactory = () => client,
+                    ModelListAsync = static _ => Task.FromResult<IReadOnlyList<AgentModelInfo>>(
+                    [
+                        new AgentModelInfo("claude-opus-4-6", DisplayName: "Claude Opus 4.6"),
+                    ]),
+                },
+            },
+        });
+
+        await using var session = await backend.CreateSessionAsync(new AgentSessionCreateOptions
+        {
+            Model = "claude-opus-4-6",
+            ReasoningEffort = AgentReasoningEffort.XHigh,
+            WorkingDirectory = temp.Path,
+            OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+        }).ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions
+        {
+            Input = new AgentInput([new AgentInputItem.Text("Hello")]),
+        }).ConfigureAwait(false);
+
+        Assert.IsNotNull(client.LastOptions?.RawRepresentationFactory);
+        var createParams = Assert.IsInstanceOfType<AnthropicMessageCreateParams>(client.LastOptions.RawRepresentationFactory(client));
+        Assert.IsNotNull(createParams.Thinking);
+        Assert.IsTrue(createParams.Thinking.TryPickAdaptive(out _));
+        Assert.AreEqual(AnthropicEffort.Max, createParams.OutputConfig?.Effort?.Value());
     }
 
     [TestMethod]

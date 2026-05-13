@@ -229,14 +229,15 @@ public sealed class AnthropicAgentBackend : IAgentBackend, IAgentSharedSessionMe
         ArgumentNullException.ThrowIfNull(chatClient);
         ArgumentNullException.ThrowIfNull(providerDescriptor);
 
+        var adaptiveThinkingChatClient = new AnthropicAdaptiveThinkingChatClient(chatClient);
         if (!useStreamingCompatibilityFallback)
         {
-            return chatClient;
+            return adaptiveThinkingChatClient;
         }
 
         LogInfo(
             $"Using Anthropic streaming compatibility fallback backend={providerDescriptor.BackendId.Value} provider={providerDescriptor.ProviderKey} displayName={providerDescriptor.DisplayName}");
-        return new AnthropicStreamingCompatibilityChatClient(chatClient);
+        return new AnthropicStreamingCompatibilityChatClient(adaptiveThinkingChatClient);
     }
 
     private static bool ShouldUseStreamingCompatibilityFallback(LocalAgentProviderDescriptor providerDescriptor)

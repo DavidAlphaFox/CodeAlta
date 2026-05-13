@@ -124,7 +124,7 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
                 AgentReasoningEffort.Low => ReasoningEffort.Low,
                 AgentReasoningEffort.Medium => ReasoningEffort.Medium,
                 AgentReasoningEffort.High => ReasoningEffort.High,
-                AgentReasoningEffort.XHigh => ReasoningEffort.High,
+                AgentReasoningEffort.XHigh => ReasoningEffort.ExtraHigh,
                 _ => null,
             },
             Output = ReasoningOutput.Full,
