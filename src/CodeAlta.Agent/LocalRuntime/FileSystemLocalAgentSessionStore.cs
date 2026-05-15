@@ -30,10 +30,16 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
     /// <param name="layout">Filesystem layout.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="layout"/> is <see langword="null" />.</exception>
     public FileSystemLocalAgentSessionStore(LocalAgentRuntimePathLayout layout)
+        : this(layout, new LocalAgentSessionJournalFile())
+    {
+    }
+
+    internal FileSystemLocalAgentSessionStore(LocalAgentRuntimePathLayout layout, LocalAgentSessionJournalFile journalFile)
     {
         ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(journalFile);
         _layout = layout;
-        _journalFile = new LocalAgentSessionJournalFile();
+        _journalFile = journalFile;
     }
 
     /// <inheritdoc />

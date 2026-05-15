@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text;
 using System.Text.Unicode;
@@ -22,7 +23,7 @@ public sealed class SkillCatalog
         .sl/
         """);
 
-    private static readonly HashSet<string> AllowedTopLevelFields = new(StringComparer.Ordinal)
+    private static readonly FrozenSet<string> AllowedTopLevelFields = new[]
     {
         "name",
         "description",
@@ -30,7 +31,7 @@ public sealed class SkillCatalog
         "compatibility",
         "metadata",
         "allowed-tools",
-    };
+    }.ToFrozenSet(StringComparer.Ordinal);
 
     private readonly FileTreeWalker _walker = new();
     private readonly IReadOnlyList<ISkillRootProvider> _rootProviders;

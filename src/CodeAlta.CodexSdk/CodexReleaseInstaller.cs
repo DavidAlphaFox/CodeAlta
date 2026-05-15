@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
@@ -70,7 +69,7 @@ internal readonly record struct CodexResolvedInstallation(
 
 internal static class CodexReleaseInstaller
 {
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> InstallLocks = new(StringComparer.Ordinal);
+    private static readonly TimeSpan InstallLockRetryDelay = TimeSpan.FromMilliseconds(50);
     private static readonly HttpClient HttpClient = CreateHttpClient();
 
     internal static async Task<CodexResolvedInstallation> EnsureInstalledAsync(
@@ -93,9 +92,7 @@ internal static class CodexReleaseInstaller
             return new CodexResolvedInstallation(tag, installDirectory, executablePath, asset.AssetName);
         }
 
-        var installLock = InstallLocks.GetOrAdd(installDirectory, static _ => new SemaphoreSlim(1, 1));
-        await installLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        using (await AcquireInstallLockAsync(installDirectory, cancellationToken).ConfigureAwait(false))
         {
             if (File.Exists(executablePath))
             {
@@ -146,10 +143,35 @@ internal static class CodexReleaseInstaller
             ReportProgress(options.Progress, CodexInstallStage.Ready, tag, asset.AssetName, $"Codex {tag} is ready.");
             return new CodexResolvedInstallation(tag, installDirectory, extractedExecutablePath, asset.AssetName);
         }
-        finally
+    }
+
+    private static async Task<InstallFileLockLease> AcquireInstallLockAsync(string installDirectory, CancellationToken cancellationToken)
+    {
+        var lockFilePath = Path.GetFullPath(installDirectory) + ".install.lock";
+        var parentDirectory = Path.GetDirectoryName(lockFilePath);
+        if (!string.IsNullOrWhiteSpace(parentDirectory))
         {
-            installLock.Release();
+            Directory.CreateDirectory(parentDirectory);
         }
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var stream = new FileStream(lockFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+                return new InstallFileLockLease(stream);
+            }
+            catch (IOException) when (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(InstallLockRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private sealed class InstallFileLockLease(FileStream stream) : IDisposable
+    {
+        public void Dispose() => stream.Dispose();
     }
 
     internal static CodexReleaseAsset ResolveAssetForCurrentRuntime()

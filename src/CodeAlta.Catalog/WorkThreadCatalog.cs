@@ -1,3 +1,5 @@
+using CodeAlta.Agent.LocalRuntime;
+
 namespace CodeAlta.Catalog;
 
 /// <summary>
@@ -16,8 +18,17 @@ public sealed class WorkThreadCatalog
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <see cref="CatalogOptions.GlobalRoot"/> is empty.</exception>
     public WorkThreadCatalog(CatalogOptions options, WorkThreadYamlSerializer? serializer = null)
+        : this(options, new LocalAgentSessionJournalFile(), serializer)
+    {
+    }
+
+    internal WorkThreadCatalog(
+        CatalogOptions options,
+        LocalAgentSessionJournalFile journalFile,
+        WorkThreadYamlSerializer? serializer = null)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(journalFile);
         if (string.IsNullOrWhiteSpace(options.GlobalRoot))
         {
             throw new ArgumentException("Global catalog root is required.", nameof(options));
@@ -25,7 +36,7 @@ public sealed class WorkThreadCatalog
 
         _options = options;
         _serializer = serializer ?? new WorkThreadYamlSerializer();
-        JournalStore = new WorkThreadJournalStore(options);
+        JournalStore = new WorkThreadJournalStore(options, journalFile);
     }
 
     /// <summary>

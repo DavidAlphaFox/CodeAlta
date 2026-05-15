@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Net.Http.Headers;
@@ -109,7 +108,7 @@ public static class CopilotCliInstaller
 {
     internal const string DefaultNpmRegistryUrl = "https://registry.npmjs.org";
 
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> InstallLocks = new(StringComparer.Ordinal);
+    private static readonly TimeSpan InstallLockRetryDelay = TimeSpan.FromMilliseconds(50);
     private static readonly HttpClient HttpClient = CreateHttpClient();
 
     /// <summary>
@@ -175,9 +174,7 @@ public static class CopilotCliInstaller
             return new CopilotCliInstallation(version, installDirectory, executablePath, package.PlatformName);
         }
 
-        var installLock = InstallLocks.GetOrAdd(installDirectory, static _ => new SemaphoreSlim(1, 1));
-        await installLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        using (await AcquireInstallLockAsync(installDirectory, cancellationToken).ConfigureAwait(false))
         {
             if (File.Exists(executablePath))
             {
@@ -234,10 +231,35 @@ public static class CopilotCliInstaller
             ReportProgress(options.Progress, CopilotCliInstallStage.Ready, version, package.PlatformName, $"Copilot CLI {version} is ready.");
             return new CopilotCliInstallation(version, installDirectory, executablePath, package.PlatformName);
         }
-        finally
+    }
+
+    private static async Task<InstallFileLockLease> AcquireInstallLockAsync(string installDirectory, CancellationToken cancellationToken)
+    {
+        var lockFilePath = Path.GetFullPath(installDirectory) + ".install.lock";
+        var parentDirectory = Path.GetDirectoryName(lockFilePath);
+        if (!string.IsNullOrWhiteSpace(parentDirectory))
         {
-            installLock.Release();
+            Directory.CreateDirectory(parentDirectory);
         }
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var stream = new FileStream(lockFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+                return new InstallFileLockLease(stream);
+            }
+            catch (IOException) when (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(InstallLockRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private sealed class InstallFileLockLease(FileStream stream) : IDisposable
+    {
+        public void Dispose() => stream.Dispose();
     }
 
     internal static CopilotCliPackage ResolvePackageForCurrentRuntime()

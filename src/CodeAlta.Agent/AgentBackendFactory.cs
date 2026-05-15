@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using CodeAlta.Agent.LocalRuntime;
 
 namespace CodeAlta.Agent;
 
@@ -9,6 +10,8 @@ public sealed class AgentBackendFactory
 {
     private readonly object _lock = new();
     private readonly Dictionary<string, Registration> _registrations = new(StringComparer.OrdinalIgnoreCase);
+
+    internal LocalAgentSessionJournalFile? LocalSessionJournalFile { get; set; }
 
     /// <summary>
     /// Registers a backend factory for a backend identifier.
@@ -305,8 +308,7 @@ public sealed class AgentBackendFactory
             }
         }
 
-        var backend = registration.Factory();
-        return ValidateCreatedBackend(registration.BackendId, backend);
+        return CreateFromRegistration(registration);
     }
 
     /// <summary>
@@ -348,7 +350,7 @@ public sealed class AgentBackendFactory
             }
         }
 
-        backend = ValidateCreatedBackend(registration.BackendId, registration.Factory());
+        backend = CreateFromRegistration(registration);
         return true;
     }
 
@@ -365,6 +367,17 @@ public sealed class AgentBackendFactory
     public bool TryCreate(string backendId, [NotNullWhen(true)] out IAgentBackend? backend)
     {
         return TryCreate(new AgentBackendId(backendId), out backend);
+    }
+
+    private IAgentBackend CreateFromRegistration(Registration registration)
+    {
+        var backend = registration.Factory();
+        if (backend is LocalAgentBackend localBackend && LocalSessionJournalFile is { } journalFile)
+        {
+            localBackend.UseSessionJournalFile(journalFile);
+        }
+
+        return ValidateCreatedBackend(registration.BackendId, backend);
     }
 
     private static IAgentBackend ValidateCreatedBackend(AgentBackendId expectedBackendId, IAgentBackend? backend)

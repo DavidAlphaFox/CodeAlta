@@ -9,8 +9,6 @@ internal sealed class CodeAltaSingleInstanceGuard : IDisposable
     private const string LockFileName = "alta.lock";
     private const int PidReadRetryCount = 20;
     private static readonly TimeSpan PidReadRetryDelay = TimeSpan.FromMilliseconds(25);
-    private static readonly object HeldLockPathsSync = new();
-    private static readonly HashSet<string> HeldLockPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly FileStream _lockStream;
     private readonly Mutex _mutex;
     private bool _disposed;
@@ -32,18 +30,6 @@ internal sealed class CodeAltaSingleInstanceGuard : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(lockFilePath);
 
         var fullLockFilePath = Path.GetFullPath(lockFilePath);
-        var alreadyHeldByProcess = false;
-        lock (HeldLockPathsSync)
-        {
-            alreadyHeldByProcess = HeldLockPaths.Contains(fullLockFilePath);
-        }
-
-        if (alreadyHeldByProcess)
-        {
-            var runningProcessId = ReadRunningProcessId(fullLockFilePath);
-            throw new CodeAltaAlreadyRunningException(runningProcessId, null);
-        }
-
         var directory = Path.GetDirectoryName(fullLockFilePath);
         if (!string.IsNullOrEmpty(directory))
         {
@@ -73,20 +59,6 @@ internal sealed class CodeAltaSingleInstanceGuard : IDisposable
             throw new CodeAltaAlreadyRunningException(runningProcessId, null);
         }
 
-        var pathRegistered = false;
-        lock (HeldLockPathsSync)
-        {
-            pathRegistered = HeldLockPaths.Add(fullLockFilePath);
-        }
-
-        if (!pathRegistered)
-        {
-            mutex.ReleaseMutex();
-            mutex.Dispose();
-            var runningProcessId = ReadRunningProcessId(fullLockFilePath);
-            throw new CodeAltaAlreadyRunningException(runningProcessId, null);
-        }
-
         FileStream lockStream;
         try
         {
@@ -98,11 +70,6 @@ internal sealed class CodeAltaSingleInstanceGuard : IDisposable
         }
         catch (IOException ex)
         {
-            lock (HeldLockPathsSync)
-            {
-                HeldLockPaths.Remove(fullLockFilePath);
-            }
-
             mutex.ReleaseMutex();
             mutex.Dispose();
             var runningProcessId = ReadRunningProcessId(fullLockFilePath);
@@ -117,11 +84,6 @@ internal sealed class CodeAltaSingleInstanceGuard : IDisposable
         catch
         {
             lockStream.Dispose();
-            lock (HeldLockPathsSync)
-            {
-                HeldLockPaths.Remove(fullLockFilePath);
-            }
-
             mutex.ReleaseMutex();
             mutex.Dispose();
             throw;
@@ -136,11 +98,6 @@ internal sealed class CodeAltaSingleInstanceGuard : IDisposable
         }
 
         _lockStream.Dispose();
-        lock (HeldLockPathsSync)
-        {
-            HeldLockPaths.Remove(LockFilePath);
-        }
-
         _mutex.ReleaseMutex();
         _mutex.Dispose();
         _disposed = true;

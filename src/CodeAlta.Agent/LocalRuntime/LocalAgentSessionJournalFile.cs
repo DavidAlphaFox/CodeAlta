@@ -8,7 +8,7 @@ internal sealed class LocalAgentSessionJournalFile
     private const int SharingViolation = 32;
     private const int LockViolation = 33;
     private static readonly TimeSpan FileRetryDelay = TimeSpan.FromMilliseconds(10);
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> PathLocks = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _pathLocks = new(StringComparer.Ordinal);
 
     public async Task AppendLinesAsync(
         string path,
@@ -156,76 +156,95 @@ internal sealed class LocalAgentSessionJournalFile
         Func<string?, bool> isExpectedFirstLine,
         CancellationToken cancellationToken)
     {
-        string? existingFirstLine = null;
-        if (File.Exists(path) && new FileInfo(path).Length > 0)
-        {
-            existingFirstLine = await RetryFileOperationAsync(
-                    async () =>
-                    {
-                        await using var readStream = new FileStream(
-                            path,
-                            FileMode.Open,
-                            FileAccess.Read,
-                            FileShare.ReadWrite | FileShare.Delete,
-                            bufferSize: 4096,
-                            useAsync: true);
-                        using var reader = new StreamReader(readStream, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 4096, leaveOpen: false);
-                        return await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-                    },
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        if (isExpectedFirstLine(existingFirstLine))
-        {
-            return;
-        }
-
-        if (existingFirstLine is null)
-        {
-            await AppendLinesCoreAsync(path, [firstLine], encoding, cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
         var directory = Path.GetDirectoryName(path)
             ?? throw new InvalidOperationException($"Path '{path}' did not resolve to a parent directory.");
+
+        await RetryFileOperationAsync(
+                async () =>
+                {
+                    await using var stream = new FileStream(
+                        path,
+                        FileMode.OpenOrCreate,
+                        FileAccess.ReadWrite,
+                        FileShare.None,
+                        bufferSize: 81920,
+                        useAsync: true);
+                    string? existingFirstLine = null;
+                    if (stream.Length > 0)
+                    {
+                        using (var reader = new StreamReader(stream, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 4096, leaveOpen: true))
+                        {
+                            existingFirstLine = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+
+                    if (isExpectedFirstLine(existingFirstLine))
+                    {
+                        return;
+                    }
+
+                    stream.Position = 0;
+                    if (stream.Length == 0)
+                    {
+                        await WriteFirstLineAsync(stream, firstLine, encoding, cancellationToken).ConfigureAwait(false);
+                        return;
+                    }
+
+                    await PrependFirstLineAsync(stream, directory, path, firstLine, encoding, cancellationToken).ConfigureAwait(false);
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task WriteFirstLineAsync(
+        FileStream stream,
+        string firstLine,
+        Encoding encoding,
+        CancellationToken cancellationToken)
+    {
+        stream.Position = 0;
+        stream.SetLength(0);
+        await using var writer = new StreamWriter(stream, encoding, bufferSize: 4096, leaveOpen: true);
+        await writer.WriteLineAsync(firstLine.AsMemory(), cancellationToken).ConfigureAwait(false);
+        await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task PrependFirstLineAsync(
+        FileStream stream,
+        string directory,
+        string path,
+        string firstLine,
+        Encoding encoding,
+        CancellationToken cancellationToken)
+    {
         var tempPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            await RetryFileOperationAsync(
-                    async () =>
-                    {
-                        if (File.Exists(tempPath))
-                        {
-                            File.Delete(tempPath);
-                        }
+            await using (var tempStream = new FileStream(
+                tempPath,
+                FileMode.CreateNew,
+                FileAccess.ReadWrite,
+                FileShare.None,
+                bufferSize: 81920,
+                useAsync: true))
+            {
+                await using (var writer = new StreamWriter(tempStream, encoding, bufferSize: 4096, leaveOpen: true))
+                {
+                    await writer.WriteLineAsync(firstLine.AsMemory(), cancellationToken).ConfigureAwait(false);
+                    await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+                }
 
-                        await using (var writeStream = new FileStream(
-                            tempPath,
-                            FileMode.CreateNew,
-                            FileAccess.Write,
-                            FileShare.None,
-                            bufferSize: 81920,
-                            useAsync: true))
-                        {
-                            await using var writer = new StreamWriter(writeStream, encoding, bufferSize: 4096, leaveOpen: true);
-                            await writer.WriteLineAsync(firstLine.AsMemory(), cancellationToken).ConfigureAwait(false);
-                            await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+                stream.Position = 0;
+                await stream.CopyToAsync(tempStream, cancellationToken).ConfigureAwait(false);
+                await tempStream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
-                            await using var readStream = new FileStream(
-                                path,
-                                FileMode.Open,
-                                FileAccess.Read,
-                                FileShare.ReadWrite | FileShare.Delete,
-                                bufferSize: 81920,
-                                useAsync: true);
-                            await readStream.CopyToAsync(writeStream, cancellationToken).ConfigureAwait(false);
-                        }
-
-                        File.Move(tempPath, path, overwrite: true);
-                    },
-                    cancellationToken)
-                .ConfigureAwait(false);
+                tempStream.Position = 0;
+                stream.Position = 0;
+                stream.SetLength(0);
+                await tempStream.CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -244,7 +263,7 @@ internal sealed class LocalAgentSessionJournalFile
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(action);
 
-        var pathLock = PathLocks.GetOrAdd(Path.GetFullPath(path), static _ => new SemaphoreSlim(1, 1));
+        var pathLock = _pathLocks.GetOrAdd(Path.GetFullPath(path), static _ => new SemaphoreSlim(1, 1));
         await pathLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -265,26 +284,6 @@ internal sealed class LocalAgentSessionJournalFile
             {
                 await action().ConfigureAwait(false);
                 return;
-            }
-            catch (IOException ex) when (IsRetryableFileAccessException(ex))
-            {
-                await Task.Delay(FileRetryDelay, cancellationToken).ConfigureAwait(false);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                await Task.Delay(FileRetryDelay, cancellationToken).ConfigureAwait(false);
-            }
-        }
-    }
-
-    private static async Task<T> RetryFileOperationAsync<T>(Func<Task<T>> action, CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                return await action().ConfigureAwait(false);
             }
             catch (IOException ex) when (IsRetryableFileAccessException(ex))
             {

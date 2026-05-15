@@ -376,7 +376,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             .Select(static backendId => backendId.Value)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(_catalogOptions.GlobalRoot));
+        var store = _threadCatalog.JournalStore.CreateSessionStore();
         await foreach (var session in store.ListSessionsAsync(cancellationToken).ConfigureAwait(false))
         {
             if (string.IsNullOrWhiteSpace(session.ProviderKey) || !loadableBackendIds.Contains(session.ProviderKey))
@@ -552,7 +552,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
 
         try
         {
-            var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(_catalogOptions.GlobalRoot));
+            var store = _threadCatalog.JournalStore.CreateSessionStore();
             return await store.ReadEventsAsync(thread.ThreadId, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

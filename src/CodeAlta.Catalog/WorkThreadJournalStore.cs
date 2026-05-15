@@ -35,11 +35,24 @@ public sealed class WorkThreadJournalStore
     /// <param name="options">Catalog options.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options" /> is <see langword="null" />.</exception>
     public WorkThreadJournalStore(CatalogOptions options)
+        : this(options, new LocalAgentSessionJournalFile())
+    {
+    }
+
+    internal WorkThreadJournalStore(CatalogOptions options, LocalAgentSessionJournalFile journalFile)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(journalFile);
         _layout = new LocalAgentRuntimePathLayout(options.GlobalRoot);
-        _journalFile = new LocalAgentSessionJournalFile();
+        _journalFile = journalFile;
     }
+
+    /// <summary>
+    /// Creates a session store that shares this journal store's in-memory per-file locks.
+    /// </summary>
+    /// <returns>A session store for the same local-runtime layout.</returns>
+    public FileSystemLocalAgentSessionStore CreateSessionStore()
+        => new(_layout, _journalFile);
 
     /// <summary>
     /// Ensures a missing or empty session journal starts with a CodeAlta thread header.

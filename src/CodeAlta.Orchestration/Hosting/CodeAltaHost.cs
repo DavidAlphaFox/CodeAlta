@@ -1,4 +1,5 @@
 using CodeAlta.Agent;
+using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Catalog;
 using CodeAlta.Catalog.Skills;
 using CodeAlta.Orchestration.Runtime;
@@ -153,7 +154,8 @@ public sealed class CodeAltaHost : IAsyncDisposable
                 .ConfigureAwait(false);
         }
 
-        var threadCatalog = new WorkThreadCatalog(catalogOptions);
+        var sessionJournalFile = new LocalAgentSessionJournalFile();
+        var threadCatalog = new WorkThreadCatalog(catalogOptions, sessionJournalFile);
         var pluginOperationOptions = CreatePluginOperationOptions(options, catalogOptions, currentProject);
         var skillCatalog = new SkillCatalog([
             new ProjectCodeAltaSkillRootProvider(),
@@ -164,7 +166,10 @@ public sealed class CodeAltaHost : IAsyncDisposable
             new PluginSkillRootProvider(() => pluginRuntime.Adapter.GetResources(pluginRuntime.ActivePlugins, pluginOperationOptions)),
         ]);
         var instructionTemplateProvider = new AgentInstructionTemplateProvider(skillCatalog, catalogOptions);
-        var backendFactory = new AgentBackendFactory();
+        var backendFactory = new AgentBackendFactory
+        {
+            LocalSessionJournalFile = sessionJournalFile,
+        };
         options.ConfigureAgentBackends?.Invoke(backendFactory);
         _ = CodeAltaHostPluginBackendRegistrar.RegisterPluginBackends(backendFactory, pluginRuntime, pluginOperationOptions);
         var agentHub = new AgentHub(backendFactory);

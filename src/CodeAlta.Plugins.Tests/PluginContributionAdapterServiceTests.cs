@@ -159,13 +159,14 @@ public sealed class PluginContributionAdapterServiceTests
     [TestMethod]
     public async Task AgentEventObservers_RunInPluginOrderAndContinueAfterDiagnostics()
     {
-        AgentEventOrderPlugin.Reset();
+        var recorder = new AgentEventOrderRecorder();
+        var services = new AgentEventOrderPluginServices(recorder);
         FailingAgentEventPlugin.Reset();
         var registry = new PluginContributionRegistry();
         var activator = new PluginRuntimeActivator(registry);
-        var first = await activator.ActivateAsync(CreateDiscovered<AgentEventOrderPlugin>(), null, null, new PluginActivationOptions { HostInfo = CreateHostInfo(), ActivationGeneration = 1 });
-        var failing = await activator.ActivateAsync(CreateDiscovered<FailingAgentEventPlugin>(), null, null, new PluginActivationOptions { HostInfo = CreateHostInfo(), ActivationGeneration = 2 });
-        var last = await activator.ActivateAsync(CreateDiscovered<AgentEventOrderPlugin>(), null, null, new PluginActivationOptions { HostInfo = CreateHostInfo(), ActivationGeneration = 3 });
+        var first = await activator.ActivateAsync(CreateDiscovered<AgentEventOrderPlugin>(), null, null, new PluginActivationOptions { HostInfo = CreateHostInfo(), Services = services, ActivationGeneration = 1 });
+        var failing = await activator.ActivateAsync(CreateDiscovered<FailingAgentEventPlugin>(), null, null, new PluginActivationOptions { HostInfo = CreateHostInfo(), Services = services, ActivationGeneration = 2 });
+        var last = await activator.ActivateAsync(CreateDiscovered<AgentEventOrderPlugin>(), null, null, new PluginActivationOptions { HostInfo = CreateHostInfo(), Services = services, ActivationGeneration = 3 });
         Assert.IsNotNull(first.ActivePlugin);
         Assert.IsNotNull(failing.ActivePlugin);
         Assert.IsNotNull(last.ActivePlugin);
@@ -175,7 +176,7 @@ public sealed class PluginContributionAdapterServiceTests
             [first.ActivePlugin, failing.ActivePlugin, last.ActivePlugin],
             CreateAgentEventTemplate(first.ActivePlugin));
 
-        CollectionAssert.AreEqual(new[] { first.ActivePlugin.Descriptor.RuntimeKey, last.ActivePlugin.Descriptor.RuntimeKey }, AgentEventOrderPlugin.Calls.ToArray());
+        CollectionAssert.AreEqual(new[] { first.ActivePlugin.Descriptor.RuntimeKey, last.ActivePlugin.Descriptor.RuntimeKey }, recorder.Calls.ToArray());
         Assert.AreEqual(1, diagnostics.Count);
         StringAssert.Contains(diagnostics[0].Message, "Agent-event callback failed.");
         await first.ActivePlugin.DeactivateAsync(TimeSpan.FromSeconds(5));
@@ -476,17 +477,63 @@ public sealed class PluginContributionAdapterServiceTests
 
     public sealed class AgentEventOrderPlugin : PluginBase
     {
-        private static readonly List<string> ObservedCalls = [];
-
-        public static IReadOnlyList<string> Calls => ObservedCalls;
-
-        public static void Reset() => ObservedCalls.Clear();
-
         public override ValueTask OnAgentEventAsync(PluginAgentEventContext context, CancellationToken cancellationToken = default)
         {
-            ObservedCalls.Add(context.Plugin.RuntimeKey);
+            if (context.Services.State is AgentEventOrderRecorder recorder)
+            {
+                recorder.Record(context.Plugin.RuntimeKey);
+            }
+
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class AgentEventOrderRecorder : IPluginStateStore
+    {
+        private readonly List<string> _calls = [];
+
+        public IReadOnlyList<string> Calls => _calls;
+
+        public string GetDirectory(PluginStateScope scope) => Path.GetTempPath();
+
+        public ValueTask<T?> ReadJsonAsync<T>(PluginStateScope scope, string name, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<T?>(default);
+
+        public ValueTask WriteJsonAsync<T>(PluginStateScope scope, string name, T value, CancellationToken cancellationToken = default)
+            => ValueTask.CompletedTask;
+
+        public ValueTask DeleteAsync(PluginStateScope scope, string name, CancellationToken cancellationToken = default)
+            => ValueTask.CompletedTask;
+
+        public void Record(string runtimeKey) => _calls.Add(runtimeKey);
+    }
+
+    private sealed class AgentEventOrderPluginServices : IPluginServices
+    {
+        private readonly NoopPluginServices _inner = NoopPluginServices.Create();
+
+        public AgentEventOrderPluginServices(IPluginStateStore state)
+        {
+            State = state;
+        }
+
+        public XenoAtom.Logging.Logger Logger => _inner.Logger;
+
+        public IPluginUiService Ui => _inner.Ui;
+
+        public IPluginStateStore State { get; }
+
+        public IPluginWorkspaceService Workspace => _inner.Workspace;
+
+        public IPluginThreadService Threads => _inner.Threads;
+
+        public IPluginPromptService Prompts => _inner.Prompts;
+
+        public IPluginAgentService Agents => _inner.Agents;
+
+        public IPluginTaskService Tasks => _inner.Tasks;
+
+        public IPluginAltaService Alta => _inner.Alta;
     }
 
     public sealed class FailingAgentEventPlugin : PluginBase

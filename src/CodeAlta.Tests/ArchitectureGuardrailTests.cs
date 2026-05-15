@@ -27,6 +27,31 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void CodeAltaSource_DoesNotUseStaticMutableData()
+    {
+        var sourceRoot = GetSourceRoot();
+        var staticMutableDataPattern = new Regex(
+            @"\bstatic\s+(?:readonly\s+)?(?:ConcurrentDictionary|Dictionary|HashSet|List|Queue|Stack|ConcurrentBag|ConcurrentQueue|ConcurrentStack|SemaphoreSlim)<[^>\r\n]+>\s+\w+\s*(?:=|;)",
+            RegexOptions.CultureInvariant);
+        var violations = Directory
+            .EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(static file => !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&
+                                  !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(sourceRoot, file).Replace('\\', '/'),
+                Source = File.ReadAllText(file),
+            })
+            .SelectMany(file => staticMutableDataPattern
+                .Matches(file.Source)
+                .Select(match => $"{file.RelativePath}:{GetLineNumber(file.Source, match.Index)}:{match.Value}"))
+            .OrderBy(static violation => violation, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), violations);
+    }
+
+    [TestMethod]
     public void RuntimeEventPump_IsOnlyCodeAltaConsumerOfRuntimeEventStream()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
@@ -1859,6 +1884,20 @@ public sealed class ArchitectureGuardrailTests
             .Where(port => port.Count > maxDelegateFields)
             .Select(port => $"{relativePath}:{port.Name}:{port.Count}")
             .ToArray();
+    }
+
+    private static int GetLineNumber(string source, int index)
+    {
+        var line = 1;
+        for (var i = 0; i < index; i++)
+        {
+            if (source[i] == '\n')
+            {
+                line++;
+            }
+        }
+
+        return line;
     }
 
     private static string GetCodeAltaSourceRoot()

@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using CodeAlta.Plugins.Abstractions;
 using XenoAtom.CommandLine;
 using Command = XenoAtom.CommandLine.Command;
@@ -11,7 +12,7 @@ public sealed class PluginAltaCommandContributor : IAltaCommandContributor
 {
     private const string UnresolvedProjectScopeId = "__codealta_unresolved_project_scope__";
 
-    private static readonly HashSet<string> ReservedRootCommands = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenSet<string> ReservedRootCommands = new[]
     {
         "version",
         "project",
@@ -23,7 +24,7 @@ public sealed class PluginAltaCommandContributor : IAltaCommandContributor
         "model",
         "plugin",
         "tool",
-    };
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
     public IEnumerable<CommandNode> CreateCommandLineNodes(AltaCommandContributionContext context)

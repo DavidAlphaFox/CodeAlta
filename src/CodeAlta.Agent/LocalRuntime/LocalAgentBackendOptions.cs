@@ -11,6 +11,8 @@ public sealed class LocalAgentBackendOptions
     /// </summary>
     public string? StateRootPath { get; init; }
 
+    internal LocalAgentSessionJournalFile? SessionJournalFile { get; init; }
+
     /// <summary>
     /// Gets or initializes the provider registrations available through this backend.
     /// </summary>

@@ -524,7 +524,7 @@ public sealed class CatalogInfrastructureTests
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var catalog = new WorkThreadCatalog(options);
-        var sessionStore = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(options.GlobalRoot));
+        var sessionStore = catalog.JournalStore.CreateSessionStore();
         var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
         var thread = new WorkThreadDescriptor
         {
@@ -612,7 +612,7 @@ public sealed class CatalogInfrastructureTests
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var catalog = new WorkThreadCatalog(options);
-        var sessionStore = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(options.GlobalRoot));
+        var sessionStore = catalog.JournalStore.CreateSessionStore();
         var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
         var thread = new WorkThreadDescriptor
         {

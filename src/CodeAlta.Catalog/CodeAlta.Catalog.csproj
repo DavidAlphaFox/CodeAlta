@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="CodeAlta.Orchestration" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="SharpYaml" />
     <PackageReference Include="Tomlyn" />
     <PackageReference Include="XenoAtom.Glob" />

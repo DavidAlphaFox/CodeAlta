@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text;
 using CodeAlta.Agent;
 using CodeAlta.Plugins.Abstractions;
@@ -9,7 +10,7 @@ namespace CodeAlta.Orchestration.Runtime.Prompts;
 /// </summary>
 public sealed class HeadlessPromptAttachmentService
 {
-    private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenSet<string> ImageExtensions = new[]
     {
         ".apng",
         ".avif",
@@ -20,7 +21,7 @@ public sealed class HeadlessPromptAttachmentService
         ".png",
         ".svg",
         ".webp",
-    };
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Materializes prompt text and attachments into agent input and plugin prompt attachments.

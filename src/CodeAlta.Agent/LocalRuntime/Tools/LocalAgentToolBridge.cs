@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
@@ -9,8 +10,8 @@ namespace CodeAlta.Agent.LocalRuntime.Tools;
 /// </summary>
 public static class LocalAgentToolBridge
 {
-    private static readonly HashSet<string> UnsupportedOpenAIStrictKeywords =
-    [
+    private static readonly FrozenSet<string> UnsupportedOpenAIStrictKeywords = new[]
+    {
         "contentEncoding",
         "contentMediaType",
         "not",
@@ -33,7 +34,7 @@ public static class LocalAgentToolBridge
         "minContains",
         "maxContains",
         "uniqueItems",
-    ];
+    }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Converts tool definitions into <see cref="AITool"/> declarations.

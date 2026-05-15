@@ -10,8 +10,11 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
 {
     private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.Agent.LocalRuntime");
     private readonly LocalAgentBackendOptions _options;
-    private readonly ILocalAgentSessionStore _store;
+    private readonly object _storeLock = new();
+    private readonly LocalAgentRuntimePathLayout _layout;
     private readonly IReadOnlyDictionary<string, LocalAgentBackendProviderRegistration> _providersByKey;
+    private LocalAgentSessionJournalFile? _journalFile;
+    private ILocalAgentSessionStore? _store;
     private bool _started;
 
     /// <summary>
@@ -40,7 +43,8 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".alta")
             : options.StateRootPath;
-        _store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(stateRootPath));
+        _layout = new LocalAgentRuntimePathLayout(stateRootPath);
+        _journalFile = options.SessionJournalFile;
         _providersByKey = options.Providers.ToDictionary(
             static provider => provider.Provider.ProviderKey,
             StringComparer.OrdinalIgnoreCase);
@@ -51,6 +55,37 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
 
     /// <inheritdoc />
     public string DisplayName { get; }
+
+    private ILocalAgentSessionStore Store
+    {
+        get
+        {
+            if (_store is not null)
+            {
+                return _store;
+            }
+
+            lock (_storeLock)
+            {
+                return _store ??= new FileSystemLocalAgentSessionStore(
+                    _layout,
+                    _journalFile ??= new LocalAgentSessionJournalFile());
+            }
+        }
+    }
+
+    internal void UseSessionJournalFile(LocalAgentSessionJournalFile journalFile)
+    {
+        ArgumentNullException.ThrowIfNull(journalFile);
+
+        lock (_storeLock)
+        {
+            if (_store is null)
+            {
+                _journalFile = journalFile;
+            }
+        }
+    }
 
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken = default)
@@ -124,7 +159,7 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
     {
         await StartAsync(cancellationToken).ConfigureAwait(false);
 
-        await foreach (var summary in _store.ListSessionsAsync(cancellationToken).ConfigureAwait(false))
+        await foreach (var summary in Store.ListSessionsAsync(cancellationToken).ConfigureAwait(false))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!_providersByKey.TryGetValue(summary.ProviderKey, out var provider) ||
@@ -138,7 +173,7 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
                 continue;
             }
 
-            var state = await _store.GetStateAsync(
+            var state = await Store.GetStateAsync(
                     summary.ProtocolFamily,
                     summary.ProviderKey,
                     summary.SessionId,
@@ -158,7 +193,7 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
 
         foreach (var provider in _options.Providers)
         {
-            if (await _store.DeleteSessionAsync(
+            if (await Store.DeleteSessionAsync(
                     provider.Provider.ProtocolFamily,
                     provider.Provider.ProviderKey,
                     sessionId,
@@ -205,15 +240,15 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
             UpdatedAt = now,
         };
 
-        await _store.UpsertSessionAsync(summary, cancellationToken).ConfigureAwait(false);
-        await _store.UpsertStateAsync(state, cancellationToken).ConfigureAwait(false);
+        await Store.UpsertSessionAsync(summary, cancellationToken).ConfigureAwait(false);
+        await Store.UpsertStateAsync(state, cancellationToken).ConfigureAwait(false);
         return new LocalAgentSession(
             BackendId,
             registration.Provider,
             summary,
             state,
             [],
-            _store,
+            Store,
             registration.TurnExecutor,
             options,
             allowProviderContinuation: true);
@@ -231,7 +266,7 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
 
         foreach (var provider in _options.Providers)
         {
-            var summary = await _store.GetSessionAsync(
+            var summary = await Store.GetSessionAsync(
                     provider.Provider.ProtocolFamily,
                     provider.Provider.ProviderKey,
                     sessionId,
@@ -242,7 +277,7 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
                 continue;
             }
 
-            var state = await _store.GetStateAsync(
+            var state = await Store.GetStateAsync(
                     provider.Provider.ProtocolFamily,
                     provider.Provider.ProviderKey,
                     sessionId,
@@ -255,7 +290,7 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
                     ProviderKey = summary.ProviderKey,
                     UpdatedAt = summary.UpdatedAt,
                 };
-            var history = await _store.ReadEventsAsync(
+            var history = await Store.ReadEventsAsync(
                     provider.Provider.ProtocolFamily,
                     provider.Provider.ProviderKey,
                     sessionId,
@@ -269,7 +304,7 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
                 OverrideSummary(summary, options),
                 state,
                 history,
-                _store,
+                Store,
                 provider.TurnExecutor,
                 options,
                 allowProviderContinuation: false);
@@ -399,12 +434,12 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
         var stateChanged = !Equals(state.Usage, originalStateUsage);
         if (summaryChanged)
         {
-            await _store.UpsertSessionAsync(summary, cancellationToken).ConfigureAwait(false);
+            await Store.UpsertSessionAsync(summary, cancellationToken).ConfigureAwait(false);
         }
 
         if (stateChanged)
         {
-            await _store.UpsertStateAsync(state, cancellationToken).ConfigureAwait(false);
+            await Store.UpsertStateAsync(state, cancellationToken).ConfigureAwait(false);
         }
 
         return (summary, state);

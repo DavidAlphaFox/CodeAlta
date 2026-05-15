@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using CodeAlta;
 using CodeAlta.App;
 using CodeAlta.Catalog;
@@ -5,7 +6,7 @@ using CodeAlta.LiveTool;
 
 internal partial class Program
 {
-    private static readonly HashSet<string> LiveToolRootCommands = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenSet<string> LiveToolRootCommands = new[]
     {
         "version",
         "tool",
@@ -16,7 +17,7 @@ internal partial class Program
         "model",
         "skill",
         "plugin",
-    };
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     internal static bool IsLiveToolInvocation(IReadOnlyList<string> args)
     {
