@@ -562,6 +562,48 @@ public sealed class CatalogInfrastructureTests
         Assert.AreEqual(41, lines.Length);
         using var firstLine = JsonDocument.Parse(lines[0]);
         Assert.AreEqual(WorkThreadJournalStore.ThreadHeaderEventType, firstLine.RootElement.GetProperty("backendEventType").GetString());
+        Assert.AreEqual(0, Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.lock").Count());
+    }
+
+    [TestMethod]
+    public async Task WorkThreadJournalStore_AppendStateWaitsForExclusiveFileHandleWithoutDiskLock()
+    {
+        using var root = TempDirectory.Create();
+        var options = new CatalogOptions { GlobalRoot = root.Path };
+        var catalog = new WorkThreadCatalog(options);
+        var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
+        var thread = new WorkThreadDescriptor
+        {
+            ThreadId = "thread-exclusive-file-test",
+            Kind = WorkThreadKind.ProjectThread,
+            BackendId = "codex",
+            ProviderKey = "codex",
+            WorkingDirectory = @"C:\code\repo-main",
+            Title = "Exclusive file test",
+            Status = WorkThreadStatus.Active,
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt,
+            LastActiveAt = createdAt,
+        };
+
+        await catalog.JournalStore.EnsureHeaderAsync(thread).ConfigureAwait(false);
+        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(thread.ThreadId, thread.CreatedAt);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var exclusiveHandle = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        var appendTask = catalog.JournalStore.AppendStateAsync(
+            thread,
+            new WorkThreadLocalState { MessageCount = 7 },
+            cancellation.Token);
+        await Task.Delay(100, cancellation.Token).ConfigureAwait(false);
+
+        Assert.IsFalse(appendTask.IsCompleted);
+        await exclusiveHandle.DisposeAsync().ConfigureAwait(false);
+        await appendTask.ConfigureAwait(false);
+
+        var lines = File.ReadLines(path).ToArray();
+        Assert.AreEqual(2, lines.Length);
+        Assert.AreEqual(0, Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.lock").Count());
     }
 
     [TestMethod]

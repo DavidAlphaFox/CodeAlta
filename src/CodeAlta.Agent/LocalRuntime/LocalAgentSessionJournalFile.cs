@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 
 namespace CodeAlta.Agent.LocalRuntime;
@@ -6,7 +7,8 @@ internal sealed class LocalAgentSessionJournalFile
 {
     private const int SharingViolation = 32;
     private const int LockViolation = 33;
-    private static readonly TimeSpan LockRetryDelay = TimeSpan.FromMilliseconds(10);
+    private static readonly TimeSpan FileRetryDelay = TimeSpan.FromMilliseconds(10);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> PathLocks = new(StringComparer.Ordinal);
 
     public async Task AppendLinesAsync(
         string path,
@@ -126,19 +128,25 @@ internal sealed class LocalAgentSessionJournalFile
         Encoding encoding,
         CancellationToken cancellationToken)
     {
-        await using var stream = new FileStream(
-            path,
-            FileMode.Append,
-            FileAccess.Write,
-            FileShare.Read,
-            bufferSize: 4096,
-            useAsync: true);
-        await using var writer = new StreamWriter(stream, encoding);
-        foreach (var line in lines)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await writer.WriteLineAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
-        }
+        await RetryFileOperationAsync(
+                async () =>
+                {
+                    await using var stream = new FileStream(
+                        path,
+                        FileMode.Append,
+                        FileAccess.Write,
+                        FileShare.Read,
+                        bufferSize: 4096,
+                        useAsync: true);
+                    await using var writer = new StreamWriter(stream, encoding);
+                    foreach (var line in lines)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await writer.WriteLineAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
+                    }
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task EnsureFirstLineCoreAsync(
@@ -151,15 +159,21 @@ internal sealed class LocalAgentSessionJournalFile
         string? existingFirstLine = null;
         if (File.Exists(path) && new FileInfo(path).Length > 0)
         {
-            await using var readStream = new FileStream(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete,
-                bufferSize: 4096,
-                useAsync: true);
-            using var reader = new StreamReader(readStream, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 4096, leaveOpen: false);
-            existingFirstLine = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+            existingFirstLine = await RetryFileOperationAsync(
+                    async () =>
+                    {
+                        await using var readStream = new FileStream(
+                            path,
+                            FileMode.Open,
+                            FileAccess.Read,
+                            FileShare.ReadWrite | FileShare.Delete,
+                            bufferSize: 4096,
+                            useAsync: true);
+                        using var reader = new StreamReader(readStream, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 4096, leaveOpen: false);
+                        return await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (isExpectedFirstLine(existingFirstLine))
@@ -178,29 +192,40 @@ internal sealed class LocalAgentSessionJournalFile
         var tempPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            await using (var writeStream = new FileStream(
-                tempPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 81920,
-                useAsync: true))
-            {
-                await using var writer = new StreamWriter(writeStream, encoding, bufferSize: 4096, leaveOpen: true);
-                await writer.WriteLineAsync(firstLine.AsMemory(), cancellationToken).ConfigureAwait(false);
-                await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+            await RetryFileOperationAsync(
+                    async () =>
+                    {
+                        if (File.Exists(tempPath))
+                        {
+                            File.Delete(tempPath);
+                        }
 
-                await using var readStream = new FileStream(
-                    path,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.ReadWrite | FileShare.Delete,
-                    bufferSize: 81920,
-                    useAsync: true);
-                await readStream.CopyToAsync(writeStream, cancellationToken).ConfigureAwait(false);
-            }
+                        await using (var writeStream = new FileStream(
+                            tempPath,
+                            FileMode.CreateNew,
+                            FileAccess.Write,
+                            FileShare.None,
+                            bufferSize: 81920,
+                            useAsync: true))
+                        {
+                            await using var writer = new StreamWriter(writeStream, encoding, bufferSize: 4096, leaveOpen: true);
+                            await writer.WriteLineAsync(firstLine.AsMemory(), cancellationToken).ConfigureAwait(false);
+                            await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
 
-            File.Move(tempPath, path, overwrite: true);
+                            await using var readStream = new FileStream(
+                                path,
+                                FileMode.Open,
+                                FileAccess.Read,
+                                FileShare.ReadWrite | FileShare.Delete,
+                                bufferSize: 81920,
+                                useAsync: true);
+                            await readStream.CopyToAsync(writeStream, cancellationToken).ConfigureAwait(false);
+                        }
+
+                        File.Move(tempPath, path, overwrite: true);
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -219,44 +244,64 @@ internal sealed class LocalAgentSessionJournalFile
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(action);
 
-        await using var pathLock = await AcquirePathLockAsync(path, cancellationToken).ConfigureAwait(false);
-        await action().ConfigureAwait(false);
+        var pathLock = PathLocks.GetOrAdd(Path.GetFullPath(path), static _ => new SemaphoreSlim(1, 1));
+        await pathLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            pathLock.Release();
+        }
     }
 
-    private static async Task<FileStream> AcquirePathLockAsync(string path, CancellationToken cancellationToken)
+    private static async Task RetryFileOperationAsync(Func<Task> action, CancellationToken cancellationToken)
     {
-        var directory = Path.GetDirectoryName(path)
-            ?? throw new InvalidOperationException($"Path '{path}' did not resolve to a parent directory.");
-        Directory.CreateDirectory(directory);
-
-        var lockPath = Path.Combine(directory, $".{Path.GetFileName(path)}.lock");
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                return new FileStream(
-                    lockPath,
-                    FileMode.OpenOrCreate,
-                    FileAccess.ReadWrite,
-                    FileShare.None,
-                    bufferSize: 1,
-                    FileOptions.DeleteOnClose);
+                await action().ConfigureAwait(false);
+                return;
             }
-            catch (IOException ex) when (IsSharingViolation(ex))
+            catch (IOException ex) when (IsRetryableFileAccessException(ex))
             {
-                await Task.Delay(LockRetryDelay, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(FileRetryDelay, cancellationToken).ConfigureAwait(false);
             }
             catch (UnauthorizedAccessException)
             {
-                await Task.Delay(LockRetryDelay, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(FileRetryDelay, cancellationToken).ConfigureAwait(false);
             }
         }
     }
 
-    private static bool IsSharingViolation(IOException ex)
+    private static async Task<T> RetryFileOperationAsync<T>(Func<Task<T>> action, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return await action().ConfigureAwait(false);
+            }
+            catch (IOException ex) when (IsRetryableFileAccessException(ex))
+            {
+                await Task.Delay(FileRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                await Task.Delay(FileRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static bool IsRetryableFileAccessException(IOException ex)
     {
         var errorCode = ex.HResult & 0xFFFF;
-        return errorCode is SharingViolation or LockViolation;
+        return errorCode is SharingViolation or LockViolation ||
+            ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("locked", StringComparison.OrdinalIgnoreCase);
     }
 }

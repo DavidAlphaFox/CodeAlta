@@ -96,7 +96,7 @@ internal sealed class ThreadViewStateCoordinator
         var localState = CreateThreadLocalState(thread);
         viewState.ThreadStates[thread.ThreadId] = localState;
         viewState.UpdatedAt = DateTimeOffset.UtcNow;
-        await _threadCatalog.JournalStore.AppendStateAsync(thread, localState).ConfigureAwait(false);
+        await PersistThreadLocalStateSnapshotAsync(thread, localState).ConfigureAwait(false);
     }
 
     public WorkThreadLocalState RememberThreadLocalState(WorkThreadViewState viewState, WorkThreadDescriptor thread)
@@ -118,7 +118,26 @@ internal sealed class ThreadViewStateCoordinator
         ArgumentNullException.ThrowIfNull(thread);
         ArgumentNullException.ThrowIfNull(localState);
 
-        await _threadCatalog.JournalStore.AppendStateAsync(thread, localState, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _threadCatalog.JournalStore.AppendStateAsync(thread, localState, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogFailure(ex, $"Failed to persist local state for thread {thread.ThreadId}.");
+        }
+    }
+
+    private static void LogFailure(Exception ex, string message)
+    {
+        if (LogManager.IsInitialized && CodeAlta.Views.CodeAltaApp.UiLogger.IsEnabled(LogLevel.Error))
+        {
+            CodeAlta.Views.CodeAltaApp.UiLogger.Error(ex, message);
+        }
     }
 
     public NavigatorSettings GetNavigatorSettingsSnapshot(WorkThreadViewState viewState)
