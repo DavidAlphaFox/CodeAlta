@@ -11,12 +11,13 @@ public sealed class LocalAgentRuntimeContractsTests
     [TestMethod]
     public void LocalAgentRuntimePathLayout_UsesDateShardedSessionJournalStructure()
     {
-        var layout = new LocalAgentRuntimePathLayout(@"C:\codealta-test-root\.alta");
+        var rootPath = Path.Combine(Path.GetTempPath(), "codealta-test-root", ".alta");
+        var layout = new LocalAgentRuntimePathLayout(rootPath);
         var createdAt = DateTimeOffset.Parse("2026-04-06T14:15:00+00:00");
         var sessionFile = layout.GetSessionFilePath("session-123", createdAt);
 
         Assert.AreEqual(
-            @"C:\codealta-test-root\.alta\sessions\2026\04\06\session-123.jsonl",
+            Path.Combine(rootPath, "sessions", "2026", "04", "06", "session-123.jsonl"),
             sessionFile);
     }
 

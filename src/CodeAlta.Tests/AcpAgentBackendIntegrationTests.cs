@@ -323,12 +323,17 @@ public sealed class AcpAgentBackendIntegrationTests
             .ConfigureAwait(false);
         Assert.AreEqual("written by ACP", await File.ReadAllTextAsync(destinationPath).ConfigureAwait(false));
 
+        var terminalCommand = OperatingSystem.IsWindows() ? "cmd" : "/bin/sh";
+        var terminalArguments = OperatingSystem.IsWindows()
+            ? new[] { "/c", "echo hello from acp" }
+            : new[] { "-c", "echo hello from acp" };
+
         var terminal = await harness.SendServerRequestAsync<CreateTerminalResponse>(
                 "terminal/create",
                 new
                 {
-                    command = "cmd",
-                    args = new[] { "/c", "echo hello from acp" },
+                    command = terminalCommand,
+                    args = terminalArguments,
                     cwd = temp.Path
                 },
                 cancellationTokenSource.Token)

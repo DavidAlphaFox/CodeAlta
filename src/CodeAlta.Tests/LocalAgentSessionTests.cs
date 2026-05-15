@@ -41,8 +41,8 @@ public sealed class LocalAgentSessionTests
         Assert.IsNotNull(bundle.DeveloperInstructions);
         StringAssert.Contains(bundle.DeveloperInstructions, "developer guidance");
         StringAssert.Contains(bundle.RuntimeContext, $"Current date: {DateTimeOffset.Now:yyyy-MM-dd}");
-        StringAssert.Contains(bundle.RuntimeContext, "Platform: Windows");
-        StringAssert.Contains(bundle.RuntimeContext, "Default shell for `shell_command`: `pwsh`");
+        StringAssert.Contains(bundle.RuntimeContext, $"Platform: {GetExpectedPlatformLabel()}");
+        StringAssert.Contains(bundle.RuntimeContext, $"Default shell for `shell_command`: `{GetExpectedDefaultShellLabel()}`");
         StringAssert.Contains(bundle.RuntimeContext, $"Current working directory: `{Path.GetFullPath(workingDirectory)}`");
         StringAssert.Contains(bundle.RuntimeContext, $"Project root: `{Path.GetFullPath(projectRoot)}`");
         StringAssert.Contains(bundle.DeveloperInstructions, repoClaude);
@@ -115,8 +115,8 @@ public sealed class LocalAgentSessionTests
                     Assert.AreEqual(LocalAgentConversationRole.User, request.Conversation[0].Role);
                     Assert.IsNotNull(request.DeveloperInstructions);
                     StringAssert.Contains(request.DeveloperInstructions, $"Current date: {DateTimeOffset.Now:yyyy-MM-dd}");
-                    StringAssert.Contains(request.DeveloperInstructions, "Platform: Windows");
-                    StringAssert.Contains(request.DeveloperInstructions, "Default shell for `shell_command`: `pwsh`");
+                    StringAssert.Contains(request.DeveloperInstructions, $"Platform: {GetExpectedPlatformLabel()}");
+                    StringAssert.Contains(request.DeveloperInstructions, $"Default shell for `shell_command`: `{GetExpectedDefaultShellLabel()}`");
                     StringAssert.Contains(request.DeveloperInstructions, $"Current working directory: `{Path.GetFullPath(temp.Path)}`");
                     await onUpdate(
                             new LocalAgentTurnDelta
@@ -3473,6 +3473,39 @@ public sealed class LocalAgentSessionTests
         var persistedState = await store.GetStateAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
         Assert.IsNotNull(persistedState);
         Assert.AreEqual("overflow", persistedState.LastCompactionTrigger);
+    }
+
+    private static string GetExpectedPlatformLabel()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return "Windows";
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return "macOS";
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return "Linux";
+        }
+
+        return System.Runtime.InteropServices.RuntimeInformation.OSDescription.Trim();
+    }
+
+    private static string GetExpectedDefaultShellLabel()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return "pwsh";
+        }
+
+        var shell = Environment.GetEnvironmentVariable("SHELL");
+        return string.IsNullOrWhiteSpace(shell)
+            ? "/bin/sh"
+            : shell.Trim();
     }
 
     private static AgentSessionCreateOptions CreateOptions(LocalAgentProviderDescriptor provider, string workingDirectory)

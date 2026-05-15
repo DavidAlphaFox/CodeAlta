@@ -39,12 +39,13 @@ public sealed class CodexProcessTests
     [TestMethod]
     public void GetInstallDirectory_UsesLocalBinCodexTag()
     {
+        var localRootPath = Path.Combine(Path.GetTempPath(), "codealta-cache");
         var installDirectory = CodexReleaseInstaller.GetInstallDirectory(
-            @"C:\Users\test\.alta\cache",
+            localRootPath,
             "rust-v0.118.0");
 
         Assert.AreEqual(
-            Path.Combine(@"C:\Users\test\.alta\cache", "bin", "codex", "rust-v0.118.0"),
+            Path.Combine(Path.GetFullPath(localRootPath), "bin", "codex", "rust-v0.118.0"),
             installDirectory);
     }
 

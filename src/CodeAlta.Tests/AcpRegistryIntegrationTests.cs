@@ -126,8 +126,10 @@ public sealed class AcpRegistryIntegrationTests
     public async Task AgentRegistryService_InstallAgentAsync_PersistsDefinition()
     {
         using var temp = TempDirectory.Create();
+        var targetId = AcpInstallResolver.GetCurrentTargetId();
+        var commandFileName = OperatingSystem.IsWindows() ? "agent.exe" : "agent";
         using var httpClient = new HttpClient(new StubHttpMessageHandler(
-            """
+            $$"""
             {
               "version": "1.0.0",
               "agents": [
@@ -138,9 +140,9 @@ public sealed class AcpRegistryIntegrationTests
                   "description": "Installed from test registry",
                   "distribution": {
                     "binary": {
-                      "windows-x86_64": {
+                      "{{targetId}}": {
                         "archive": "https://example.test/registry-agent.zip",
-                        "cmd": "./agent.exe",
+                        "cmd": "./{{commandFileName}}",
                         "args": ["acp"]
                       }
                     }
@@ -151,7 +153,7 @@ public sealed class AcpRegistryIntegrationTests
             }
             """,
             new Uri("https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json"),
-            CreateZipArchiveBytes(("agent.exe", "echo registry")),
+            CreateZipArchiveBytes((commandFileName, "echo registry")),
             new Uri("https://example.test/registry-agent.zip")));
 
         var catalogOptions = new CatalogOptions { GlobalRoot = temp.Path };
