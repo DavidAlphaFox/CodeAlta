@@ -825,7 +825,7 @@ public sealed class CodeAltaAppTests
             "Waiting for Codex to reconnect...",
             PromptComposerProjectionBuilder.BuildPromptUnavailablePlaceholder(thread, "Codex", ChatBackendAvailability.Connecting, anyBackendReady: false));
         Assert.AreEqual(
-            "Configure model providers (Ctrl+G Ctrl+M) to start a thread...",
+            "Configure model providers (Ctrl+G Ctrl+R) to start a thread...",
             PromptComposerProjectionBuilder.BuildPromptUnavailablePlaceholder(null, "Codex", ChatBackendAvailability.Unsupported, anyBackendReady: false));
     }
 
@@ -850,7 +850,7 @@ public sealed class CodeAltaAppTests
             "Reconnecting 'Review startup' to Codex. Prompt sending is temporarily unavailable.",
             PromptComposerProjectionBuilder.BuildPromptUnavailableStatusText(thread, "Codex", ChatBackendAvailability.Connecting, anyBackendReady: false));
         Assert.AreEqual(
-            "No model provider is ready. Open Model Providers (Ctrl+G Ctrl+M) to configure one.",
+            "No model provider is ready. Open Model Providers (Ctrl+G Ctrl+R) to configure one.",
             PromptComposerProjectionBuilder.BuildPromptUnavailableStatusText(null, "Codex", ChatBackendAvailability.Unsupported, anyBackendReady: false));
     }
 

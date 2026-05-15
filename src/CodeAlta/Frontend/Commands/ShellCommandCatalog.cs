@@ -23,7 +23,7 @@ internal static class ShellCommandCatalog
 
     public static readonly KeySequence ModelProvidersShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
-        new KeyGesture(TerminalChar.CtrlM, TerminalModifiers.Ctrl));
+        new KeyGesture(TerminalChar.CtrlR, TerminalModifiers.Ctrl));
 
     public static readonly KeySequence ModelsShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
@@ -35,7 +35,7 @@ internal static class ShellCommandCatalog
 
     public static readonly KeySequence PluginsShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
-        new KeyGesture(TerminalChar.CtrlI, TerminalModifiers.Ctrl));
+        new KeyGesture(TerminalChar.CtrlN, TerminalModifiers.Ctrl));
 
     public static readonly KeySequence SessionUsageShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),

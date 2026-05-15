@@ -448,7 +448,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         if (!_startupProviderDialogHandled && !_providerUi.HasAnyEnabledProviders())
         {
             _startupProviderDialogHandled = true;
-            SetStatus("No model providers are enabled. Open Model Providers (Ctrl+G Ctrl+M) to configure one.", false, StatusTone.Warning);
+            SetStatus("No model providers are enabled. Open Model Providers (Ctrl+G Ctrl+R) to configure one.", false, StatusTone.Warning);
             _ = OpenModelProvidersAsync();
         }
 

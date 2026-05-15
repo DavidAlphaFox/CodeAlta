@@ -99,9 +99,9 @@ public sealed class PromptComposerProjectionTests
             selectedThreadCanCompact: false,
             selectedThreadCanAbort: false);
 
-        Assert.AreEqual("Configure model providers (Ctrl+G Ctrl+M) to start a thread...", projection.Placeholder);
+        Assert.AreEqual("Configure model providers (Ctrl+G Ctrl+R) to start a thread...", projection.Placeholder);
         Assert.IsTrue(projection.HasUnavailableStatus);
-        Assert.AreEqual("No model provider is ready. Open Model Providers (Ctrl+G Ctrl+M) to configure one.", projection.UnavailableStatusMessage);
+        Assert.AreEqual("No model provider is ready. Open Model Providers (Ctrl+G Ctrl+R) to configure one.", projection.UnavailableStatusMessage);
         Assert.AreEqual(StatusTone.Warning, projection.UnavailableStatusTone);
     }
 

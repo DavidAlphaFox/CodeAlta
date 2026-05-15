@@ -188,7 +188,7 @@ internal sealed class ModelProvidersDialog
         _dialog = new Dialog()
             .Title("Model Providers")
             .TopRightText(closeButton)
-            .BottomRightText(new Markup("[dim]Ctrl+G Ctrl+M reopen · Esc close[/]"))
+            .BottomRightText(new Markup("[dim]Ctrl+G Ctrl+R reopen · Esc close[/]"))
             .IsModal(true)
             .Padding(1)
             .Content(content);

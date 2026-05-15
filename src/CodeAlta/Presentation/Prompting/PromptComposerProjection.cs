@@ -100,7 +100,7 @@ namespace CodeAlta.Presentation.Prompting
 
             return anyBackendReady
                 ? "Select a connected provider to start a thread..."
-                : "Configure model providers (Ctrl+G Ctrl+M) to start a thread...";
+                : "Configure model providers (Ctrl+G Ctrl+R) to start a thread...";
         }
 
         internal static string BuildPromptUnavailableStatusText(
@@ -123,7 +123,7 @@ namespace CodeAlta.Presentation.Prompting
 
             return anyBackendReady
                 ? "Select a connected provider to send prompts."
-                : "No model provider is ready. Open Model Providers (Ctrl+G Ctrl+M) to configure one.";
+                : "No model provider is ready. Open Model Providers (Ctrl+G Ctrl+R) to configure one.";
         }
 
         private static string BuildReadyPromptPlaceholder(bool isContinuation, bool hasProjectContext)

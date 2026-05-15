@@ -83,14 +83,26 @@ public sealed class ResponsiveDialogSizeTests
     }
 
     [TestMethod]
-    public void ThreadWorkspaceView_UsesCtrlGCtrlMForModelProvidersShortcut()
+    public void ThreadWorkspaceView_UsesCtrlGCtrlRForModelProvidersShortcut()
     {
         var sequence = ThreadWorkspaceView.ModelProvidersShortcutSequence;
 
         Assert.AreEqual(2, sequence.Count);
         Assert.AreEqual(TerminalChar.CtrlG, sequence[0].Char);
         Assert.AreEqual(TerminalModifiers.Ctrl, sequence[0].Modifiers);
-        Assert.AreEqual(TerminalChar.CtrlM, sequence[1].Char);
+        Assert.AreEqual(TerminalChar.CtrlR, sequence[1].Char);
+        Assert.AreEqual(TerminalModifiers.Ctrl, sequence[1].Modifiers);
+    }
+
+    [TestMethod]
+    public void ShellCommandCatalog_UsesCtrlGCtrlNForPluginsShortcut()
+    {
+        var sequence = ShellCommandCatalog.PluginsShortcutSequence;
+
+        Assert.AreEqual(2, sequence.Count);
+        Assert.AreEqual(TerminalChar.CtrlG, sequence[0].Char);
+        Assert.AreEqual(TerminalModifiers.Ctrl, sequence[0].Modifiers);
+        Assert.AreEqual(TerminalChar.CtrlN, sequence[1].Char);
         Assert.AreEqual(TerminalModifiers.Ctrl, sequence[1].Modifiers);
     }
 
