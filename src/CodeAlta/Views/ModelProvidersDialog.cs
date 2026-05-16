@@ -322,15 +322,15 @@ internal sealed class ModelProvidersDialog
         QueueBackgroundOperation(
             async () =>
             {
-                await _modelProviders.SaveDefinitionsAsync(definitions);
-                return _modelProviders.LoadDefinitions();
+                var saveResult = await _modelProviders.SaveDefinitionsAsync(definitions);
+                return new ProviderDefinitionsSaveDialogResult(_modelProviders.LoadDefinitions(), saveResult);
             },
-            definitionsFromDisk =>
+            result =>
             {
                 LoadDefinitionsIntoDialog(
-                    definitionsFromDisk,
+                    result.DefinitionsFromDisk,
                     emptyStatusText: "[warning]No providers are configured yet. Add one, or enable Codex/Copilot.[/]",
-                    loadedStatusText: "[success]Provider configuration saved and runtime refreshed.[/]");
+                    loadedStatusText: FormatProviderSaveStatus(result.SaveResult));
             },
             ex => SetStatus($"[error]{AnsiMarkup.Escape(ex.GetBaseException().Message)}[/]"));
     }
@@ -1003,6 +1003,11 @@ internal sealed class ModelProvidersDialog
            statusText.Contains("saved", StringComparison.OrdinalIgnoreCase) ||
            statusText.Contains("configure model providers", StringComparison.OrdinalIgnoreCase);
 
+    private static string FormatProviderSaveStatus(ProviderConfigurationSaveResult saveResult)
+        => saveResult.RuntimeRefreshSucceeded
+            ? "[success]Provider configuration saved and runtime refreshed.[/]"
+            : $"[warning]Provider configuration saved, but runtime refresh failed: {AnsiMarkup.Escape(saveResult.RuntimeRefreshErrorMessage ?? "unknown error")}[/]";
+
     private void QueueBackgroundOperation<TResult>(
         Func<TResult> work,
         Action<TResult> onCompleted,
@@ -1216,6 +1221,10 @@ internal sealed class ModelProvidersDialog
     {
         public override string ToString() => DisplayName;
     }
+
+    private readonly record struct ProviderDefinitionsSaveDialogResult(
+        IReadOnlyList<CodeAltaProviderDocument> DefinitionsFromDisk,
+        ProviderConfigurationSaveResult SaveResult);
 
 
     private Visual BuildProviderListItem(DataTemplateValue<ModelProviderEditorItemViewModel> value)

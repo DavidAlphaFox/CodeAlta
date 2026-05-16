@@ -6,7 +6,7 @@ internal interface IModelProviderDialogService
 {
     IReadOnlyList<CodeAltaProviderDocument> LoadDefinitions();
 
-    Task SaveDefinitionsAsync(IReadOnlyList<CodeAltaProviderDocument> definitions);
+    Task<ProviderConfigurationSaveResult> SaveDefinitionsAsync(IReadOnlyList<CodeAltaProviderDocument> definitions);
 
     Task<ProviderTestResult> TestProviderAsync(CodeAltaProviderDocument definition);
 
@@ -23,6 +23,17 @@ internal interface IModelProviderDialogService
     Task<ProviderTestResult> ListAccountsAsync(CodeAltaProviderDocument definition);
 }
 
+internal readonly record struct ProviderConfigurationSaveResult(bool RuntimeRefreshSucceeded, string? RuntimeRefreshErrorMessage)
+{
+    public static ProviderConfigurationSaveResult Success { get; } = new(true, null);
+
+    public static ProviderConfigurationSaveResult RuntimeRefreshFailed(string message)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        return new ProviderConfigurationSaveResult(false, message);
+    }
+}
+
 internal sealed class ModelProviderDialogService : IModelProviderDialogService
 {
     private readonly ProviderFrontendCoordinator _providerUi;
@@ -36,7 +47,7 @@ internal sealed class ModelProviderDialogService : IModelProviderDialogService
     public IReadOnlyList<CodeAltaProviderDocument> LoadDefinitions()
         => _providerUi.LoadProviderDefinitions();
 
-    public Task SaveDefinitionsAsync(IReadOnlyList<CodeAltaProviderDocument> definitions)
+    public Task<ProviderConfigurationSaveResult> SaveDefinitionsAsync(IReadOnlyList<CodeAltaProviderDocument> definitions)
         => _providerUi.SaveProviderDefinitionsAsync(definitions, CancellationToken.None);
 
     public Task<ProviderTestResult> TestProviderAsync(CodeAltaProviderDocument definition)

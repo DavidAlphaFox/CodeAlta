@@ -515,8 +515,24 @@ internal sealed class ThreadHistoryCoordinator
         }
 
         ArgumentNullException.ThrowIfNull(executionOptions);
-        await _runtimeService.EnsureCoordinatorSessionAsync(thread, executionOptions, cancellationToken).ConfigureAwait(false);
-        return (await _runtimeService.GetHistoryAsync(thread.ThreadId, cancellationToken).ConfigureAwait(false)).ToList();
+        try
+        {
+            await _runtimeService.EnsureCoordinatorSessionAsync(thread, executionOptions, cancellationToken).ConfigureAwait(false);
+            return (await _runtimeService.GetHistoryAsync(thread.ThreadId, cancellationToken).ConfigureAwait(false)).ToList();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (KeyNotFoundException)
+        {
+            if (await _runtimeService.TryReadStoredHistoryAsync(thread, cancellationToken).ConfigureAwait(false) is { } storedHistory)
+            {
+                return storedHistory.ToList();
+            }
+
+            throw;
+        }
     }
 
     private static bool ShouldDisplayCompletedHistoryContent(AgentContentCompletedEvent completed)

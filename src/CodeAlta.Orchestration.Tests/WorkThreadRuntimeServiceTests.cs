@@ -1,4 +1,5 @@
 using CodeAlta.Agent;
+using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Catalog;
 using CodeAlta.Orchestration.Runtime;
 
@@ -7,6 +8,36 @@ namespace CodeAlta.Orchestration.Tests;
 [TestClass]
 public sealed class WorkThreadRuntimeServiceTests
 {
+    [TestMethod]
+    public async Task ListRecoverableThreadsAsync_IncludesLocalRuntimeSessionsForUnregisteredProviders()
+    {
+        using var temp = new TempDirectory();
+        var factory = new AgentBackendFactory();
+        await using var hub = new AgentHub(factory);
+        await using var runtime = CreateRuntime(temp.Path, hub);
+        var store = new WorkThreadCatalog(new CatalogOptions { GlobalRoot = temp.Path }).JournalStore.CreateSessionStore();
+        var createdAt = DateTimeOffset.Parse("2026-05-16T12:00:00+00:00");
+        await store.UpsertSessionAsync(
+            new LocalAgentSessionSummary
+            {
+                SessionId = "session-1",
+                BackendId = new AgentBackendId("old-provider"),
+                ProtocolFamily = "openai-responses",
+                ProviderKey = "old-provider",
+                WorkingDirectory = temp.Path,
+                Title = "Recovered old provider",
+                CreatedAt = createdAt,
+                UpdatedAt = createdAt.AddMinutes(1),
+            }).ConfigureAwait(false);
+
+        var threads = await runtime.ListRecoverableThreadsAsync().ConfigureAwait(false);
+
+        Assert.AreEqual(1, threads.Count);
+        Assert.AreEqual("session-1", threads[0].ThreadId);
+        Assert.AreEqual("old-provider", threads[0].BackendId);
+        Assert.AreEqual("old-provider", threads[0].ProviderKey);
+    }
+
     [TestMethod]
     public async Task EnsureCoordinatorSessionAsync_RecreatesSharedMetadataSessionWhenResumeTargetIsMissing()
     {

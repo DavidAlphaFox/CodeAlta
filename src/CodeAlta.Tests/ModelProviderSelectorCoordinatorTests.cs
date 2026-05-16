@@ -307,6 +307,65 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
+    public void RefreshForThread_PreservesUnavailableThreadProviderSelection()
+    {
+        using var temp = TempDirectory.Create();
+        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
+        thread.BackendId = "copilot_cli";
+        thread.ProviderKey = "copilot_cli";
+        var threadSelection = new ThreadSelectionContext(
+            threadStateCoordinator,
+            static (_, _) => Task.CompletedTask,
+            static _ => true);
+        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        tab.BackendId = new AgentBackendId("copilot_cli");
+        tab.ModelId = "gpt-4.1";
+
+        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var promptComposerViewModel = new PromptComposerViewModel();
+        AgentBackendDescriptor[] backendDescriptors =
+        [
+            new(new AgentBackendId("openai"), "OpenAI"),
+        ];
+        var backendStates = ChatBackendPresentation.CreateBackendStates(backendDescriptors);
+        backendStates["openai"].Availability = ChatBackendAvailability.Ready;
+
+        var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
+        var preferences = new FrontendModelProviderPreferencePort(
+            ApplyDraftModelProviderPreference,
+            static _ => { },
+            static (_, _, _) => { },
+            static (_, _, _, _) => { });
+        var coordinator = new ModelProviderSelectorCoordinator(
+            backendDescriptors,
+            workspaceViewModel,
+            promptComposerViewModel,
+            backendStates,
+            selectorState,
+            threadSelection,
+            preferences,
+            new WorkspaceRefreshContext(static _ => { }),
+            static _ => null,
+            static () => { },
+            static (_, _) => true);
+
+        coordinator.RefreshForThread(tab);
+
+        Assert.AreEqual(0, workspaceViewModel.SelectedModelProviderIndex);
+        Assert.AreEqual("copilot_cli", workspaceViewModel.ModelProviderOptions[0].BackendId.Value);
+        StringAssert.Contains(workspaceViewModel.ModelProviderOptions[0].Label, "not configured");
+        Assert.AreEqual("gpt-4.1", workspaceViewModel.ModelOptions[0].ModelId);
+        Assert.IsFalse(workspaceViewModel.CanSelectModel);
+        Assert.IsFalse(workspaceViewModel.CanSelectReasoning);
+        Assert.IsTrue(workspaceViewModel.CanSelectModelProvider);
+
+        coordinator.ApplyPromptAvailabilityProjection();
+
+        Assert.IsFalse(promptComposerViewModel.CanSend);
+        StringAssert.Contains(promptComposerViewModel.Placeholder, "copilot_cli");
+    }
+
+    [TestMethod]
     public void ApplyPromptAvailabilityProjection_RefreshesThreadModelProviderSelectionCapability()
     {
         using var temp = TempDirectory.Create();

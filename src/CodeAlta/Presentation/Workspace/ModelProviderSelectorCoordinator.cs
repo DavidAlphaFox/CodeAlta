@@ -186,7 +186,8 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         _selectorsRefreshing = true;
         try
         {
-            var backendOptions = ChatBackendPresentation.BuildBackendOptions(_backendDescriptors);
+            var configuredBackendOptions = ChatBackendPresentation.BuildBackendOptions(_backendDescriptors);
+            var backendOptions = BuildThreadBackendOptions(tab, configuredBackendOptions);
             _workspaceViewModel.ProviderSummaryMarkup = ChatBackendPresentation.BuildProviderSummaryMarkup(
                 _chatBackendStates.Values,
                 isInitializing: false,
@@ -210,7 +211,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
                 0,
                 Math.Max(0, backendOptions.Count - 1)));
 
-            var backendState = _chatBackendStates[tab.BackendId.Value];
+            var backendState = GetThreadBackendState(tab, out var backendStateIsRegistered);
             _preferences.ApplyThreadModelProviderState(tab);
 
             var modelOptions = ChatBackendPresentation.BuildModelOptions(backendState, tab.ModelId);
@@ -231,9 +232,9 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
                 reasoningOptions.FindIndex(option => option.Effort == tab.ReasoningEffort),
                 0,
                 Math.Max(0, reasoningOptions.Count - 1)));
-            _workspaceViewModel.CanSelectModelProvider = _canSelectThreadBackend(tab.Thread, tab);
-            _workspaceViewModel.CanSelectModel = backendState.Availability == ChatBackendAvailability.Ready;
-            _workspaceViewModel.CanSelectReasoning = backendState.Availability == ChatBackendAvailability.Ready;
+            _workspaceViewModel.CanSelectModelProvider = HasRegisteredBackendOption(backendOptions) && _canSelectThreadBackend(tab.Thread, tab);
+            _workspaceViewModel.CanSelectModel = backendStateIsRegistered && backendState.Availability == ChatBackendAvailability.Ready;
+            _workspaceViewModel.CanSelectReasoning = backendStateIsRegistered && backendState.Availability == ChatBackendAvailability.Ready;
             _syncModelProviderSelectorItems();
         }
         finally
@@ -249,7 +250,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             return;
         }
 
-        var options = ChatBackendPresentation.BuildBackendOptions(_backendDescriptors);
+        var options = GetCurrentModelProviderOptions();
         if (options.Count == 0)
         {
             return;
@@ -266,10 +267,15 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         if (thread is null)
         {
             var selectedBackendId = options[newIndex].BackendId;
+            if (!_chatBackendStates.TryGetValue(selectedBackendId.Value, out var draftBackendState))
+            {
+                RefreshForDraftScope();
+                return;
+            }
+
             _draftBackendId = selectedBackendId;
             RememberDraftBackendForCurrentScope(selectedBackendId);
             RefreshForDraftScope(selectedBackendId);
-            var draftBackendState = _chatBackendStates[selectedBackendId.Value];
             _preferences.RememberGlobalPreference(CreatePreference(
                 selectedBackendId,
                 draftBackendState.SelectedModelId,
@@ -282,6 +288,12 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         var targetBackendId = options[newIndex].BackendId;
         if (string.Equals(tab.BackendId.Value, targetBackendId.Value, StringComparison.OrdinalIgnoreCase))
         {
+            return;
+        }
+
+        if (!_chatBackendStates.ContainsKey(targetBackendId.Value))
+        {
+            RefreshForThread(tab);
             return;
         }
 
@@ -328,7 +340,12 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         }
 
         var tab = _threadSelection.EnsureThreadTab(thread);
-        var backendState = _chatBackendStates[tab.BackendId.Value];
+        if (!_chatBackendStates.TryGetValue(tab.BackendId.Value, out var backendState))
+        {
+            RefreshForThread(tab);
+            return;
+        }
+
         var options = ChatBackendPresentation.BuildModelOptions(backendState, tab.ModelId);
         if ((uint)newIndex >= (uint)options.Count)
         {
@@ -371,7 +388,12 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         }
 
         var tab = _threadSelection.EnsureThreadTab(thread);
-        var backendState = _chatBackendStates[tab.BackendId.Value];
+        if (!_chatBackendStates.TryGetValue(tab.BackendId.Value, out var backendState))
+        {
+            RefreshForThread(tab);
+            return;
+        }
+
         var selectedModel = backendState.Models.FirstOrDefault(model => string.Equals(model.Id, tab.ModelId, StringComparison.Ordinal));
         var options = ChatBackendPresentation.BuildReasoningOptions(selectedModel);
         if ((uint)newIndex >= (uint)options.Count)
@@ -531,8 +553,54 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             return;
         }
 
-        _workspaceViewModel.CanSelectModelProvider = _workspaceViewModel.ModelProviderOptions.Count > 0 &&
+        _workspaceViewModel.CanSelectModelProvider = HasRegisteredBackendOption(_workspaceViewModel.ModelProviderOptions) &&
             _canSelectThreadBackend(selectedThread, selectedTab);
+    }
+
+    private IReadOnlyList<ChatBackendOption> GetCurrentModelProviderOptions()
+        => _workspaceViewModel.ModelProviderOptions.Count > 0
+            ? _workspaceViewModel.ModelProviderOptions
+            : ChatBackendPresentation.BuildBackendOptions(_backendDescriptors);
+
+    private List<ChatBackendOption> BuildThreadBackendOptions(
+        OpenThreadState tab,
+        IReadOnlyList<ChatBackendOption> configuredBackendOptions)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(configuredBackendOptions);
+
+        var options = configuredBackendOptions.ToList();
+        if (options.Any(option => string.Equals(option.BackendId.Value, tab.BackendId.Value, StringComparison.OrdinalIgnoreCase)))
+        {
+            return options;
+        }
+
+        options.Insert(0, new ChatBackendOption(tab.BackendId, BuildUnavailableThreadProviderLabel(tab.Thread, tab.BackendId)));
+        return options;
+    }
+
+    private ChatBackendState GetThreadBackendState(OpenThreadState tab, out bool isRegistered)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (_chatBackendStates.TryGetValue(tab.BackendId.Value, out var backendState))
+        {
+            isRegistered = true;
+            return backendState;
+        }
+
+        isRegistered = false;
+        return new ChatBackendState(tab.BackendId, BuildUnavailableThreadProviderLabel(tab.Thread, tab.BackendId))
+        {
+            Availability = ChatBackendAvailability.Unsupported,
+            SelectedModelId = tab.ModelId,
+            SelectedReasoningEffort = tab.ReasoningEffort,
+        };
+    }
+
+    private bool HasRegisteredBackendOption(IReadOnlyList<ChatBackendOption> options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return options.Any(option => _chatBackendStates.ContainsKey(option.BackendId.Value));
     }
 
     private AgentBackendId GetPreferredDraftBackendId(IReadOnlyList<ChatBackendOption> backendOptions)
@@ -631,8 +699,15 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         var selection = _threadSelection.Selection;
         var selectedThread = selection.Target is WorkspaceTarget.Thread ? _threadSelection.GetSelectedThread() : null;
         var backendId = selectedThread is not null ? new AgentBackendId(selectedThread.BackendId) : GetPreferredModelProviderId();
-        if (!_chatBackendStates.TryGetValue(backendId.Value, out var backendState) ||
-            string.IsNullOrWhiteSpace(backendState.DisplayName))
+        if (!_chatBackendStates.TryGetValue(backendId.Value, out var backendState) && selectedThread is not null)
+        {
+            backendState = new ChatBackendState(backendId, BuildUnavailableThreadProviderLabel(selectedThread, backendId))
+            {
+                Availability = ChatBackendAvailability.Unsupported,
+            };
+        }
+
+        if (backendState is null || string.IsNullOrWhiteSpace(backendState.DisplayName))
         {
             backendState = _chatBackendStates.Values.FirstOrDefault()
                 ?? new ChatBackendState(GetDefaultBackendId(), GetDefaultBackendId().Value);
@@ -671,6 +746,15 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         string? modelId,
         AgentReasoningEffort? reasoningEffort)
         => new(new ModelProviderId(modelProviderId.Value), modelId, reasoningEffort);
+
+    private static string BuildUnavailableThreadProviderLabel(WorkThreadDescriptor thread, AgentBackendId backendId)
+    {
+        ArgumentNullException.ThrowIfNull(thread);
+        var providerKey = string.IsNullOrWhiteSpace(thread.ResolvedProviderKey)
+            ? backendId.Value
+            : thread.ResolvedProviderKey.Trim();
+        return $"{providerKey} (not configured)";
+    }
 
     private IReadOnlyList<string>? GetConfiguredProviderKeys()
         => _getConfiguredProviderKeys?.Invoke();

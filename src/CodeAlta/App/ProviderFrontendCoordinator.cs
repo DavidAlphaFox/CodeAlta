@@ -70,7 +70,7 @@ internal sealed class ProviderFrontendCoordinator
         return hasEnabledProviders;
     }
 
-    public async Task SaveProviderDefinitionsAsync(
+    public async Task<ProviderConfigurationSaveResult> SaveProviderDefinitionsAsync(
         IReadOnlyList<CodeAltaProviderDocument> definitions,
         CancellationToken cancellationToken = default)
     {
@@ -81,24 +81,39 @@ internal sealed class ProviderFrontendCoordinator
         if (_ownedServices is null)
         {
             _setStatus("Provider configuration saved.", false, StatusTone.Info);
-            return;
+            return ProviderConfigurationSaveResult.Success;
         }
 
-        await _ownedServices.RefreshProviderBackendsAsync(cancellationToken);
-        _dispatchToUi(
-            () =>
-            {
-                SyncModelProviderCatalog();
-                PublishModelProviderCatalogChanged();
-            });
-        await _chatBackendInitializationCoordinator.InitializeAsync(cancellationToken);
-        _dispatchToUi(
-            () =>
-            {
-                SyncModelProviderCatalog();
-                PublishModelProviderCatalogChanged();
-                _setStatus("Model providers refreshed.", false, StatusTone.Info);
-            });
+        try
+        {
+            await _ownedServices.RefreshProviderBackendsAsync(cancellationToken);
+            _dispatchToUi(
+                () =>
+                {
+                    SyncModelProviderCatalog();
+                    PublishModelProviderCatalogChanged();
+                });
+            await _chatBackendInitializationCoordinator.InitializeAsync(cancellationToken);
+            _dispatchToUi(
+                () =>
+                {
+                    SyncModelProviderCatalog();
+                    PublishModelProviderCatalogChanged();
+                    _setStatus("Model providers refreshed.", false, StatusTone.Info);
+                });
+        }
+        catch (Exception ex)
+        {
+            var message = ex.GetBaseException().Message;
+            _dispatchToUi(
+                () => _setStatus(
+                    $"Provider configuration saved, but runtime refresh failed: {message}",
+                    false,
+                    StatusTone.Error));
+            return ProviderConfigurationSaveResult.RuntimeRefreshFailed(message);
+        }
+
+        return ProviderConfigurationSaveResult.Success;
     }
 
     public async Task<ProviderTestResult> TestProviderAsync(

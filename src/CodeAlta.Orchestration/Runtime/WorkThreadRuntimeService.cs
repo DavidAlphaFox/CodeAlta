@@ -128,6 +128,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         var results = new List<RecoverableThreadCandidate>();
         var candidatesByThreadId = new Dictionary<string, RecoverableThreadCandidate>(StringComparer.OrdinalIgnoreCase);
 
+        var includeUnregisteredLocalRuntimeSessions = shouldListBackendSessions is null;
         var backendIds = _agentHub.ListRegisteredBackends()
             .Where(backendId => shouldListBackendSessions?.Invoke(backendId) != false)
             .OrderBy(static backendId => IsProviderManagedBackend(backendId) ? 1 : 0)
@@ -146,7 +147,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             yield break;
         }
 
-        await foreach (var candidate in StreamSharedLocalRuntimeThreadsAsync(backendIds, projects, cancellationToken).ConfigureAwait(false))
+        await foreach (var candidate in StreamSharedLocalRuntimeThreadsAsync(backendIds, projects, includeUnregisteredLocalRuntimeSessions, cancellationToken).ConfigureAwait(false))
         {
             if (await TryAddRecoverableThreadCandidateAsync(candidate, results, candidatesByThreadId, cancellationToken).ConfigureAwait(false) is { } thread)
             {
@@ -370,6 +371,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
     private async IAsyncEnumerable<RecoverableThreadCandidate> StreamSharedLocalRuntimeThreadsAsync(
         IReadOnlyList<AgentBackendId> backendIds,
         IReadOnlyList<ProjectDescriptor> projects,
+        bool includeUnregisteredLocalRuntimeSessions,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var loadableBackendIds = backendIds
@@ -379,7 +381,8 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
         var store = _threadCatalog.JournalStore.CreateSessionStore();
         await foreach (var session in store.ListSessionsAsync(cancellationToken).ConfigureAwait(false))
         {
-            if (string.IsNullOrWhiteSpace(session.ProviderKey) || !loadableBackendIds.Contains(session.ProviderKey))
+            if (string.IsNullOrWhiteSpace(session.ProviderKey) ||
+                (!includeUnregisteredLocalRuntimeSessions && !loadableBackendIds.Contains(session.ProviderKey)))
             {
                 continue;
             }

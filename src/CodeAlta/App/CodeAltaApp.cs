@@ -284,7 +284,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             EnsureThreadTab,
             _threadStateCoordinator.FindThread,
             threadId => _threadStateCoordinator.FindOpenThread(threadId),
-            thread => ThreadHistoryCoordinator.CanLoadThreadHistory(thread) && IsModelProviderReady(new AgentBackendId(thread.BackendId)),
+            ThreadHistoryCoordinator.CanLoadThreadHistory,
             _threadCommandCoordinator.BuildExecutionOptions,
             (tab, message, showSpinner, tone) => SetThreadStatus(tab, message, showSpinner, tone),
             ClearThreadStatus,

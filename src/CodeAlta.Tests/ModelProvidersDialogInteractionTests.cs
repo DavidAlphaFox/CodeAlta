@@ -83,7 +83,7 @@ public sealed class ModelProvidersDialogInteractionTests
                     ProviderType = definition.ProviderType,
                     ApiKey = definition.ApiKey,
                 }).ToArray();
-                return Task.CompletedTask;
+                return Task.FromResult(ProviderConfigurationSaveResult.Success);
             },
             getFocusTarget: () => root);
 
@@ -193,7 +193,7 @@ public sealed class ModelProvidersDialogInteractionTests
             {
                 saveCount++;
                 definitionsFromDisk = definitions.ToArray();
-                return Task.CompletedTask;
+                return Task.FromResult(ProviderConfigurationSaveResult.Success);
             },
             _ => Task.FromResult(new ProviderTestResult(false, "Endpoint temporarily rejected model discovery.", 0)),
             () => root);
@@ -260,7 +260,7 @@ public sealed class ModelProvidersDialogInteractionTests
             {
                 saveCount++;
                 definitionsFromDisk = definitions.ToArray();
-                return Task.CompletedTask;
+                return Task.FromResult(ProviderConfigurationSaveResult.Success);
             },
             getFocusTarget: () => root);
 
@@ -279,6 +279,61 @@ public sealed class ModelProvidersDialogInteractionTests
 
             Assert.AreEqual(1, saveCount);
             Assert.IsTrue(BuildStatusMarkup(dialog).Contains("saved", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            InvokeTerminalApp(app, "EndRun");
+        }
+    }
+
+    [TestMethod]
+    public void ModelProvidersDialog_SaveClearsDirtyStateWhenRuntimeRefreshFailsAfterPersisting()
+    {
+        using var session = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(120, 40)), new TerminalOptions { ImplicitStartInput = true }, force: true);
+        var root = new TextBlock("Root");
+        var app = new TerminalApp(
+            root,
+            session.Instance,
+            new TerminalAppOptions
+            {
+                HostKind = TerminalHostKind.Fullscreen,
+            });
+
+        IReadOnlyList<CodeAltaProviderDocument> definitionsFromDisk =
+        [
+            new CodeAltaProviderDocument
+            {
+                ProviderKey = "provider-1",
+                Enabled = true,
+                ProviderType = "openai-chat",
+                ApiKey = "key-1",
+            },
+        ];
+
+        var dialog = CreateDialog(
+            () => definitionsFromDisk,
+            definitions =>
+            {
+                definitionsFromDisk = definitions.ToArray();
+                return Task.FromResult(ProviderConfigurationSaveResult.RuntimeRefreshFailed("backend initialization failed"));
+            },
+            getFocusTarget: () => root);
+
+        InvokeTerminalApp(app, "BeginRun");
+        try
+        {
+            dialog.Show();
+            WaitUntil(() => GetProviderCount(dialog) == 1, app);
+
+            var provider = GetProviders(dialog)[0];
+            provider.Enabled = false;
+            Assert.IsTrue(HasUnsavedChanges(dialog));
+
+            InvokeStartSave(dialog);
+            WaitUntil(() => !HasUnsavedChanges(dialog), app);
+
+            Assert.IsTrue(GetStatusMarkupText(dialog).Contains("saved", StringComparison.OrdinalIgnoreCase));
+            Assert.IsTrue(GetStatusMarkupText(dialog).Contains("runtime refresh failed", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -402,7 +457,7 @@ public sealed class ModelProvidersDialogInteractionTests
 
     private static ModelProvidersDialog CreateDialog(
         Func<IReadOnlyList<CodeAltaProviderDocument>> loadDefinitions,
-        Func<IReadOnlyList<CodeAltaProviderDocument>, Task>? saveDefinitionsAsync = null,
+        Func<IReadOnlyList<CodeAltaProviderDocument>, Task<ProviderConfigurationSaveResult>>? saveDefinitionsAsync = null,
         Func<CodeAltaProviderDocument, Task<ProviderTestResult>>? testProviderAsync = null,
         Func<Visual?>? getFocusTarget = null)
     {
@@ -503,22 +558,22 @@ public sealed class ModelProvidersDialogInteractionTests
     private sealed class TestModelProviderDialogService : IModelProviderDialogService
     {
         private readonly Func<IReadOnlyList<CodeAltaProviderDocument>> _loadDefinitions;
-        private readonly Func<IReadOnlyList<CodeAltaProviderDocument>, Task> _saveDefinitionsAsync;
+        private readonly Func<IReadOnlyList<CodeAltaProviderDocument>, Task<ProviderConfigurationSaveResult>> _saveDefinitionsAsync;
         private readonly Func<CodeAltaProviderDocument, Task<ProviderTestResult>> _testProviderAsync;
 
         public TestModelProviderDialogService(
             Func<IReadOnlyList<CodeAltaProviderDocument>> loadDefinitions,
-            Func<IReadOnlyList<CodeAltaProviderDocument>, Task>? saveDefinitionsAsync,
+            Func<IReadOnlyList<CodeAltaProviderDocument>, Task<ProviderConfigurationSaveResult>>? saveDefinitionsAsync,
             Func<CodeAltaProviderDocument, Task<ProviderTestResult>>? testProviderAsync)
         {
             _loadDefinitions = loadDefinitions;
-            _saveDefinitionsAsync = saveDefinitionsAsync ?? (_ => Task.CompletedTask);
+            _saveDefinitionsAsync = saveDefinitionsAsync ?? (_ => Task.FromResult(ProviderConfigurationSaveResult.Success));
             _testProviderAsync = testProviderAsync ?? (definition => Task.FromResult(new ProviderTestResult(true, $"Connected successfully · {definition.ProviderKey}", 1)));
         }
 
         public IReadOnlyList<CodeAltaProviderDocument> LoadDefinitions() => _loadDefinitions();
 
-        public Task SaveDefinitionsAsync(IReadOnlyList<CodeAltaProviderDocument> definitions) => _saveDefinitionsAsync(definitions);
+        public Task<ProviderConfigurationSaveResult> SaveDefinitionsAsync(IReadOnlyList<CodeAltaProviderDocument> definitions) => _saveDefinitionsAsync(definitions);
 
         public Task<ProviderTestResult> TestProviderAsync(CodeAltaProviderDocument definition) => _testProviderAsync(definition);
 
