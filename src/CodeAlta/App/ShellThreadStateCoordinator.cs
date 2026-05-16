@@ -416,10 +416,15 @@ internal sealed class ShellThreadStateCoordinator
         _tabLifecycle.ResetPendingThreadTabSelection();
         var removedSelectedThread = string.Equals(SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
         var removedThread = FindThread(threadId);
-        ViewState.OpenThreadIds.RemoveAll(id => string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase));
+        var openThreadTabIds = removedSelectedThread
+            ? _tabLifecycle.GetOpenThreadTabIds()
+            : [];
+        ViewState.OpenThreadIds.RemoveAll(id =>
+            string.Equals(id, threadId, StringComparison.OrdinalIgnoreCase) ||
+            (removedSelectedThread && !openThreadTabIds.Contains(id, StringComparer.OrdinalIgnoreCase)));
         if (removedSelectedThread)
         {
-            var nextThreadId = ViewState.OpenThreadIds.FirstOrDefault();
+            var nextThreadId = GetNextOpenThreadTabId(threadId, openThreadTabIds);
             ViewState.SelectedThreadId = nextThreadId;
             _selectionCoordinator.ApplyThreadRemovalFallback(nextThreadId, removedThread?.ProjectRef, Projects, Threads);
             if (!string.IsNullOrWhiteSpace(nextThreadId) && FindThread(nextThreadId) is { } nextThread)
@@ -436,6 +441,26 @@ internal sealed class ShellThreadStateCoordinator
         return wasOpen
             ? TabCloseResult.Closed
             : TabCloseResult.NotOpen;
+    }
+
+    private string? GetNextOpenThreadTabId(string closingThreadId, IReadOnlyList<string> openThreadTabIds)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(closingThreadId);
+        ArgumentNullException.ThrowIfNull(openThreadTabIds);
+
+        foreach (var threadId in openThreadTabIds)
+        {
+            if (string.IsNullOrWhiteSpace(threadId) ||
+                string.Equals(threadId, closingThreadId, StringComparison.OrdinalIgnoreCase) ||
+                !ViewState.OpenThreadIds.Contains(threadId, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return threadId;
+        }
+
+        return null;
     }
 
     public async Task RemoveDeletedThreadArtifactsAsync(IReadOnlyList<string> threadIds)

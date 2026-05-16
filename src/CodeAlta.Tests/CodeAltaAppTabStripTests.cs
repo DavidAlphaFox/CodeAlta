@@ -282,6 +282,10 @@ public sealed class CodeAltaAppTabStripTests
             new WorkThreadCatalog(options),
             dispatcher,
             new ShellStateStore(dispatcher),
+            getOpenThreadTabIds: () => tabs.GetTabs()
+                .Where(static tab => tab.Kind == ShellTabKind.Thread)
+                .Select(static tab => tab.TabId.Value)
+                .ToArray(),
             removeThreadTabPage: (threadId, reason) =>
             {
                 tabs.CloseTabAsync(new ShellTabId(threadId), reason).GetAwaiter().GetResult();
@@ -321,6 +325,10 @@ public sealed class CodeAltaAppTabStripTests
             new WorkThreadCatalog(options),
             dispatcher,
             new ShellStateStore(dispatcher),
+            getOpenThreadTabIds: () => tabs.GetTabs()
+                .Where(static tab => tab.Kind == ShellTabKind.Thread)
+                .Select(static tab => tab.TabId.Value)
+                .ToArray(),
             removeThreadTabPage: (threadId, reason) =>
             {
                 tabs.CloseTabAsync(new ShellTabId(threadId), reason).GetAwaiter().GetResult();

@@ -23,6 +23,7 @@ internal static class TestThreadStateServices
         Action<OpenThreadState>? applyThreadPreference = null,
         Action<string, string?, AgentReasoningEffort?, bool>? rememberThreadPreference = null,
         Func<WorkThreadDescriptor, CancellationToken, Task>? ensureThreadHistoryLoadedAsync = null,
+        Func<IReadOnlyList<string>>? getOpenThreadTabIds = null,
         Action? resetPendingThreadTabSelection = null,
         Action<string>? replaceDraftTabWithThread = null,
         Action<string, ShellTabCloseReason>? removeThreadTabPage = null,
@@ -40,6 +41,7 @@ internal static class TestThreadStateServices
             new ThreadModelProviderReadinessService(isModelProviderReady ?? (static _ => true)),
             new ThreadHistoryLoaderService(ensureThreadHistoryLoadedAsync ?? (static (_, _) => Task.CompletedTask)),
             new ThreadStateTabLifecycleService(
+                getOpenThreadTabIds ?? (static () => []),
                 resetPendingThreadTabSelection ?? (static () => { }),
                 replaceDraftTabWithThread ?? (static _ => { }),
                 removeThreadTabPage ?? (static (_, _) => { })),

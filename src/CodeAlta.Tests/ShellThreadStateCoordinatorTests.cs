@@ -239,6 +239,7 @@ public sealed class ShellThreadStateCoordinatorTests
         ShellThreadStateCoordinator? coordinator = null;
         coordinator = CreateCoordinator(
             options,
+            getOpenThreadTabIds: static () => ["thread-1", "thread-2"],
             removeThreadTabPage: (_, _) => selectedThreadDuringRemoval = coordinator!.SelectedThreadId);
         var project = CreateProject("project-1", "CodeAlta");
         coordinator.ApplyRecoveredCatalogState(
@@ -254,21 +255,22 @@ public sealed class ShellThreadStateCoordinatorTests
     }
 
     [TestMethod]
-    public async Task CloseThreadTabAsync_MaterializesFallbackRestoredThread()
+    public async Task CloseThreadTabAsync_DoesNotMaterializePersistedThreadWhenClosingSelectedTab()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
         var loadedThreadIds = new List<string>();
+        var project = CreateProject("project-1", "CodeAlta");
+        var firstThread = CreateThread("thread-1", project.Id);
+        var selectedThread = CreateThread("thread-2", project.Id);
         var coordinator = CreateCoordinator(
             options,
+            getOpenThreadTabIds: () => [selectedThread.ThreadId],
             ensureThreadHistoryLoadedAsync: (thread, _) =>
             {
                 loadedThreadIds.Add(thread.ThreadId);
                 return Task.CompletedTask;
             });
-        var project = CreateProject("project-1", "CodeAlta");
-        var firstThread = CreateThread("thread-1", project.Id);
-        var selectedThread = CreateThread("thread-2", project.Id);
         coordinator.ViewState = new WorkThreadViewState
         {
             OpenThreadIds = [firstThread.ThreadId, selectedThread.ThreadId],
@@ -280,9 +282,13 @@ public sealed class ShellThreadStateCoordinatorTests
 
         await coordinator.CloseThreadTabAsync(selectedThread.ThreadId).ConfigureAwait(false);
 
-        Assert.AreEqual(firstThread.ThreadId, coordinator.SelectedThreadId);
-        Assert.IsNotNull(coordinator.FindOpenThread(firstThread.ThreadId));
-        CollectionAssert.Contains(loadedThreadIds, firstThread.ThreadId);
+        Assert.IsNull(coordinator.SelectedThreadId);
+        Assert.IsFalse(coordinator.ViewState.OpenThreadIds.Contains(firstThread.ThreadId, StringComparer.OrdinalIgnoreCase));
+        Assert.IsInstanceOfType<WorkspaceTarget.Draft>(coordinator.Selection.Target);
+        Assert.IsFalse(coordinator.GlobalScopeSelected);
+        Assert.AreEqual(project.Id, coordinator.SelectedProjectId);
+        Assert.IsNull(coordinator.FindOpenThread(firstThread.ThreadId));
+        CollectionAssert.DoesNotContain(loadedThreadIds, firstThread.ThreadId);
     }
 
     [TestMethod]
@@ -693,6 +699,7 @@ public sealed class ShellThreadStateCoordinatorTests
         Action<string>? deletePromptDraft = null,
         Action<string>? replaceDraftTabWithThread = null,
         Action<string, ShellTabCloseReason>? removeThreadTabPage = null,
+        Func<IReadOnlyList<string>>? getOpenThreadTabIds = null,
         ShellStateStore? stateStore = null,
         FrontendEventPublisher? frontendEvents = null,
         Func<WorkThreadDescriptor, CancellationToken, Task>? ensureThreadHistoryLoadedAsync = null)
@@ -706,6 +713,7 @@ public sealed class ShellThreadStateCoordinatorTests
             loadPromptDraft: loadPromptDraft,
             deletePromptDraft: deletePromptDraft,
             ensureThreadHistoryLoadedAsync: ensureThreadHistoryLoadedAsync,
+            getOpenThreadTabIds: getOpenThreadTabIds,
             replaceDraftTabWithThread: replaceDraftTabWithThread,
             removeThreadTabPage: removeThreadTabPage,
             frontendEvents: frontendEvents);

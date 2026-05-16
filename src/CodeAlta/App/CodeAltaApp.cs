@@ -618,6 +618,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _threadWorkspaceView?.RemoveTabPage(threadId);
     }
 
+    internal IReadOnlyList<ShellTabSnapshot> GetShellTabs() => _shellTabService.GetTabs();
+
     internal void RekeyThreadIdentity(string oldThreadId, WorkThreadDescriptor thread)
         => _threadStateCoordinator.RekeyThreadIdentity(oldThreadId, thread);
 

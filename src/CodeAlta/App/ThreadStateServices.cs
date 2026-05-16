@@ -50,6 +50,8 @@ internal sealed class ThreadHistoryLoaderService : IThreadHistoryLoaderService
 
 internal interface IThreadStateTabLifecycleService
 {
+    IReadOnlyList<string> GetOpenThreadTabIds();
+
     void ResetPendingThreadTabSelection();
 
     void ReplaceDraftTabWithThread(string threadId);
@@ -76,22 +78,29 @@ internal sealed class DraftTabReplacementPort
 
 internal sealed class ThreadStateTabLifecycleService : IThreadStateTabLifecycleService
 {
+    private readonly Func<IReadOnlyList<string>> _getOpenThreadTabIds;
     private readonly Action _resetPendingThreadTabSelection;
     private readonly Action<string> _replaceDraftTabWithThread;
     private readonly Action<string, ShellTabCloseReason> _removeThreadTabPage;
 
     public ThreadStateTabLifecycleService(
+        Func<IReadOnlyList<string>> getOpenThreadTabIds,
         Action resetPendingThreadTabSelection,
         Action<string> replaceDraftTabWithThread,
         Action<string, ShellTabCloseReason> removeThreadTabPage)
     {
+        ArgumentNullException.ThrowIfNull(getOpenThreadTabIds);
         ArgumentNullException.ThrowIfNull(resetPendingThreadTabSelection);
         ArgumentNullException.ThrowIfNull(replaceDraftTabWithThread);
         ArgumentNullException.ThrowIfNull(removeThreadTabPage);
+        _getOpenThreadTabIds = getOpenThreadTabIds;
         _resetPendingThreadTabSelection = resetPendingThreadTabSelection;
         _replaceDraftTabWithThread = replaceDraftTabWithThread;
         _removeThreadTabPage = removeThreadTabPage;
     }
+
+    public IReadOnlyList<string> GetOpenThreadTabIds()
+        => _getOpenThreadTabIds();
 
     public void ResetPendingThreadTabSelection()
         => _resetPendingThreadTabSelection();

@@ -153,7 +153,14 @@ internal sealed class CodeAltaFrontendComposition
             threadModelProviderPreferenceService,
             new ThreadModelProviderReadinessService(thread => frontend.IsModelProviderReady(new AgentBackendId(thread.BackendId))),
             new ThreadHistoryLoaderService(frontend.EnsureThreadHistoryLoadedAsync),
-            new ThreadStateTabLifecycleService(frontend.ResetPendingThreadTabSelection, draftTabReplacement.ReplaceDraftTabWithThread, frontend.RemoveThreadTabPage),
+            new ThreadStateTabLifecycleService(
+                () => frontend.GetShellTabs()
+                    .Where(static tab => tab.Kind == ShellTabKind.Thread)
+                    .Select(static tab => tab.TabId.Value)
+                    .ToArray(),
+                frontend.ResetPendingThreadTabSelection,
+                draftTabReplacement.ReplaceDraftTabWithThread,
+                frontend.RemoveThreadTabPage),
             frontendEvents);
         var threadSelectionContext = new ThreadSelectionContext(
             threadStateCoordinator,
