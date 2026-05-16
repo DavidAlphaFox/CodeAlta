@@ -1661,19 +1661,19 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         LocalAgentCompactionSettings settings,
         LocalAgentTokenBudget budget)
     {
-        _ = settings;
+        var ratio = settings.SummaryOutputRatio > 0
+            ? Math.Min(settings.SummaryOutputRatio, LocalAgentCompactionSettings.MaxSummaryOutputRatio)
+            : LocalAgentCompactionSettings.DefaultSummaryOutputRatio;
+        var desired = budget.InputContextLimit is > 0
+            ? (long)Math.Ceiling(budget.InputContextLimit.Value * ratio)
+            : 1L;
 
         if (budget.MaxOutputTokens is > 0)
         {
-            return (int)Math.Min(budget.MaxOutputTokens.Value, int.MaxValue);
+            desired = Math.Min(desired, budget.MaxOutputTokens.Value);
         }
 
-        if (budget.InputContextLimit is > 0)
-        {
-            return (int)Math.Clamp((long)Math.Ceiling(budget.InputContextLimit.Value * 0.05d), 1L, int.MaxValue);
-        }
-
-        return 1;
+        return (int)Math.Clamp(desired, 1L, int.MaxValue);
     }
 
     private static JsonElement CreateCompactionDetailsElement(LocalAgentCompactionCheckpoint checkpoint)

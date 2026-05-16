@@ -233,6 +233,7 @@ Recommended user-facing default:
 
 - `enabled = true`
 - `ratio = 0.95`
+- `summary_output_ratio = 0.10`
 
 Automatic threshold compaction starts when:
 
@@ -246,7 +247,7 @@ Rationale:
 
 - `0.95` is intentionally close to the safe input side once output headroom is no longer borrowed from the denominator.
 - CodeAlta should pair this threshold with strict omission-first summary behavior rather than transcript-like summary output.
-- Summary input/output fit should derive from model/provider limits, not provider configuration token knobs.
+- Summary input/output fit should derive from model/provider limits plus the compaction summary-output ratio, not broad provider max-output limits alone.
 
 ### 10.3 Summary output bound
 
@@ -258,7 +259,9 @@ When a provider requires an explicit summarizer output limit, the summarizer cal
 
 The compaction system must never rely on an unconstrained summarizer response.
 
-The effective cap must also respect any smaller provider/model output limit. CodeAlta must not enforce a local minimum that exceeds the resolved provider maximum.
+The effective cap is derived from `ceil(inputContextLimit * summary_output_ratio)`, defaulting to `0.10`. User configuration must keep `summary_output_ratio` greater than `0` and no larger than `0.50`. The effective cap must also respect any smaller provider/model output limit. CodeAlta must not enforce a local minimum that exceeds the resolved provider maximum.
+
+When a total context envelope is known, compaction should chunk summarizer input so the estimated request plus the chosen output cap fits within that envelope, using the smaller of that envelope-derived limit and any explicit input limit.
 
 This applies to every compaction-related generation pass, including:
 
@@ -754,12 +757,14 @@ Recommended normalized shape:
 [providers.openai.compaction]
 enabled = true
 ratio = 0.95
+summary_output_ratio = 0.10
 ```
 
 Notes:
 
 - `ratio` is measured against the resolved input-context limit, not the advertised total input-plus-output envelope.
-- Fixed retained-suffix, summary-input, summary-output, reserved-token, and post-compaction target-ratio fields are not part of the provider configuration surface.
+- `summary_output_ratio` bounds compaction summarizer output as a fraction of the resolved input-context limit and is capped at `0.50`.
+- Fixed retained-suffix, summary-input, reserved-token, and post-compaction target-ratio fields are not part of the provider configuration surface.
 - Internal serializer caps and bounded chunking safeguards may still exist, but they are implementation policy rather than user-facing configuration.
 
 ## 24. Edge cases that must be covered

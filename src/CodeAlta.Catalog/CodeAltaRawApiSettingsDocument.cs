@@ -67,6 +67,9 @@ public sealed class CodeAltaProviderCompactionDocument
 
     [JsonPropertyName("ratio")]
     public double? Ratio { get; set; }
+
+    [JsonPropertyName("summary_output_ratio")]
+    public double? SummaryOutputRatio { get; set; }
 }
 
 /// <summary>

@@ -34,6 +34,21 @@ public sealed record LocalAgentCompactionSettings(
     public const bool DefaultAllowSplitTurn = true;
 
     /// <summary>
+    /// The default maximum summarizer output budget as a ratio of the input-context limit.
+    /// </summary>
+    public const double DefaultSummaryOutputRatio = 0.10;
+
+    /// <summary>
+    /// The largest configurable summarizer output budget ratio.
+    /// </summary>
+    public const double MaxSummaryOutputRatio = 0.50;
+
+    /// <summary>
+    /// Gets or initializes the maximum summarizer output budget as a ratio of the input-context limit.
+    /// </summary>
+    public double SummaryOutputRatio { get; init; } = DefaultSummaryOutputRatio;
+
+    /// <summary>
     /// Gets the runtime defaults.
     /// </summary>
     public static LocalAgentCompactionSettings Default { get; } = new(

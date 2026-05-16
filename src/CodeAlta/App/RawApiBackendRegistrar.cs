@@ -830,7 +830,10 @@ internal static class RawApiBackendRegistrar
             Enabled: normalized.Enabled ?? LocalAgentCompactionSettings.Default.Enabled,
             Ratio: normalized.Ratio ?? LocalAgentCompactionSettings.Default.Ratio,
             KeepLastUserMessage: LocalAgentCompactionSettings.Default.KeepLastUserMessage,
-            AllowSplitTurn: LocalAgentCompactionSettings.Default.AllowSplitTurn);
+            AllowSplitTurn: LocalAgentCompactionSettings.Default.AllowSplitTurn)
+        {
+            SummaryOutputRatio = normalized.SummaryOutputRatio ?? LocalAgentCompactionSettings.Default.SummaryOutputRatio,
+        };
     }
 
     private static string FormatDisplayName(string? displayName)

@@ -47,6 +47,7 @@ public sealed class CodeAltaConfigStore
     {
         Enabled = LocalAgentCompactionSettings.DefaultEnabled,
         Ratio = LocalAgentCompactionSettings.DefaultRatio,
+        SummaryOutputRatio = LocalAgentCompactionSettings.DefaultSummaryOutputRatio,
     };
 
     private readonly CatalogOptions _options;
@@ -1776,6 +1777,7 @@ public sealed class CodeAltaConfigStore
             {
                 Enabled = compaction.Enabled,
                 Ratio = compaction.Ratio,
+                SummaryOutputRatio = compaction.SummaryOutputRatio,
             };
     }
 
@@ -1809,6 +1811,11 @@ public sealed class CodeAltaConfigStore
             pruned.Ratio = null;
         }
 
+        if (pruned.SummaryOutputRatio == LocalAgentCompactionSettings.DefaultSummaryOutputRatio)
+        {
+            pruned.SummaryOutputRatio = null;
+        }
+
         return IsEmptyCompaction(pruned) ? null : pruned;
     }
 
@@ -1817,7 +1824,8 @@ public sealed class CodeAltaConfigStore
         ArgumentNullException.ThrowIfNull(compaction);
 
         return compaction.Enabled is null &&
-               compaction.Ratio is null;
+               compaction.Ratio is null &&
+               compaction.SummaryOutputRatio is null;
     }
 
     private static CodeAltaProviderCompactionDocument NormalizeAndCompleteCompactionSettings(
@@ -1831,10 +1839,12 @@ public sealed class CodeAltaConfigStore
         {
             merged.Enabled = normalized.Enabled ?? merged.Enabled;
             merged.Ratio = normalized.Ratio ?? merged.Ratio;
+            merged.SummaryOutputRatio = normalized.SummaryOutputRatio ?? merged.SummaryOutputRatio;
         }
 
         merged.Enabled ??= LocalAgentCompactionSettings.DefaultEnabled;
         merged.Ratio ??= LocalAgentCompactionSettings.DefaultRatio;
+        merged.SummaryOutputRatio ??= LocalAgentCompactionSettings.DefaultSummaryOutputRatio;
 
         ValidateCompaction(merged);
         return merged;
@@ -1847,6 +1857,13 @@ public sealed class CodeAltaConfigStore
         if (compaction.Ratio is not > 0 or > 1)
         {
             throw new InvalidOperationException("provider compaction ratio must be > 0 and <= 1.");
+        }
+
+        if (compaction.SummaryOutputRatio is not > 0 ||
+            compaction.SummaryOutputRatio > LocalAgentCompactionSettings.MaxSummaryOutputRatio)
+        {
+            throw new InvalidOperationException(
+                $"provider compaction summary_output_ratio must be > 0 and <= {LocalAgentCompactionSettings.MaxSummaryOutputRatio:0.##}.");
         }
     }
 

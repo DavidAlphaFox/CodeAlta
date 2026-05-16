@@ -304,7 +304,14 @@ internal sealed class LocalAgentSessionJournalFile
     }
 
     internal static async Task<T> RetryFileOperationAsync<T>(Func<Task<T>> action, CancellationToken cancellationToken)
+        => await RetryFileOperationAsync(action, maxRetryTime: null, cancellationToken).ConfigureAwait(false);
+
+    internal static async Task<T> RetryFileOperationAsync<T>(
+        Func<Task<T>> action,
+        TimeSpan? maxRetryTime,
+        CancellationToken cancellationToken)
     {
+        var startedAt = maxRetryTime is null ? default : TimeProvider.System.GetTimestamp();
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -314,14 +321,27 @@ internal sealed class LocalAgentSessionJournalFile
             }
             catch (IOException ex) when (IsRetryableFileAccessException(ex))
             {
+                if (HasRetryWindowElapsed(startedAt, maxRetryTime))
+                {
+                    throw;
+                }
+
                 await Task.Delay(FileRetryDelay, cancellationToken).ConfigureAwait(false);
             }
             catch (UnauthorizedAccessException)
             {
+                if (HasRetryWindowElapsed(startedAt, maxRetryTime))
+                {
+                    throw;
+                }
+
                 await Task.Delay(FileRetryDelay, cancellationToken).ConfigureAwait(false);
             }
         }
     }
+
+    private static bool HasRetryWindowElapsed(long startedAt, TimeSpan? maxRetryTime)
+        => maxRetryTime is not null && TimeProvider.System.GetElapsedTime(startedAt) >= maxRetryTime.Value;
 
     private static bool IsRetryableFileAccessException(IOException ex)
     {

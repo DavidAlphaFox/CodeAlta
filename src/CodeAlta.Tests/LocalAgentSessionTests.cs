@@ -1439,6 +1439,84 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public void LocalAgentCompactionPlanner_Preparation_TargetsLowerRetainedPromptBudget()
+    {
+        var latestUserMessage = new LocalAgentConversationMessage(
+            LocalAgentConversationRole.User,
+            [new LocalAgentMessagePart.Text("Latest prompt")]);
+        var suffixMessages = Enumerable.Range(0, 20)
+            .Select(index => new LocalAgentConversationMessage(
+                LocalAgentConversationRole.Assistant,
+                [new LocalAgentMessagePart.Text($"post-anchor assistant {index} " + new string('a', 240))]))
+            .ToArray();
+        var conversation = new[]
+        {
+            new LocalAgentConversationMessage(LocalAgentConversationRole.User, [new LocalAgentMessagePart.Text("Earlier prompt")]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, [new LocalAgentMessagePart.Text("Earlier answer")]),
+            latestUserMessage,
+        }.Concat(suffixMessages).ToArray();
+
+        var preparation = LocalAgentCompactionPlanner.Prepare(
+            LocalAgentCompactionTrigger.Manual,
+            systemMessage: null,
+            developerInstructions: null,
+            conversation,
+            usage: null,
+            new LocalAgentTokenBudget(
+                TotalContextEnvelope: 2_500,
+                InputContextLimit: 2_000,
+                MaxOutputTokens: 500),
+            LocalAgentCompactionSettings.Default,
+            checkpointTokenEstimate: 64);
+
+        Assert.IsNotNull(preparation);
+        CollectionAssert.AreEqual(new[] { latestUserMessage }, preparation!.TurnPrefixMessages.ToArray());
+        Assert.IsTrue(preparation.MessagesToKeep.Count < suffixMessages.Length);
+        Assert.IsTrue(preparation.MessagesToSummarize.Any(message => suffixMessages.Contains(message)));
+    }
+
+    [TestMethod]
+    public void LocalAgentCompactionPlanner_Preparation_CapsPromptBudgetOverrideAtHalfInputLimit()
+    {
+        var latestUserMessage = new LocalAgentConversationMessage(
+            LocalAgentConversationRole.User,
+            [new LocalAgentMessagePart.Text("Latest prompt")]);
+        var suffixMessages = Enumerable.Range(0, 20)
+            .Select(index => new LocalAgentConversationMessage(
+                LocalAgentConversationRole.Assistant,
+                [new LocalAgentMessagePart.Text($"post-anchor assistant {index} " + new string('a', 240))]))
+            .ToArray();
+        var conversation = new[]
+        {
+            new LocalAgentConversationMessage(LocalAgentConversationRole.User, [new LocalAgentMessagePart.Text("Earlier prompt")]),
+            new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, [new LocalAgentMessagePart.Text("Earlier answer")]),
+            latestUserMessage,
+        }.Concat(suffixMessages).ToArray();
+
+        var preparation = LocalAgentCompactionPlanner.Prepare(
+            LocalAgentCompactionTrigger.Manual,
+            systemMessage: null,
+            developerInstructions: null,
+            conversation,
+            usage: null,
+            new LocalAgentTokenBudget(
+                TotalContextEnvelope: 2_500,
+                InputContextLimit: 2_000,
+                MaxOutputTokens: 500),
+            LocalAgentCompactionSettings.Default,
+            checkpointTokenEstimate: 64,
+            promptBudgetOverride: 2_000);
+
+        Assert.IsNotNull(preparation);
+        var retainedTokens = preparation!.TurnPrefixMessages.Concat(preparation.MessagesToKeep).Sum(LocalAgentTokenEstimator.EstimateMessage);
+        Assert.IsTrue(
+            retainedTokens <= 1_000,
+            $"Expected retained prompt tokens to stay within half the input limit, but got {retainedTokens}.");
+        Assert.IsTrue(preparation.MessagesToKeep.Count < suffixMessages.Length);
+        Assert.IsTrue(preparation.MessagesToSummarize.Any(message => suffixMessages.Contains(message)));
+    }
+
+    [TestMethod]
     public void LocalAgentCompactionPlanner_Preparation_ThrowsWhenSplitTurnDisabled()
     {
         var conversation = new[]
@@ -2386,7 +2464,10 @@ public sealed class LocalAgentSessionTests
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider();
+        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
+        {
+            SummaryOutputRatio = 0.20,
+        });
         var summary = CreateSummary("session-summary-output-limit");
         var state = CreateState("session-summary-output-limit");
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
@@ -2467,6 +2548,94 @@ public sealed class LocalAgentSessionTests
         Assert.IsNotNull(outcome);
         Assert.IsTrue(outcome.Success);
         CollectionAssert.AreEqual(new int?[] { 320 }, observedMaxOutputTokens);
+    }
+
+    [TestMethod]
+    public async Task LocalAgentSession_CompactAsync_CapsSummaryOutputTokenLimitByInputRatio()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider();
+        var summary = CreateSummary("session-summary-output-ratio");
+        var state = CreateState("session-summary-output-ratio");
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        var observedMaxOutputTokens = new List<int?>();
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                [new AgentModelInfo(
+                    "gpt-5.4",
+                    "GPT-5.4",
+                    Capabilities: new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        ["contextWindow"] = 20_000L,
+                        ["inputTokenLimit"] = 10_000L,
+                        ["outputTokenLimit"] = 8_000L,
+                    })],
+                (request, _, _) =>
+                {
+                    observedMaxOutputTokens.Add(request.MaxOutputTokens);
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [new LocalAgentMessagePart.Text(
+                                    """
+                                    ## Objective
+                                    Keep working.
+                                    ## Active User Request
+                                    Follow up.
+                                    ## Constraints
+                                    - Preserve behavior.
+                                    ## Progress
+                                    ### Done
+                                    - Captured state.
+                                    ### In Progress
+                                    - Compaction.
+                                    ### Blocked
+                                    - None recorded.
+                                    ## Decisions
+                                    - Cap summary output by input ratio.
+                                    ## Next Steps
+                                    - Continue.
+                                    ## Critical Context
+                                    - Keep the summary tight.
+                                    ## Relevant Files
+                                    - None tracked.
+                                    """)]),
+                        });
+                },
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("First answer " + new string('a', 160))]),
+                    }),
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("Second answer " + new string('b', 160))]),
+                    })),
+            CreateOptions(provider, temp.Path));
+
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("First prompt " + new string('x', 180)) }).ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Second prompt " + new string('y', 180)) }).ConfigureAwait(false);
+
+        var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);
+        Assert.IsNotNull(outcome);
+        Assert.IsTrue(outcome.Success);
+        CollectionAssert.AreEqual(new int?[] { 1000 }, observedMaxOutputTokens);
     }
 
     [TestMethod]
@@ -2639,7 +2808,10 @@ public sealed class LocalAgentSessionTests
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider();
+        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
+        {
+            Enabled = false,
+        });
         var summary = CreateSummary("session-chunked-compaction");
         var state = CreateState("session-chunked-compaction");
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
@@ -2703,14 +2875,14 @@ public sealed class LocalAgentSessionTests
                     {
                         AssistantMessage = new LocalAgentConversationMessage(
                             LocalAgentConversationRole.Assistant,
-                            [new LocalAgentMessagePart.Text("First answer " + new string('a', 320))]),
+                            [new LocalAgentMessagePart.Text("First answer " + new string('a', 4_000))]),
                     }),
                 (_, _, _) => Task.FromResult(
                     new LocalAgentTurnResponse
                     {
                         AssistantMessage = new LocalAgentConversationMessage(
                             LocalAgentConversationRole.Assistant,
-                            [new LocalAgentMessagePart.Text("Second answer " + new string('b', 320))]),
+                            [new LocalAgentMessagePart.Text("Second answer " + new string('b', 4_000))]),
                     }),
                 (_, _, _) => Task.FromResult(
                     new LocalAgentTurnResponse
@@ -2721,8 +2893,8 @@ public sealed class LocalAgentSessionTests
                     })),
             CreateOptions(provider, temp.Path));
 
-        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("First prompt " + new string('x', 240)) }).ConfigureAwait(false);
-        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Second prompt " + new string('y', 240)) }).ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("First prompt " + new string('x', 4_000)) }).ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Second prompt " + new string('y', 4_000)) }).ConfigureAwait(false);
         _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Third prompt " + new string('z', 240)) }).ConfigureAwait(false);
 
         var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);

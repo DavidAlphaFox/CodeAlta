@@ -17,6 +17,7 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
     private const int MetadataProbeHeadByteCount = 64 * 1024;
     private const int MetadataProbeTailByteCount = 256 * 1024;
 
+    private static readonly TimeSpan ReadRetryTime = TimeSpan.FromMilliseconds(250);
     private static readonly UTF8Encoding Utf8WithoutBom = new(encoderShouldEmitUTF8Identifier: false);
 
     private readonly LocalAgentRuntimePathLayout _layout;
@@ -665,6 +666,7 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
                 FileShare.ReadWrite | FileShare.Delete,
                 bufferSize: 4096,
                 useAsync: true)),
+            ReadRetryTime,
             cancellationToken);
 
     private static FileStamp? GetFileStamp(string path)

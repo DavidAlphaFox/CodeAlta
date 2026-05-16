@@ -3,6 +3,7 @@ namespace CodeAlta.Agent.LocalRuntime.Compaction;
 internal static class LocalAgentCompactionPlanner
 {
     private const bool DefaultReduceOversizedAnchors = true;
+    private const double DefaultRetainedPromptBudgetRatio = 0.50;
 
     public static LocalAgentCompactionPreparation? Prepare(
         LocalAgentCompactionTrigger trigger,
@@ -112,14 +113,23 @@ internal static class LocalAgentCompactionPlanner
     {
         if (promptBudgetOverride is > 0)
         {
+            if (inputContextLimit is > 0)
+            {
+                var retainedPromptBudget = ResolveRetainedPromptBudget(inputContextLimit.Value);
+                return Math.Max(Math.Min(promptBudgetOverride.Value, retainedPromptBudget), 1L);
+            }
+
             return promptBudgetOverride.Value;
         }
 
         var resolvedPromptBudget = inputContextLimit is > 0
-            ? inputContextLimit.Value
+            ? ResolveRetainedPromptBudget(inputContextLimit.Value)
             : Math.Max(tokensBefore / 2, 1L);
         return Math.Max(resolvedPromptBudget, 1L);
     }
+
+    private static long ResolveRetainedPromptBudget(long inputContextLimit)
+        => Math.Max((long)Math.Floor(inputContextLimit * DefaultRetainedPromptBudgetRatio), 1L);
 
     private static (IReadOnlyList<int> TurnPrefixIndexes, IReadOnlyList<int> SuffixIndexes, bool IsSplitTurn, int? OversizedAnchorGroupIndex) BuildPlan(
         IReadOnlyList<MessageGroup> groups,

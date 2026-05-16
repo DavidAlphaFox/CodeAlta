@@ -150,9 +150,10 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
             fileActivity,
             settings,
             modelInfo,
-            oversizedAnchorSynopsis);
+            oversizedAnchorSynopsis,
+            maxOutputTokens);
 
-        var summaryInputLimit = GetSummaryInputLimit(modelInfo, settings);
+        var summaryInputLimit = GetSummaryInputLimit(modelInfo, settings, maxOutputTokens);
         if (summaryInputLimit is > 0 &&
             serialization.EstimatedInputTokens > summaryInputLimit.Value &&
             currentPass < RecursiveChunkPassLimit &&
@@ -237,7 +238,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         int currentPass,
         CancellationToken cancellationToken)
     {
-        var chunks = GetChunksIfNeeded(preparation, latestUserRequest, fileActivity, settings, modelInfo, oversizedAnchorSynopsis);
+        var chunks = GetChunksIfNeeded(preparation, latestUserRequest, fileActivity, settings, modelInfo, oversizedAnchorSynopsis, maxOutputTokens);
         if (chunks.Count <= 1)
         {
             chunks = [preparation.MessagesToSummarize];
@@ -355,10 +356,11 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         FileActivity fileActivity,
         LocalAgentCompactionSettings settings,
         AgentModelInfo? modelInfo,
-        string? oversizedAnchorSynopsis)
+        string? oversizedAnchorSynopsis,
+        int maxOutputTokens)
         => LocalAgentCompactionChunker.CreateChunks(
             preparation.MessagesToSummarize,
-            (int)Math.Clamp(GetSummaryInputLimit(modelInfo, settings) ?? long.MaxValue, 1L, int.MaxValue),
+            (int)Math.Clamp(GetSummaryInputLimit(modelInfo, settings, maxOutputTokens) ?? long.MaxValue, 1L, int.MaxValue),
             chunkMessages => LocalAgentCompactionSerializer.BuildSummaryRequestBody(
                     preparation with
                     {
@@ -374,8 +376,20 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                     preparation.OversizedAnchorMessage is not null)
                 .EstimatedInputTokens);
 
-    private static long? GetSummaryInputLimit(AgentModelInfo? modelInfo, LocalAgentCompactionSettings settings)
-        => LocalAgentTokenBudgetResolver.Resolve(modelInfo, settings).InputContextLimit;
+    private static long? GetSummaryInputLimit(AgentModelInfo? modelInfo, LocalAgentCompactionSettings settings, int maxOutputTokens)
+    {
+        var budget = LocalAgentTokenBudgetResolver.Resolve(modelInfo, settings);
+        var inputLimit = budget.InputContextLimit;
+        if (budget.TotalContextEnvelope is > 0)
+        {
+            var envelopeInputLimit = Math.Max(budget.TotalContextEnvelope.Value - Math.Max(maxOutputTokens, 0), 1L);
+            inputLimit = inputLimit is > 0
+                ? Math.Min(inputLimit.Value, envelopeInputLimit)
+                : envelopeInputLimit;
+        }
+
+        return inputLimit;
+    }
 
     private async Task<(string Synopsis, int InvocationCount)> ReduceOversizedAnchorAsync(
         AgentBackendId backendId,
@@ -430,7 +444,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
     {
         var requestBody = BuildOversizedAnchorRequestBody(serializedAnchor, previousSynopsis);
         var requestTokens = LocalAgentTokenEstimator.EstimateTextTokens(requestBody);
-        var summaryInputLimit = GetSummaryInputLimit(modelInfo, settings);
+        var summaryInputLimit = GetSummaryInputLimit(modelInfo, settings, maxOutputTokens);
         if (summaryInputLimit is > 0 &&
             requestTokens > summaryInputLimit.Value &&
             currentPass < RecursiveChunkPassLimit)

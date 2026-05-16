@@ -39,6 +39,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
 
             [providers.OpenRouter.compaction]
             ratio = 0.95
+            summary_output_ratio = 0.10
 
             [providers.OpenRouter.model_overrides." gpt-5 "]
             display_name = " GPT-5 "
@@ -84,6 +85,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
         Assert.AreEqual("reasoning_content", openRouter.Profile.ReasoningInputFieldName);
         Assert.IsNotNull(openRouter.Compaction);
         Assert.AreEqual(0.95d, openRouter.Compaction!.Ratio!.Value, 0.0001d);
+        Assert.AreEqual(0.10d, openRouter.Compaction.SummaryOutputRatio!.Value, 0.0001d);
         Assert.IsNotNull(openRouter.ModelOverrides);
         Assert.IsTrue(openRouter.ModelOverrides!.TryGetValue("gpt-5", out var modelOverride));
         Assert.IsNotNull(modelOverride);
@@ -117,6 +119,25 @@ public sealed class CodeAltaConfigStoreRawApiTests
     }
 
     [TestMethod]
+    public void LoadGlobalProviderDefinitions_InvalidCompactionSummaryOutputRatio_Throws()
+    {
+        using var temp = TempDirectory.Create();
+        File.WriteAllText(
+            Path.Combine(temp.Path, "config.toml"),
+            """
+            [providers.openai]
+            type = "openai-chat"
+            api_key_env = "OPENAI_API_KEY"
+
+            [providers.openai.compaction]
+            summary_output_ratio = 0.60
+            """);
+
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        Assert.ThrowsExactly<InvalidDataException>(() => store.LoadGlobalProviderDefinitions(includeDisabled: true));
+    }
+
+    [TestMethod]
     public void LoadGlobalProviderDefinitions_UsesUpdatedCompactionDefaults()
     {
         using var temp = TempDirectory.Create();
@@ -134,6 +155,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
         var compaction = openAi.Compaction;
         Assert.IsNotNull(compaction);
         Assert.AreEqual(0.95d, compaction!.Ratio!.Value, 0.0001d);
+        Assert.AreEqual(0.10d, compaction.SummaryOutputRatio!.Value, 0.0001d);
     }
 
     [TestMethod]
