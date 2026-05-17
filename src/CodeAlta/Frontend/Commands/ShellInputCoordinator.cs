@@ -85,6 +85,7 @@ internal sealed class ShellInputCoordinator
             OpenAcpManagementIntent => new OpenAcpManagementCommand(),
             OpenModelProvidersIntent => new OpenModelProvidersCommand(),
             OpenModelsIntent => new OpenModelsCommand(),
+            OpenApplicationLogsIntent => new OpenApplicationLogsCommand(),
             OpenFileEditorIntent => new OpenFileEditorCommand(),
             OpenSkillsIntent => new OpenSkillsCommand(),
             OpenPluginsIntent => new OpenPluginsCommand(),

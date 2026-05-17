@@ -38,7 +38,6 @@ internal sealed class ThreadWorkspaceView
 
     internal const TerminalKey ExpandPromptShortcutKey = TerminalKey.F6;
     internal static readonly KeySequence ModelProvidersShortcutSequence = ShellCommandCatalog.ModelProvidersShortcutSequence;
-    internal static readonly KeySequence FocusModelProviderShortcutSequence = ShellCommandCatalog.FocusModelProviderShortcutSequence;
     internal static readonly KeySequence SessionUsageShortcutSequence = ShellCommandCatalog.SessionUsageShortcutSequence;
     internal static readonly KeySequence ThreadInfoShortcutSequence = ShellCommandCatalog.ThreadInfoShortcutSequence;
 

@@ -52,6 +52,7 @@ internal sealed class ShellInputRouter
             { Id: "CodeAlta.File.Edit" } => new OpenFileEditorIntent(),
             { Id: "CodeAlta.Providers.Manage" } => new OpenModelProvidersIntent(),
             { Id: "CodeAlta.Models.Browse" } => new OpenModelsIntent(),
+            { Id: "CodeAlta.ApplicationLogs.Open" } => new OpenApplicationLogsIntent(),
             { Id: "CodeAlta.Skills.Manage" } => new OpenSkillsIntent(),
             { Id: "CodeAlta.Plugins.Manage" } => new OpenPluginsIntent(),
             { Id: "CodeAlta.Workspace.Settings" } => new OpenWorkspaceSettingsIntent(),

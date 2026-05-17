@@ -71,9 +71,9 @@ public sealed class ResponsiveDialogSizeTests
     }
 
     [TestMethod]
-    public void ShellCommandCatalog_UsesCtrlGCtrlOForFocusModelProviderShortcut()
+    public void ShellCommandCatalog_UsesCtrlGCtrlOForModelsShortcut()
     {
-        var sequence = ShellCommandCatalog.FocusModelProviderShortcutSequence;
+        var sequence = ShellCommandCatalog.ModelsShortcutSequence;
 
         Assert.AreEqual(2, sequence.Count);
         Assert.AreEqual(TerminalChar.CtrlG, sequence[0].Char);
@@ -115,6 +115,18 @@ public sealed class ResponsiveDialogSizeTests
         Assert.AreEqual(TerminalChar.CtrlG, sequence[0].Char);
         Assert.AreEqual(TerminalModifiers.Ctrl, sequence[0].Modifiers);
         Assert.AreEqual(TerminalChar.CtrlW, sequence[1].Char);
+        Assert.AreEqual(TerminalModifiers.Ctrl, sequence[1].Modifiers);
+    }
+
+    [TestMethod]
+    public void ShellCommandCatalog_UsesCtrlGCtrlLForApplicationLogsShortcut()
+    {
+        var sequence = ShellCommandCatalog.ApplicationLogsShortcutSequence;
+
+        Assert.AreEqual(2, sequence.Count);
+        Assert.AreEqual(TerminalChar.CtrlG, sequence[0].Char);
+        Assert.AreEqual(TerminalModifiers.Ctrl, sequence[0].Modifiers);
+        Assert.AreEqual(TerminalChar.CtrlL, sequence[1].Char);
         Assert.AreEqual(TerminalModifiers.Ctrl, sequence[1].Modifiers);
     }
 

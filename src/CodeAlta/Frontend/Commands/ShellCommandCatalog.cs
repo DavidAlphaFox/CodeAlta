@@ -13,10 +13,6 @@ internal static class ShellCommandCatalog
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
         new KeyGesture(TerminalChar.CtrlP, TerminalModifiers.Ctrl));
 
-    public static readonly KeySequence FocusModelProviderShortcutSequence = new(
-        new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
-        new KeyGesture(TerminalChar.CtrlO, TerminalModifiers.Ctrl));
-
     public static readonly KeySequence AcpAgentsShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
         new KeyGesture(TerminalChar.CtrlA, TerminalModifiers.Ctrl));
@@ -27,7 +23,7 @@ internal static class ShellCommandCatalog
 
     public static readonly KeySequence ModelsShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
-        new KeyGesture(TerminalChar.CtrlL, TerminalModifiers.Ctrl));
+        new KeyGesture(TerminalChar.CtrlO, TerminalModifiers.Ctrl));
 
     public static readonly KeySequence SkillsShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
@@ -40,6 +36,10 @@ internal static class ShellCommandCatalog
     public static readonly KeySequence WorkspaceSettingsShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
         new KeyGesture(TerminalChar.CtrlW, TerminalModifiers.Ctrl));
+
+    public static readonly KeySequence ApplicationLogsShortcutSequence = new(
+        new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
+        new KeyGesture(TerminalChar.CtrlL, TerminalModifiers.Ctrl));
 
     public static readonly KeySequence SessionUsageShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
@@ -174,7 +174,6 @@ internal static class ShellCommandCatalog
             ShellCommandHelpCategory.General,
             ShellCommandScope.AnyShell,
             ShellCommandAvailability.Always,
-            Sequence: FocusModelProviderShortcutSequence,
             CommandName: "model",
             Aliases: ["model_selector"],
             ShowInCommandBar: false),
@@ -199,6 +198,17 @@ internal static class ShellCommandCatalog
             Sequence: ModelsShortcutSequence,
             CommandName: "models",
             Aliases: ["model_list"],
+            ShowInCommandBar: true),
+        new(
+            "CodeAlta.ApplicationLogs.Open",
+            "Show Logs",
+            "Open application logs captured for the current UI session.",
+            ShellCommandHelpCategory.Inspection,
+            ShellCommandScope.AnyShell,
+            ShellCommandAvailability.Always,
+            Sequence: ApplicationLogsShortcutSequence,
+            CommandName: "logs",
+            Aliases: ["show_logs"],
             ShowInCommandBar: true),
         new(
             "CodeAlta.Shell.ToggleCommandBarMultiLine",

@@ -263,7 +263,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         var threadSvc = new DelegatingShellThreadCommandService(GetSelectedThread, EnsureThreadTab);
         var dialogs = new DelegatingShellDialogCommandService(
             () => DialogBoundsResolver.ResolveAppBounds(ThreadInput), () => ThreadInput, () => _threadStateCoordinator.Projects,
-            OpenFolderAsync, OpenAcp, OpenModelProvidersAsync, composition.ModelCatalogCoordinator.Open, _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
+            OpenFolderAsync, OpenAcp, OpenModelProvidersAsync, composition.ModelCatalogCoordinator.Open, _sidebarCoordinator.OpenLogs, _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
             SkillsManagementCoordinatorFactory.Create(_ownedServices, _catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync, _threadCommandCoordinator.ActivateSelectedSkillAsync, SetStatus),
             PluginManagementCoordinatorFactory.Create(_catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync), _sidebarCoordinator.OpenNavigatorSettings,
             () => EnsureSessionUsagePresenter().TogglePopupFromIndicator(),

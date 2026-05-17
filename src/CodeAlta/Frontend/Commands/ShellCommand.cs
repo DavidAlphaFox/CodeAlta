@@ -38,6 +38,8 @@ internal sealed record OpenModelProvidersCommand : ShellCommand;
 
 internal sealed record OpenModelsCommand : ShellCommand;
 
+internal sealed record OpenApplicationLogsCommand : ShellCommand;
+
 internal sealed record OpenAcpManagementCommand : ShellCommand;
 
 internal sealed record OpenFileEditorCommand : ShellCommand;

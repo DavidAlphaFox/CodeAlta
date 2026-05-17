@@ -80,6 +80,9 @@ internal sealed class ShellCommandSurfaceCoordinator
     public Task OpenModelProvidersAsync()
         => DispatchShellCommandAsync(new OpenModelProvidersCommand());
 
+    public Task OpenApplicationLogsAsync()
+        => DispatchShellCommandAsync(new OpenApplicationLogsCommand());
+
     public Task OpenFileEditorAsync()
         => DispatchShellCommandAsync(new OpenFileEditorCommand());
 

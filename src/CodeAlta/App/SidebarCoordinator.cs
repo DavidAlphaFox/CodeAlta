@@ -12,6 +12,7 @@ internal sealed class SidebarCoordinator
     private readonly CatalogOptions _catalogOptions;
     private readonly CodeAltaShellController _shellController;
     private readonly Action _openNavigatorSettings;
+    private readonly Action _openLogs;
     private readonly Func<string, string, Task> _renameProjectDisplayNameAsync;
     private readonly SidebarView _view;
     private readonly Dictionary<string, SidebarNodeViewModel> _rowsById = new(StringComparer.OrdinalIgnoreCase);
@@ -44,6 +45,7 @@ internal sealed class SidebarCoordinator
         _catalogOptions = catalogOptions;
         _shellController = shellController;
         _openNavigatorSettings = openNavigatorSettings;
+        _openLogs = openLogs;
         _renameProjectDisplayNameAsync = renameProjectDisplayNameAsync;
         _view = new SidebarView(
             viewModel,
@@ -61,6 +63,8 @@ internal sealed class SidebarCoordinator
     public SidebarView View => _view;
 
     public void OpenNavigatorSettings() => _openNavigatorSettings();
+
+    public void OpenLogs() => _openLogs();
 
     public void RefreshProjection(
         IReadOnlyList<ProjectDescriptor> projects,

@@ -116,6 +116,9 @@ internal static class CodeAltaShellViewFactory
             ShellCommandCatalog.Get("CodeAlta.Providers.Manage"),
             () => _ = shellCommandSurfaceCoordinator.OpenModelProvidersAsync()));
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
+            ShellCommandCatalog.Get("CodeAlta.ApplicationLogs.Open"),
+            () => _ = shellCommandSurfaceCoordinator.OpenApplicationLogsAsync()));
+        shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.File.Edit"),
             () => _ = shellCommandSurfaceCoordinator.OpenFileEditorAsync()));
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
