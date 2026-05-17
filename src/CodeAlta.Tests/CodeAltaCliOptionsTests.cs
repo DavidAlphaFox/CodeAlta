@@ -50,6 +50,28 @@ public sealed class CodeAltaCliOptionsTests
     }
 
     [TestMethod]
+    public void CreateCommandApp_ProvidesTopLevelVersionOption()
+    {
+        var app = CodeAltaCliOptions.CreateCommandApp(static _ => new ValueTask<int>(23));
+
+        var result = app.Parse(["--version"]);
+
+        Assert.IsFalse(result.HasErrors);
+        Assert.IsTrue(result.VersionRequested);
+    }
+
+    [TestMethod]
+    public void CreateCommandApp_DoesNotRouteLiveToolRootCommands()
+    {
+        var app = CodeAltaCliOptions.CreateCommandApp(static _ => new ValueTask<int>(23));
+
+        var result = app.Parse(["session"]);
+
+        Assert.IsTrue(result.HasErrors);
+        Assert.AreEqual("Unexpected argument `session`.", result.Errors[0].Message);
+    }
+
+    [TestMethod]
     public void TryParse_ParsesPluginSafeMode()
     {
         var result = CodeAltaCliOptions.TryParse(["--no-plugins"], out var options, out var error);

@@ -41,7 +41,7 @@ The tool should be:
 
 ## 2. Terminology
 
-- **`alta` CLI**: the command-line-shaped surface implemented with `XenoAtom.CommandLine`. In v1 it is hosted in-process by CodeAlta command surfaces and the live tool; it is not a separate client process for controlling another CodeAlta instance.
+- **`alta` command registry**: the command-line-shaped live-tool surface implemented with `XenoAtom.CommandLine`. In v1 it is hosted in-process by CodeAlta sessions, plugins, tests, and future UI/diagnostic surfaces; it is not exposed by the top-level `alta` executable and is not a separate client process for controlling another CodeAlta instance.
 - **`alta` live tool**: an agent tool exposed inside CodeAlta-managed sessions. It accepts command-line-like arguments and dispatches them through the in-process command registry.
 - **Live host**: the currently running CodeAlta process that owns active UI state, orchestration runtime, plugin runtime, active sessions, and the in-process `alta` command registry.
 - **Controller session**: the session invoking `alta`.
@@ -64,8 +64,8 @@ The first implementation should stay close to APIs that already exist or are alr
 - `IWorkThreadOrchestrator` already defines headless command/query/event contracts for draft creation, launch, submit, steer, abort, compact, skill activation, queueing, snapshots, and event streams.
 - `AgentHub`/`IAgentBackend` can list sessions, list provider models, resume sessions, send/steer/abort, and retrieve backend-normalized history where supported.
 - `SkillCatalog` supports progressive discovery/activation for CodeAlta-managed skills.
-- `PluginBase.GetCommandLineContributions()` and plugin agent-tool contributions already create a plugin seam that can be extended for `alta` command/live tool contributions.
-- The existing executable already builds a `XenoAtom.CommandLine.CommandApp` named `alta`; this work should extend the same executable rather than introduce a second user-facing command name.
+- `PluginBase.GetCommandLineContributions()` and plugin agent-tool contributions already create separate plugin seams that can be extended independently for top-level executable commands and `alta` live-tool contributions.
+- The existing executable already builds its own top-level `XenoAtom.CommandLine.CommandApp` named `alta` for process options such as `--version`, plugin bootstrap/status options, and plugin-contributed executable commands; the live-tool command registry must remain separate from that process command line.
 
 ## 4. Non-goals for v1
 
@@ -108,11 +108,11 @@ Model-visible tool result shape:
 
 The live tool should not return a JSON object with `stdout`/`stderr` string properties containing escaped JSONL. That nested form is unnecessarily verbose for model context. Instead, the model-visible response for non-help commands is a flat finite JSONL transcript: one compact `alta.result` header followed by the command's normal JSONL records and any diagnostic records. Empty streams have no section marker.
 
-The CLI-shaped surface and live tool must share the same parser and command handlers:
+The live-tool surface and other in-process callers must share the same parser and command handlers:
 
 - an agent calls the `alta` live tool with `args = ["session", "list"]`;
 - an in-process CodeAlta command surface can invoke the same command registry for diagnostics, tests, or future UI affordances;
-- a user or agent progressively discovers commands with `alta --help`, `alta session --help`, and `alta session tail --help`;
+- an agent progressively discovers commands with live-tool help such as `--help`, `session --help`, and `session tail --help`;
 - execution and help requests resolve through the same `AltaCommandRegistry` entry and `AltaCommandContext`.
 
 ### 5.2 In-process only
@@ -547,7 +547,7 @@ public interface IAltaCommandContributor
 
 The command registry should generate a `CommandApp` tree for in-process live-tool argument parsing and any future in-process UI/diagnostic command surfaces. Help is not a separate metadata service: every root command, command group, and leaf command that accepts options should include `HelpOption` so `XenoAtom.CommandLine` can render `alta --help`, `alta session --help`, `alta session tail --help`, and plugin command help automatically.
 
-The `alta` executable dispatches recognized live-tool root commands directly to `AltaCommandRegistry` before starting the terminal UI. Root help is rendered through the live registry and appends the process-level TUI/plugin bootstrap options; command-group and leaf help are rendered by the same registry. Catalog-only `project` commands use `CatalogOptions`/`ProjectCatalog` services without creating a headless runtime, while runtime-backed commands compose a headless `CodeAltaHost` with the real catalog, orchestration, plugin, provider, model, and skill services. Unknown non-option roots are treated as potential plugin command roots and therefore compose the headless runtime before parsing, allowing external invocations such as `alta statistics estimate ...` to discover trusted built-in/plugin commands.
+The top-level `alta` executable does not dispatch live-tool root commands and must not expose the `AltaCommandRegistry` as an external command-line control surface. Its `Program.cs` command line is a separate `XenoAtom.CommandLine.CommandApp` for process-owned options such as `--version`, plugin bootstrap/status switches, TUI launch, and plugin contributions registered for `PluginPoint.CommandLine`. The live-tool registry is used only by in-process session/tool/plugin surfaces; its root, command-group, and leaf help are rendered by the live-tool dispatcher. Plugins that want both surfaces must contribute separate command nodes to the executable command-line plugin point and to the live-tool command registry.
 
 `XenoAtom.CommandLine` command graphs are intended for one invocation at a time: parsing mutates per-run option state, and concurrent `RunAsync`/`Parse` calls on the same command tree are not supported. The `alta` registry must therefore either create a fresh command tree with fresh, unattached `CommandNode` instances for each concurrent invocation, or serialize invocations through a single built tree. Prefer fresh per-invocation trees if multiple agents/plugins may call `alta` concurrently; if v1 starts with serialized dispatch, document the serialization and keep handlers non-blocking so the critical section stays short.
 
@@ -946,7 +946,7 @@ If a backend cannot store metadata, CodeAlta should render a visible header and 
 
 - [x] Create `CodeAlta.LiveTool`.
 - [x] Build an `AltaCommandRegistry` around `XenoAtom.CommandLine`.
-- [x] Move/extend existing top-level CLI parsing so `alta --help` can show new command groups.
+- [x] Keep the live-tool command registry separate from the top-level executable parser while preserving generated root help for in-session live-tool discovery.
 - [x] Implement `version` and ensure `--help` works at the root, command-group, and leaf-command levels.
 - [x] Choose and test the command-graph concurrency strategy: fresh per-invocation trees.
 - [x] Implement catalog-only `project list/show/resolve/upsert` using `ProjectCatalog`.
