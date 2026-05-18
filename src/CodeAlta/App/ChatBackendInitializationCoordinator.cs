@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using CodeAlta.Agent;
 using CodeAlta.App.Events;
-using CodeAlta.CodexSdk;
 using CodeAlta.Models;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Presentation.Chat;
@@ -17,7 +16,6 @@ internal sealed class ChatBackendInitializationCoordinator
     private readonly Dictionary<string, ChatBackendState> _chatBackendStates;
     private readonly Action<Action> _dispatchToUi;
     private readonly FrontendEventPublisher _frontendEvents;
-    private readonly CodexInstallProgressReporter? _codexInstallProgress;
     private readonly Action<string?>? _setProviderInitializationStatus;
     private readonly Action<AgentBackendId, bool>? _setBackendSessionLoadingEnabled;
     private long _providerInitializationStatusVersion;
@@ -28,7 +26,6 @@ internal sealed class ChatBackendInitializationCoordinator
         Dictionary<string, ChatBackendState> chatBackendStates,
         Action<Action> dispatchToUi,
         FrontendEventPublisher frontendEvents,
-        CodexInstallProgressReporter? codexInstallProgress = null,
         Action<string?>? setProviderInitializationStatus = null,
         Action<AgentBackendId, bool>? setBackendSessionLoadingEnabled = null)
     {
@@ -43,7 +40,6 @@ internal sealed class ChatBackendInitializationCoordinator
         _chatBackendStates = chatBackendStates;
         _dispatchToUi = dispatchToUi;
         _frontendEvents = frontendEvents;
-        _codexInstallProgress = codexInstallProgress;
         _setProviderInitializationStatus = setProviderInitializationStatus;
         _setBackendSessionLoadingEnabled = setBackendSessionLoadingEnabled;
     }
@@ -176,7 +172,6 @@ internal sealed class ChatBackendInitializationCoordinator
                 PublishProviderStateChanged(backendId);
             });
 
-        using var codexProgressSubscription = SubscribeCodexProgressIfNeeded(backendId, state);
         try
         {
             // Backend discovery is explicit background I/O. Any state mutation after this point
@@ -255,23 +250,6 @@ internal sealed class ChatBackendInitializationCoordinator
         return await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private IDisposable? SubscribeCodexProgressIfNeeded(AgentBackendId backendId, ChatBackendState state)
-    {
-        if (_codexInstallProgress is null || backendId != AgentBackendIds.Codex)
-        {
-            return null;
-        }
-
-        return _codexInstallProgress.Subscribe(progress =>
-            _dispatchToUi(
-                () =>
-                {
-                    state.Availability = ChatBackendAvailability.Connecting;
-                    state.StatusMessage = progress.Message;
-                    PublishProviderStateChanged(backendId);
-                }));
-    }
-
     private void PublishProviderStateChanged(AgentBackendId backendId)
     {
         _frontendEvents.Publish(new ModelProviderStateChangedEvent(backendId.Value));
@@ -279,8 +257,7 @@ internal sealed class ChatBackendInitializationCoordinator
     }
 
     private static bool IsProcessBackedProviderBackend(AgentBackendId backendId)
-        => string.Equals(backendId.Value, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase) ||
-           string.Equals(backendId.Value, AgentBackendIds.Copilot.Value, StringComparison.OrdinalIgnoreCase);
+        => false;
 
     private void ReportProviderInitializationProgress(ProviderInitializationProgressSnapshot? progress)
     {

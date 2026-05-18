@@ -42,7 +42,7 @@ public sealed class WorkThreadRuntimeServiceTests
     public async Task EnsureCoordinatorSessionAsync_RecreatesSharedMetadataSessionWhenResumeTargetIsMissing()
     {
         using var temp = new TempDirectory();
-        var backendId = new AgentBackendId("copilot");
+        var backendId = new AgentBackendId("shared-missing");
         var backend = new MissingResumeBackend(backendId);
         var factory = new AgentBackendFactory();
         factory.Register(backendId, () => backend, AgentBackendRegistrationOptions.SharedSessionMetadataStore);

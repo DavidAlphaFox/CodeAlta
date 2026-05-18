@@ -15,8 +15,6 @@ internal sealed partial class ModelProviderEditorItemViewModel
 
         _source = source;
         ProviderKey = source.ProviderKey;
-        IsReserved = string.Equals(source.ProviderKey, "codex_cli", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(source.ProviderKey, "copilot_cli", StringComparison.OrdinalIgnoreCase);
         Enabled = source.Enabled != false;
         ProviderType = source.ProviderType ?? "openai-chat";
         DisplayName = source.DisplayName;
@@ -53,7 +51,6 @@ internal sealed partial class ModelProviderEditorItemViewModel
         UseDefaultModelDiscovery = source.ModelDiscovery is null;
         ResponseTransport = source.ResponseTransport ?? "websocket_with_http_fallback";
         UseDefaultResponseTransport = source.ResponseTransport is null;
-        Experimental = source.Experimental == true;
         _isInitialized = true;
     }
 
@@ -66,7 +63,7 @@ internal sealed partial class ModelProviderEditorItemViewModel
     [Bindable]
     public partial string? ProviderKey { get; set; }
 
-    public bool IsReserved { get; }
+    public bool IsReserved => false;
 
     [Bindable]
     public partial bool Enabled { get; set; }
@@ -176,9 +173,6 @@ internal sealed partial class ModelProviderEditorItemViewModel
     [Bindable]
     public partial bool UseDefaultResponseTransport { get; set; }
 
-    [Bindable]
-    public partial bool Experimental { get; set; }
-
     public string Label => string.IsNullOrWhiteSpace(DisplayName) ? ProviderKey ?? string.Empty : DisplayName.Trim();
 
     public static ModelProviderEditorItemViewModel FromDocument(CodeAltaProviderDocument definition)
@@ -219,7 +213,7 @@ internal sealed partial class ModelProviderEditorItemViewModel
         definition.AccountId = ProviderType == "codex" && !UseDefaultAccountId ? NormalizeText(AccountId) : null;
         definition.ModelDiscovery = usesSubscriptionStyleFields && !UseDefaultModelDiscovery ? NormalizeText(ModelDiscovery) : null;
         definition.ResponseTransport = ProviderType == "codex" && !UseDefaultResponseTransport ? NormalizeText(ResponseTransport) : null;
-        definition.Experimental = usesSubscriptionStyleFields ? Experimental : null;
+        definition.Experimental = null;
         return definition;
     }
 
@@ -278,8 +272,6 @@ internal sealed partial class ModelProviderEditorItemViewModel
     partial void OnUseDefaultModelDiscoveryChanged(bool value) => ClearTestResultOnEdit();
     partial void OnResponseTransportChanged(string? value) => ClearTestResultOnEdit();
     partial void OnUseDefaultResponseTransportChanged(bool value) => ClearTestResultOnEdit();
-    partial void OnExperimentalChanged(bool value) => ClearTestResultOnEdit();
-
     private static CodeAltaProviderDocument Clone(CodeAltaProviderDocument definition)
     {
         return new CodeAltaProviderDocument
@@ -298,8 +290,6 @@ internal sealed partial class ModelProviderEditorItemViewModel
             CopilotTokenEnv = definition.CopilotTokenEnv,
             EnableModelPolicies = definition.EnableModelPolicies,
             IncludePreviewModels = definition.IncludePreviewModels,
-            CliPath = definition.CliPath,
-            NpmRegistry = definition.NpmRegistry,
             ProtocolTrace = definition.ProtocolTrace,
             OrganizationId = definition.OrganizationId,
             ProjectId = definition.ProjectId,

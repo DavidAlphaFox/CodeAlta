@@ -113,58 +113,17 @@ public sealed class ModelProviderEditorDiagnosticsTests
     }
 
     [TestMethod]
-    public void Analyze_CodexSubscriptionExperimentalAdvisory_DoesNotWarnInProviderStatus()
-    {
-        var item = CreateCodexSubscriptionItem(enabled: true, experimental: true);
-
-        var snapshot = ModelProviderEditorDiagnostics.Analyze(item, [item]);
-
-        Assert.AreEqual(ModelProviderUiStatusKind.Configured, snapshot.StatusKind);
-        Assert.AreEqual("Ready", snapshot.StatusText);
-        Assert.IsTrue(snapshot.Entries.Any(static entry =>
-            entry.Severity == ValidationSeverity.Warning &&
-            entry.Message.Contains("Experimental ChatGPT/Codex subscription access", StringComparison.Ordinal)));
-
-        item.SetTestResult(success: true, "Connected successfully · 5 model(s) discovered.");
-        var testedSnapshot = ModelProviderEditorDiagnostics.Analyze(item, [item]);
-
-        Assert.AreEqual(ModelProviderUiStatusKind.Success, testedSnapshot.StatusKind);
-        Assert.AreEqual("Tested successfully", testedSnapshot.StatusText);
-    }
-
-    [TestMethod]
-    public void Analyze_CopilotExperimentalAdvisory_DoesNotWarnInProviderStatus()
-    {
-        var item = CreateCopilotDirectItem(enabled: true, experimental: true);
-
-        var snapshot = ModelProviderEditorDiagnostics.Analyze(item, [item]);
-
-        Assert.AreEqual(ModelProviderUiStatusKind.Configured, snapshot.StatusKind);
-        Assert.AreEqual("Ready to test", snapshot.StatusText);
-        Assert.IsTrue(snapshot.Entries.Any(static entry =>
-            entry.Severity == ValidationSeverity.Warning &&
-            entry.Message.Contains("Experimental Copilot access", StringComparison.Ordinal)));
-
-        item.SetTestResult(success: true, "Connected successfully · 5 model(s) discovered.");
-        var testedSnapshot = ModelProviderEditorDiagnostics.Analyze(item, [item]);
-
-        Assert.AreEqual(ModelProviderUiStatusKind.Success, testedSnapshot.StatusKind);
-        Assert.AreEqual("Tested successfully", testedSnapshot.StatusText);
-    }
-
-    [TestMethod]
-    public void Analyze_CodexSubscriptionActionFailure_IsWarningNotError()
+    public void Analyze_CodexSubscriptionActionFailure_IsError()
     {
         var item = CreateCodexSubscriptionItem(enabled: true, experimental: true);
         item.SetTestResult(success: false, "Codex model discovery failed with HTTP 403.");
 
         var snapshot = ModelProviderEditorDiagnostics.Analyze(item, [item]);
 
-        Assert.AreEqual(ModelProviderUiStatusKind.Warning, snapshot.StatusKind);
+        Assert.AreEqual(ModelProviderUiStatusKind.Error, snapshot.StatusKind);
         Assert.AreEqual("Last action needs review", snapshot.StatusText);
-        Assert.IsFalse(snapshot.Entries.Any(static entry => entry.Severity == ValidationSeverity.Error));
         Assert.IsTrue(snapshot.Entries.Any(static entry =>
-            entry.Severity == ValidationSeverity.Warning &&
+            entry.Severity == ValidationSeverity.Error &&
             entry.Message.Contains("Last test failed", StringComparison.Ordinal)));
     }
 
@@ -183,50 +142,6 @@ public sealed class ModelProviderEditorDiagnosticsTests
 
         Assert.AreEqual(ModelProviderUiStatusKind.Error, snapshot.StatusKind);
         Assert.AreEqual("Missing credentials", snapshot.StatusText);
-    }
-
-    [TestMethod]
-    public void Analyze_ReservedCliProviders_CanUseBuiltInCliProviderTypes()
-    {
-        var codex = ModelProviderEditorItemViewModel.FromDocument(new CodeAlta.Catalog.CodeAltaProviderDocument
-        {
-            ProviderKey = "codex_cli",
-            Enabled = true,
-            ProviderType = "codex_cli",
-        });
-        var copilot = ModelProviderEditorItemViewModel.FromDocument(new CodeAlta.Catalog.CodeAltaProviderDocument
-        {
-            ProviderKey = "copilot_cli",
-            Enabled = true,
-            ProviderType = "copilot_cli",
-        });
-
-        var codexSnapshot = ModelProviderEditorDiagnostics.Analyze(codex, [codex, copilot]);
-        var copilotSnapshot = ModelProviderEditorDiagnostics.Analyze(copilot, [codex, copilot]);
-
-        Assert.IsTrue(codex.IsReserved);
-        Assert.IsTrue(copilot.IsReserved);
-        Assert.IsFalse(codexSnapshot.Entries.Any(static entry => entry.Message.Contains("built-in CLI provider types", StringComparison.Ordinal)));
-        Assert.IsFalse(copilotSnapshot.Entries.Any(static entry => entry.Message.Contains("built-in CLI provider types", StringComparison.Ordinal)));
-    }
-
-    [TestMethod]
-    public void Analyze_CustomProvider_CannotUseBuiltInCliProviderType()
-    {
-        var item = ModelProviderEditorItemViewModel.FromDocument(new CodeAlta.Catalog.CodeAltaProviderDocument
-        {
-            ProviderKey = "custom-codex",
-            Enabled = true,
-            ProviderType = "codex_cli",
-        });
-
-        var snapshot = ModelProviderEditorDiagnostics.Analyze(item, [item]);
-
-        Assert.IsFalse(item.IsReserved);
-        Assert.AreEqual(ModelProviderUiStatusKind.Error, snapshot.StatusKind);
-        Assert.IsTrue(snapshot.Entries.Any(static entry =>
-            entry.Severity == ValidationSeverity.Error &&
-            entry.Message.Contains("reserved codex_cli/copilot_cli entries", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -249,7 +164,7 @@ public sealed class ModelProviderEditorDiagnosticsTests
         Assert.AreEqual("acct_123", definition.AccountId);
         Assert.AreEqual("static", definition.ModelDiscovery);
         Assert.AreEqual("http", definition.ResponseTransport);
-        Assert.AreEqual(true, definition.Experimental);
+        Assert.IsNull(definition.Experimental);
 
         item.AccountId = "acct_456";
         Assert.AreEqual(ModelProviderLastTestState.None, item.LastTestState);
@@ -265,12 +180,4 @@ public sealed class ModelProviderEditorDiagnosticsTests
             Experimental = experimental,
         });
 
-    private static ModelProviderEditorItemViewModel CreateCopilotDirectItem(bool enabled, bool experimental)
-        => ModelProviderEditorItemViewModel.FromDocument(new CodeAlta.Catalog.CodeAltaProviderDocument
-        {
-            ProviderKey = "copilot",
-            Enabled = enabled,
-            ProviderType = "copilot",
-            Experimental = experimental,
-        });
 }

@@ -9,14 +9,14 @@ namespace CodeAlta.Tests;
 public sealed class ProviderFrontendCoordinatorTests
 {
     [TestMethod]
-    public void TryBuildActiveBackendTestResult_UsesReadyReservedBackendState()
+    public void TryBuildActiveBackendTestResult_UsesReadyBackendState()
     {
         var definition = new CodeAltaProviderDocument
         {
-            ProviderKey = "copilot_cli",
-            ProviderType = "copilot_cli",
+            ProviderKey = "copilot",
+            ProviderType = "copilot",
         };
-        var backendState = new ChatBackendState(AgentBackendIds.Copilot, "Copilot CLI")
+        var backendState = new ChatBackendState(AgentBackendIds.Copilot, "Copilot")
         {
             Availability = ChatBackendAvailability.Ready,
             StatusMessage = "Ready",
@@ -39,12 +39,12 @@ public sealed class ProviderFrontendCoordinatorTests
     }
 
     [TestMethod]
-    public void TryBuildActiveBackendTestResult_UsesFailureStatusForReservedBackend()
+    public void TryBuildActiveBackendTestResult_UsesFailureStatusForBackend()
     {
         var definition = new CodeAltaProviderDocument
         {
-            ProviderKey = "codex_cli",
-            ProviderType = "codex_cli",
+            ProviderKey = "codex",
+            ProviderType = "codex",
         };
         var backendState = new ChatBackendState(AgentBackendIds.Codex, "Codex")
         {
@@ -67,44 +67,20 @@ public sealed class ProviderFrontendCoordinatorTests
     }
 
     [TestMethod]
-    public void TryBuildActiveBackendTestResult_DoesNotReuseNonReservedProvider()
+    public void TryBuildActiveBackendTestResult_DoesNotReuseMissingProviderState()
     {
         var definition = new CodeAltaProviderDocument
         {
             ProviderKey = "openai",
             ProviderType = "openai-chat",
         };
-        var backendState = new ChatBackendState(new AgentBackendId("openai"), "OpenAI")
-        {
-            Availability = ChatBackendAvailability.Ready,
-            StatusMessage = "Ready",
-        };
-        backendState.Models.Add(new AgentModelInfo("gpt-4.1"));
-
         var reused = ProviderFrontendCoordinator.TryBuildActiveBackendTestResult(
             definition,
-            new Dictionary<string, ChatBackendState>(StringComparer.OrdinalIgnoreCase)
-            {
-                [definition.ProviderKey] = backendState,
-            },
+            new Dictionary<string, ChatBackendState>(StringComparer.OrdinalIgnoreCase),
             out var result);
 
         Assert.IsFalse(reused);
         Assert.AreEqual(default, result);
     }
 
-    [TestMethod]
-    public void IsTemporarilyDisabledCopilotProvider_AppliesOnlyToCliProvider()
-    {
-        Assert.IsTrue(ProviderFrontendCoordinator.IsTemporarilyDisabledCopilotProvider(new CodeAltaProviderDocument
-        {
-            ProviderKey = "copilot_cli",
-            ProviderType = "copilot_cli",
-        }));
-        Assert.IsFalse(ProviderFrontendCoordinator.IsTemporarilyDisabledCopilotProvider(new CodeAltaProviderDocument
-        {
-            ProviderKey = "copilot",
-            ProviderType = "copilot",
-        }));
-    }
 }

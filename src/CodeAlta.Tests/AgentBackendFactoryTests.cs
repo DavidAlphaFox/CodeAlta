@@ -1,8 +1,4 @@
 using CodeAlta.Agent;
-using CodeAlta.Agent.Codex;
-using CodeAlta.Agent.Copilot;
-using CodeAlta.Agent.CopilotCli;
-using CopilotAgentBackend = CodeAlta.Agent.CopilotCli.CopilotAgentBackend;
 
 namespace CodeAlta.Tests;
 
@@ -89,26 +85,6 @@ public sealed class AgentBackendFactoryTests
         factory.Register("expected", () => new TestBackend("actual"));
 
         Assert.ThrowsExactly<InvalidOperationException>(() => factory.Create("expected"));
-    }
-
-    [TestMethod]
-    public async Task AdapterExtensions_RegisterCodexAndCopilot()
-    {
-        var factory = new AgentBackendFactory();
-        factory.RegisterCodex(new CodexAgentBackendOptions());
-        factory.RegisterCopilot(new CopilotAgentBackendOptions());
-
-        Assert.IsTrue(factory.IsRegistered(AgentBackendIds.Codex));
-        Assert.IsTrue(factory.IsRegistered(AgentBackendIds.Copilot));
-
-        var codexBackend = factory.Create(AgentBackendIds.Codex);
-        var copilotBackend = factory.Create(AgentBackendIds.Copilot);
-
-        Assert.IsInstanceOfType<CodexAgentBackend>(codexBackend);
-        Assert.IsInstanceOfType<CopilotAgentBackend>(copilotBackend);
-
-        await codexBackend.DisposeAsync().ConfigureAwait(false);
-        await copilotBackend.DisposeAsync().ConfigureAwait(false);
     }
 
     private sealed class TestBackend : IAgentBackend

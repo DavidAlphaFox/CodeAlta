@@ -11,46 +11,6 @@ namespace CodeAlta.Tests;
 public sealed class ChatBackendInitializationCoordinatorTests
 {
     [TestMethod]
-    public async Task InitializeAsync_SkipsLoadedCodexBackend()
-    {
-        using var temp = TempDirectory.Create();
-        var backendFactory = new AgentBackendFactory();
-        var backend = new CountingBackend(AgentBackendIds.Codex);
-        var factoryCreateCount = 0;
-        backendFactory.Register(
-            AgentBackendIds.Codex,
-            () =>
-            {
-                factoryCreateCount++;
-                return backend;
-            });
-
-        await using var hub = new AgentHub(backendFactory);
-        var state = new ChatBackendState(AgentBackendIds.Codex, "Codex")
-        {
-            Availability = ChatBackendAvailability.Ready,
-            StatusMessage = "Ready",
-        };
-        state.Models.Add(new AgentModelInfo("gpt-5"));
-
-        var coordinator = CreateCoordinator(
-            hub,
-            [new AgentBackendDescriptor(AgentBackendIds.Codex, "Codex")],
-            new Dictionary<string, ChatBackendState>(StringComparer.OrdinalIgnoreCase)
-            {
-                [AgentBackendIds.Codex.Value] = state,
-            });
-
-        await coordinator.InitializeAsync(CancellationToken.None).ConfigureAwait(false);
-
-        Assert.AreEqual(0, factoryCreateCount);
-        Assert.AreEqual(0, backend.StartCount);
-        Assert.AreEqual(0, backend.ListModelsCount);
-        Assert.AreEqual(ChatBackendAvailability.Ready, state.Availability);
-        Assert.AreEqual(1, state.Models.Count);
-    }
-
-    [TestMethod]
     public async Task InitializeAsync_RefreshesLoadedNonProcessBackedBackend()
     {
         using var temp = TempDirectory.Create();

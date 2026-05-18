@@ -9,8 +9,6 @@ Paths/commands below are relative to this directory.
 ## Orientation
 
 - Library: `src/CodeAlta/`
-- Library: `src/CodeAlta.CodexSdk/` (Codex app-server API client)
-- Executable: `src/CodeAlta.CodexSdk.Generator/` (CLI tool for generating Codex SDK C# .NET API)
 - Tests: `src/CodeAlta.Tests/` (MSTest)
 - Development rules to keep in sync: `doc/development-guide.md`
 - Docs to keep in sync with behavior: `readme.md` and the docs under `doc/` (e.g., `doc/**/*.md`)

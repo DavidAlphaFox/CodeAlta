@@ -15,25 +15,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AgentMessageDiagnosticApp\AgentMessageDiagnosticApp.csproj" />
     <ProjectReference Include="..\CodeAlta\CodeAlta.csproj" />
     <ProjectReference Include="..\CodeAlta.Agent\CodeAlta.Agent.csproj" />
     <ProjectReference Include="..\CodeAlta.Agent.Acp\CodeAlta.Agent.Acp.csproj" />
     <ProjectReference Include="..\CodeAlta.Agent.Anthropic\CodeAlta.Agent.Anthropic.csproj" />
-    <ProjectReference Include="..\CodeAlta.Agent.Codex\CodeAlta.Agent.Codex.csproj" />
     <ProjectReference Include="..\CodeAlta.Agent.Copilot\CodeAlta.Agent.Copilot.csproj" />
     <ProjectReference Include="..\CodeAlta.Agent.GoogleGenAI\CodeAlta.Agent.GoogleGenAI.csproj" />
     <ProjectReference Include="..\CodeAlta.Agent.OpenAI\CodeAlta.Agent.OpenAI.csproj" />
     <ProjectReference Include="..\CodeAlta.Acp\CodeAlta.Acp.csproj" />
     <ProjectReference Include="..\CodeAlta.Acp.Generator\CodeAlta.Acp.Generator.csproj" />
-    <ProjectReference Include="..\CodeAlta.CodexSdk\CodeAlta.CodexSdk.csproj" />
-    <ProjectReference Include="..\CodeAlta.CodexSdk.Generator\CodeAlta.CodexSdk.Generator.csproj" Aliases="CodexSdkGenerator" />
     <ProjectReference Include="..\CodeAlta.LiveTool\CodeAlta.LiveTool.csproj" />
-    <ProjectReference Include="..\RawCaptureApp\RawCaptureApp.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Remove="CopilotLiveIntegrationTests.cs" />
   </ItemGroup>
 
 </Project>

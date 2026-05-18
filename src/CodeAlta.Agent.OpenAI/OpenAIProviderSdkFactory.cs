@@ -5,7 +5,7 @@ using System.ClientModel.Primitives;
 using System.Text.Json;
 using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Agent.ModelCatalog;
-using CodeAlta.Agent.OpenAI.CodexSubscription;
+using CodeAlta.Agent.OpenAI.Codex;
 using OpenAI;
 using OpenAI.Chat;
 using OpenAI.Models;

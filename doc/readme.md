@@ -54,8 +54,7 @@ Current terminal shell capabilities:
 
 - Chat (global and project thread) operations:
   - Chat screen powered by `PromptEditor` (input) and `DocumentFlow` + `MarkdownControl` (rendered conversation history).
-  - Automatically probes and initializes enabled provider backends. Codex is pinned to the SDK-generated release tag and is downloaded on demand into `~/.alta/cache/bin/codex/<tag>/` when missing. Copilot CLI is also downloaded only on demand into `~/.alta/cache/bin/copilot/<version>/<platform>/` when the Copilot backend starts. The built-in Copilot backend is temporarily forced disabled until the upstream `GitHub.Copilot.SDK` process cleanup issue is fixed.
-  - Codex backend sessions default to `danger-full-access` (no sandbox) in CodeAlta so prompts can inspect sibling projects outside the current working directory without first switching the session root.
+  - Automatically probes and initializes enabled provider backends. Codex and Copilot are direct endpoint providers backed by local-runtime session journals rather than the removed Codex app-server and Copilot CLI integrations.
   - Provider, model, and reasoning-effort selectors are shown under the prompt, while the footer now shows a compact provider summary button with enabled-provider and error counts.
   - In a thread tab, `F3` / `F4` jump to previous / next user or assistant messages, while `Ctrl+F3` jumps to the first message and `Ctrl+F4` returns to the bottom of the latest message. The same actions are available as `/msg_prev`, `/msg_next`, `/msg_first`, and `/msg_last`.
   - Press `F6` or use the `Full Prompt` button to edit the current draft in a large 80%-screen prompt window; `Enter`, `Esc`, or `Ctrl+Enter` closes it and keeps the edited draft, while `Shift+Enter` inserts a new line.
@@ -184,24 +183,24 @@ CodeAlta exposes providers as the single user-facing execution concept. Each pro
 - its default `model`
 - its default `reasoning_effort`
 
-Built-in providers use reserved keys:
+Built-in direct endpoint providers use conventional keys:
 
-- `providers.codex_cli` → `type = "codex_cli"`
-- `providers.copilot_cli` → `type = "copilot_cli"`
+- `providers.codex` → `type = "codex"`
+- `providers.copilot` → `type = "copilot"`
 
-Both reserved CLI providers (`Codex CLI` and `Copilot CLI`) are present in the model providers dialog even when they are not explicitly configured in `config.toml`. They now default to disabled so a first-time user must explicitly opt into a provider before starting a thread. Copilot CLI remains visible for existing preferences, but CodeAlta currently keeps it disabled regardless of `config.toml` until the upstream `GitHub.Copilot.SDK` process cleanup issue is fixed. Advanced Copilot CLI config can set `cli_path` to use an explicit Copilot CLI executable or `npm_registry` to keep CodeAlta's on-demand npm download/extract flow while using a private or mirrored registry.
+CodeAlta no longer ships the legacy Codex app-server or Copilot CLI integrations. Codex and Copilot support now goes through their direct endpoints and local-runtime session journals.
 
 Additional local providers can target raw provider SDKs such as:
 
 - `OpenAI Responses`
 - `OpenAI Chat`
-- `Codex` experimental ChatGPT subscription Responses access
-- `Copilot` experimental local-runtime HTTP access
+- `Codex` ChatGPT subscription Responses endpoint access
+- `Copilot` local-runtime HTTP endpoint access
 - `Anthropic`
 - `Google GenAI`
 - `Vertex AI`
 
-These providers are configured from `~/.alta/config.toml` under `providers.<provider-key>`. Each entry represents one provider registration and uses a single canonical `type` field such as `codex_cli`, `codex`, `copilot_cli`, `copilot`, `openai-chat`, `openai-responses`, `anthropic`, `google-genai`, or `vertex-ai`. OpenAI-compatible and Anthropic-compatible endpoints may set `api_url`; Vertex uses `project` and `location` instead. Each provider can optionally map to a models.dev provider id and override individual model limits so context usage stays consistent even when the upstream SDK does not expose context-window metadata.
+These providers are configured from `~/.alta/config.toml` under `providers.<provider-key>`. Each entry represents one provider registration and uses a single canonical `type` field such as `codex`, `copilot`, `openai-chat`, `openai-responses`, `anthropic`, `google-genai`, or `vertex-ai`. OpenAI-compatible and Anthropic-compatible endpoints may set `api_url`; Vertex uses `project` and `location` instead. Each provider can optionally map to a models.dev provider id and override individual model limits so context usage stays consistent even when the upstream SDK does not expose context-window metadata.
 
 The preferred workflow is now the in-app model providers dialog (`Ctrl+G Ctrl+R`), which edits the same file. The dialog:
 
@@ -212,7 +211,7 @@ The preferred workflow is now the in-app model providers dialog (`Ctrl+G Ctrl+R`
 - can save, reload from disk, and test a provider before applying changes
 - preserves advanced TOML settings such as `profile`, `compaction`, `extra_body`, `model_overrides`, and `protocol_trace` from the form and exposes an Advanced TOML editor for direct validated edits to the same `config.toml` file
 
-When CodeAlta writes `config.toml` back, it now omits properties that match built-in defaults such as `enabled = true`, reserved-provider `type`/`display_name`, and default compaction values. Local raw-API compaction uses a simplified optional block; automatic compaction starts when the projected active context reaches `inputTokenLimit * ratio`, defaulting to `0.95`. Post-compaction planning targets `inputTokenLimit * post_compaction_target_ratio` by default (`0.10`) while still allowing explicit hard-fit fallbacks with target-miss diagnostics. Compaction summarizer calls are capped by `inputTokenLimit * summary_output_ratio`, defaulting to `0.10` and configurable up to `0.50`, and the default request budget is additionally bounded by `summary_share_of_target` (`0.40`) while still respecting any smaller model output limit:
+When CodeAlta writes `config.toml` back, it omits properties that match built-in defaults such as `enabled = true`, provider `display_name`, and default compaction values. Local raw-API compaction uses a simplified optional block; automatic compaction starts when the projected active context reaches `inputTokenLimit * ratio`, defaulting to `0.95`. Post-compaction planning targets `inputTokenLimit * post_compaction_target_ratio` by default (`0.10`) while still allowing explicit hard-fit fallbacks with target-miss diagnostics. Compaction summarizer calls are capped by `inputTokenLimit * summary_output_ratio`, defaulting to `0.10` and configurable up to `0.50`, and the default request budget is additionally bounded by `summary_share_of_target` (`0.40`) while still respecting any smaller model output limit:
 
 ```toml
 [providers.openai_responses.compaction]
@@ -232,7 +231,7 @@ Default provider selection is configured separately:
 
 ```toml
 [chat]
-default_provider = "codex_cli"
+default_provider = "codex"
 ```
 
 Example:
@@ -240,23 +239,6 @@ Example:
 ```toml
 [chat]
 default_provider = "openai_responses"
-
-[providers.codex_cli]
-display_name = "Codex CLI"
-type = "codex_cli"
-model = "gpt-5.4"
-reasoning_effort = "high"
-
-# Temporarily kept disabled even if enabled = true is present.
-[providers.copilot_cli]
-display_name = "Copilot CLI"
-type = "copilot_cli"
-model = "claude-opus-4.6"
-reasoning_effort = "high"
-# Optional: bypass CodeAlta's on-demand Copilot CLI installer.
-# cli_path = "C:/tools/copilot.exe"
-# Optional: keep on-demand install but use a private/mirrored npm registry.
-# npm_registry = "https://registry.npmjs.org"
 
 [providers.openai_chat]
 display_name = "OpenAI"
@@ -288,12 +270,10 @@ model = "gpt-5.3-codex"
 reasoning_effort = "high"
 # Optional: set to "http" to disable the default WebSocket + HTTP fallback transport.
 # response_transport = "http"
-experimental = true
 
 [providers.copilot]
 display_name = "Copilot"
 type = "copilot"
-experimental = true
 # Default: start a GitHub OAuth device flow, cache the GitHub token and exchanged
 # Copilot API token under CodeAlta state, and refresh the Copilot token before expiry.
 auth_source = "github_device_flow"
@@ -335,9 +315,9 @@ reasoning_effort = "high"
 
 Model discovery still comes from the upstream provider API when supported. `model_overrides` enriches or corrects discovered model metadata, while `single_model_id` can pin a provider to one fixed model for single-model endpoints. When an OpenAI-compatible endpoint does not implement `/models`, CodeAlta can also fall back to the local `models.dev` catalog if the provider key or `models_dev_provider_id` maps to a known catalog provider such as `minimax`.
 
-The `codex` provider type is experimental ChatGPT subscription access and intentionally distinct from public OpenAI platform access:
+The `codex` provider type is ChatGPT subscription endpoint access and intentionally distinct from public OpenAI platform access:
 
-- it requires `experimental = true` and rejects `api_key`, `api_key_env`, and arbitrary `extra_body`;
+- it rejects `api_key`, `api_key_env`, and arbitrary `extra_body`;
 - it uses ChatGPT/Codex OAuth credentials stored in CodeAlta-owned state and never treats ChatGPT tokens as OpenAI platform API keys;
 - requests target `https://chatgpt.com/backend-api/codex` by default and use WebSocket Responses transport with HTTP/SSE fallback; set `response_transport = "http"` to force HTTP-only mode;
 - `previous_response_id` continuation is used only for active in-memory CodeAlta sessions and is not resumed from sessions reloaded from disk;
@@ -348,7 +328,7 @@ The `codex` provider type is experimental ChatGPT subscription access and intent
 
 Supported Codex subscription auth sources are `codealta_oauth`, `codex_auth_import`, and `codex_auth_file_readonly`. `codex_auth_import` is a one-time read-only copy from Codex's `auth.json` into CodeAlta state; `codex_auth_file_readonly` is intended for development/test scenarios and never writes Codex-owned files.
 
-The `copilot` provider type is experimental direct Copilot HTTP access and intentionally distinct from the reserved native `[providers.copilot_cli]` Copilot CLI backend. It requires `experimental = true`, fetches Copilot `/models`, filters disabled/unsupported models, and dispatches turns per model to Copilot `/responses`, `/chat/completions`, or `/v1/messages` through the existing OpenAI Responses, OpenAI Chat, and Anthropic local-runtime executors. Supported auth sources are `github_device_flow`, `github_token_env`, and `copilot_token_env`; device flow and GitHub-token auth exchange a GitHub OAuth token through `https://api.github.com/copilot_internal/v2/token` (or the configured Enterprise domain) and never log bearer tokens. The model providers dialog includes Copilot Browser Login/Device Login actions: Browser Login opens GitHub's device authorization page, displays the user code in the dialog status, polls until authorization completes, and stores CodeAlta-owned credentials for the provider. `github_enterprise_url`, `model_discovery`, `enable_model_policies`, and `include_preview_models` provide Copilot-specific controls.
+The `copilot` provider type is direct Copilot HTTP access. It fetches Copilot `/models`, filters disabled/unsupported models, and dispatches turns per model to Copilot `/responses`, `/chat/completions`, or `/v1/messages` through the existing OpenAI Responses, OpenAI Chat, and Anthropic local-runtime executors. Supported auth sources are `github_device_flow`, `github_token_env`, and `copilot_token_env`; device flow and GitHub-token auth exchange a GitHub OAuth token through `https://api.github.com/copilot_internal/v2/token` (or the configured Enterprise domain) and never log bearer tokens. The model providers dialog includes Copilot Browser Login/Device Login actions: Browser Login opens GitHub's device authorization page, displays the user code in the dialog status, polls until authorization completes, and stores CodeAlta-owned credentials for the provider. `github_enterprise_url`, `model_discovery`, `enable_model_policies`, and `include_preview_models` provide Copilot-specific controls.
 
 CodeAlta also applies known provider defaults through a small defaults catalog before config overrides are applied. For example, MiniMax Chat registrations automatically disable the `developer` message role and merge developer instructions into the system prompt instead. DeepSeek Chat registrations replay assistant reasoning through `reasoning_content` so thinking-mode tool calls can continue across tool-result turns. An explicit `profile` section in `config.toml` can still override those defaults, including `reasoning_input_field_name` for OpenAI-compatible providers that require a different assistant reasoning replay field.
 
@@ -359,21 +339,3 @@ dotnet run --project src/CodeAlta.Agent.ModelsDev.Updater/CodeAlta.Agent.ModelsD
 ```
 
 Session state for these local runtimes is stored under `~/.alta/sessions/yyyy/mm/dd/<session-id>.jsonl`. The journal contains replayable agent events plus internal session summary/state snapshots, so provider or model switches are captured as events in the same durable file instead of rewriting multiple provider-bound files. For protocol debugging, `protocol_trace = true` on an OpenAI-compatible provider enables a per-session trace at `~/.alta/sessions/traces/<session-id>.trace`; this redacts credential headers but otherwise may contain prompts, tool arguments, model output, and streamed SDK updates, so keep it disabled outside targeted local investigations.
-
-## Live Backend Smoke Tests
-
-`src/CodeAlta.Tests` also contains opt-in live backend smoke tests for the local Codex and Copilot CLIs.
-
-- Set `CODEALTA_RUN_LIVE_CODEX_TESTS=1` to run the Codex live prompt test.
-- Set `CODEALTA_RUN_LIVE_COPILOT_TESTS=1` to run the Copilot live prompt test.
-- Without those environment variables, the live tests are skipped as inconclusive during `dotnet test`.
-
-## Session Diagnostics
-
-`src/AgentMessageDiagnosticApp` provides a small CLI for dumping mapped backend session history as JSONL.
-
-- `dotnet run --project src/AgentMessageDiagnosticApp/AgentMessageDiagnosticApp.csproj -- --codex <session-id>`
-- `dotnet run --project src/AgentMessageDiagnosticApp/AgentMessageDiagnosticApp.csproj -- --copilot <session-id>`
-- Add `--indented` to pretty-print each JSON payload instead of emitting compact JSONL.
-- Run with `--help` to see the generated visual usage and option reference.
-

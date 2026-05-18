@@ -4,7 +4,7 @@ using System.ClientModel;
 using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Agent.LocalRuntime.Compaction;
 using CodeAlta.Agent.ModelCatalog;
-using CodeAlta.Agent.OpenAI.CodexSubscription;
+using CodeAlta.Agent.OpenAI.Codex;
 using OpenAI.Chat;
 using OpenAI.Responses;
 

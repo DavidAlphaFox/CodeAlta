@@ -2139,12 +2139,12 @@ public sealed class CodeAltaAppTests
     {
         var states = new[]
         {
-            new ChatBackendState(AgentBackendIds.Codex, "Codex CLI")
+            new ChatBackendState(AgentBackendIds.Codex, "Codex")
             {
                 Availability = ChatBackendAvailability.Ready,
                 StatusMessage = "Connected · 2 models",
             },
-            new ChatBackendState(AgentBackendIds.Copilot, "Copilot CLI")
+            new ChatBackendState(AgentBackendIds.Copilot, "Copilot")
             {
                 Availability = ChatBackendAvailability.Unsupported,
                 StatusMessage = "Copilot is unavailable: CLI not found.",
@@ -2223,7 +2223,7 @@ public sealed class CodeAltaAppTests
         var markup = ChatBackendPresentation.BuildProviderSummaryMarkup(
             states,
             isInitializing: false,
-            configuredProviderKeys: ["codex_cli", "copilot_cli", "openai", "anthropic", "google", "vertex"]);
+            configuredProviderKeys: ["codex", "copilot", "openai", "anthropic", "google", "vertex"]);
 
         StringAssert.Contains(markup, "1 active provider");
         StringAssert.Contains(markup, "6 configured");
@@ -2805,7 +2805,7 @@ public sealed class CodeAltaAppTests
         var markup = SidebarThreadPresentation.BuildProviderMarkup(AgentBackendIds.Copilot.Value, displayName: null, WorkThreadKind.ProjectThread);
 
         StringAssert.Contains(markup, UiPalette.GetSidebarAccentMarkup(SidebarAccent.CopilotThread));
-        StringAssert.Contains(markup, "Copilot CLI");
+        StringAssert.Contains(markup, "Copilot");
         StringAssert.Contains(markup, NerdFont.MdCircleSmall.ToString());
     }
 

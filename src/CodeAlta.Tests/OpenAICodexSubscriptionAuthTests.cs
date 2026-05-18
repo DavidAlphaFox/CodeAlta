@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using CodeAlta.Agent.OpenAI.CodexSubscription;
+using CodeAlta.Agent.OpenAI.Codex;
 
 namespace CodeAlta.Tests;
 

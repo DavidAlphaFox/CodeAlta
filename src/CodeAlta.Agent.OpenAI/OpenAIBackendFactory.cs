@@ -1,6 +1,6 @@
 using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Agent.LocalRuntime.Compaction;
-using CodeAlta.Agent.OpenAI.CodexSubscription;
+using CodeAlta.Agent.OpenAI.Codex;
 
 namespace CodeAlta.Agent.OpenAI;
 

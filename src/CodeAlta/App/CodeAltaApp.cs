@@ -127,8 +127,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             ownedServices.AgentHub,
             ownedServices.ProjectFileSearchService,
             new KnownProjectImporter(ownedServices.AgentHub, ownedServices.BackendDescriptors, ownedServices.ProjectCatalog, ownedServices.CatalogOptions),
-            ownedServices,
-            ownedServices.CodexInstallProgress);
+            ownedServices);
     }
 
     private CodeAltaApp(
@@ -140,8 +139,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         AgentHub agentHub,
         IProjectFileSearchService projectFileSearchService,
         KnownProjectImporter? knownProjectImporter,
-        CodeAltaOwnedServices? ownedServices,
-        CodexInstallProgressReporter? codexInstallProgress = null)
+        CodeAltaOwnedServices? ownedServices)
     {
         ArgumentNullException.ThrowIfNull(projectCatalog);
         ArgumentNullException.ThrowIfNull(threadCatalog);
@@ -167,7 +165,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             new CodeAltaShellBridge(this),
             _knownProjectImporter,
             this,
-            codexInstallProgress,
             ownedServices?.PluginHostBridge);
         _modelProviderPreferences = composition.ModelProviderPreferences;
         _shellController = composition.ShellController;

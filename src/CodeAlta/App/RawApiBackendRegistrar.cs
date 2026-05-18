@@ -6,7 +6,7 @@ using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Agent.LocalRuntime.Compaction;
 using CodeAlta.Agent.ModelCatalog;
 using CodeAlta.Agent.OpenAI;
-using CodeAlta.Agent.OpenAI.CodexSubscription;
+using CodeAlta.Agent.OpenAI.Codex;
 using CodeAlta.Catalog;
 using Tomlyn.Model;
 using XenoAtom.Logging;
@@ -256,12 +256,6 @@ internal static class RawApiBackendRegistrar
         out AgentBackendDescriptor descriptor,
         out Func<IAgentBackend> createBackend)
     {
-        if (definition.Experimental != true)
-        {
-            throw new InvalidOperationException(
-                $"Provider '{definition.ProviderKey}' requires experimental = true for type 'codex'.");
-        }
-
         var backendId = new AgentBackendId(definition.ProviderKey);
         var displayName = ResolveProviderDisplayName(definition);
         var baseUri = ParseUri(definition.ApiUrl) ?? new Uri("https://chatgpt.com/backend-api/codex");
@@ -313,12 +307,6 @@ internal static class RawApiBackendRegistrar
         out AgentBackendDescriptor descriptor,
         out Func<IAgentBackend> createBackend)
     {
-        if (definition.Experimental != true)
-        {
-            throw new InvalidOperationException(
-                $"Provider '{definition.ProviderKey}' requires experimental = true for type 'copilot'.");
-        }
-
         var authSource = NormalizeText(definition.AuthSource) ?? CopilotDirectAuthSources.GitHubDeviceFlow;
         var githubTokenEnv = NormalizeText(definition.GitHubTokenEnv);
         var copilotTokenEnv = NormalizeText(definition.CopilotTokenEnv);

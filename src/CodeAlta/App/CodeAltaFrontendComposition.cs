@@ -59,7 +59,6 @@ internal sealed class CodeAltaFrontendComposition
         ICodeAltaShell shell,
         KnownProjectImporter knownProjectImporter,
         CodeAltaApp frontend,
-        CodexInstallProgressReporter? codexInstallProgress = null,
         PluginHostBridge? pluginHostBridge = null)
     {
         ArgumentNullException.ThrowIfNull(projectCatalog);
@@ -298,7 +297,6 @@ internal sealed class CodeAltaFrontendComposition
             chatBackendStates,
             frontend.DispatchToUi,
             frontendEvents,
-            codexInstallProgress,
             frontend.SetProviderSessionLoadStatus,
             SetBackendSessionLoadingEnabled);
         var shellStatusPort = new ShellStatusPort(

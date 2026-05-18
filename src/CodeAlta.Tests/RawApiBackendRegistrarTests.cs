@@ -165,7 +165,6 @@ public sealed class RawApiBackendRegistrarTests
             [providers.codex]
             type = "codex"
             model = "gpt-5.3-codex"
-            experimental = true
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -189,37 +188,6 @@ public sealed class RawApiBackendRegistrarTests
             "gpt-5.2|gpt-5.3-codex|gpt-5.4|gpt-5.4-mini|gpt-5.5",
             string.Join('|', models.Select(static model => model.Id)));
         Assert.IsTrue(models.All(static model => model.Provider == "codex"));
-    }
-
-    [TestMethod]
-    public void RegisterConfiguredBackends_CodexSubscriptionRejectsMissingExperimentalOptIn()
-    {
-        using var temp = TempDirectory.Create();
-        var definition = new CodeAltaProviderDocument
-        {
-            ProviderKey = "codex",
-            Enabled = true,
-            ProviderType = "codex",
-            DisplayName = "Codex Sub",
-            Model = "gpt-5.3-codex",
-            ApiUrl = "https://chatgpt.com/backend-api/codex",
-            AuthSource = "codealta_oauth",
-            MaxConcurrentRequests = 16,
-            TextVerbosity = "medium",
-            IncludeEncryptedReasoning = true,
-            ModelDiscovery = "static",
-            SendResponsesBetaHeader = true,
-            SendInstallationId = false,
-            InstallationIdSource = "codealta_state",
-            Experimental = false,
-        };
-
-        var factory = new AgentBackendFactory();
-        Assert.ThrowsExactly<InvalidOperationException>(
-            () => RawApiBackendRegistrar.RegisterOrReplaceConfiguredBackends(
-                factory,
-                [definition],
-                Path.Combine(temp.Path, "machine", "agents")));
     }
 
     [TestMethod]

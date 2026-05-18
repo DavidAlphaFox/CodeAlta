@@ -5,7 +5,7 @@ Last updated: **2026-05-01**
 
 ## 1. Purpose
 
-Add an experimental LocalRuntime provider that lets CodeAlta run Codex-capable ChatGPT subscription models through CodeAlta's own local agent loop.
+Add a LocalRuntime provider that lets CodeAlta run Codex-capable ChatGPT subscription models through CodeAlta's own local agent loop.
 
 This feature is the direct API variant of Codex support:
 
@@ -14,7 +14,7 @@ This feature is the direct API variant of Codex support:
 - it reuses the official OpenAI .NET SDK `ResponsesClient` for Responses serialization and SSE parsing;
 - it keeps CodeAlta responsible for local tools, approvals, persistence, compaction, and normalized events.
 
-This is **not** a replacement for `src/CodeAlta.Agent.Codex`. The Codex app-server backend remains the primary supported Codex integration. This provider is only for users who explicitly want Codex models inside CodeAlta's LocalRuntime.
+This direct endpoint provider has replaced the removed `src/CodeAlta.Agent.Codex` app-server integration in CodeAlta.
 
 ## 2. Non-goals
 

@@ -123,7 +123,6 @@ public sealed class CodeAltaLoggingTests
         LogManager.GetLogger("CodeAlta.AgentSessionConnection").Info("codealta-info");
         LogManager.GetLogger("External.Component").Info("external-info");
         LogManager.GetLogger("External.Component").Warn("external-warn");
-        LogManager.GetLogger(CodeAltaLogging.CodexAgentLoggerName).Debug("codex-debug");
 
         LogManager.Shutdown();
 
@@ -132,7 +131,6 @@ public sealed class CodeAltaLoggingTests
             {
                 "Info|CodeAlta.AgentSessionConnection|codealta-info",
                 "Warn|External.Component|external-warn",
-                $"Debug|{CodeAltaLogging.CodexAgentLoggerName}|codex-debug",
             },
             writer.Messages.ToArray());
     }

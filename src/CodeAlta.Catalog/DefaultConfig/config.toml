@@ -6,26 +6,11 @@ type = "anthropic"
 model = "claude-sonnet-4-6"
 api_key_env = "CODEALTA_ANTHROPIC_API_KEY"
 
-[providers.codex_cli]
-enabled = false
-display_name = "Codex CLI"
-type = "codex_cli"
-model = "gpt-5.5"
-reasoning_effort = "high"
-
 [providers.codex]
 enabled = false
 display_name = "Codex"
 type = "codex"
 model = "gpt-5.5"
-reasoning_effort = "high"
-experimental = true
-
-[providers.copilot_cli]
-enabled = false
-display_name = "Copilot CLI"
-type = "copilot_cli"
-model = "claude-opus-4.6"
 reasoning_effort = "high"
 
 [providers.copilot]
@@ -34,7 +19,6 @@ display_name = "Copilot"
 type = "copilot"
 model = "claude-sonnet-4.6"
 reasoning_effort = "high"
-experimental = true
 
 [providers.deepseek]
 enabled = false

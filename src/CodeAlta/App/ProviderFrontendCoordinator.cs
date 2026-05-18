@@ -1,16 +1,12 @@
 using System.Diagnostics;
 using CodeAlta.Agent;
-using CodeAlta.Agent.Codex;
 using CodeAlta.Agent.Copilot;
-using CodeAlta.Agent.CopilotCli;
 using CodeAlta.Agent.ModelCatalog;
-using CodeAlta.Agent.OpenAI.CodexSubscription;
+using CodeAlta.Agent.OpenAI.Codex;
 using CodeAlta.App.Events;
 using CodeAlta.Catalog;
-using CodeAlta.CodexSdk;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Chat;
-using CopilotAgentBackend = CodeAlta.Agent.CopilotCli.CopilotAgentBackend;
 
 namespace CodeAlta.App;
 
@@ -143,14 +139,6 @@ internal sealed class ProviderFrontendCoordinator
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(definition);
-
-        if (IsTemporarilyDisabledCopilotProvider(definition))
-        {
-            return new ProviderTestResult(
-                false,
-                "GitHub Copilot is temporarily disabled until the upstream Copilot SDK process cleanup issue is fixed.",
-                0);
-        }
 
         if (TryBuildActiveBackendTestResult(definition, _chatBackendStates, out var activeResult))
         {
@@ -360,12 +348,6 @@ internal sealed class ProviderFrontendCoordinator
         ArgumentNullException.ThrowIfNull(chatBackendStates);
 
         result = default;
-        if (!string.Equals(definition.ProviderType, "codex_cli", StringComparison.Ordinal) &&
-            !string.Equals(definition.ProviderType, "copilot_cli", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
         if (!chatBackendStates.TryGetValue(definition.ProviderKey, out var state))
         {
             return false;
@@ -398,29 +380,6 @@ internal sealed class ProviderFrontendCoordinator
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentException.ThrowIfNullOrWhiteSpace(stateRootPath);
 
-        if (string.Equals(definition.ProviderType, "codex_cli", StringComparison.Ordinal))
-        {
-            var codexPath = CodeAltaOwnedServices.ResolveCodexExecutablePath(Environment.GetEnvironmentVariable("CODEALTA_CODEX_PATH"));
-            backend = new CodexAgentBackend(
-                new CodexAgentBackendOptions
-                {
-                    ProcessOptions = new CodexProcessOptions
-                    {
-                        CodexPath = codexPath,
-                        LocalRootPath = Path.Combine(stateRootPath, "cache"),
-                        ReleaseTag = codexPath is null ? CodeAlta.CodexSdk.CodexClient.CompiledAgainstReleaseTag : null,
-                    },
-                });
-            return true;
-        }
-
-        if (string.Equals(definition.ProviderType, "copilot_cli", StringComparison.Ordinal))
-        {
-            backend = new CopilotAgentBackend(
-                CodeAltaOwnedServices.CreateCopilotBackendOptions(definition, Path.Combine(stateRootPath, "cache")));
-            return true;
-        }
-
         if (!RawApiBackendRegistrar.TryCreateBackendRegistration(definition, stateRootPath, modelCatalog, out _, out var createBackend))
         {
             backend = null!;
@@ -429,14 +388,6 @@ internal sealed class ProviderFrontendCoordinator
 
         backend = createBackend();
         return true;
-    }
-
-    internal static bool IsTemporarilyDisabledCopilotProvider(CodeAltaProviderDocument definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        return string.Equals(definition.ProviderKey, "copilot_cli", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(definition.ProviderType, "copilot_cli", StringComparison.OrdinalIgnoreCase);
     }
 
     private OpenAICodexSubscriptionLoginManager CreateCodexSubscriptionLoginManager(CodeAltaProviderDocument definition)

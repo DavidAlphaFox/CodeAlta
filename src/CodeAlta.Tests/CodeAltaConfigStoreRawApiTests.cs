@@ -64,8 +64,6 @@ public sealed class CodeAltaConfigStoreRawApiTests
             .ToDictionary(static provider => provider.ProviderKey, StringComparer.OrdinalIgnoreCase);
 
         Assert.AreEqual("openrouter", store.GetEffectiveDefaultProvider());
-        Assert.IsTrue(providers.ContainsKey("codex_cli"));
-        Assert.IsTrue(providers.ContainsKey("copilot_cli"));
 
         var openRouter = providers["openrouter"];
         Assert.AreEqual("OpenRouter", openRouter.DisplayName);
@@ -258,7 +256,6 @@ public sealed class CodeAltaConfigStoreRawApiTests
             [providers.codex]
             type = "codex"
             model = " gpt-5.3-codex "
-            experimental = true
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -279,7 +276,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
         Assert.IsTrue(provider.SendResponsesBetaHeader);
         Assert.IsFalse(provider.SendInstallationId);
         Assert.AreEqual("codealta_state", provider.InstallationIdSource);
-        Assert.IsTrue(provider.Experimental);
+        Assert.IsFalse(provider.Experimental);
     }
 
     [TestMethod]
@@ -305,7 +302,6 @@ public sealed class CodeAltaConfigStoreRawApiTests
             send_responses_beta_header = false
             send_installation_id = true
             installation_id_source = " CODEX_HOME_READONLY "
-            experimental = true
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -337,7 +333,6 @@ public sealed class CodeAltaConfigStoreRawApiTests
             type = "codex"
             model = "gpt-5.3-codex"
             api_key_env = "OPENAI_API_KEY"
-            experimental = true
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -355,7 +350,6 @@ public sealed class CodeAltaConfigStoreRawApiTests
             [providers.codex]
             type = "codex"
             model = "gpt-5.3-codex"
-            experimental = true
 
             [providers.codex.extra_body]
             suspicious = true
@@ -367,23 +361,6 @@ public sealed class CodeAltaConfigStoreRawApiTests
     }
 
     [TestMethod]
-    public void LoadGlobalProviderDefinitions_CodexSubscriptionRejectsMissingExperimentalOptIn()
-    {
-        using var temp = TempDirectory.Create();
-        File.WriteAllText(
-            Path.Combine(temp.Path, "config.toml"),
-            """
-            [providers.codex_alt]
-            type = "codex"
-            model = "gpt-5.3-codex"
-            """);
-
-        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
-        var ex = Assert.ThrowsExactly<InvalidDataException>(() => store.LoadGlobalProviderDefinitions(includeDisabled: true));
-        StringAssert.Contains(ex.InnerException?.Message, "experimental = true");
-    }
-
-    [TestMethod]
     public void LoadGlobalProviderDefinitions_CodexSubscriptionAllowsMissingModel()
     {
         using var temp = TempDirectory.Create();
@@ -392,7 +369,6 @@ public sealed class CodeAltaConfigStoreRawApiTests
             """
             [providers.codex]
             type = "codex"
-            experimental = true
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -414,7 +390,6 @@ public sealed class CodeAltaConfigStoreRawApiTests
             type = "codex"
             model = "gpt-5.3-codex"
             api_url = "http://example.com/backend-api/codex"
-            experimental = true
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -433,7 +408,6 @@ public sealed class CodeAltaConfigStoreRawApiTests
             type = "codex"
             model = "gpt-5.3-codex"
             text_verbosity = "verbose"
-            experimental = true
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -452,7 +426,6 @@ public sealed class CodeAltaConfigStoreRawApiTests
             type = "codex"
             model = "gpt-5.3-codex"
             response_transport = "socket"
-            experimental = true
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -461,57 +434,23 @@ public sealed class CodeAltaConfigStoreRawApiTests
     }
 
     [TestMethod]
-    public void LoadGlobalProviderDefinitions_ReservedProvidersReceiveDefaults()
+    public void LoadGlobalProviderDefinitions_MigratesDirectProviderAliases()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
             Path.Combine(temp.Path, "config.toml"),
             """
-            [providers.codex_cli]
-            model = "gpt-5.4"
-            reasoning_effort = "high"
-            """);
-
-        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
-        var providers = store.LoadGlobalProviderDefinitions(includeDisabled: true)
-            .ToDictionary(static provider => provider.ProviderKey, StringComparer.OrdinalIgnoreCase);
-
-        Assert.AreEqual("codex_cli", providers["codex_cli"].ProviderType);
-        Assert.AreEqual("Codex CLI", providers["codex_cli"].DisplayName);
-        Assert.IsFalse(providers["codex_cli"].Enabled);
-        Assert.AreEqual("copilot_cli", providers["copilot_cli"].ProviderType);
-        Assert.AreEqual("Copilot CLI", providers["copilot_cli"].DisplayName);
-        Assert.IsFalse(providers["copilot_cli"].Enabled);
-    }
-
-    [TestMethod]
-    public void LoadGlobalProviderDefinitions_MigratesLegacyProviderTypes()
-    {
-        using var temp = TempDirectory.Create();
-        File.WriteAllText(
-            Path.Combine(temp.Path, "config.toml"),
-            """
-            [providers.codex]
-            type = "codex"
-
-            [providers.copilot]
-            type = "copilot"
-
             [providers.codex_subscription]
             type = "openai-codex-subscription"
-            experimental = true
 
             [providers.github-copilot-direct]
             type = "github-copilot-direct"
-            experimental = true
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
         var providers = store.LoadGlobalProviderDefinitions(includeDisabled: true)
             .ToDictionary(static provider => provider.ProviderKey, StringComparer.OrdinalIgnoreCase);
 
-        Assert.AreEqual("codex_cli", providers["codex_cli"].ProviderType);
-        Assert.AreEqual("copilot_cli", providers["copilot_cli"].ProviderType);
         Assert.AreEqual("codex", providers["codex"].ProviderType);
         Assert.AreEqual("copilot", providers["copilot"].ProviderType);
     }
@@ -526,61 +465,13 @@ public sealed class CodeAltaConfigStoreRawApiTests
         Assert.IsFalse(store.EnsureGlobalConfigExists());
 
         var content = File.ReadAllText(Path.Combine(temp.Path, "config.toml"));
-        StringAssert.Contains(content, "type = \"codex_cli\"");
         StringAssert.Contains(content, "type = \"codex\"");
-        StringAssert.Contains(content, "type = \"copilot_cli\"");
         StringAssert.Contains(content, "type = \"copilot\"");
         Assert.IsFalse(content.Contains("pc-ai", StringComparison.OrdinalIgnoreCase));
 
         var providers = store.LoadGlobalProviderDefinitions(includeDisabled: true);
         Assert.IsTrue(providers.Count > 4);
         Assert.IsTrue(providers.All(static provider => provider.Enabled == false));
-    }
-
-    [TestMethod]
-    public void LoadGlobalProviderDefinitions_CopilotExplicitlyEnabledIsTemporarilyDisabled()
-    {
-        using var temp = TempDirectory.Create();
-        File.WriteAllText(
-            Path.Combine(temp.Path, "config.toml"),
-            """
-            [providers.copilot]
-            enabled = true
-            model = "claude-opus-4.6"
-            """);
-
-        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
-        var providers = store.LoadGlobalProviderDefinitions(includeDisabled: true)
-            .ToDictionary(static provider => provider.ProviderKey, StringComparer.OrdinalIgnoreCase);
-
-        Assert.IsFalse(providers["copilot_cli"].Enabled);
-        Assert.AreEqual("claude-opus-4.6", providers["copilot_cli"].Model);
-    }
-
-    [TestMethod]
-    public void SaveGlobalProviderDefinitions_CopilotEnabledIsPrunedWhileTemporarilyDisabled()
-    {
-        using var temp = TempDirectory.Create();
-        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
-
-        store.SaveGlobalProviderDefinitions(
-        [
-            new CodeAltaProviderDocument
-            {
-                ProviderKey = "copilot_cli",
-                Enabled = true,
-                ProviderType = "copilot_cli",
-                Model = "claude-opus-4.6",
-            },
-        ]);
-
-        var content = File.ReadAllText(Path.Combine(temp.Path, "config.toml"));
-        Assert.IsFalse(content.Contains("enabled = true", StringComparison.Ordinal));
-
-        var providers = store.LoadGlobalProviderDefinitions(includeDisabled: true)
-            .ToDictionary(static provider => provider.ProviderKey, StringComparer.OrdinalIgnoreCase);
-        Assert.IsFalse(providers["copilot_cli"].Enabled);
-        Assert.AreEqual("claude-opus-4.6", providers["copilot_cli"].Model);
     }
 
     [TestMethod]
@@ -593,9 +484,9 @@ public sealed class CodeAltaConfigStoreRawApiTests
         [
             new CodeAltaProviderDocument
             {
-                ProviderKey = "codex_cli",
+                ProviderKey = "codex",
                 Enabled = true,
-                ProviderType = "codex_cli",
+                ProviderType = "codex",
             },
             new CodeAltaProviderDocument
             {
@@ -619,7 +510,7 @@ public sealed class CodeAltaConfigStoreRawApiTests
         var providers = store.LoadGlobalProviderDefinitions(includeDisabled: true)
             .ToDictionary(static provider => provider.ProviderKey, StringComparer.OrdinalIgnoreCase);
 
-        Assert.IsTrue(providers["codex_cli"].Enabled);
+        Assert.IsTrue(providers["codex"].Enabled);
         Assert.IsTrue(providers["openrouter"].Enabled);
         Assert.IsTrue(providers["openrouter"].ProtocolTrace);
         Assert.IsNotNull(providers["openrouter"].Compaction);
@@ -647,21 +538,6 @@ public sealed class CodeAltaConfigStoreRawApiTests
                     ProviderType = "openai-chat",
                 },
             ]));
-    }
-
-    [TestMethod]
-    public void LoadGlobalProviderDefinitions_InvalidReservedProviderType_Throws()
-    {
-        using var temp = TempDirectory.Create();
-        File.WriteAllText(
-            Path.Combine(temp.Path, "config.toml"),
-            """
-            [providers.codex_cli]
-            type = "openai-chat"
-            """);
-
-        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
-        Assert.ThrowsExactly<InvalidDataException>(() => store.LoadGlobalProviderDefinitions(includeDisabled: true));
     }
 
     [TestMethod]

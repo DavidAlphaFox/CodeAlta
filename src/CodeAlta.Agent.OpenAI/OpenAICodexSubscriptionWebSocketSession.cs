@@ -7,7 +7,7 @@ using System.Net;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using CodeAlta.Agent.OpenAI.CodexSubscription;
+using CodeAlta.Agent.OpenAI.Codex;
 using OpenAI;
 using OpenAI.Responses;
 

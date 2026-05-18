@@ -6,14 +6,14 @@ namespace CodeAlta.Agent;
 public static class AgentBackendIds
 {
     /// <summary>
-    /// GitHub Copilot CLI runtime backend.
+    /// GitHub Copilot endpoint runtime backend.
     /// </summary>
-    public static readonly AgentBackendId Copilot = new("copilot_cli");
+    public static readonly AgentBackendId Copilot = new("copilot");
 
     /// <summary>
-    /// Codex app-server runtime backend.
+    /// Codex endpoint runtime backend.
     /// </summary>
-    public static readonly AgentBackendId Codex = new("codex_cli");
+    public static readonly AgentBackendId Codex = new("codex");
 
     /// <summary>
     /// OpenAI-compatible chat/completions runtime backend.

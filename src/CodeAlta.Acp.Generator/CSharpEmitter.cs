@@ -1435,8 +1435,8 @@ public class CSharpEmitter
 
     /// <summary>
     /// Converts a fully-qualified collection type like
-    /// <c>List&lt;CodeAlta.CodexSdk.UserInput&gt;</c> into a unique property name
-    /// like <c>ListCodeAltaCodexSdkUserInput</c> for the <c>TypeInfoPropertyName</c>.
+    /// <c>List&lt;Example.Namespace.UserInput&gt;</c> into a unique property name
+    /// like <c>ListExampleNamespaceUserInput</c> for the <c>TypeInfoPropertyName</c>.
     /// </summary>
     private static string CollectionTypeToPropName(string collectionType)
     {

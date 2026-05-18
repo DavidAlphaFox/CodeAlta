@@ -1,16 +1,13 @@
 using CodeAlta.Agent;
 using CodeAlta.Agent.Acp;
 using CodeAlta.Agent.Anthropic;
-using CodeAlta.Agent.Codex;
 using CodeAlta.Agent.Copilot;
 using CodeAlta.Agent.GoogleGenAI;
 using CodeAlta.Agent.ModelCatalog;
 using CodeAlta.Agent.OpenAI;
 using CodeAlta.Acp;
-using CodeAlta.Agent.CopilotCli;
 using CodeAlta.Catalog;
 using CodeAlta.Catalog.Skills;
-using CodeAlta.CodexSdk;
 using CodeAlta.Orchestration.Hosting;
 using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Plugins;
@@ -20,14 +17,11 @@ namespace CodeAlta.App;
 
 internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 {
-    private const string CodexPathOverrideEnvironmentVariable = "CODEALTA_CODEX_PATH";
-
     private readonly bool _ownsLogging;
     private readonly AgentBackendFactory _backendFactory;
     private readonly CodeAltaConfigStore _configStore;
     private readonly AcpInstalledBackendStore _installedBackendStore;
     private readonly List<AgentBackendDescriptor> _backendDescriptors;
-    private readonly CodexInstallProgressReporter _codexInstallProgress;
     private readonly ModelsDevCatalogService _modelsDevCatalogService;
 
     private CodeAltaOwnedServices(
@@ -35,7 +29,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         AgentBackendFactory backendFactory,
         CodeAltaConfigStore configStore,
         AcpInstalledBackendStore installedBackendStore,
-        CodexInstallProgressReporter codexInstallProgress,
         ModelsDevCatalogService modelsDevCatalogService,
         PluginRuntimeManager pluginRuntime,
         PluginHostBridge pluginHostBridge,
@@ -53,7 +46,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         _backendFactory = backendFactory;
         _configStore = configStore;
         _installedBackendStore = installedBackendStore;
-        _codexInstallProgress = codexInstallProgress;
         _modelsDevCatalogService = modelsDevCatalogService;
         PluginRuntime = pluginRuntime;
         PluginHostBridge = pluginHostBridge;
@@ -71,8 +63,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
     public CatalogOptions CatalogOptions { get; }
 
     public IReadOnlyList<AgentBackendDescriptor> BackendDescriptors => _backendDescriptors;
-
-    public CodexInstallProgressReporter CodexInstallProgress => _codexInstallProgress;
 
     internal ModelsDevCatalogService ModelsDevCatalogService => _modelsDevCatalogService;
 
@@ -106,7 +96,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         var ownsLogging = CodeAltaLogging.Initialize(homeRoot);
 
         Directory.CreateDirectory(cacheRoot);
-        var codexInstallProgress = new CodexInstallProgressReporter();
         var rawArguments = Environment.GetCommandLineArgs();
         var pluginBootstrapOptions = CodeAltaCliOptions.GetPluginBootstrapOptions(rawArguments);
         var catalogOptions = new CatalogOptions { GlobalRoot = homeRoot };
@@ -123,8 +112,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         var providerDefinitions = configStore.LoadGlobalProviderDefinitions(includeDisabled: true)
             .ToDictionary(static definition => definition.ProviderKey, StringComparer.OrdinalIgnoreCase);
         var backendDescriptors = new List<AgentBackendDescriptor>();
-        var codexPath = ResolveCodexExecutablePath(
-            Environment.GetEnvironmentVariable(CodexPathOverrideEnvironmentVariable));
         var pluginAltaServiceBridge = new PluginAltaServiceBridge();
         var sharedHost = await CodeAltaHost.CreateAsync(
                 new CodeAltaHostOptions
@@ -157,7 +144,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             backendFactory,
             configStore,
             installedBackendStore,
-            codexInstallProgress,
             modelsDevCatalogService,
             pluginRuntime,
             pluginHostBridge,
@@ -173,28 +159,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 
         void RegisterFrontendBackends(AgentBackendFactory backendFactory)
         {
-            if (providerDefinitions.TryGetValue("codex_cli", out var codexProvider) && codexProvider.Enabled != false)
-            {
-                backendFactory.RegisterCodex(
-                    new CodexAgentBackendOptions
-                    {
-                        ProcessOptions = new CodexProcessOptions
-                        {
-                            CodexPath = codexPath,
-                            LocalRootPath = cacheRoot,
-                            ReleaseTag = codexPath is null ? CodexClient.CompiledAgainstReleaseTag : null,
-                            Progress = codexPath is null ? codexInstallProgress : null,
-                        },
-                    });
-                backendDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Codex, codexProvider.DisplayName ?? "Codex CLI"));
-            }
-
-            if (providerDefinitions.TryGetValue("copilot_cli", out var copilotProvider) && copilotProvider.Enabled != false)
-            {
-                backendFactory.RegisterCopilot(CreateCopilotBackendOptions(copilotProvider, cacheRoot));
-                backendDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Copilot, copilotProvider.DisplayName ?? "Copilot CLI"));
-            }
-
             backendDescriptors.AddRange(
                 RawApiBackendRegistrar.RegisterConfiguredBackends(
                     backendFactory,
@@ -212,53 +176,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
                         acpOptions.DisplayName));
                 }
             }
-        }
-    }
-
-    internal static CopilotAgentBackendOptions CreateCopilotBackendOptions(
-        CodeAltaProviderDocument definition,
-        string cacheRoot)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-        ArgumentException.ThrowIfNullOrWhiteSpace(cacheRoot);
-
-        var clientOptions = new GitHub.Copilot.SDK.CopilotClientOptions();
-        if (!string.IsNullOrWhiteSpace(definition.CliPath))
-        {
-            clientOptions.CliPath = definition.CliPath.Trim();
-        }
-
-        return new CopilotAgentBackendOptions
-        {
-            ClientOptions = clientOptions,
-            CliInstallOptions = new CopilotCliInstallOptions
-            {
-                LocalRootPath = cacheRoot,
-                NpmRegistryUrl = string.IsNullOrWhiteSpace(definition.NpmRegistry) ? null : definition.NpmRegistry.Trim(),
-            },
-        };
-    }
-
-    internal static string? ResolveCodexExecutablePath(string? configuredOverridePath)
-    {
-        foreach (var candidate in EnumerateCodexExecutableCandidates(configuredOverridePath))
-        {
-            var fullPath = Path.GetFullPath(candidate);
-            if (File.Exists(fullPath))
-            {
-                return fullPath;
-            }
-        }
-
-        return null;
-    }
-
-    private static IEnumerable<string> EnumerateCodexExecutableCandidates(
-        string? configuredOverridePath)
-    {
-        if (!string.IsNullOrWhiteSpace(configuredOverridePath))
-        {
-            yield return configuredOverridePath;
         }
     }
 
@@ -280,8 +197,8 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
     {
         return
         [
-            new AgentBackendDescriptor(AgentBackendIds.Codex, "Codex CLI"),
-            new AgentBackendDescriptor(AgentBackendIds.Copilot, "Copilot CLI"),
+            new AgentBackendDescriptor(AgentBackendIds.Codex, "Codex"),
+            new AgentBackendDescriptor(AgentBackendIds.Copilot, "Copilot"),
         ];
     }
 
@@ -292,36 +209,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             .ToDictionary(static definition => definition.ProviderKey, StringComparer.OrdinalIgnoreCase);
         var expectedBackendIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var providerDescriptors = new List<AgentBackendDescriptor>();
-
-        if (providerDefinitions.TryGetValue("codex_cli", out var codexProvider) && codexProvider.Enabled != false)
-        {
-            var codexPath = ResolveCodexExecutablePath(Environment.GetEnvironmentVariable(CodexPathOverrideEnvironmentVariable));
-            // Codex is a process-backed runtime. Replacing the factory is enough for the
-            // next cold start; keep an already loaded backend alive across provider saves.
-            _backendFactory.RegisterOrReplaceCodex(
-                new CodexAgentBackendOptions
-                {
-                    ProcessOptions = new CodexProcessOptions
-                    {
-                        CodexPath = codexPath,
-                        LocalRootPath = Path.Combine(CatalogOptions.GlobalRoot, "cache"),
-                        ReleaseTag = codexPath is null ? CodexClient.CompiledAgainstReleaseTag : null,
-                        Progress = codexPath is null ? _codexInstallProgress : null,
-                    },
-                });
-            providerDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Codex, codexProvider.DisplayName ?? "Codex CLI"));
-            expectedBackendIds.Add(AgentBackendIds.Codex.Value);
-        }
-
-        if (providerDefinitions.TryGetValue("copilot_cli", out var copilotProvider) && copilotProvider.Enabled != false)
-        {
-            // Copilot is a process-backed runtime. Replacing the factory is enough for the
-            // next cold start; keep an already loaded backend alive across provider saves.
-            _backendFactory.RegisterOrReplaceCopilot(
-                CreateCopilotBackendOptions(copilotProvider, Path.Combine(CatalogOptions.GlobalRoot, "cache")));
-            providerDescriptors.Add(new AgentBackendDescriptor(AgentBackendIds.Copilot, copilotProvider.DisplayName ?? "Copilot CLI"));
-            expectedBackendIds.Add(AgentBackendIds.Copilot.Value);
-        }
 
         providerDescriptors.AddRange(
             RawApiBackendRegistrar.RegisterOrReplaceConfiguredBackends(

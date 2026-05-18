@@ -33,12 +33,12 @@ internal static class SidebarThreadPresentation
 
         if (string.Equals(providerKey, AgentBackendIds.Copilot.Value, StringComparison.OrdinalIgnoreCase))
         {
-            return "Copilot CLI";
+            return "Copilot";
         }
 
         if (string.Equals(providerKey, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase))
         {
-            return "Codex CLI";
+            return "Codex";
         }
 
         if (!string.IsNullOrWhiteSpace(providerKey) &&

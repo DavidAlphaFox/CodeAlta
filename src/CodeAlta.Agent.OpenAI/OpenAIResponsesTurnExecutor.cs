@@ -10,7 +10,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Agent.LocalRuntime.Tools;
-using CodeAlta.Agent.OpenAI.CodexSubscription;
+using CodeAlta.Agent.OpenAI.Codex;
 using OpenAI.Responses;
 using XenoAtom.Logging;
 
@@ -88,8 +88,8 @@ internal sealed class OpenAIResponsesTurnExecutor(
 
         try
         {
-            // Codex CLI treats dropped response streams as retryable turn-level failures and
-            // defaults to five reconnect attempts (six total attempts including the original).
+            // The Codex endpoint can drop long-lived response streams, so retry a small
+            // turn-level budget before surfacing the failure.
             var retryBudget = provider.CodexSubscription is null ? 1 : 6;
             var refreshedCredentialAfterUnauthorized = false;
             var activatedHttpFallbackAfterWebSocketRetries = false;
@@ -2137,7 +2137,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
         return new LocalAgentTurnSessionUpdate
         {
             Kind = AgentSessionUpdateKind.Warning,
-            Message = $"Waiting for CodeAlta's local ChatGPT/Codex concurrency guard: {maxConcurrentRequestsText} active request(s) for this ChatGPT account are already running. Codex CLI and pi-mono do not impose an equivalent account-wide limiter. To allow more parallel sessions, set max_concurrent_requests to a higher value under [providers.{providerKey}] in config.toml.",
+            Message = $"Waiting for CodeAlta's local ChatGPT/Codex concurrency guard: {maxConcurrentRequestsText} active request(s) for this ChatGPT account are already running. To allow more parallel sessions, set max_concurrent_requests to a higher value under [providers.{providerKey}] in config.toml.",
         };
     }
 

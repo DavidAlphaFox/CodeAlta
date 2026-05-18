@@ -18,8 +18,6 @@ internal sealed class ModelProvidersDialog
 {
     private static readonly ProviderTypeOption[] ProviderTypes =
     [
-        new("codex_cli", "Codex CLI"),
-        new("copilot_cli", "Copilot CLI"),
         new("openai-chat", "OpenAI Chat"),
         new("openai-responses", "OpenAI Responses"),
         new("codex", "Codex"),
@@ -145,8 +143,7 @@ internal sealed class ModelProvidersDialog
                 .Content(_providerList.Stretch())
                 .Padding(new Thickness(1, 0, 1, 0))
                 .HorizontalAlignment(Align.Stretch)
-                .VerticalAlignment(Align.Stretch),
-            new Markup("[dim]Tip: reserved providers stay in the list even when disabled.[/]") { Wrap = true })
+                .VerticalAlignment(Align.Stretch))
         {
             HorizontalAlignment = Align.Stretch,
             VerticalAlignment = Align.Stretch,
@@ -538,11 +535,6 @@ internal sealed class ModelProvidersDialog
         AddTextRow(form, ref row, "Provider Key", CreateKeyField(item), CreateSpacer());
         AddSelectRow(form, ref row, "Type", CreateTypeSelect(item), CreateSpacer());
         AddCheckRow(form, ref row, "Enabled", CreateEnabledCheckBox(item), CreateSpacer());
-        if (item.ProviderType is "codex" or "copilot")
-        {
-            AddCheckRow(form, ref row, "Experimental", CreateExperimentalCheckBox(item), CreateSpacer());
-        }
-
         AddTextRow(form, ref row, "Display Name", CreateDefaultTextField(bindings.DisplayName, () => item.UseDefaultDisplayName), CreateDefaultCheckBox("Default", bindings.UseDefaultDisplayName));
         AddTextRow(form, ref row, "Model", CreateDefaultTextField(bindings.Model, () => item.UseDefaultModel), CreateDefaultCheckBox("Default", bindings.UseDefaultModel));
         AddSelectRow(form, ref row, "Reasoning", CreateReasoningSelect(item), CreateDefaultCheckBox("Default", bindings.UseDefaultReasoningEffort));
@@ -758,12 +750,6 @@ internal sealed class ModelProvidersDialog
 
     private CheckBox CreateEnabledCheckBox(ModelProviderEditorItemViewModel item)
         => new CheckBox("Enabled").IsChecked(GetBindings(item).Enabled);
-
-    private CheckBox CreateExperimentalCheckBox(ModelProviderEditorItemViewModel item)
-        => new CheckBox(item.ProviderType == "copilot"
-                ? "I understand this Copilot provider is experimental"
-                : "I understand this ChatGPT/Codex subscription provider is experimental")
-            .IsChecked(GetBindings(item).Experimental);
 
     private Visual CreateReasoningSelect(ModelProviderEditorItemViewModel item)
     {
@@ -1349,8 +1335,6 @@ internal sealed class ModelProvidersDialog
             definition.ApiKey,
             definition.ApiKeyEnv,
             definition.ApiUrl,
-            definition.CliPath,
-            definition.NpmRegistry,
             definition.OrganizationId,
             definition.ProjectId,
             definition.Project,
@@ -1374,8 +1358,6 @@ internal sealed class ModelProvidersDialog
         string? ApiKey,
         string? ApiKeyEnv,
         string? ApiUrl,
-        string? CliPath,
-        string? NpmRegistry,
         string? OrganizationId,
         string? ProjectId,
         string? Project,

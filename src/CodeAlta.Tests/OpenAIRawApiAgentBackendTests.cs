@@ -12,7 +12,7 @@ using System.Text.Json;
 using CodeAlta.Agent;
 using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Agent.OpenAI;
-using CodeAlta.Agent.OpenAI.CodexSubscription;
+using CodeAlta.Agent.OpenAI.Codex;
 using OpenAI;
 using OpenAI.Chat;
 using OpenAI.Responses;

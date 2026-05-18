@@ -773,6 +773,7 @@ public sealed class CatalogInfrastructureTests
     {
         using var root = TempDirectory.Create();
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = root.Path });
+        store.EnsureGlobalConfigExists();
 
         store.SaveGlobalProviderPreference(AgentBackendIds.Codex.Value, "gpt-5.4", AgentReasoningEffort.High);
 
@@ -780,33 +781,32 @@ public sealed class CatalogInfrastructureTests
         var content = File.ReadAllText(configPath);
         var preference = store.GetEffectiveProviderPreference(AgentBackendIds.Codex.Value);
 
-        StringAssert.Contains(content, "[providers.codex_cli]");
+        StringAssert.Contains(content, "[providers.codex]");
         StringAssert.Contains(content, "gpt-5.4");
         StringAssert.Contains(content, "reasoning_effort = \"high\"");
         Assert.IsFalse(content.Contains("enabled = true", StringComparison.Ordinal));
-        Assert.IsFalse(content.Contains("display_name = \"Codex CLI\"", StringComparison.Ordinal));
-        Assert.IsFalse(content.Contains("type = \"codex_cli\"", StringComparison.Ordinal));
-        Assert.IsFalse(content.Contains("[providers.codex_cli.compaction]", StringComparison.Ordinal));
+        Assert.IsFalse(content.Contains("display_name = \"Codex\"", StringComparison.Ordinal));
+        Assert.IsFalse(content.Contains("[providers.codex.compaction]", StringComparison.Ordinal));
         Assert.AreEqual("gpt-5.4", preference.Model);
         Assert.AreEqual(AgentReasoningEffort.High, preference.ReasoningEffort);
     }
 
     [TestMethod]
-    public void CodeAltaConfigStore_SaveGlobalProviderPreference_PrunesReservedProviderDefaults()
+    public void CodeAltaConfigStore_SaveGlobalProviderPreference_PrunesProviderDefaults()
     {
         using var root = TempDirectory.Create();
         var configPath = Path.Combine(root.Path, "config.toml");
         File.WriteAllText(
             configPath,
             """
-            [providers.codex_cli]
+            [providers.codex]
             enabled = true
-            display_name = "Codex CLI"
-            type = "codex_cli"
+            display_name = "Codex"
+            type = "codex"
             model = "gpt-5.4"
             reasoning_effort = "high"
 
-            [providers.codex_cli.compaction]
+            [providers.codex.compaction]
             enabled = true
             ratio = 0.95
             """);
@@ -815,13 +815,12 @@ public sealed class CatalogInfrastructureTests
         store.SaveGlobalProviderPreference(AgentBackendIds.Codex.Value, "gpt-5.4", AgentReasoningEffort.High);
 
         var content = File.ReadAllText(configPath);
-        StringAssert.Contains(content, "[providers.codex_cli]");
+        StringAssert.Contains(content, "[providers.codex]");
         StringAssert.Contains(content, "model = \"gpt-5.4\"");
         StringAssert.Contains(content, "reasoning_effort = \"high\"");
         Assert.IsFalse(content.Contains("enabled = true", StringComparison.Ordinal));
-        Assert.IsFalse(content.Contains("display_name = \"Codex CLI\"", StringComparison.Ordinal));
-        Assert.IsFalse(content.Contains("type = \"codex_cli\"", StringComparison.Ordinal));
-        Assert.IsFalse(content.Contains("[providers.codex_cli.compaction]", StringComparison.Ordinal));
+        Assert.IsFalse(content.Contains("display_name = \"Codex\"", StringComparison.Ordinal));
+        Assert.IsFalse(content.Contains("[providers.codex.compaction]", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -832,7 +831,7 @@ public sealed class CatalogInfrastructureTests
 
         var content = store.LoadGlobalConfigContent();
 
-        StringAssert.Contains(content, "[providers.codex_cli]");
+        StringAssert.Contains(content, "[providers.codex]");
         Assert.IsFalse(File.Exists(Path.Combine(root.Path, "config.toml")));
     }
 
@@ -862,12 +861,13 @@ public sealed class CatalogInfrastructureTests
         Directory.CreateDirectory(Path.Combine(projectRoot, ".alta"));
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = root.Path });
+        store.EnsureGlobalConfigExists();
         store.SaveGlobalProviderPreference(AgentBackendIds.Codex.Value, "gpt-5.4", AgentReasoningEffort.High);
 
         File.WriteAllText(
             Path.Combine(projectRoot, ".alta", "config.toml"),
             """
-            [providers.codex_cli]
+            [providers.codex]
             reasoning_effort = "medium"
             """);
 

@@ -163,7 +163,7 @@ public sealed class ThreadProviderSwitchCoordinatorTests
     }
 
     [TestMethod]
-    public void CanSwitchThreadProvider_RejectsNativeTargets()
+    public void CanSwitchThreadProvider_AllowsDirectCodexTarget()
     {
         using var temp = TempDirectory.Create();
         WriteProviderConfig(temp.Path);
@@ -178,7 +178,7 @@ public sealed class ThreadProviderSwitchCoordinatorTests
         var tabState = CreateTabState(thread, "openai", "gpt-4.1");
 
         Assert.IsTrue(coordinator.CanSelectThreadProvider(thread, tabState));
-        Assert.IsFalse(coordinator.CanSwitchThreadProvider(thread, tabState, AgentBackendIds.Codex));
+        Assert.IsTrue(coordinator.CanSwitchThreadProvider(thread, tabState, AgentBackendIds.Codex));
     }
 
     private static void WriteProviderConfig(string root)
@@ -193,8 +193,6 @@ public sealed class ThreadProviderSwitchCoordinatorTests
             [providers.codex]
             type = "codex"
             model = "gpt-5.5"
-            experimental = true
-
             [providers.anthropic]
             type = "anthropic"
             api_key_env = "ANTHROPIC_API_KEY"

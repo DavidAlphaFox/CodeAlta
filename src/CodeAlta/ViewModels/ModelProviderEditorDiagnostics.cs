@@ -47,36 +47,11 @@ internal static class ModelProviderEditorDiagnostics
         Add(entries, ValidateVertexProject(item));
         Add(entries, ValidateVertexLocation(item));
 
-        if (!item.IsReserved && item.ProviderType is "codex_cli" or "copilot_cli")
-        {
-            entries.Add(new ModelProviderDiagnosticEntry(
-                ValidationSeverity.Error,
-                "Only the reserved codex_cli/copilot_cli entries can use built-in CLI provider types."));
-        }
-
         if (item.ProviderType == "vertex-ai" && item.Enabled)
         {
             entries.Add(new ModelProviderDiagnosticEntry(
                 ValidationSeverity.Info,
                 "Vertex AI uses Google application-default credentials from the current environment."));
-        }
-
-        if (item.ProviderType == "codex" && item.Enabled)
-        {
-            entries.Add(new ModelProviderDiagnosticEntry(
-                item.Experimental ? ValidationSeverity.Warning : ValidationSeverity.Error,
-                item.Experimental
-                    ? "Experimental ChatGPT/Codex subscription access may count against plan limits; CodeAlta will not rotate accounts or bypass limits."
-                    : "Enable the experimental opt-in before saving this ChatGPT/Codex subscription provider."));
-        }
-
-        if (item.ProviderType == "copilot" && item.Enabled)
-        {
-            entries.Add(new ModelProviderDiagnosticEntry(
-                item.Experimental ? ValidationSeverity.Warning : ValidationSeverity.Error,
-                item.Experimental
-                    ? "Experimental Copilot access uses Copilot HTTP endpoints directly and may be affected by account or organization policy."
-                    : "Enable the experimental opt-in before saving this Copilot provider."));
         }
 
         if (ShouldShowCustomApiUrlGuidance(item))
@@ -97,7 +72,7 @@ internal static class ModelProviderEditorDiagnostics
                  !string.IsNullOrWhiteSpace(item.LastTestMessage))
         {
             entries.Insert(0, new ModelProviderDiagnosticEntry(
-                IsCodexSubscription(item) ? ValidationSeverity.Warning : ValidationSeverity.Error,
+                ValidationSeverity.Error,
                 $"Last test failed: {item.LastTestMessage!.Trim()}"));
         }
 
@@ -264,7 +239,7 @@ internal static class ModelProviderEditorDiagnostics
         bool hasErrors,
         bool hasWarnings)
     {
-        if ((item.LastTestState == ModelProviderLastTestState.Failed && !IsCodexSubscription(item)) || hasErrors)
+        if (item.LastTestState == ModelProviderLastTestState.Failed || hasErrors)
         {
             return ModelProviderUiStatusKind.Error;
         }
@@ -274,7 +249,7 @@ internal static class ModelProviderEditorDiagnostics
             return ModelProviderUiStatusKind.Disabled;
         }
 
-        if (hasWarnings || (item.LastTestState == ModelProviderLastTestState.Failed && IsCodexSubscription(item)))
+        if (hasWarnings)
         {
             return ModelProviderUiStatusKind.Warning;
         }
@@ -357,7 +332,7 @@ internal static class ModelProviderEditorDiagnostics
         out string statusText)
     {
         statusText = string.Empty;
-        if (!item.Enabled || !item.Experimental)
+        if (!item.Enabled)
         {
             statusText = "Not configured";
             return true;
@@ -423,12 +398,6 @@ internal static class ModelProviderEditorDiagnostics
     private static bool IsCodexSubscription(ModelProviderEditorItemViewModel item)
         => string.Equals(item.ProviderType, "codex", StringComparison.Ordinal);
 
-    private static bool IsCopilotDirect(ModelProviderEditorItemViewModel item)
-        => string.Equals(item.ProviderType, "copilot", StringComparison.Ordinal);
-
     private static bool IsStatusNeutralDiagnostic(ModelProviderEditorItemViewModel item, ModelProviderDiagnosticEntry entry)
-        => (IsCodexSubscription(item) &&
-            entry.Message.StartsWith("Experimental ChatGPT/Codex subscription access", StringComparison.Ordinal)) ||
-           (IsCopilotDirect(item) &&
-            entry.Message.StartsWith("Experimental Copilot access", StringComparison.Ordinal));
+        => false;
 }
