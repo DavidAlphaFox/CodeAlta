@@ -84,6 +84,15 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
     }
 
     /// <inheritdoc />
+    public async Task<LocalAgentSessionSummary?> GetSessionAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        var projection = await TryProjectSessionAsync(sessionId, includeHistory: false, cancellationToken).ConfigureAwait(false);
+        return projection?.Summary;
+    }
+
+    /// <inheritdoc />
     public async IAsyncEnumerable<LocalAgentSessionSummary> ListSessionsAsync(
         string protocolFamily,
         string providerKey,
@@ -237,6 +246,15 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
         return MatchesScope(projection.Summary, protocolFamily, providerKey)
             ? projection.State
             : null;
+    }
+
+    /// <inheritdoc />
+    public async Task<LocalAgentSessionState?> GetStateAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        var projection = await TryProjectSessionAsync(sessionId, includeHistory: false, cancellationToken).ConfigureAwait(false);
+        return projection?.State;
     }
 
     /// <inheritdoc />

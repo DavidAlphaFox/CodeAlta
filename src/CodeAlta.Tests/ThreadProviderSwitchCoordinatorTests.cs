@@ -128,6 +128,41 @@ public sealed class ThreadProviderSwitchCoordinatorTests
     }
 
     [TestMethod]
+    public async Task SwitchThreadProviderAsync_DropsPreviousProviderModelSelection()
+    {
+        using var temp = TempDirectory.Create();
+        WriteProviderConfig(temp.Path);
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var createdAt = DateTimeOffset.Parse("2026-04-19T10:00:00+00:00");
+        var thread = CreateThread("session-1", "openai", createdAt);
+        thread.ModelId = "gpt-4.1";
+        var tabState = CreateTabState(thread, "openai", "gpt-4.1");
+        var coordinator = new ThreadProviderSwitchCoordinator(
+            new CodeAltaConfigStore(options),
+            CreateBackendStates(),
+            tab =>
+            {
+                tab.ModelId = "gpt-4.1";
+                tab.ReasoningEffort = AgentReasoningEffort.High;
+                return Task.CompletedTask;
+            },
+            static _ => Task.FromResult(true),
+            static _ => { },
+            static () => Task.CompletedTask);
+
+        var switched = await coordinator.SwitchThreadProviderAsync(
+            thread,
+            tabState,
+            new AgentBackendId("anthropic")).ConfigureAwait(false);
+
+        Assert.IsTrue(switched);
+        Assert.AreEqual("claude-sonnet-4", tabState.ModelId);
+        Assert.AreEqual("claude-sonnet-4", thread.ModelId);
+        Assert.AreEqual(AgentReasoningEffort.Medium, tabState.ReasoningEffort);
+        Assert.AreEqual(AgentReasoningEffort.Medium, thread.ReasoningEffort);
+    }
+
+    [TestMethod]
     public void CanSwitchThreadProvider_RejectsNativeTargets()
     {
         using var temp = TempDirectory.Create();
@@ -183,10 +218,28 @@ public sealed class ThreadProviderSwitchCoordinatorTests
     }
 
     private static ChatBackendState ReadyState(string backendId, string displayName)
-        => new(new AgentBackendId(backendId), displayName)
+    {
+        var state = new ChatBackendState(new AgentBackendId(backendId), displayName)
         {
             Availability = ChatBackendAvailability.Ready,
         };
+        if (string.Equals(backendId, "anthropic", StringComparison.OrdinalIgnoreCase))
+        {
+            state.Models.Add(new AgentModelInfo(
+                "claude-sonnet-4",
+                "Claude Sonnet 4",
+                SupportedReasoningEfforts: [AgentReasoningEffort.Low, AgentReasoningEffort.Medium]));
+            state.SelectedModelId = "claude-sonnet-4";
+            state.SelectedReasoningEffort = AgentReasoningEffort.Medium;
+        }
+        else if (string.Equals(backendId, "openai", StringComparison.OrdinalIgnoreCase))
+        {
+            state.Models.Add(new AgentModelInfo("gpt-4.1", "GPT-4.1"));
+            state.SelectedModelId = "gpt-4.1";
+        }
+
+        return state;
+    }
 
     private static WorkThreadDescriptor CreateThread(string threadId, string backendId, DateTimeOffset timestamp)
         => new()

@@ -264,7 +264,8 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
         ArgumentNullException.ThrowIfNull(options);
         await StartAsync(cancellationToken).ConfigureAwait(false);
 
-        foreach (var provider in _options.Providers)
+        var resumeProviders = GetResumeProviders(options).ToArray();
+        foreach (var provider in resumeProviders)
         {
             var summary = await Store.GetSessionAsync(
                     provider.Provider.ProtocolFamily,
@@ -310,6 +311,41 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
                 allowProviderContinuation: false);
         }
 
+        if (resumeProviders.Length == 1)
+        {
+            var provider = resumeProviders[0];
+            var summary = await Store.GetSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
+            if (summary is not null)
+            {
+                var state = await Store.GetStateAsync(sessionId, cancellationToken).ConfigureAwait(false)
+                    ?? new LocalAgentSessionState
+                    {
+                        SessionId = sessionId,
+                        ProtocolFamily = summary.ProtocolFamily,
+                        ProviderKey = summary.ProviderKey,
+                        UpdatedAt = summary.UpdatedAt,
+                    };
+                var history = await Store.ReadEventsAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                var now = DateTimeOffset.UtcNow;
+                summary = TransferSummaryToProvider(summary, provider.Provider, options, now);
+                state = TransferStateToProvider(state, provider.Provider, now);
+                await Store.UpsertSessionAsync(summary, cancellationToken).ConfigureAwait(false);
+                await Store.UpsertStateAsync(state, cancellationToken).ConfigureAwait(false);
+                (summary, state) = await RepairRecoveredUsageAsync(summary, state, history, provider, options, cancellationToken).ConfigureAwait(false);
+
+                return new LocalAgentSession(
+                    BackendId,
+                    provider.Provider,
+                    OverrideSummary(summary, options),
+                    state,
+                    history,
+                    Store,
+                    provider.TurnExecutor,
+                    options,
+                    allowProviderContinuation: false);
+            }
+        }
+
         throw new KeyNotFoundException($"The session '{sessionId}' was not found for backend '{BackendId.Value}'.");
     }
 
@@ -352,6 +388,45 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
 
         return preferred;
     }
+
+    private IReadOnlyList<LocalAgentBackendProviderRegistration> GetResumeProviders(AgentSessionResumeOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.ProviderKey))
+        {
+            return [ResolveProvider(options.ProviderKey)];
+        }
+
+        return _options.Providers;
+    }
+
+    private LocalAgentSessionSummary TransferSummaryToProvider(
+        LocalAgentSessionSummary summary,
+        LocalAgentProviderDescriptor provider,
+        AgentSessionResumeOptions options,
+        DateTimeOffset updatedAt)
+        => summary with
+        {
+            BackendId = BackendId,
+            ProtocolFamily = provider.ProtocolFamily,
+            ProviderKey = provider.ProviderKey,
+            ModelId = NormalizeOptionalText(options.Model),
+            WorkingDirectory = string.IsNullOrWhiteSpace(options.WorkingDirectory) ? summary.WorkingDirectory : options.WorkingDirectory,
+            Title = string.IsNullOrWhiteSpace(options.Title) ? summary.Title : options.Title.Trim(),
+            UpdatedAt = updatedAt,
+        };
+
+    private static LocalAgentSessionState TransferStateToProvider(
+        LocalAgentSessionState state,
+        LocalAgentProviderDescriptor provider,
+        DateTimeOffset updatedAt)
+        => state with
+        {
+            ProtocolFamily = provider.ProtocolFamily,
+            ProviderKey = provider.ProviderKey,
+            ProviderSessionId = null,
+            ProviderState = null,
+            UpdatedAt = updatedAt,
+        };
 
     private static LocalAgentSessionSummary OverrideSummary(
         LocalAgentSessionSummary summary,

@@ -29,6 +29,16 @@ public interface ILocalAgentSessionStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets a session summary without applying a provider-scope filter.
+    /// </summary>
+    /// <param name="sessionId">Local session identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The session summary when found; otherwise <see langword="null" />.</returns>
+    Task<LocalAgentSessionSummary?> GetSessionAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Lists sessions for a configured provider.
     /// </summary>
     /// <param name="protocolFamily">Protocol family.</param>
@@ -77,6 +87,16 @@ public interface ILocalAgentSessionStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Reads canonical session events without applying a provider-scope filter.
+    /// </summary>
+    /// <param name="sessionId">Local session identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The canonical event list when the session exists; otherwise an empty list.</returns>
+    Task<IReadOnlyList<AgentEvent>> ReadEventsAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Persists session state.
     /// </summary>
     /// <param name="state">Session state.</param>
@@ -96,6 +116,16 @@ public interface ILocalAgentSessionStore
     Task<LocalAgentSessionState?> GetStateAsync(
         string protocolFamily,
         string providerKey,
+        string sessionId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets session state without applying a provider-scope filter.
+    /// </summary>
+    /// <param name="sessionId">Local session identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The session state when found; otherwise <see langword="null" />.</returns>
+    Task<LocalAgentSessionState?> GetStateAsync(
         string sessionId,
         CancellationToken cancellationToken = default);
 

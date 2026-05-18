@@ -84,6 +84,86 @@ public sealed class LocalAgentBackendTests
     }
 
     [TestMethod]
+    public async Task LocalAgentBackend_ResumeSession_DifferentProvider_ReplaysStoredHistory()
+    {
+        using var temp = TestTempDirectory.Create();
+        var sourceExecutor = new RecordingTurnExecutor();
+        var sourceBackend = CreateBackend(
+            temp.Path,
+            sourceExecutor,
+            providerKey: "openai",
+            displayName: "OpenAI",
+            protocolFamily: "openai-responses",
+            transportKind: LocalAgentTransportKind.OpenAIResponses,
+            backendId: new AgentBackendId("openai"));
+
+        await using var sourceSession = await sourceBackend.CreateSessionAsync(
+                new AgentSessionCreateOptions
+                {
+                    ProviderKey = "openai",
+                    Title = "Switchable thread",
+                    Model = "gpt-5.4",
+                    WorkingDirectory = "C:\\repo\\sample",
+                    OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                })
+            .ConfigureAwait(false);
+
+        _ = await sourceSession.SendAsync(new AgentSendOptions { Input = AgentInput.Text("First prompt") }).ConfigureAwait(false);
+
+        var store = new FileSystemLocalAgentSessionStore(
+            new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var sourceState = await store.GetStateAsync("openai-responses", "openai", sourceSession.SessionId).ConfigureAwait(false);
+        Assert.IsNotNull(sourceState);
+        using var providerState = JsonDocument.Parse("""{"responseId":"resp_old"}""");
+        await store.UpsertStateAsync(sourceState with
+            {
+                ProviderSessionId = "resp_old",
+                ProviderState = providerState.RootElement.Clone(),
+            })
+            .ConfigureAwait(false);
+
+        var targetExecutor = new RecordingTurnExecutor();
+        var targetBackend = CreateBackend(
+            temp.Path,
+            targetExecutor,
+            providerKey: "anthropic",
+            displayName: "Anthropic",
+            protocolFamily: "anthropic-messages",
+            transportKind: LocalAgentTransportKind.AnthropicMessages,
+            backendId: new AgentBackendId("anthropic"));
+
+        await using var resumedSession = await targetBackend.ResumeSessionAsync(
+                sourceSession.SessionId,
+                new AgentSessionResumeOptions
+                {
+                    ProviderKey = "anthropic",
+                    Model = "claude-sonnet-4.5",
+                    WorkingDirectory = "C:\\repo\\sample",
+                    OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                })
+            .ConfigureAwait(false);
+
+        _ = await resumedSession.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Second prompt") }).ConfigureAwait(false);
+
+        Assert.AreEqual(1, targetExecutor.Requests.Count);
+        var request = targetExecutor.Requests[0];
+        Assert.AreEqual("anthropic", request.Provider.ProviderKey);
+        Assert.AreEqual("anthropic", request.State.ProviderKey);
+        Assert.AreEqual("anthropic-messages", request.State.ProtocolFamily);
+        Assert.IsNull(request.State.ProviderSessionId);
+        Assert.IsNull(request.State.ProviderState);
+        Assert.AreEqual(3, request.Conversation.Count);
+        Assert.AreEqual(LocalAgentConversationRole.User, request.Conversation[0].Role);
+        Assert.AreEqual(LocalAgentConversationRole.Assistant, request.Conversation[1].Role);
+        Assert.AreEqual(LocalAgentConversationRole.User, request.Conversation[2].Role);
+
+        var targetSummary = await store.GetSessionAsync("anthropic-messages", "anthropic", sourceSession.SessionId).ConfigureAwait(false);
+        Assert.IsNotNull(targetSummary);
+        Assert.AreEqual("claude-sonnet-4.5", targetSummary.ModelId);
+        Assert.IsNull(await store.GetSessionAsync("openai-responses", "openai", sourceSession.SessionId).ConfigureAwait(false));
+    }
+
+    [TestMethod]
     public async Task LocalAgentBackend_SendAsync_EmitsTurnDiffForBuiltInFileChanges()
     {
         using var temp = TestTempDirectory.Create();
@@ -321,10 +401,27 @@ public sealed class LocalAgentBackendTests
     }
 
     private static LocalAgentBackend CreateBackend(string tempRoot, ILocalAgentTurnExecutor executor)
+        => CreateBackend(
+            tempRoot,
+            executor,
+            providerKey: "openai",
+            displayName: "OpenAI",
+            protocolFamily: "openai-responses",
+            transportKind: LocalAgentTransportKind.OpenAIResponses,
+            backendId: AgentBackendIds.OpenAIResponses);
+
+    private static LocalAgentBackend CreateBackend(
+        string tempRoot,
+        ILocalAgentTurnExecutor executor,
+        string providerKey,
+        string displayName,
+        string protocolFamily,
+        LocalAgentTransportKind transportKind,
+        AgentBackendId backendId)
     {
         return new LocalAgentBackend(
-            AgentBackendIds.OpenAIResponses,
-            "OpenAI Responses",
+            backendId,
+            displayName,
             new LocalAgentBackendOptions
             {
                 StateRootPath = Path.Combine(tempRoot, "machine", "agents"),
@@ -334,11 +431,11 @@ public sealed class LocalAgentBackendTests
                     {
                         Provider = new LocalAgentProviderDescriptor
                         {
-                            ProtocolFamily = "openai-responses",
-                            ProviderKey = "openai",
-                            DisplayName = "OpenAI",
-                            BackendId = AgentBackendIds.OpenAIResponses,
-                            TransportKind = LocalAgentTransportKind.OpenAIResponses,
+                            ProtocolFamily = protocolFamily,
+                            ProviderKey = providerKey,
+                            DisplayName = displayName,
+                            BackendId = backendId,
+                            TransportKind = transportKind,
                             BaseUri = new Uri("https://api.openai.com/v1"),
                             IsDefault = true,
                             Profile = new LocalAgentProviderProfile

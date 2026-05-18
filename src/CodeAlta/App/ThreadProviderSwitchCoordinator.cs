@@ -2,6 +2,7 @@ using CodeAlta.Agent;
 using CodeAlta.App.State;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
+using CodeAlta.Presentation.Chat;
 
 namespace CodeAlta.App;
 
@@ -114,6 +115,7 @@ internal sealed class ThreadProviderSwitchCoordinator
         try
         {
             await _applyThreadPreferenceAsync(tab);
+            NormalizeTargetModelSelection(tab, targetBackend.BackendId);
             thread.ModelId = tab.ModelId;
             thread.ReasoningEffort = tab.ReasoningEffort;
             if (!string.IsNullOrWhiteSpace(oldThreadId))
@@ -147,6 +149,23 @@ internal sealed class ThreadProviderSwitchCoordinator
 
     private bool IsSwitchableSourceBackend(AgentBackendId backendId)
         => TryGetLocalRuntimeBackendInfo(backendId, out _) || IsNativeProviderBackend(backendId);
+
+    private void NormalizeTargetModelSelection(OpenThreadState tab, AgentBackendId targetBackendId)
+    {
+        if (!_chatBackendStates.TryGetValue(targetBackendId.Value, out var targetState) ||
+            targetState.Models.Count == 0 ||
+            string.IsNullOrWhiteSpace(tab.ModelId) ||
+            targetState.Models.Any(model => string.Equals(model.Id, tab.ModelId, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        tab.ModelId = ChatBackendPresentation.ResolvePreferredModelId(targetState.Models, targetState.SelectedModelId);
+        var selectedModel = ModelProviderPreferenceCoordinator.FindModel(targetState.Models, tab.ModelId);
+        tab.ReasoningEffort = ChatBackendPresentation.ResolvePreferredReasoningEffort(
+            selectedModel,
+            targetState.SelectedReasoningEffort);
+    }
 
     private static bool IsNativeProviderBackend(AgentBackendId backendId)
         => string.Equals(backendId.Value, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase) ||
