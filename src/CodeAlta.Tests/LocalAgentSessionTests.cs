@@ -925,6 +925,87 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public async Task LocalAgentSession_SendAsync_TruncatesOversizedToolOutputBeforeNextTurn()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider();
+        var summary = CreateSummary("session-oversized-tool-output");
+        var state = CreateState("session-oversized-tool-output");
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        var liveEvents = new List<AgentEvent>();
+        using var schema = JsonDocument.Parse("""{"type":"object"}""");
+        using var toolArguments = JsonDocument.Parse("""{"size":100000}""");
+        var initialUsage = CreateWindowUsageSnapshot(currentTokens: 780, tokenLimit: 1000, inputTokens: 760, outputTokens: 20);
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [
+                                new LocalAgentMessagePart.Text("Need tool output."),
+                                new LocalAgentMessagePart.ToolCall(
+                                    "call-oversized",
+                                    "emit_oversized_output",
+                                    toolArguments.RootElement.Clone()),
+                            ]),
+                        Usage = initialUsage,
+                    }),
+                (request, _, _) =>
+                {
+                    var toolResult = Assert.IsInstanceOfType<LocalAgentMessagePart.ToolResult>(request.Conversation[^1].Parts.Single());
+                    var text = Assert.IsInstanceOfType<AgentToolResultItem.Text>(toolResult.Result.Items.Single()).Value;
+                    Assert.IsTrue(text.Length < 2_000, $"Expected model-visible tool output to be truncated, got {text.Length} characters.");
+                    StringAssert.Contains(text, "was truncated from");
+                    Assert.IsNotNull(request.State.Usage);
+                    Assert.IsTrue(request.State.Usage!.CurrentTokens <= 1000, $"Expected usage to stay within the input limit, got {request.State.Usage.CurrentTokens}.");
+                    Assert.AreEqual(1000L, request.State.Usage.TokenLimit);
+                    return Task.FromResult(
+                        new LocalAgentTurnResponse
+                        {
+                            AssistantMessage = new LocalAgentConversationMessage(
+                                LocalAgentConversationRole.Assistant,
+                                [new LocalAgentMessagePart.Text("Done.")]),
+                            Usage = request.State.Usage,
+                        });
+                }),
+            new AgentSessionCreateOptions
+            {
+                ProviderKey = provider.ProviderKey,
+                Model = "gpt-5.4",
+                WorkingDirectory = temp.Path,
+                OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                Tools =
+                [
+                    new AgentToolDefinition(
+                        new AgentToolSpec("emit_oversized_output", "Emit oversized output", schema.RootElement.Clone()),
+                        static (_, _) => Task.FromResult(
+                            new AgentToolResult(
+                                true,
+                                [new AgentToolResultItem.Text(new string('x', 100_000))]))),
+                ],
+            });
+        using var subscription = session.Subscribe(liveEvents.Add);
+
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Trigger oversized tool output") }).ConfigureAwait(false);
+
+        var usageEvent = liveEvents.OfType<AgentSessionUpdateEvent>()
+            .LastOrDefault(static evt => evt.Kind == AgentSessionUpdateKind.UsageUpdated && evt.Usage?.LastOperation is null);
+        Assert.IsNotNull(usageEvent);
+        Assert.IsTrue(usageEvent.Usage!.CurrentTokens <= 1000, $"Expected live usage to stay within the input limit, got {usageEvent.Usage.CurrentTokens}.");
+    }
+
+    [TestMethod]
     public async Task LocalAgentSession_SendAsync_DoesNotResetWindowWhenProviderReportsContinuationDeltaUsage()
     {
         using var temp = TestTempDirectory.Create();
@@ -1292,6 +1373,16 @@ public sealed class LocalAgentSessionTests
         Assert.AreEqual(checkpoint.KeptMessages.Count, checkpoint.KeptMessageCount);
         Assert.IsTrue(checkpoint.SummaryCallCount >= 1);
         Assert.IsTrue(checkpoint.SummaryPromptInputTokens > 0);
+        Assert.AreEqual(LocalAgentCompactionSettings.DefaultPostCompactionTargetRatio, checkpoint.TargetRatio!.Value, 0.0001d);
+        Assert.IsNotNull(checkpoint.TargetTokens);
+        Assert.IsNotNull(checkpoint.TargetMet);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(checkpoint.TargetMissReason));
+        if (checkpoint.TargetMet == true)
+        {
+            Assert.AreEqual("none", checkpoint.TargetMissReason);
+        }
+
+        Assert.IsNotNull(checkpoint.PlanningAttemptCount);
 
         var completedUpdate = persistedHistory
             .OfType<AgentSessionUpdateEvent>()
@@ -1300,6 +1391,8 @@ public sealed class LocalAgentSessionTests
         Assert.AreEqual("codealta.localCompaction.v1", completedUpdate.Details.Value.GetProperty("schema").GetString());
         Assert.AreEqual(checkpoint.Summary, completedUpdate.Details.Value.GetProperty("summaryMarkdown").GetString());
         Assert.AreEqual(checkpoint.SummaryCallCount, completedUpdate.Details.Value.GetProperty("summaryCallCount").GetInt32());
+        Assert.AreEqual(checkpoint.TargetTokens, completedUpdate.Details.Value.GetProperty("targetTokens").GetInt64());
+        Assert.AreEqual(checkpoint.TargetMet, completedUpdate.Details.Value.GetProperty("targetMet").GetBoolean());
 
         var persistedState = await store.GetStateAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
         Assert.IsNotNull(persistedState);
@@ -1372,7 +1465,7 @@ public sealed class LocalAgentSessionTests
             [],
             usage: null).Tokens;
         var anchorTokens = LocalAgentTokenEstimator.EstimateMessage(secondUserMessage);
-        var inputContextLimit = (fixedTokens + 64 + anchorTokens + 20) * 2L;
+        var inputContextLimit = (long)Math.Ceiling((fixedTokens + 64 + anchorTokens + 20) / LocalAgentCompactionSettings.DefaultPostCompactionTargetRatio);
         var compactionRatio = Math.Max(0.20d, Math.Min(0.95d, (estimatedPromptTokens - 1d) / inputContextLimit));
 
         var preparation = LocalAgentCompactionPlanner.Prepare(
@@ -1396,8 +1489,7 @@ public sealed class LocalAgentSessionTests
         Assert.IsNotNull(preparation);
         Assert.AreEqual("user:2", preparation!.AnchorContentId);
         Assert.IsTrue(preparation.MessagesToSummarize.Count >= 1);
-        Assert.IsTrue(preparation.MessagesToKeep.Count >= 1);
-        Assert.AreEqual(secondUserMessage, preparation.MessagesToKeep[0]);
+        Assert.IsTrue(preparation.TurnPrefixMessages.Contains(secondUserMessage) || preparation.MessagesToKeep.Contains(secondUserMessage));
     }
 
     [TestMethod]
@@ -1476,7 +1568,7 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
-    public void LocalAgentCompactionPlanner_Preparation_CapsPromptBudgetOverrideAtHalfInputLimit()
+    public void LocalAgentCompactionPlanner_Preparation_AllowsExplicitFallbackPromptBudgetUpToHardInputLimit()
     {
         var latestUserMessage = new LocalAgentConversationMessage(
             LocalAgentConversationRole.User,
@@ -1510,10 +1602,11 @@ public sealed class LocalAgentSessionTests
         Assert.IsNotNull(preparation);
         var retainedTokens = preparation!.TurnPrefixMessages.Concat(preparation.MessagesToKeep).Sum(LocalAgentTokenEstimator.EstimateMessage);
         Assert.IsTrue(
-            retainedTokens <= 1_000,
-            $"Expected retained prompt tokens to stay within half the input limit, but got {retainedTokens}.");
-        Assert.IsTrue(preparation.MessagesToKeep.Count < suffixMessages.Length);
-        Assert.IsTrue(preparation.MessagesToSummarize.Any(message => suffixMessages.Contains(message)));
+            retainedTokens <= 2_000,
+            $"Expected explicit fallback prompt tokens to stay within the hard input limit, but got {retainedTokens}.");
+        Assert.IsTrue(
+            retainedTokens > 1_000,
+            $"Expected the explicit hard-fit fallback to be allowed above the default preferred target, but got {retainedTokens}.");
     }
 
     [TestMethod]
@@ -2460,7 +2553,7 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
-    public async Task LocalAgentSession_CompactAsync_PassesModelSummaryOutputTokenLimitToSummarizer()
+    public async Task LocalAgentSession_CompactAsync_UsesTargetAwareSummaryOutputLimitBeforeProviderClamp()
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
@@ -2547,7 +2640,7 @@ public sealed class LocalAgentSessionTests
         var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);
         Assert.IsNotNull(outcome);
         Assert.IsTrue(outcome.Success);
-        CollectionAssert.AreEqual(new int?[] { 320 }, observedMaxOutputTokens);
+        CollectionAssert.AreEqual(new int?[] { 122 }, observedMaxOutputTokens);
     }
 
     [TestMethod]
@@ -2635,7 +2728,7 @@ public sealed class LocalAgentSessionTests
         var outcome = await ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync().ConfigureAwait(false);
         Assert.IsNotNull(outcome);
         Assert.IsTrue(outcome.Success);
-        CollectionAssert.AreEqual(new int?[] { 1000 }, observedMaxOutputTokens);
+        CollectionAssert.AreEqual(new int?[] { 400 }, observedMaxOutputTokens);
     }
 
     [TestMethod]
@@ -2718,7 +2811,10 @@ public sealed class LocalAgentSessionTests
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
-        var provider = CreateProvider();
+        var provider = CreateProvider(LocalAgentCompactionSettings.Default with
+        {
+            PostCompactionTargetRatio = 0.50,
+        });
         var summary = CreateSummary("session-summary-output-clamped");
         var state = CreateState("session-summary-output-clamped");
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
@@ -3198,7 +3294,7 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
-    public async Task LocalAgentSession_CompactAsync_AllowsOversizedGeneratedSummary()
+    public async Task LocalAgentSession_CompactAsync_ShrinksOversizedGeneratedSummary()
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
@@ -3214,6 +3310,7 @@ public sealed class LocalAgentSessionTests
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
         var summaryAttempts = 0;
+        var shrinkAttempts = 0;
         await using var session = new LocalAgentSession(
             AgentBackendIds.OpenAIResponses,
             provider,
@@ -3233,8 +3330,43 @@ public sealed class LocalAgentSessionTests
                             ["outputTokenLimit"] = 64L,
                         }),
                 ],
-                (_, _, _) =>
+                (request, _, _) =>
                 {
+                    if (request.SystemMessage?.Contains("CodeAlta compaction summary shrinker", StringComparison.Ordinal) == true)
+                    {
+                        shrinkAttempts++;
+                        return Task.FromResult(
+                            new LocalAgentTurnResponse
+                            {
+                                AssistantMessage = new LocalAgentConversationMessage(
+                                    LocalAgentConversationRole.Assistant,
+                                    [new LocalAgentMessagePart.Text(
+                                        """
+                                        ## Objective
+                                        Continue the task.
+                                        ## Active User Request
+                                        Second prompt
+                                        ## Constraints
+                                        - Keep the summary tight.
+                                        ## Progress
+                                        ### Done
+                                        - Earlier work summarized.
+                                        ### In Progress
+                                        - Continue.
+                                        ### Blocked
+                                        - None recorded.
+                                        ## Decisions
+                                        - Shrink verbose compaction summaries.
+                                        ## Next Steps
+                                        - Continue from compacted context.
+                                        ## Critical Context
+                                        - Oversized generated summary was rewritten.
+                                        ## Relevant Files
+                                        - None tracked.
+                                        """)]),
+                            });
+                    }
+
                     summaryAttempts++;
                     return Task.FromResult(
                         new LocalAgentTurnResponse
@@ -3268,6 +3400,7 @@ public sealed class LocalAgentSessionTests
         Assert.IsNotNull(outcome);
         Assert.IsTrue(outcome.Success);
         Assert.AreEqual(1, summaryAttempts);
+        Assert.AreEqual(1, shrinkAttempts);
         var persistedState = await store.GetStateAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
         Assert.IsNotNull(persistedState);
         Assert.IsNotNull(persistedState.CompactionCheckpointEventId);
@@ -3278,7 +3411,8 @@ public sealed class LocalAgentSessionTests
             .Last(static evt => evt.BackendEventType == "local.compactionCheckpoint");
         var checkpoint = checkpointEvent.Raw.Deserialize(AgentJsonSerializerContext.Default.LocalAgentCompactionCheckpoint);
         Assert.IsNotNull(checkpoint);
-        Assert.IsTrue(LocalAgentTokenEstimator.EstimateTextTokens(checkpoint!.Summary) > 256);
+        Assert.IsTrue(LocalAgentTokenEstimator.EstimateTextTokens(checkpoint!.Summary) <= 256);
+        Assert.AreEqual(2, checkpoint.SummaryCallCount);
     }
 
     [TestMethod]
@@ -3432,6 +3566,30 @@ public sealed class LocalAgentSessionTests
         Assert.AreEqual(
             150 + LocalAgentTokenEstimator.EstimateMessage(conversation[2]) + LocalAgentTokenEstimator.EstimateMessage(conversation[3]),
             estimate.Tokens);
+    }
+
+    [TestMethod]
+    public void LocalAgentCompactionCheckpoint_OldJsonWithoutTargetFields_Deserializes()
+    {
+        var checkpoint = JsonSerializer.Deserialize(
+            """
+            {
+              "version": 2,
+              "contentId": "compaction:old",
+              "trigger": "manual",
+              "summary": "## Objective\nContinue.",
+              "tokensBefore": 1000,
+              "summarizedMessageCount": 4
+            }
+            """,
+            AgentJsonSerializerContext.Default.LocalAgentCompactionCheckpoint);
+
+        Assert.IsNotNull(checkpoint);
+        Assert.AreEqual("compaction:old", checkpoint!.ContentId);
+        Assert.IsNull(checkpoint.TargetRatio);
+        Assert.IsNull(checkpoint.TargetTokens);
+        Assert.IsNull(checkpoint.TargetMet);
+        Assert.IsNull(checkpoint.TargetMissReason);
     }
 
     [TestMethod]
@@ -3931,6 +4089,7 @@ public sealed class LocalAgentSessionTests
         {
             if (_summaryHandler is not null &&
                 (request.SystemMessage?.Contains("CodeAlta compaction summarizer", StringComparison.Ordinal) == true ||
+                 request.SystemMessage?.Contains("CodeAlta compaction summary shrinker", StringComparison.Ordinal) == true ||
                  request.SystemMessage?.Contains("CodeAlta oversized-anchor reducer", StringComparison.Ordinal) == true))
             {
                 return _summaryHandler(request, onUpdate, cancellationToken);
@@ -3966,7 +4125,8 @@ public sealed class LocalAgentSessionTests
             Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
             CancellationToken cancellationToken = default)
         {
-            if (request.SystemMessage?.Contains("CodeAlta compaction summarizer", StringComparison.Ordinal) == true)
+            if (request.SystemMessage?.Contains("CodeAlta compaction summarizer", StringComparison.Ordinal) == true ||
+                request.SystemMessage?.Contains("CodeAlta compaction summary shrinker", StringComparison.Ordinal) == true)
             {
                 return Task.FromResult(
                     new LocalAgentTurnResponse

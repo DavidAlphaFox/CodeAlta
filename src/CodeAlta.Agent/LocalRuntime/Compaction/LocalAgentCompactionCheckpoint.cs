@@ -198,6 +198,61 @@ public sealed record LocalAgentCompactionCheckpoint
     public bool OversizedAnchorReduced { get; init; }
 
     /// <summary>
+    /// Gets or initializes the preferred post-compaction active-context target ratio.
+    /// </summary>
+    public double? TargetRatio { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the preferred post-compaction active-context token target.
+    /// </summary>
+    public long? TargetTokens { get; init; }
+
+    /// <summary>
+    /// Gets or initializes whether the realized post-compaction context met the preferred target.
+    /// </summary>
+    public bool? TargetMet { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the reason the preferred target was missed, when known.
+    /// </summary>
+    public string? TargetMissReason { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the number of bounded planning attempts used before accepting the checkpoint.
+    /// </summary>
+    public int? PlanningAttemptCount { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the realized post-compaction active-context ratio against the input-context limit.
+    /// </summary>
+    public double? PostCompactionInputRatio { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the estimated checkpoint token count.
+    /// </summary>
+    public long? CheckpointTokens { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the estimated fixed system/developer prompt token count included in target planning.
+    /// </summary>
+    public long? FixedPromptTokens { get; init; }
+
+    /// <summary>
+    /// Gets or initializes the estimated token count of retained messages after compaction.
+    /// </summary>
+    public long? RetainedMessageTokens { get; init; }
+
+    /// <summary>
+    /// Gets or initializes how many read files were exposed to the model-visible summary prompt.
+    /// </summary>
+    public int? ModelVisibleReadFileCount { get; init; }
+
+    /// <summary>
+    /// Gets or initializes how many modified files were exposed to the model-visible summary prompt.
+    /// </summary>
+    public int? ModelVisibleModifiedFileCount { get; init; }
+
+    /// <summary>
     /// Creates the synthetic replay message for the checkpoint.
     /// </summary>
     /// <returns>The replay message.</returns>

@@ -22,6 +22,8 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
     private const string SkillActivationEventType = "local.skillActivation";
     private const string CompactionSnapshotEventType = "local.compactionSnapshot";
     private const string CompactionCheckpointEventType = "local.compactionCheckpoint";
+    private const int FallbackModelVisibleToolResultCharacterLimit = 120_000;
+    private const int ToolResultTruncationFooterReserve = 512;
     private static readonly Regex SkillContentTagRegex = new(
         "<skill_content\\b(?<attributes>[^>]*)>",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -370,9 +372,15 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
 
                     var toolDiff = toolFileChangeTracker?.CreateUnifiedDiff();
 
+                    var modelVisibleResult = CreateModelVisibleToolResult(
+                        toolCall,
+                        result,
+                        instructionBundle.SystemMessage,
+                        instructionBundle.DeveloperInstructions,
+                        modelInfo);
                     var toolMessage = new LocalAgentConversationMessage(
                         LocalAgentConversationRole.Tool,
-                        [new LocalAgentMessagePart.ToolResult(toolCall.CallId, result)]);
+                        [new LocalAgentMessagePart.ToolResult(toolCall.CallId, modelVisibleResult)]);
                     _conversation.Add(toolMessage);
 
                     var completed = new AgentActivityEvent(
@@ -1432,17 +1440,30 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             now,
             currentPromptEstimate.IsEstimated ? "Estimated active context" : "Active context window");
         var checkpointContentId = $"compaction:{Guid.CreateVersion7()}";
-        var summarizerMaxOutputTokens = GetCompactionSummarizerMaxOutputTokens(settings, budget);
+        var postCompactionTargetRatio = ResolvePostCompactionTargetRatio(settings);
+        var postCompactionTargetTokens = ResolvePostCompactionTargetTokens(settings, budget);
+        var checkpointTargetTokens = ResolveCheckpointTargetTokens(settings, postCompactionTargetTokens);
+        var summarizerMaxOutputTokens = GetCompactionSummarizerMaxOutputTokens(settings, budget, postCompactionTargetTokens);
+        var fixedPromptTokens = LocalAgentTokenEstimator.EstimatePromptTokens(
+            systemMessage,
+            developerInstructions,
+            [],
+            usage: null).Tokens;
         LocalAgentCompactionPreparation? preparation = null;
         LocalAgentCompactionResult? result = null;
         LocalAgentCompactionCheckpoint? checkpoint = null;
         LocalAgentConversationMessage? checkpointMessage = null;
         IReadOnlyList<LocalAgentConversationMessage>? retainedConversation = null;
         long? checkpointTokenEstimate = null;
+        var planningAttemptCount = 0;
+        var shrinkAttempted = false;
 
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            long? promptBudgetOverride = attempt == 0 ? null : budget.InputContextLimit ?? currentPromptTokens;
+            planningAttemptCount = attempt + 1;
+            long? promptBudgetOverride = attempt == 2
+                ? budget.InputContextLimit ?? currentPromptTokens
+                : postCompactionTargetTokens;
             var keepAnchorOnly = attempt == 2;
             try
             {
@@ -1534,6 +1555,16 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                 SummaryCallCount = summaryResult.SummaryCallCount,
                 SummaryMaxOutputTokens = summaryResult.SummaryMaxOutputTokens,
                 CompressionRatio = summaryResult.CompressionRatio,
+                TargetRatio = postCompactionTargetRatio,
+                TargetTokens = postCompactionTargetTokens,
+                TargetMet = null,
+                TargetMissReason = null,
+                PlanningAttemptCount = planningAttemptCount,
+                CheckpointTokens = checkpointTokenEstimate,
+                FixedPromptTokens = fixedPromptTokens,
+                RetainedMessageTokens = retainedConversation.Sum(LocalAgentTokenEstimator.EstimateMessage),
+                ModelVisibleReadFileCount = summaryResult.ModelVisibleReadFileCount,
+                ModelVisibleModifiedFileCount = summaryResult.ModelVisibleModifiedFileCount,
                 ReadFiles = summaryResult.ReadFiles,
                 ModifiedFiles = summaryResult.ModifiedFiles,
                 OmittedToolResultCount = summaryResult.SerializerStatistics.OmittedToolResultCount,
@@ -1572,17 +1603,102 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             var compressionRatio = summaryResult.TokensBefore > 0
                 ? (double)tokensAfter / summaryResult.TokensBefore
                 : (double?)null;
+            var targetMet = tokensAfter <= postCompactionTargetTokens;
+            if (!targetMet &&
+                !shrinkAttempted &&
+                attempt < 2 &&
+                ShouldShrinkCompactionSummary(postCompactionTargetTokens, checkpointTokenEstimate.Value, checkpointTargetTokens))
+            {
+                shrinkAttempted = true;
+                summaryResult = await _compactionSummarizer.ShrinkSummaryAsync(
+                        BackendId,
+                        Provider,
+                        SessionId,
+                        _summary.ModelId ?? _options.Model,
+                        modelInfo,
+                        _summary.WorkingDirectory,
+                        _state,
+                        summaryResult,
+                        latestUserRequest,
+                        checkpointTargetTokens,
+                        summarizerMaxOutputTokens,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                checkpointTokenEstimate = LocalAgentTokenEstimator.EstimateCheckpointTokens(summaryResult.Summary);
+                checkpoint = checkpoint with
+                {
+                    Summary = summaryResult.Summary,
+                    SummaryPromptInputTokens = summaryResult.SummaryPromptInputTokens,
+                    SummaryCallCount = summaryResult.SummaryCallCount,
+                    SummaryMaxOutputTokens = summaryResult.SummaryMaxOutputTokens,
+                    CheckpointTokens = checkpointTokenEstimate,
+                    ModelVisibleReadFileCount = summaryResult.ModelVisibleReadFileCount,
+                    ModelVisibleModifiedFileCount = summaryResult.ModelVisibleModifiedFileCount,
+                };
+                checkpointMessage = checkpoint.CreateMessage();
+                candidateConversation = new List<LocalAgentConversationMessage>(retainedConversation.Count + 1)
+                {
+                    checkpointMessage,
+                };
+                candidateConversation.AddRange(retainedConversation);
+                tokensAfter = LocalAgentTokenEstimator.EstimatePromptTokens(
+                    systemMessage,
+                    developerInstructions,
+                    candidateConversation,
+                    usage: null).Tokens;
+                compressionRatio = summaryResult.TokensBefore > 0
+                    ? (double)tokensAfter / summaryResult.TokensBefore
+                    : (double?)null;
+                targetMet = tokensAfter <= postCompactionTargetTokens;
+            }
+
             if (FitsResolvedPromptBudget(tokensAfter, budget))
             {
+                if (!targetMet && attempt < 2)
+                {
+                    continue;
+                }
+
+                var retainedMessageTokens = retainedConversation.Sum(LocalAgentTokenEstimator.EstimateMessage);
+                var postCompactionInputRatio = budget.InputContextLimit is > 0
+                    ? (double)tokensAfter / budget.InputContextLimit.Value
+                    : (double?)null;
+                var targetMissReason = DetermineTargetMissReason(
+                    preparation,
+                    summaryResult,
+                    targetMet,
+                    postCompactionTargetTokens,
+                    fixedPromptTokens,
+                    checkpointTokenEstimate.Value,
+                    retainedMessageTokens);
                 result = summaryResult with
                 {
                     TokensAfter = tokensAfter,
                     CompressionRatio = compressionRatio,
+                    TargetRatio = postCompactionTargetRatio,
+                    TargetTokens = postCompactionTargetTokens,
+                    TargetMet = targetMet,
+                    TargetMissReason = targetMissReason,
+                    PlanningAttemptCount = planningAttemptCount,
+                    PostCompactionInputRatio = postCompactionInputRatio,
+                    CheckpointTokens = checkpointTokenEstimate,
+                    FixedPromptTokens = fixedPromptTokens,
+                    RetainedMessageTokens = retainedMessageTokens,
                 };
                 checkpoint = checkpoint with
                 {
                     TokensAfter = tokensAfter,
                     CompressionRatio = compressionRatio,
+                    TargetRatio = postCompactionTargetRatio,
+                    TargetTokens = postCompactionTargetTokens,
+                    TargetMet = targetMet,
+                    TargetMissReason = targetMissReason,
+                    PlanningAttemptCount = planningAttemptCount,
+                    PostCompactionInputRatio = postCompactionInputRatio,
+                    CheckpointTokens = checkpointTokenEstimate,
+                    FixedPromptTokens = fixedPromptTokens,
+                    RetainedMessageTokens = retainedMessageTokens,
                 };
                 break;
             }
@@ -1659,14 +1775,20 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
 
     private static int GetCompactionSummarizerMaxOutputTokens(
         LocalAgentCompactionSettings settings,
-        LocalAgentTokenBudget budget)
+        LocalAgentTokenBudget budget,
+        long postCompactionTargetTokens)
     {
         var ratio = settings.SummaryOutputRatio > 0
             ? Math.Min(settings.SummaryOutputRatio, LocalAgentCompactionSettings.MaxSummaryOutputRatio)
             : LocalAgentCompactionSettings.DefaultSummaryOutputRatio;
-        var desired = budget.InputContextLimit is > 0
+        var hardCap = budget.InputContextLimit is > 0
             ? (long)Math.Ceiling(budget.InputContextLimit.Value * ratio)
             : 1L;
+        var summaryShare = settings.SummaryShareOfTarget > 0
+            ? Math.Min(settings.SummaryShareOfTarget, LocalAgentCompactionSettings.MaxSummaryShareOfTarget)
+            : LocalAgentCompactionSettings.DefaultSummaryShareOfTarget;
+        var desired = Math.Max((long)Math.Floor(postCompactionTargetTokens * summaryShare), 1L);
+        desired = Math.Min(desired, hardCap);
 
         if (budget.MaxOutputTokens is > 0)
         {
@@ -1674,6 +1796,81 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         }
 
         return (int)Math.Clamp(desired, 1L, int.MaxValue);
+    }
+
+    private static double ResolvePostCompactionTargetRatio(LocalAgentCompactionSettings settings)
+        => settings.PostCompactionTargetRatio > 0
+            ? Math.Min(settings.PostCompactionTargetRatio, LocalAgentCompactionSettings.MaxPostCompactionTargetRatio)
+            : LocalAgentCompactionSettings.DefaultPostCompactionTargetRatio;
+
+    private static long ResolvePostCompactionTargetTokens(LocalAgentCompactionSettings settings, LocalAgentTokenBudget budget)
+    {
+        var inputContextLimit = budget.InputContextLimit is > 0
+            ? budget.InputContextLimit.Value
+            : 1L;
+        return Math.Max((long)Math.Floor(inputContextLimit * ResolvePostCompactionTargetRatio(settings)), 1L);
+    }
+
+    private static long ResolveCheckpointTargetTokens(LocalAgentCompactionSettings settings, long postCompactionTargetTokens)
+    {
+        var summaryShare = settings.SummaryShareOfTarget > 0
+            ? Math.Min(settings.SummaryShareOfTarget, LocalAgentCompactionSettings.MaxSummaryShareOfTarget)
+            : LocalAgentCompactionSettings.DefaultSummaryShareOfTarget;
+        return Math.Max((long)Math.Floor(postCompactionTargetTokens * summaryShare), 1L);
+    }
+
+    private static bool ShouldShrinkCompactionSummary(
+        long postCompactionTargetTokens,
+        long checkpointTokens,
+        long checkpointTargetTokens)
+    {
+        var relativeSummarySizeThreshold = Math.Max(checkpointTargetTokens, postCompactionTargetTokens / 2);
+        return checkpointTokens > checkpointTargetTokens || checkpointTokens >= relativeSummarySizeThreshold;
+    }
+
+    private static string DetermineTargetMissReason(
+        LocalAgentCompactionPreparation preparation,
+        LocalAgentCompactionResult result,
+        bool targetMet,
+        long postCompactionTargetTokens,
+        long fixedPromptTokens,
+        long checkpointTokens,
+        long retainedMessageTokens)
+    {
+        if (targetMet)
+        {
+            return "none";
+        }
+
+        if (fixedPromptTokens >= postCompactionTargetTokens)
+        {
+            return "fixed_prompt";
+        }
+
+        if (result.OversizedAnchorReduced || preparation.OversizedAnchorMessage is not null)
+        {
+            return result.OversizedAnchorReduced ? "oversized_anchor_reduced" : "latest_user_anchor";
+        }
+
+        var anchorTokens = preparation.TurnPrefixMessages
+            .Where(static message => message.Role is LocalAgentConversationRole.User)
+            .Sum(LocalAgentTokenEstimator.EstimateMessage);
+        if (anchorTokens > 0 && fixedPromptTokens + checkpointTokens + anchorTokens > postCompactionTargetTokens)
+        {
+            return "latest_user_anchor";
+        }
+
+        if (fixedPromptTokens + checkpointTokens > postCompactionTargetTokens || checkpointTokens >= postCompactionTargetTokens / 2)
+        {
+            return "summary_size";
+        }
+
+        if (retainedMessageTokens > 0)
+        {
+            return "retained_suffix";
+        }
+
+        return "input_fit_only";
     }
 
     private static JsonElement CreateCompactionDetailsElement(LocalAgentCompactionCheckpoint checkpoint)
@@ -1710,6 +1907,79 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                 writer.WriteNull("compressionRatio");
             }
 
+            if (checkpoint.TargetRatio is { } targetRatio)
+            {
+                writer.WriteNumber("targetRatio", targetRatio);
+            }
+            else
+            {
+                writer.WriteNull("targetRatio");
+            }
+
+            if (checkpoint.TargetTokens is { } targetTokens)
+            {
+                writer.WriteNumber("targetTokens", targetTokens);
+            }
+            else
+            {
+                writer.WriteNull("targetTokens");
+            }
+
+            if (checkpoint.TargetMet is { } targetMet)
+            {
+                writer.WriteBoolean("targetMet", targetMet);
+            }
+            else
+            {
+                writer.WriteNull("targetMet");
+            }
+
+            writer.WriteString("targetMissReason", checkpoint.TargetMissReason);
+            if (checkpoint.PlanningAttemptCount is { } planningAttemptCount)
+            {
+                writer.WriteNumber("planningAttemptCount", planningAttemptCount);
+            }
+            else
+            {
+                writer.WriteNull("planningAttemptCount");
+            }
+
+            if (checkpoint.PostCompactionInputRatio is { } postCompactionInputRatio)
+            {
+                writer.WriteNumber("postCompactionInputRatio", postCompactionInputRatio);
+            }
+            else
+            {
+                writer.WriteNull("postCompactionInputRatio");
+            }
+
+            if (checkpoint.CheckpointTokens is { } checkpointTokens)
+            {
+                writer.WriteNumber("checkpointTokens", checkpointTokens);
+            }
+            else
+            {
+                writer.WriteNull("checkpointTokens");
+            }
+
+            if (checkpoint.FixedPromptTokens is { } fixedPromptTokens)
+            {
+                writer.WriteNumber("fixedPromptTokens", fixedPromptTokens);
+            }
+            else
+            {
+                writer.WriteNull("fixedPromptTokens");
+            }
+
+            if (checkpoint.RetainedMessageTokens is { } retainedMessageTokens)
+            {
+                writer.WriteNumber("retainedMessageTokens", retainedMessageTokens);
+            }
+            else
+            {
+                writer.WriteNull("retainedMessageTokens");
+            }
+
             writer.WriteNumber("summarizedMessageCount", checkpoint.SummarizedMessageCount);
             writer.WriteNumber("keptMessageCount", checkpoint.KeptMessageCount);
             writer.WriteNumber("messagesAfter", checkpoint.KeptMessageCount + 1);
@@ -1737,6 +2007,24 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             writer.WriteNumber("serializedReasoningCount", checkpoint.SerializedReasoningCount);
             writer.WriteNumber("totalAttachmentCount", checkpoint.TotalAttachmentCount);
             writer.WriteNumber("serializedAttachmentCount", checkpoint.SerializedAttachmentCount);
+            if (checkpoint.ModelVisibleReadFileCount is { } modelVisibleReadFileCount)
+            {
+                writer.WriteNumber("modelVisibleReadFileCount", modelVisibleReadFileCount);
+            }
+            else
+            {
+                writer.WriteNull("modelVisibleReadFileCount");
+            }
+
+            if (checkpoint.ModelVisibleModifiedFileCount is { } modelVisibleModifiedFileCount)
+            {
+                writer.WriteNumber("modelVisibleModifiedFileCount", modelVisibleModifiedFileCount);
+            }
+            else
+            {
+                writer.WriteNull("modelVisibleModifiedFileCount");
+            }
+
             WriteStringArray(writer, "readFiles", checkpoint.ReadFiles);
             WriteStringArray(writer, "modifiedFiles", checkpoint.ModifiedFiles);
             writer.WriteEndObject();
@@ -2027,6 +2315,91 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         return string.IsNullOrWhiteSpace(rendered)
             ? (result.Error ?? "(no output)")
             : rendered;
+    }
+
+    private AgentToolResult CreateModelVisibleToolResult(
+        LocalAgentMessagePart.ToolCall toolCall,
+        AgentToolResult result,
+        string? systemMessage,
+        string? developerInstructions,
+        AgentModelInfo? modelInfo)
+    {
+        ArgumentNullException.ThrowIfNull(toolCall);
+        ArgumentNullException.ThrowIfNull(result);
+
+        if (IsSkillActivationTool(toolCall.Name))
+        {
+            return result;
+        }
+
+        var rendered = RenderToolResult(result);
+        var characterLimit = ResolveModelVisibleToolResultCharacterLimit(systemMessage, developerInstructions, modelInfo);
+        if (characterLimit <= 0 || rendered.Length <= characterLimit)
+        {
+            return result;
+        }
+
+        var excerpt = CreateModelVisibleToolResultExcerpt(toolCall.Name, rendered, characterLimit);
+        return result with
+        {
+            Items = [new AgentToolResultItem.Text(excerpt)],
+        };
+    }
+
+    private int ResolveModelVisibleToolResultCharacterLimit(
+        string? systemMessage,
+        string? developerInstructions,
+        AgentModelInfo? modelInfo)
+    {
+        var settings = Provider.Compaction ?? LocalAgentCompactionSettings.Default;
+        var budget = LocalAgentTokenBudgetResolver.Resolve(modelInfo, settings);
+        var inputLimit = budget.InputContextLimit ?? _state.Usage?.TokenLimit;
+        if (inputLimit is not > 0)
+        {
+            return FallbackModelVisibleToolResultCharacterLimit;
+        }
+
+        var thresholdTokens = Math.Max((long)Math.Floor(inputLimit.Value * settings.Ratio), 1L);
+        var perToolTokenLimit = Math.Max((long)Math.Floor(inputLimit.Value * LocalAgentCompactionSettings.DefaultPostCompactionTargetRatio), 1L);
+        var providerConversation = CreateProviderConversation();
+        var currentEstimate = LocalAgentTokenEstimator.EstimatePromptTokens(
+            systemMessage,
+            developerInstructions,
+            providerConversation.Messages,
+            providerConversation.PrunedImageCount > 0 ? null : _state.Usage);
+        var remainingTokens = Math.Max(thresholdTokens - currentEstimate.Tokens, 0L);
+        var allowedTokens = Math.Min(perToolTokenLimit, remainingTokens);
+        if (allowedTokens <= 0)
+        {
+            return ToolResultTruncationFooterReserve;
+        }
+
+        var allowedCharacters = allowedTokens * 4L;
+        return (int)Math.Min(Math.Max(allowedCharacters, ToolResultTruncationFooterReserve), int.MaxValue);
+    }
+
+    private static string CreateModelVisibleToolResultExcerpt(string toolName, string output, int characterLimit)
+    {
+        var footer = Environment.NewLine + Environment.NewLine +
+            $"[CodeAlta: tool '{toolName}' output was truncated from {output.Length:#,0} characters to keep the active context within the model input limit. Re-run the tool with narrower arguments if more detail is needed.]";
+        if (characterLimit <= footer.Length + 32)
+        {
+            return footer.Trim();
+        }
+
+        var contentBudget = characterLimit - footer.Length;
+        var headLength = Math.Max((int)Math.Floor(contentBudget * 0.70d), 0);
+        var tailLength = Math.Max(contentBudget - headLength, 0);
+        if (headLength + tailLength >= output.Length)
+        {
+            return output;
+        }
+
+        var head = output[..headLength].TrimEnd();
+        var tail = tailLength == 0 ? string.Empty : output[^tailLength..].TrimStart();
+        return string.IsNullOrEmpty(tail)
+            ? head + footer
+            : head + footer + Environment.NewLine + Environment.NewLine + tail;
     }
 
     private static AgentToolResult CreateToolExecutionFailureResult(string toolName, Exception exception)

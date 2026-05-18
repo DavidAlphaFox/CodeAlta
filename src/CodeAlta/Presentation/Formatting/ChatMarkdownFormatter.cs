@@ -196,6 +196,12 @@ internal static class ChatMarkdownFormatter
         var tokensAfter = GetLongProperty(details, "tokensAfter");
         var tokensRemoved = GetLongProperty(details, "tokensRemoved");
         var compressionRatio = GetDoubleProperty(details, "compressionRatio");
+        var targetRatio = GetDoubleProperty(details, "targetRatio");
+        var targetTokens = GetLongProperty(details, "targetTokens");
+        var targetMet = GetBoolProperty(details, "targetMet");
+        _ = TryGetStringProperty(details, "targetMissReason", out var targetMissReason);
+        var planningAttemptCount = GetIntProperty(details, "planningAttemptCount");
+        var postCompactionInputRatio = GetDoubleProperty(details, "postCompactionInputRatio");
         var summarizedMessages = GetIntProperty(details, "summarizedMessageCount");
         var keptMessages = GetIntProperty(details, "keptMessageCount");
         var messagesAfter = GetIntProperty(details, "messagesAfter");
@@ -251,6 +257,46 @@ internal static class ChatMarkdownFormatter
             builder.Append("- Context before: ")
                 .Append(FormatCompactNumber(tokensBefore.Value))
                 .AppendLine(" tokens");
+        }
+
+        if (targetTokens is not null || targetRatio is not null || targetMet is not null)
+        {
+            builder.Append("- Target: ");
+            if (targetTokens is not null)
+            {
+                builder.Append(FormatCompactNumber(targetTokens.Value)).Append(" tokens");
+            }
+            else
+            {
+                builder.Append("unknown tokens");
+            }
+
+            if (targetRatio is not null)
+            {
+                builder.Append(" (").Append(FormatPercent(targetRatio.Value)).Append(" of input limit)");
+            }
+
+            if (postCompactionInputRatio is not null)
+            {
+                builder.Append(", actual ").Append(FormatPercent(postCompactionInputRatio.Value)).Append(" of input limit");
+            }
+
+            if (targetMet is not null)
+            {
+                builder.Append(targetMet.Value ? ", met" : ", missed");
+            }
+
+            if (targetMet is false && !string.IsNullOrWhiteSpace(targetMissReason) && !string.Equals(targetMissReason, "none", StringComparison.OrdinalIgnoreCase))
+            {
+                builder.Append(" (").Append(FormatTargetMissReason(targetMissReason)).Append(')');
+            }
+
+            if (planningAttemptCount is > 1)
+            {
+                builder.Append(", ").Append(planningAttemptCount.Value).Append(" planning attempts");
+            }
+
+            builder.AppendLine();
         }
 
         builder.Append("- Messages: summarized ")
@@ -408,6 +454,20 @@ internal static class ChatMarkdownFormatter
 
     private static string FormatPercent(double value)
         => value.ToString("P1", CultureInfo.InvariantCulture);
+
+    private static string FormatTargetMissReason(string reason)
+    {
+        return reason switch
+        {
+            "fixed_prompt" => "fixed prompt exceeded target",
+            "oversized_anchor_reduced" => "latest user anchor required reduction",
+            "latest_user_anchor" => "latest user anchor exceeded target",
+            "summary_size" => "checkpoint summary exceeded target",
+            "retained_suffix" => "retained suffix exceeded target",
+            "input_fit_only" => "accepted to fit the input limit",
+            _ => reason.Replace('_', ' '),
+        };
+    }
 
     public static string GetSessionUpdateHeader(AgentSessionUpdateKind kind)
     {

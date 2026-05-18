@@ -45,7 +45,18 @@ internal sealed record LocalAgentCompactionResult(
     double? CompressionRatio,
     LocalAgentCompactionSerializerStatistics SerializerStatistics,
     IReadOnlyList<string> ReadFiles,
-    IReadOnlyList<string> ModifiedFiles);
+    IReadOnlyList<string> ModifiedFiles,
+    double? TargetRatio = null,
+    long? TargetTokens = null,
+    bool? TargetMet = null,
+    string? TargetMissReason = null,
+    int? PlanningAttemptCount = null,
+    double? PostCompactionInputRatio = null,
+    long? CheckpointTokens = null,
+    long? FixedPromptTokens = null,
+    long? RetainedMessageTokens = null,
+    int? ModelVisibleReadFileCount = null,
+    int? ModelVisibleModifiedFileCount = null);
 
 internal sealed record LocalAgentCompactionSummaryRequest(
     AgentBackendId BackendId,

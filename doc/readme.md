@@ -212,13 +212,18 @@ The preferred workflow is now the in-app model providers dialog (`Ctrl+G Ctrl+R`
 - can save, reload from disk, and test a provider before applying changes
 - preserves advanced TOML settings such as `profile`, `compaction`, `extra_body`, `model_overrides`, and `protocol_trace` from the form and exposes an Advanced TOML editor for direct validated edits to the same `config.toml` file
 
-When CodeAlta writes `config.toml` back, it now omits properties that match built-in defaults such as `enabled = true`, reserved-provider `type`/`display_name`, and default compaction values. Local raw-API compaction uses a simplified optional block; automatic compaction starts when the projected active context reaches `inputTokenLimit * ratio`, defaulting to `0.95`. Compaction summarizer calls are also capped by `inputTokenLimit * summary_output_ratio`, defaulting to `0.10` and configurable up to `0.50`, while still respecting any smaller model output limit:
+When CodeAlta writes `config.toml` back, it now omits properties that match built-in defaults such as `enabled = true`, reserved-provider `type`/`display_name`, and default compaction values. Local raw-API compaction uses a simplified optional block; automatic compaction starts when the projected active context reaches `inputTokenLimit * ratio`, defaulting to `0.95`. Post-compaction planning targets `inputTokenLimit * post_compaction_target_ratio` by default (`0.10`) while still allowing explicit hard-fit fallbacks with target-miss diagnostics. Compaction summarizer calls are capped by `inputTokenLimit * summary_output_ratio`, defaulting to `0.10` and configurable up to `0.50`, and the default request budget is additionally bounded by `summary_share_of_target` (`0.40`) while still respecting any smaller model output limit:
 
 ```toml
 [providers.openai_responses.compaction]
 enabled = true
 ratio = 0.95
 summary_output_ratio = 0.10
+post_compaction_target_ratio = 0.10
+summary_share_of_target = 0.40
+file_context_share_of_summary_target = 0.15
+keep_last_user_message = true
+allow_split_turn = true
 ```
 
 The context-usage indicator uses the same input-token denominator. If only a total `context_window` is known it is treated as the practical input limit; if both total context and output limit are known, CodeAlta derives the input side from `context_window - output_token_limit` unless an explicit input limit is configured.

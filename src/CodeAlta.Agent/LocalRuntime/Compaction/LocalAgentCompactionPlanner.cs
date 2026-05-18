@@ -3,7 +3,6 @@ namespace CodeAlta.Agent.LocalRuntime.Compaction;
 internal static class LocalAgentCompactionPlanner
 {
     private const bool DefaultReduceOversizedAnchors = true;
-    private const double DefaultRetainedPromptBudgetRatio = 0.50;
 
     public static LocalAgentCompactionPreparation? Prepare(
         LocalAgentCompactionTrigger trigger,
@@ -44,7 +43,7 @@ internal static class LocalAgentCompactionPlanner
             ?? (previousSummary is null
                 ? 64L
                 : Math.Max(LocalAgentTokenEstimator.EstimateCheckpointTokens(previousSummary), 64L));
-        var promptBudget = ResolveRetainedPromptBudget(tokensBefore.Tokens, budget.InputContextLimit, promptBudgetOverride);
+        var promptBudget = ResolveRetainedPromptBudget(tokensBefore.Tokens, budget.InputContextLimit, settings, promptBudgetOverride);
         var fixedTokenCost = LocalAgentTokenEstimator.EstimatePromptTokens(
             systemMessage,
             developerInstructions,
@@ -109,27 +108,34 @@ internal static class LocalAgentCompactionPlanner
     private static long ResolveRetainedPromptBudget(
         long tokensBefore,
         long? inputContextLimit,
+        LocalAgentCompactionSettings settings,
         long? promptBudgetOverride)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+
         if (promptBudgetOverride is > 0)
         {
             if (inputContextLimit is > 0)
             {
-                var retainedPromptBudget = ResolveRetainedPromptBudget(inputContextLimit.Value);
-                return Math.Max(Math.Min(promptBudgetOverride.Value, retainedPromptBudget), 1L);
+                return Math.Max(Math.Min(promptBudgetOverride.Value, inputContextLimit.Value), 1L);
             }
 
             return promptBudgetOverride.Value;
         }
 
         var resolvedPromptBudget = inputContextLimit is > 0
-            ? ResolveRetainedPromptBudget(inputContextLimit.Value)
+            ? ResolveRetainedPromptBudget(inputContextLimit.Value, settings)
             : Math.Max(tokensBefore / 2, 1L);
         return Math.Max(resolvedPromptBudget, 1L);
     }
 
-    private static long ResolveRetainedPromptBudget(long inputContextLimit)
-        => Math.Max((long)Math.Floor(inputContextLimit * DefaultRetainedPromptBudgetRatio), 1L);
+    private static long ResolveRetainedPromptBudget(long inputContextLimit, LocalAgentCompactionSettings settings)
+    {
+        var ratio = settings.PostCompactionTargetRatio > 0
+            ? Math.Min(settings.PostCompactionTargetRatio, LocalAgentCompactionSettings.MaxPostCompactionTargetRatio)
+            : LocalAgentCompactionSettings.DefaultPostCompactionTargetRatio;
+        return Math.Max((long)Math.Floor(inputContextLimit * ratio), 1L);
+    }
 
     private static (IReadOnlyList<int> TurnPrefixIndexes, IReadOnlyList<int> SuffixIndexes, bool IsSplitTurn, int? OversizedAnchorGroupIndex) BuildPlan(
         IReadOnlyList<MessageGroup> groups,

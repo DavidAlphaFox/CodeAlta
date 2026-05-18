@@ -70,6 +70,21 @@ public sealed class CodeAltaProviderCompactionDocument
 
     [JsonPropertyName("summary_output_ratio")]
     public double? SummaryOutputRatio { get; set; }
+
+    [JsonPropertyName("post_compaction_target_ratio")]
+    public double? PostCompactionTargetRatio { get; set; }
+
+    [JsonPropertyName("summary_share_of_target")]
+    public double? SummaryShareOfTarget { get; set; }
+
+    [JsonPropertyName("file_context_share_of_summary_target")]
+    public double? FileContextShareOfSummaryTarget { get; set; }
+
+    [JsonPropertyName("keep_last_user_message")]
+    public bool? KeepLastUserMessage { get; set; }
+
+    [JsonPropertyName("allow_split_turn")]
+    public bool? AllowSplitTurn { get; set; }
 }
 
 /// <summary>

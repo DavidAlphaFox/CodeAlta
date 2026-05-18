@@ -28,7 +28,35 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
 
         Preserve exact file paths, identifiers, tool names, and critical error text when present.
         Keep the summary concise, continuation-oriented, and optimized for replay.
-        When a previous summary is provided, update it rather than rewriting from scratch.
+        When a previous summary is provided, update it by preserving still-relevant facts and retiring stale implementation detail; do not append indefinitely.
+        Keep Done milestone-level rather than changelog-like. Keep exact commit hashes only when the next agent must reference them.
+        Prefer current state, unresolved blockers, verification status, next steps, and active files over exhaustive historical progress.
+        Replace stale file lists with current dirty, modified, read, or otherwise active files when newer file activity is provided.
+        """;
+
+    private const string ShrinkSystemPromptTemplate =
+        """
+        You are the CodeAlta compaction summary shrinker.
+
+        Rewrite the supplied compaction checkpoint into a smaller continuation handoff.
+        Do not continue the conversation. Do not answer the user's task. Do not invent work.
+
+        Return only markdown with exactly these top-level sections in this order:
+        ## Objective
+        ## Active User Request
+        ## Constraints
+        ## Progress
+        ### Done
+        ### In Progress
+        ### Blocked
+        ## Decisions
+        ## Next Steps
+        ## Critical Context
+        ## Relevant Files
+
+        Preserve only continuation-critical facts: active objective, explicit constraints, current state, unresolved blockers, next steps, current verification status, active files, exact paths, identifiers, commands, and critical error text.
+        Retire stale completed details, old exploratory file lists, old commit hashes unless needed next, and archival narration.
+        Prefer compact bullets over prose.
         """;
 
     private const string OversizedAnchorSystemPromptTemplate =
@@ -73,6 +101,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
 
         var settings = provider.Compaction ?? LocalAgentCompactionSettings.Default;
         var fileActivity = ExtractFileActivity(history);
+        var modelVisibleFileActivity = BudgetFileActivityForSummary(fileActivity, latestUserRequest, settings, maxOutputTokens);
         string? oversizedAnchorSynopsis = null;
         var oversizedAnchorInvocationCount = 0;
         if (preparation.OversizedAnchorMessage is not null)
@@ -105,6 +134,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                 maxOutputTokens,
                 settings,
                 fileActivity,
+                modelVisibleFileActivity,
                 oversizedAnchorSynopsis,
                 oversizedAnchorInvocationCount,
                 currentPass: 1,
@@ -114,6 +144,63 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         {
             ReadFiles = fileActivity.ReadFiles,
             ModifiedFiles = fileActivity.ModifiedFiles,
+            ModelVisibleReadFileCount = modelVisibleFileActivity.ReadFiles.Count,
+            ModelVisibleModifiedFileCount = modelVisibleFileActivity.ModifiedFiles.Count,
+        };
+    }
+
+    public async Task<LocalAgentCompactionResult> ShrinkSummaryAsync(
+        AgentBackendId backendId,
+        LocalAgentProviderDescriptor provider,
+        string sessionId,
+        string? modelId,
+        AgentModelInfo? modelInfo,
+        string? workingDirectory,
+        LocalAgentSessionState state,
+        LocalAgentCompactionResult result,
+        string? latestUserRequest,
+        long checkpointTargetTokens,
+        int maxOutputTokens,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(result);
+
+        var settings = provider.Compaction ?? LocalAgentCompactionSettings.Default;
+        var completeFileActivity = new FileActivity(result.ReadFiles, result.ModifiedFiles);
+        var modelVisibleFileActivity = BudgetFileActivityForSummary(completeFileActivity, latestUserRequest, settings, maxOutputTokens);
+        var userMessage = BuildShrinkRequestBody(result.Summary, latestUserRequest, modelVisibleFileActivity, checkpointTargetTokens);
+        var response = await ExecuteSummaryRequestAsync(
+                backendId,
+                provider,
+                sessionId,
+                modelId,
+                modelInfo,
+                workingDirectory,
+                state,
+                CreateShrinkSystemPrompt(maxOutputTokens, checkpointTargetTokens),
+                userMessage,
+                Math.Max(maxOutputTokens, 1),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var normalizedSummary = NormalizeSummary(
+            response.Summary,
+            latestUserRequest,
+            result.Summary,
+            modelVisibleFileActivity,
+            maxOutputTokens);
+        ValidateSummaryShape(normalizedSummary);
+
+        return result with
+        {
+            Summary = normalizedSummary,
+            SummaryCallCount = result.SummaryCallCount + 1,
+            SummaryPromptInputTokens = result.SummaryPromptInputTokens + LocalAgentTokenEstimator.EstimateTextTokens(userMessage),
+            SummaryMaxOutputTokens = maxOutputTokens,
+            ModelVisibleReadFileCount = modelVisibleFileActivity.ReadFiles.Count,
+            ModelVisibleModifiedFileCount = modelVisibleFileActivity.ModifiedFiles.Count,
         };
     }
 
@@ -130,6 +217,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         int maxOutputTokens,
         LocalAgentCompactionSettings settings,
         FileActivity fileActivity,
+        FileActivity modelVisibleFileActivity,
         string? oversizedAnchorSynopsis,
         int additionalSummaryCallCount,
         int currentPass,
@@ -138,8 +226,8 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         var serialization = LocalAgentCompactionSerializer.BuildSummaryRequestBody(
             preparation,
             latestUserRequest,
-            fileActivity.ReadFiles,
-            fileActivity.ModifiedFiles,
+            modelVisibleFileActivity.ReadFiles,
+            modelVisibleFileActivity.ModifiedFiles,
             settings,
             oversizedAnchorSynopsis,
             preparation.OversizedAnchorMessage is not null);
@@ -147,7 +235,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         var chunks = GetChunksIfNeeded(
             preparation,
             latestUserRequest,
-            fileActivity,
+            modelVisibleFileActivity,
             settings,
             modelInfo,
             oversizedAnchorSynopsis,
@@ -172,6 +260,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                     maxOutputTokens,
                     settings,
                     fileActivity,
+                    modelVisibleFileActivity,
                     oversizedAnchorSynopsis,
                     additionalSummaryCallCount,
                     currentPass,
@@ -196,7 +285,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
             response.Summary,
             latestUserRequest,
             preparation.PreviousSummary,
-            fileActivity,
+            modelVisibleFileActivity,
             maxOutputTokens);
         ValidateSummaryShape(normalizedSummary);
 
@@ -217,7 +306,9 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
             CompressionRatio: null,
             SerializerStatistics: serialization.Statistics,
             ReadFiles: fileActivity.ReadFiles,
-            ModifiedFiles: fileActivity.ModifiedFiles);
+            ModifiedFiles: fileActivity.ModifiedFiles,
+            ModelVisibleReadFileCount: modelVisibleFileActivity.ReadFiles.Count,
+            ModelVisibleModifiedFileCount: modelVisibleFileActivity.ModifiedFiles.Count);
     }
 
     private async Task<LocalAgentCompactionResult> SummarizeChunkedAsync(
@@ -233,12 +324,13 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         int maxOutputTokens,
         LocalAgentCompactionSettings settings,
         FileActivity fileActivity,
+        FileActivity modelVisibleFileActivity,
         string? oversizedAnchorSynopsis,
         int additionalSummaryCallCount,
         int currentPass,
         CancellationToken cancellationToken)
     {
-        var chunks = GetChunksIfNeeded(preparation, latestUserRequest, fileActivity, settings, modelInfo, oversizedAnchorSynopsis, maxOutputTokens);
+        var chunks = GetChunksIfNeeded(preparation, latestUserRequest, modelVisibleFileActivity, settings, modelInfo, oversizedAnchorSynopsis, maxOutputTokens);
         if (chunks.Count <= 1)
         {
             chunks = [preparation.MessagesToSummarize];
@@ -283,6 +375,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                     maxOutputTokens,
                     settings,
                     fileActivity,
+                    modelVisibleFileActivity,
                     oversizedAnchorSynopsis,
                     additionalSummaryCallCount: 0,
                     currentPass + 1,
@@ -321,6 +414,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                     maxOutputTokens,
                     settings,
                     fileActivity,
+                    modelVisibleFileActivity,
                     oversizedAnchorSynopsis,
                     additionalSummaryCallCount: 0,
                     currentPass + 1,
@@ -353,7 +447,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
     private IReadOnlyList<IReadOnlyList<LocalAgentConversationMessage>> GetChunksIfNeeded(
         LocalAgentCompactionPreparation preparation,
         string? latestUserRequest,
-        FileActivity fileActivity,
+        FileActivity modelVisibleFileActivity,
         LocalAgentCompactionSettings settings,
         AgentModelInfo? modelInfo,
         string? oversizedAnchorSynopsis,
@@ -369,8 +463,8 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                         MessagesToKeep = [],
                     },
                     latestUserRequest,
-                    fileActivity.ReadFiles,
-                    fileActivity.ModifiedFiles,
+                    modelVisibleFileActivity.ReadFiles,
+                    modelVisibleFileActivity.ModifiedFiles,
                     settings,
                     oversizedAnchorSynopsis,
                     preparation.OversizedAnchorMessage is not null)
@@ -598,8 +692,8 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
             "- Resume from the latest retained context.");
         var relevantFiles = FirstNonEmpty(
             GetSection(currentSections, "## Relevant Files"),
-            GetSection(previousSections, "## Relevant Files"),
             BuildRelevantFilesSection(fileActivity),
+            GetSection(previousSections, "## Relevant Files"),
             "- None tracked.");
 
         var criticalContext = FirstNonEmpty(
@@ -715,6 +809,100 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         return new FileActivity(readFiles, modifiedFiles);
     }
 
+    private static FileActivity BudgetFileActivityForSummary(
+        FileActivity fileActivity,
+        string? latestUserRequest,
+        LocalAgentCompactionSettings settings,
+        int maxOutputTokens)
+    {
+        ArgumentNullException.ThrowIfNull(fileActivity);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (fileActivity.ReadFiles.Count == 0 && fileActivity.ModifiedFiles.Count == 0)
+        {
+            return fileActivity;
+        }
+
+        var share = settings.FileContextShareOfSummaryTarget >= 0
+            ? Math.Min(settings.FileContextShareOfSummaryTarget, LocalAgentCompactionSettings.MaxFileContextShareOfSummaryTarget)
+            : LocalAgentCompactionSettings.DefaultFileContextShareOfSummaryTarget;
+        if (share <= 0)
+        {
+            return new FileActivity([], []);
+        }
+
+        var budgetTokens = Math.Max((long)Math.Floor(Math.Max(maxOutputTokens, 1) * share), 1L);
+        var latestRequest = latestUserRequest ?? string.Empty;
+        var modified = OrderPathsForSummary(fileActivity.ModifiedFiles, latestRequest).ToArray();
+        var modifiedSet = new HashSet<string>(modified, StringComparer.OrdinalIgnoreCase);
+        var read = OrderPathsForSummary(
+                fileActivity.ReadFiles.Where(path => !modifiedSet.Contains(path)),
+                latestRequest)
+            .ToArray();
+
+        var selectedModified = new List<string>();
+        var selectedRead = new List<string>();
+
+        foreach (var path in modified)
+        {
+            var candidateModified = selectedModified.Concat([path]).ToArray();
+            var candidate = new FileActivity(selectedRead, candidateModified);
+            var candidateRendered = BuildRelevantFilesSection(candidate);
+            if (LocalAgentTokenEstimator.EstimateTextTokens(candidateRendered) > budgetTokens && selectedModified.Count + selectedRead.Count > 0)
+            {
+                break;
+            }
+
+            selectedModified.Add(path);
+        }
+
+        foreach (var path in read)
+        {
+            var candidateRead = selectedRead.Concat([path]).ToArray();
+            var candidate = new FileActivity(candidateRead, selectedModified);
+            var candidateRendered = BuildRelevantFilesSection(candidate);
+            if (LocalAgentTokenEstimator.EstimateTextTokens(candidateRendered) > budgetTokens && selectedModified.Count + selectedRead.Count > 0)
+            {
+                break;
+            }
+
+            selectedRead.Add(path);
+        }
+
+        return new FileActivity(selectedRead, selectedModified);
+    }
+
+    private static IEnumerable<string> OrderPathsForSummary(IEnumerable<string> paths, string latestUserRequest)
+    {
+        return paths
+            .Select((path, index) => new
+            {
+                Path = path,
+                Index = index,
+                Mentioned = IsPathMentioned(latestUserRequest, path),
+            })
+            .OrderByDescending(static item => item.Mentioned)
+            .ThenBy(static item => item.Index)
+            .Select(static item => item.Path);
+    }
+
+    private static bool IsPathMentioned(string latestUserRequest, string path)
+    {
+        if (string.IsNullOrWhiteSpace(latestUserRequest) || string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        if (latestUserRequest.Contains(path, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var fileName = System.IO.Path.GetFileName(path);
+        return !string.IsNullOrWhiteSpace(fileName) &&
+            latestUserRequest.Contains(fileName, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void AddPaths(
         JsonElement details,
         string propertyName,
@@ -743,12 +931,35 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
             Keep the output under roughly {maxOutputTokens} tokens.
             """;
 
+    private static string CreateShrinkSystemPrompt(int maxOutputTokens, long checkpointTargetTokens)
+        => $"""
+            {ShrinkSystemPromptTemplate}
+
+            Target roughly {checkpointTargetTokens} tokens when possible and never exceed roughly {maxOutputTokens} tokens.
+            """;
+
     private static string CreateOversizedAnchorSystemPrompt(int maxOutputTokens)
         => $"""
             {OversizedAnchorSystemPromptTemplate}
 
             Keep the output under roughly {maxOutputTokens} tokens.
             """;
+
+    private static string BuildShrinkRequestBody(
+        string summary,
+        string? latestUserRequest,
+        FileActivity modelVisibleFileActivity,
+        long checkpointTargetTokens)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.AppendLine("""<codealta-compaction-shrink-request version="1">""");
+        AppendTag(builder, "target-tokens", checkpointTargetTokens.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AppendTag(builder, "active-user-request", latestUserRequest?.Trim());
+        AppendTag(builder, "relevant-files", BuildRelevantFilesSection(modelVisibleFileActivity));
+        AppendTag(builder, "current-summary", summary);
+        builder.Append("""</codealta-compaction-shrink-request>""");
+        return builder.ToString();
+    }
 
     private static void AppendTag(System.Text.StringBuilder builder, string tagName, string? value)
     {

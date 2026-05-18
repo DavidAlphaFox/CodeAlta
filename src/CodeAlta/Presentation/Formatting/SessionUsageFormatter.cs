@@ -15,7 +15,7 @@ internal static class SessionUsageFormatter
                 : "[dim]Context --[/]";
         }
 
-        var clampedPercentage = Math.Clamp(percentage, 0d, 999d);
+        var clampedPercentage = Math.Clamp(percentage, 0d, 100d);
         return FormattableString.Invariant($"[dim]Context[/] [{GetUsageTone(clampedPercentage)}]{clampedPercentage:0}%[/]");
     }
 
@@ -28,17 +28,20 @@ internal static class SessionUsageFormatter
             return "Window unavailable";
         }
 
-        var current = FormatNumber(window.CurrentTokens);
         if (window.TokenLimit is not { } tokenLimit || tokenLimit <= 0)
         {
+            var currentWithoutLimit = FormatNumber(window.CurrentTokens);
             return window.MessageCount is { } messageCount
-                ? $"{current} tokens · {messageCount} messages"
-                : $"{current} tokens";
+                ? $"{currentWithoutLimit} tokens · {messageCount} messages"
+                : $"{currentWithoutLimit} tokens";
         }
 
+        var current = window.CurrentTokens is { } currentTokens && currentTokens > tokenLimit
+            ? "≥" + FormatNumber(tokenLimit)
+            : FormatNumber(window.CurrentTokens);
         var limit = FormatNumber(window.TokenLimit);
         return usage.WindowUsagePercentage is { } percentage
-            ? FormattableString.Invariant($"{current} / {limit} input tokens ({percentage:0.#}%)")
+            ? FormattableString.Invariant($"{current} / {limit} input tokens ({Math.Clamp(percentage, 0d, 100d):0.#}%)")
             : $"{current} / {limit} input tokens";
     }
 

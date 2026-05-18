@@ -40,6 +40,11 @@ public sealed class CodeAltaConfigStoreRawApiTests
             [providers.OpenRouter.compaction]
             ratio = 0.95
             summary_output_ratio = 0.10
+            post_compaction_target_ratio = 0.08
+            summary_share_of_target = 0.35
+            file_context_share_of_summary_target = 0.20
+            keep_last_user_message = false
+            allow_split_turn = false
 
             [providers.OpenRouter.model_overrides." gpt-5 "]
             display_name = " GPT-5 "
@@ -86,6 +91,11 @@ public sealed class CodeAltaConfigStoreRawApiTests
         Assert.IsNotNull(openRouter.Compaction);
         Assert.AreEqual(0.95d, openRouter.Compaction!.Ratio!.Value, 0.0001d);
         Assert.AreEqual(0.10d, openRouter.Compaction.SummaryOutputRatio!.Value, 0.0001d);
+        Assert.AreEqual(0.08d, openRouter.Compaction.PostCompactionTargetRatio!.Value, 0.0001d);
+        Assert.AreEqual(0.35d, openRouter.Compaction.SummaryShareOfTarget!.Value, 0.0001d);
+        Assert.AreEqual(0.20d, openRouter.Compaction.FileContextShareOfSummaryTarget!.Value, 0.0001d);
+        Assert.IsFalse(openRouter.Compaction.KeepLastUserMessage!.Value);
+        Assert.IsFalse(openRouter.Compaction.AllowSplitTurn!.Value);
         Assert.IsNotNull(openRouter.ModelOverrides);
         Assert.IsTrue(openRouter.ModelOverrides!.TryGetValue("gpt-5", out var modelOverride));
         Assert.IsNotNull(modelOverride);
@@ -156,6 +166,49 @@ public sealed class CodeAltaConfigStoreRawApiTests
         Assert.IsNotNull(compaction);
         Assert.AreEqual(0.95d, compaction!.Ratio!.Value, 0.0001d);
         Assert.AreEqual(0.10d, compaction.SummaryOutputRatio!.Value, 0.0001d);
+        Assert.AreEqual(0.10d, compaction.PostCompactionTargetRatio!.Value, 0.0001d);
+        Assert.AreEqual(0.40d, compaction.SummaryShareOfTarget!.Value, 0.0001d);
+        Assert.AreEqual(0.15d, compaction.FileContextShareOfSummaryTarget!.Value, 0.0001d);
+        Assert.IsTrue(compaction.KeepLastUserMessage!.Value);
+        Assert.IsTrue(compaction.AllowSplitTurn!.Value);
+    }
+
+    [TestMethod]
+    public void LoadGlobalProviderDefinitions_InvalidPostCompactionTargetRatio_Throws()
+    {
+        using var temp = TempDirectory.Create();
+        File.WriteAllText(
+            Path.Combine(temp.Path, "config.toml"),
+            """
+            [providers.openai]
+            type = "openai-chat"
+            api_key_env = "OPENAI_API_KEY"
+
+            [providers.openai.compaction]
+            post_compaction_target_ratio = 0
+            """);
+
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        Assert.ThrowsExactly<InvalidDataException>(() => store.LoadGlobalProviderDefinitions(includeDisabled: true));
+    }
+
+    [TestMethod]
+    public void LoadGlobalProviderDefinitions_InvalidCompactionShare_Throws()
+    {
+        using var temp = TempDirectory.Create();
+        File.WriteAllText(
+            Path.Combine(temp.Path, "config.toml"),
+            """
+            [providers.openai]
+            type = "openai-chat"
+            api_key_env = "OPENAI_API_KEY"
+
+            [providers.openai.compaction]
+            summary_share_of_target = 1.5
+            """);
+
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
+        Assert.ThrowsExactly<InvalidDataException>(() => store.LoadGlobalProviderDefinitions(includeDisabled: true));
     }
 
     [TestMethod]
@@ -552,6 +605,14 @@ public sealed class CodeAltaConfigStoreRawApiTests
                 ApiKeyEnv = "OPENROUTER_API_KEY",
                 ApiUrl = "https://openrouter.ai/api/v1",
                 ProtocolTrace = true,
+                Compaction = new CodeAltaProviderCompactionDocument
+                {
+                    PostCompactionTargetRatio = 0.08,
+                    SummaryShareOfTarget = 0.35,
+                    FileContextShareOfSummaryTarget = 0.20,
+                    KeepLastUserMessage = false,
+                    AllowSplitTurn = false,
+                },
             },
         ]);
 
@@ -561,6 +622,13 @@ public sealed class CodeAltaConfigStoreRawApiTests
         Assert.IsTrue(providers["codex_cli"].Enabled);
         Assert.IsTrue(providers["openrouter"].Enabled);
         Assert.IsTrue(providers["openrouter"].ProtocolTrace);
+        Assert.IsNotNull(providers["openrouter"].Compaction);
+        var compaction = providers["openrouter"].Compaction!;
+        Assert.AreEqual(0.08d, compaction.PostCompactionTargetRatio!.Value, 0.0001d);
+        Assert.AreEqual(0.35d, compaction.SummaryShareOfTarget!.Value, 0.0001d);
+        Assert.AreEqual(0.20d, compaction.FileContextShareOfSummaryTarget!.Value, 0.0001d);
+        Assert.IsFalse(compaction.KeepLastUserMessage!.Value);
+        Assert.IsFalse(compaction.AllowSplitTurn!.Value);
     }
 
     [TestMethod]

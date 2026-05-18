@@ -1612,6 +1612,12 @@ public sealed class CodeAltaAppTests
               "tokensAfter": 4500,
               "tokensRemoved": 7500,
               "compressionRatio": 0.375,
+              "targetRatio": 0.10,
+              "targetTokens": 3000,
+              "targetMet": false,
+              "targetMissReason": "latest_user_anchor",
+              "planningAttemptCount": 3,
+              "postCompactionInputRatio": 0.15,
               "summarizedMessageCount": 8,
               "keptMessageCount": 3,
               "messagesAfter": 4,
@@ -1652,11 +1658,43 @@ public sealed class CodeAltaAppTests
 
         StringAssert.Contains(markdown, "**Efficiency**");
         StringAssert.Contains(markdown, "Context: 12,000 → 4,500 tokens");
+        StringAssert.Contains(markdown, "Target: 3,000 tokens (10.0 % of input limit), actual 15.0 % of input limit, missed (latest user anchor exceeded target), 3 planning attempts");
         StringAssert.Contains(markdown, "Summarizer: 2 calls, 2 chunks");
         StringAssert.Contains(markdown, "Tool outputs: 3/5 with excerpts");
         StringAssert.Contains(markdown, "1 modified files and 2 read files tracked");
         Assert.IsTrue(ChatMarkdownFormatter.TryGetCompactionSummaryMarkdown(update, out var summaryMarkdown));
         Assert.AreEqual("## Objective\nContinue the task.", summaryMarkdown);
+    }
+
+    [TestMethod]
+    public void FormatChatSessionUpdateMarkdown_LocalCompactionDetails_OldMetadataWithoutTargetRenders()
+    {
+        using var document = JsonDocument.Parse(
+            """
+            {
+              "schema": "codealta.localCompaction.v1",
+              "summaryMarkdown": "## Objective\nContinue the task.",
+              "tokensBefore": 1000,
+              "tokensAfter": 200,
+              "summarizedMessageCount": 2,
+              "keptMessageCount": 1,
+              "messagesAfter": 2
+            }
+            """);
+        var update = new AgentSessionUpdateEvent(
+            AgentBackendIds.OpenAIResponses,
+            "session-1",
+            DateTimeOffset.UtcNow,
+            null,
+            AgentSessionUpdateKind.CompactionCompleted,
+            "Manual local compaction summarized 2 messages.",
+            Details: document.RootElement.Clone());
+
+        var markdown = ChatMarkdownFormatter.FormatChatSessionUpdateMarkdown(update);
+
+        StringAssert.Contains(markdown, "Context: 1,000 → 200 tokens");
+        StringAssert.Contains(markdown, "Messages: summarized 2, kept 1, after 2");
+        Assert.IsFalse(markdown.Contains("Target:", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -2320,6 +2358,22 @@ public sealed class CodeAltaAppTests
         var indicator = SessionUsageAggregator.BuildIndicatorMarkup(usage);
 
         Assert.AreEqual("[dim]Context[/] [error]95%[/]", indicator);
+    }
+
+    [TestMethod]
+    public void SessionUsageFormatting_CapsOverLimitPressureDisplay()
+    {
+        var usage = new AgentSessionUsage(
+            Window: new AgentWindowUsageSnapshot(3_495_220, 272_000, 63, "Estimated active context"),
+            Scope: AgentUsageScope.CurrentWindow,
+            Source: AgentUsageSource.LocalProviderUsage,
+            UpdatedAt: DateTimeOffset.Parse("2026-05-18T18:38:43+00:00"));
+
+        var indicator = SessionUsageAggregator.BuildIndicatorMarkup(usage);
+        var summary = SessionUsageAggregator.FormatSummary(usage);
+
+        Assert.AreEqual("[dim]Context[/] [error]100%[/]", indicator);
+        Assert.AreEqual("≥272,000 / 272,000 input tokens (100%)", summary);
     }
 
     [TestMethod]

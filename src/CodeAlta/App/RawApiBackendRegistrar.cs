@@ -829,10 +829,13 @@ internal static class RawApiBackendRegistrar
         return new LocalAgentCompactionSettings(
             Enabled: normalized.Enabled ?? LocalAgentCompactionSettings.Default.Enabled,
             Ratio: normalized.Ratio ?? LocalAgentCompactionSettings.Default.Ratio,
-            KeepLastUserMessage: LocalAgentCompactionSettings.Default.KeepLastUserMessage,
-            AllowSplitTurn: LocalAgentCompactionSettings.Default.AllowSplitTurn)
+            KeepLastUserMessage: normalized.KeepLastUserMessage ?? LocalAgentCompactionSettings.Default.KeepLastUserMessage,
+            AllowSplitTurn: normalized.AllowSplitTurn ?? LocalAgentCompactionSettings.Default.AllowSplitTurn)
         {
             SummaryOutputRatio = normalized.SummaryOutputRatio ?? LocalAgentCompactionSettings.Default.SummaryOutputRatio,
+            PostCompactionTargetRatio = normalized.PostCompactionTargetRatio ?? LocalAgentCompactionSettings.Default.PostCompactionTargetRatio,
+            SummaryShareOfTarget = normalized.SummaryShareOfTarget ?? LocalAgentCompactionSettings.Default.SummaryShareOfTarget,
+            FileContextShareOfSummaryTarget = normalized.FileContextShareOfSummaryTarget ?? LocalAgentCompactionSettings.Default.FileContextShareOfSummaryTarget,
         };
     }
 

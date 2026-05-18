@@ -51,6 +51,11 @@ public sealed class CodeAltaConfigStore
         Enabled = LocalAgentCompactionSettings.DefaultEnabled,
         Ratio = LocalAgentCompactionSettings.DefaultRatio,
         SummaryOutputRatio = LocalAgentCompactionSettings.DefaultSummaryOutputRatio,
+        PostCompactionTargetRatio = LocalAgentCompactionSettings.DefaultPostCompactionTargetRatio,
+        SummaryShareOfTarget = LocalAgentCompactionSettings.DefaultSummaryShareOfTarget,
+        FileContextShareOfSummaryTarget = LocalAgentCompactionSettings.DefaultFileContextShareOfSummaryTarget,
+        KeepLastUserMessage = LocalAgentCompactionSettings.DefaultKeepLastUserMessage,
+        AllowSplitTurn = LocalAgentCompactionSettings.DefaultAllowSplitTurn,
     };
 
     private readonly CatalogOptions _options;
@@ -1899,6 +1904,11 @@ public sealed class CodeAltaConfigStore
                 Enabled = compaction.Enabled,
                 Ratio = compaction.Ratio,
                 SummaryOutputRatio = compaction.SummaryOutputRatio,
+                PostCompactionTargetRatio = compaction.PostCompactionTargetRatio,
+                SummaryShareOfTarget = compaction.SummaryShareOfTarget,
+                FileContextShareOfSummaryTarget = compaction.FileContextShareOfSummaryTarget,
+                KeepLastUserMessage = compaction.KeepLastUserMessage,
+                AllowSplitTurn = compaction.AllowSplitTurn,
             };
     }
 
@@ -1937,6 +1947,31 @@ public sealed class CodeAltaConfigStore
             pruned.SummaryOutputRatio = null;
         }
 
+        if (pruned.PostCompactionTargetRatio == LocalAgentCompactionSettings.DefaultPostCompactionTargetRatio)
+        {
+            pruned.PostCompactionTargetRatio = null;
+        }
+
+        if (pruned.SummaryShareOfTarget == LocalAgentCompactionSettings.DefaultSummaryShareOfTarget)
+        {
+            pruned.SummaryShareOfTarget = null;
+        }
+
+        if (pruned.FileContextShareOfSummaryTarget == LocalAgentCompactionSettings.DefaultFileContextShareOfSummaryTarget)
+        {
+            pruned.FileContextShareOfSummaryTarget = null;
+        }
+
+        if (pruned.KeepLastUserMessage == LocalAgentCompactionSettings.DefaultKeepLastUserMessage)
+        {
+            pruned.KeepLastUserMessage = null;
+        }
+
+        if (pruned.AllowSplitTurn == LocalAgentCompactionSettings.DefaultAllowSplitTurn)
+        {
+            pruned.AllowSplitTurn = null;
+        }
+
         return IsEmptyCompaction(pruned) ? null : pruned;
     }
 
@@ -1946,7 +1981,12 @@ public sealed class CodeAltaConfigStore
 
         return compaction.Enabled is null &&
                compaction.Ratio is null &&
-               compaction.SummaryOutputRatio is null;
+               compaction.SummaryOutputRatio is null &&
+               compaction.PostCompactionTargetRatio is null &&
+               compaction.SummaryShareOfTarget is null &&
+               compaction.FileContextShareOfSummaryTarget is null &&
+               compaction.KeepLastUserMessage is null &&
+               compaction.AllowSplitTurn is null;
     }
 
     private static CodeAltaProviderCompactionDocument NormalizeAndCompleteCompactionSettings(
@@ -1961,11 +2001,21 @@ public sealed class CodeAltaConfigStore
             merged.Enabled = normalized.Enabled ?? merged.Enabled;
             merged.Ratio = normalized.Ratio ?? merged.Ratio;
             merged.SummaryOutputRatio = normalized.SummaryOutputRatio ?? merged.SummaryOutputRatio;
+            merged.PostCompactionTargetRatio = normalized.PostCompactionTargetRatio ?? merged.PostCompactionTargetRatio;
+            merged.SummaryShareOfTarget = normalized.SummaryShareOfTarget ?? merged.SummaryShareOfTarget;
+            merged.FileContextShareOfSummaryTarget = normalized.FileContextShareOfSummaryTarget ?? merged.FileContextShareOfSummaryTarget;
+            merged.KeepLastUserMessage = normalized.KeepLastUserMessage ?? merged.KeepLastUserMessage;
+            merged.AllowSplitTurn = normalized.AllowSplitTurn ?? merged.AllowSplitTurn;
         }
 
         merged.Enabled ??= LocalAgentCompactionSettings.DefaultEnabled;
         merged.Ratio ??= LocalAgentCompactionSettings.DefaultRatio;
         merged.SummaryOutputRatio ??= LocalAgentCompactionSettings.DefaultSummaryOutputRatio;
+        merged.PostCompactionTargetRatio ??= LocalAgentCompactionSettings.DefaultPostCompactionTargetRatio;
+        merged.SummaryShareOfTarget ??= LocalAgentCompactionSettings.DefaultSummaryShareOfTarget;
+        merged.FileContextShareOfSummaryTarget ??= LocalAgentCompactionSettings.DefaultFileContextShareOfSummaryTarget;
+        merged.KeepLastUserMessage ??= LocalAgentCompactionSettings.DefaultKeepLastUserMessage;
+        merged.AllowSplitTurn ??= LocalAgentCompactionSettings.DefaultAllowSplitTurn;
 
         ValidateCompaction(merged);
         return merged;
@@ -1985,6 +2035,27 @@ public sealed class CodeAltaConfigStore
         {
             throw new InvalidOperationException(
                 $"provider compaction summary_output_ratio must be > 0 and <= {LocalAgentCompactionSettings.MaxSummaryOutputRatio:0.##}.");
+        }
+
+        if (compaction.PostCompactionTargetRatio is not > 0 ||
+            compaction.PostCompactionTargetRatio > LocalAgentCompactionSettings.MaxPostCompactionTargetRatio)
+        {
+            throw new InvalidOperationException(
+                $"provider compaction post_compaction_target_ratio must be > 0 and <= {LocalAgentCompactionSettings.MaxPostCompactionTargetRatio:0.##}.");
+        }
+
+        if (compaction.SummaryShareOfTarget is not > 0 ||
+            compaction.SummaryShareOfTarget > LocalAgentCompactionSettings.MaxSummaryShareOfTarget)
+        {
+            throw new InvalidOperationException(
+                $"provider compaction summary_share_of_target must be > 0 and <= {LocalAgentCompactionSettings.MaxSummaryShareOfTarget:0.##}.");
+        }
+
+        if (compaction.FileContextShareOfSummaryTarget is not >= 0 ||
+            compaction.FileContextShareOfSummaryTarget > LocalAgentCompactionSettings.MaxFileContextShareOfSummaryTarget)
+        {
+            throw new InvalidOperationException(
+                $"provider compaction file_context_share_of_summary_target must be >= 0 and <= {LocalAgentCompactionSettings.MaxFileContextShareOfSummaryTarget:0.##}.");
         }
     }
 

@@ -234,6 +234,9 @@ Recommended user-facing default:
 - `enabled = true`
 - `ratio = 0.95`
 - `summary_output_ratio = 0.10`
+- `post_compaction_target_ratio = 0.10`
+- `summary_share_of_target = 0.40`
+- `file_context_share_of_summary_target = 0.15`
 
 Automatic threshold compaction starts when:
 
@@ -247,7 +250,7 @@ Rationale:
 
 - `0.95` is intentionally close to the safe input side once output headroom is no longer borrowed from the denominator.
 - CodeAlta should pair this threshold with strict omission-first summary behavior rather than transcript-like summary output.
-- Summary input/output fit should derive from model/provider limits plus the compaction summary-output ratio, not broad provider max-output limits alone.
+- Summary input/output fit should derive from model/provider limits, the compaction summary-output ratio, and the preferred post-compaction target, not broad provider max-output limits alone.
 
 ### 10.3 Summary output bound
 
@@ -259,7 +262,7 @@ When a provider requires an explicit summarizer output limit, the summarizer cal
 
 The compaction system must never rely on an unconstrained summarizer response.
 
-The effective cap is derived from `ceil(inputContextLimit * summary_output_ratio)`, defaulting to `0.10`. User configuration must keep `summary_output_ratio` greater than `0` and no larger than `0.50`. The effective cap must also respect any smaller provider/model output limit. CodeAlta must not enforce a local minimum that exceeds the resolved provider maximum.
+The hard cap is derived from `ceil(inputContextLimit * summary_output_ratio)`, defaulting to `0.10`. User configuration must keep `summary_output_ratio` greater than `0` and no larger than `0.50`. The effective default request budget is the smaller of that hard cap, any provider/model output limit, and `floor(inputContextLimit * post_compaction_target_ratio * summary_share_of_target)`. CodeAlta must not enforce a local minimum that exceeds the resolved provider maximum.
 
 When a total context envelope is known, compaction should chunk summarizer input so the estimated request plus the chosen output cap fits within that envelope, using the smaller of that envelope-derived limit and any explicit input limit.
 
@@ -326,6 +329,7 @@ Default policy should be **adaptive**, not “always include reasoning”.
 ### 11.3 Tool output policy
 
 Tool outputs are the most common source of pathological compaction size.
+The active conversation should also cap model-visible tool results before the next provider turn; the raw UI/audit event may record more detail, but oversized output must not be allowed to make context-pressure estimates or the next request exceed the resolved input limit.
 
 Rules:
 
@@ -758,13 +762,21 @@ Recommended normalized shape:
 enabled = true
 ratio = 0.95
 summary_output_ratio = 0.10
+post_compaction_target_ratio = 0.10
+summary_share_of_target = 0.40
+file_context_share_of_summary_target = 0.15
+keep_last_user_message = true
+allow_split_turn = true
 ```
 
 Notes:
 
 - `ratio` is measured against the resolved input-context limit, not the advertised total input-plus-output envelope.
 - `summary_output_ratio` bounds compaction summarizer output as a fraction of the resolved input-context limit and is capped at `0.50`.
-- Fixed retained-suffix, summary-input, reserved-token, and post-compaction target-ratio fields are not part of the provider configuration surface.
+- `post_compaction_target_ratio` is the preferred post-compaction active-context quality target as a fraction of the resolved input-context limit. The default is `0.10`; exceeding it is a fallback that should be recorded with `targetMissReason`.
+- `summary_share_of_target` controls the default summary budget as a share of the preferred target while `summary_output_ratio` remains the hard cap.
+- `file_context_share_of_summary_target` budgets the model-visible relevant-file list without truncating complete checkpoint metadata.
+- `keep_last_user_message` and `allow_split_turn` expose the existing latest-user anchoring and split-turn behaviors for advanced provider-local tuning.
 - Internal serializer caps and bounded chunking safeguards may still exist, but they are implementation policy rather than user-facing configuration.
 
 ## 24. Edge cases that must be covered
