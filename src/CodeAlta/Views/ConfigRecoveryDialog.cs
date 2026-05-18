@@ -20,6 +20,7 @@ internal sealed class ConfigRecoveryDialog
     private readonly CodeEditor _editor;
     private readonly Button _saveButton;
     private readonly Button _exitButton;
+    private readonly State<int> _editVersion = new(0);
     private Dialog? _dialog;
     private CodeAltaConfigValidationResult _validation;
 
@@ -48,7 +49,7 @@ internal sealed class ConfigRecoveryDialog
         _editor.LeftMargins.Insert(0, diagnosticMargin);
 
         _saveButton = new Button($"{NerdFont.MdContentSaveCheckOutline} Save and Continue") { Tone = ControlTone.Success };
-        _saveButton.IsEnabled(() => _validation.IsValid);
+        _saveButton.IsEnabled(CanSave);
         _saveButton.Click(SaveAndContinue);
 
         _exitButton = new Button($"{NerdFont.MdExitRun} Exit") { Tone = ControlTone.Error };
@@ -153,7 +154,7 @@ internal sealed class ConfigRecoveryDialog
             Gesture = new KeyGesture(TerminalChar.CtrlS, TerminalModifiers.Ctrl),
             Presentation = CommandPresentation.CommandBar,
             Importance = CommandImportance.Primary,
-            CanExecute = _ => _validation.IsValid,
+            CanExecute = _ => CanSave(),
             Execute = _ => SaveAndContinue(),
         });
         dialog.AddCommand(new Command
@@ -174,10 +175,13 @@ internal sealed class ConfigRecoveryDialog
         _ = sender;
         _ = e;
         _validation = CodeAltaConfigStore.ValidateGlobalConfigContent(GetEditorText(), _configPath);
+        _editVersion.Value++;
     }
 
     private string BuildStatusMarkup()
     {
+        _ = _editVersion.Value;
+
         if (_validation.IsValid)
         {
             return $"[success]{NerdFont.MdCheckCircleOutline} Configuration can be loaded. Save and Continue is available.[/]";
@@ -189,9 +193,15 @@ internal sealed class ConfigRecoveryDialog
         return $"[error]{NerdFont.MdAlertCircleOutline} {AnsiMarkup.Escape(location + (_validation.Message ?? "Configuration is invalid."))}[/]";
     }
 
+    internal bool CanSave()
+    {
+        _ = _editVersion.Value;
+        return _validation.IsValid;
+    }
+
     private void SaveAndContinue()
     {
-        if (!_validation.IsValid)
+        if (!CanSave())
         {
             return;
         }
@@ -204,6 +214,7 @@ internal sealed class ConfigRecoveryDialog
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _validation = new CodeAltaConfigValidationResult(false, $"Unable to save config file: {ex.Message}", null, null);
+            _editVersion.Value++;
             return;
         }
 
