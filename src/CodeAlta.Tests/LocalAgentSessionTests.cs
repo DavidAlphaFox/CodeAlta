@@ -1434,6 +1434,99 @@ public sealed class LocalAgentSessionTests
     }
 
     [TestMethod]
+    public async Task LocalAgentSession_CompactWithOutcomeAsync_PublishesStartedBeforeSummaryCompletes()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider(LocalAgentCompactionSettings.Default with { Enabled = false });
+        var summary = CreateSummary("session-compact-started");
+        var state = CreateState("session-compact-started");
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        var summaryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSummary = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var liveEvents = new List<AgentEvent>();
+        await using var session = new LocalAgentSession(
+            AgentBackendIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            [],
+            store,
+            new ScriptedTurnExecutor(
+                [new AgentModelInfo("gpt-5.4", "GPT-5.4")],
+                async (request, _, _) =>
+                {
+                    Assert.AreEqual(1, request.Conversation.Count);
+                    summaryStarted.TrySetResult();
+                    await releaseSummary.Task.ConfigureAwait(false);
+                    return new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text(
+                                """
+                                ## Objective
+                                Continue the coding task.
+                                ## Active User Request
+                                Second prompt
+                                ## Constraints
+                                - Preserve behavior.
+                                ## Progress
+                                ### Done
+                                - First answer captured.
+                                ### In Progress
+                                - Working on the second prompt.
+                                ### Blocked
+                                - None recorded.
+                                ## Decisions
+                                - Use checkpoints.
+                                ## Next Steps
+                                - Continue from the retained suffix.
+                                ## Critical Context
+                                - Keep recent context verbatim.
+                                ## Relevant Files
+                                - None tracked.
+                                """)]),
+                    };
+                },
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("First answer " + new string('a', 120))]),
+                    }),
+                (_, _, _) => Task.FromResult(
+                    new LocalAgentTurnResponse
+                    {
+                        AssistantMessage = new LocalAgentConversationMessage(
+                            LocalAgentConversationRole.Assistant,
+                            [new LocalAgentMessagePart.Text("Second answer " + new string('b', 120))]),
+                    })),
+            CreateOptions(provider, temp.Path));
+        using var subscription = session.Subscribe(liveEvents.Add);
+
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("First prompt " + new string('x', 140)) }).ConfigureAwait(false);
+        _ = await session.SendAsync(new AgentSendOptions { Input = AgentInput.Text("Second prompt " + new string('y', 140)) }).ConfigureAwait(false);
+        liveEvents.Clear();
+
+        var compactTask = ((IAgentCompactionOutcomeProvider)session).CompactWithOutcomeAsync();
+        await summaryStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+
+        Assert.IsTrue(liveEvents.OfType<AgentSessionUpdateEvent>().Any(static evt => evt.Kind == AgentSessionUpdateKind.CompactionStarted));
+        Assert.IsFalse(liveEvents.OfType<AgentSessionUpdateEvent>().Any(static evt => evt.Kind == AgentSessionUpdateKind.CompactionCompleted));
+
+        releaseSummary.SetResult();
+        var outcome = await compactTask.ConfigureAwait(false);
+
+        Assert.IsNotNull(outcome);
+        Assert.IsTrue(outcome.Success);
+        Assert.IsTrue(liveEvents.OfType<AgentSessionUpdateEvent>().Any(static evt => evt.Kind == AgentSessionUpdateKind.CompactionCompleted));
+    }
+
+    [TestMethod]
     public void LocalAgentCompactionPlanner_ThresholdPreparation_ProtectsLatestUserMessage()
     {
         var instructionBundle = LocalAgentInstructionComposer.Compose(
@@ -3290,7 +3383,8 @@ public sealed class LocalAgentSessionTests
 
         var persistedHistory = await store.ReadEventsAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
         Assert.IsFalse(persistedHistory.OfType<AgentRawEvent>().Any(static evt => evt.BackendEventType == "local.compactionCheckpoint"));
-        Assert.IsFalse(persistedHistory.OfType<AgentSessionUpdateEvent>().Any(static evt => evt.Kind == AgentSessionUpdateKind.CompactionStarted));
+        Assert.IsTrue(persistedHistory.OfType<AgentSessionUpdateEvent>().Any(static evt => evt.Kind == AgentSessionUpdateKind.CompactionStarted));
+        Assert.IsFalse(persistedHistory.OfType<AgentSessionUpdateEvent>().Any(static evt => evt.Kind == AgentSessionUpdateKind.CompactionCompleted));
     }
 
     [TestMethod]

@@ -1457,6 +1457,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         long? checkpointTokenEstimate = null;
         var planningAttemptCount = 0;
         var shrinkAttempted = false;
+        var startedEventEmitted = false;
 
         for (var attempt = 0; attempt < 3; attempt++)
         {
@@ -1510,6 +1511,19 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                 {
                     return null;
                 }
+            }
+
+            if (!startedEventEmitted)
+            {
+                var started = new AgentSessionUpdateEvent(
+                    BackendId,
+                    SessionId,
+                    DateTimeOffset.UtcNow,
+                    runId,
+                    AgentSessionUpdateKind.CompactionStarted,
+                    $"{trigger} local compaction started.");
+                await AppendEventsAsync([started], cancellationToken).ConfigureAwait(false);
+                startedEventEmitted = true;
             }
 
             var summaryResult = await _compactionSummarizer.SummarizeAsync(
@@ -1709,41 +1723,34 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             throw new InvalidOperationException("Compaction summarization could not produce a prompt that fits the resolved limits after bounded replanning.");
         }
 
-        var started = new AgentSessionUpdateEvent(
-            BackendId,
-            SessionId,
-            now,
-            runId,
-            AgentSessionUpdateKind.CompactionStarted,
-            $"{trigger} local compaction started.");
-
         _conversation.Clear();
         _conversation.Add(checkpointMessage);
         _conversation.AddRange(retainedConversation);
 
+        var completedAt = DateTimeOffset.UtcNow;
         var usage = CreateCompactionUsage(result, budget, _conversation.Count, _state.Usage);
         _state = _state with
         {
-            CompactionEventOffset = CountDurableEvents() + 2,
+            CompactionEventOffset = CountDurableEvents() + 1,
             CompactionSummaryContentId = checkpoint.ContentId,
             CompactionCheckpointEventId = checkpoint.ContentId,
-            LastCompactedAt = now,
+            LastCompactedAt = completedAt,
             LastCompactionTrigger = checkpoint.Trigger,
             LastCompactionTokensBefore = result.TokensBefore,
             LastCompactionTokensAfter = result.TokensAfter,
             Usage = usage,
-            UpdatedAt = now,
+            UpdatedAt = completedAt,
         };
         _summary = _summary with
         {
             Usage = usage,
-            UpdatedAt = now,
+            UpdatedAt = completedAt,
         };
 
         var rawCheckpoint = new AgentRawEvent(
             BackendId,
             SessionId,
-            now,
+            completedAt,
             CompactionCheckpointEventType,
             JsonSerializer.SerializeToElement(checkpoint, AgentJsonSerializerContext.Default.LocalAgentCompactionCheckpoint),
             runId);
@@ -1753,13 +1760,13 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         var completed = new AgentSessionUpdateEvent(
             BackendId,
             SessionId,
-            now,
+            completedAt,
             runId,
             AgentSessionUpdateKind.CompactionCompleted,
             completionMessage,
             Details: CreateCompactionDetailsElement(checkpoint),
             Usage: usage);
-        await AppendEventsAsync([started, rawCheckpoint, completed], cancellationToken).ConfigureAwait(false);
+        await AppendEventsAsync([rawCheckpoint, completed], cancellationToken).ConfigureAwait(false);
         await _store.UpsertStateAsync(_state, cancellationToken).ConfigureAwait(false);
         await _store.UpsertSessionAsync(_summary, cancellationToken).ConfigureAwait(false);
 
