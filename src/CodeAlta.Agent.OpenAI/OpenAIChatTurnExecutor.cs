@@ -131,7 +131,10 @@ internal sealed class OpenAIChatTurnExecutor(OpenAIProviderOptions provider) : I
 
             if (streamedReasoning.Length > 0)
             {
-                parts.Add(new LocalAgentMessagePart.Reasoning(streamedReasoning.ToString(), ProtectedData: null));
+                parts.Add(new LocalAgentMessagePart.Reasoning(
+                    streamedReasoning.ToString(),
+                    ProtectedData: null,
+                    LocalAgentReasoningReplay.CreateProvenance(request)));
                 assistantPartContentIds.Add(reasoningContentId);
             }
 
@@ -202,7 +205,7 @@ internal sealed class OpenAIChatTurnExecutor(OpenAIProviderOptions provider) : I
             }
         }
 
-        foreach (var message in request.Conversation)
+        foreach (var message in LocalAgentReasoningReplay.SanitizeForRequest(request.Conversation, request))
         {
             messages.Add(MapMessage(message, request.Provider.Profile));
         }

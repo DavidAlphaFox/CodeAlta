@@ -48,7 +48,9 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
             var chatClient = await _chatClientFactory(request.Provider, cancellationToken).ConfigureAwait(false);
             try
             {
-                var messages = request.Conversation.Select(MapMessage).ToArray();
+                var messages = LocalAgentReasoningReplay.SanitizeForRequest(request.Conversation, request)
+                    .Select(MapMessage)
+                    .ToArray();
                 var updates = new List<ChatResponseUpdate>();
                 await foreach (var update in chatClient
                                    .GetStreamingResponseAsync(messages, CreateOptions(request), cancellationToken)
@@ -62,7 +64,7 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
                 }
 
                 var response = updates.ToChatResponse();
-                var (assistantMessage, assistantPartContentIds) = MapAssistantMessage(response);
+                var (assistantMessage, assistantPartContentIds) = MapAssistantMessage(response, request);
                 return new LocalAgentTurnResponse
                 {
                     AssistantMessage = assistantMessage,
@@ -301,7 +303,9 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
         }
     }
 
-    private static (LocalAgentConversationMessage Message, IReadOnlyList<string?> PartContentIds) MapAssistantMessage(ChatResponse response)
+    private static (LocalAgentConversationMessage Message, IReadOnlyList<string?> PartContentIds) MapAssistantMessage(
+        ChatResponse response,
+        LocalAgentTurnRequest request)
     {
         var assistantMessages = response.Messages
             .Where(static message => message.Role == ChatRole.Assistant)
@@ -317,6 +321,7 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
 
         var parts = new List<LocalAgentMessagePart>();
         var partContentIds = new List<string?>();
+        var reasoningProvenance = LocalAgentReasoningReplay.CreateProvenance(request);
         foreach (var message in assistantMessages)
         {
             var assistantText = new System.Text.StringBuilder();
@@ -329,7 +334,8 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
                 {
                     parts.Add(new LocalAgentMessagePart.Reasoning(
                         reasoningText.Length == 0 ? string.Empty : reasoningText.ToString(),
-                        reasoningProtectedData));
+                        reasoningProtectedData,
+                        reasoningProvenance));
                     partContentIds.Add(message.MessageId ?? response.ResponseId);
                     reasoningText.Clear();
                     reasoningProtectedData = null;
@@ -360,7 +366,7 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
                         break;
                     default:
                         FlushBufferedContent();
-                        if (TryMapAssistantPart(content, out var part))
+                        if (TryMapAssistantPart(content, reasoningProvenance, out var part))
                         {
                             parts.Add(part);
                             partContentIds.Add(null);
@@ -376,7 +382,10 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
         return (new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, parts), partContentIds);
     }
 
-    private static bool TryMapAssistantPart(AIContent content, out LocalAgentMessagePart part)
+    private static bool TryMapAssistantPart(
+        AIContent content,
+        LocalAgentReasoningProvenance reasoningProvenance,
+        out LocalAgentMessagePart part)
     {
         switch (content)
         {
@@ -389,7 +398,7 @@ internal sealed class LocalAgentChatClientTurnExecutor : ILocalAgentTurnExecutor
                     break;
                 }
 
-                part = new LocalAgentMessagePart.Reasoning(reasoning.Text, reasoning.ProtectedData);
+                part = new LocalAgentMessagePart.Reasoning(reasoning.Text, reasoning.ProtectedData, reasoningProvenance);
                 return true;
             case FunctionCallContent functionCall:
                 part = new LocalAgentMessagePart.ToolCall(

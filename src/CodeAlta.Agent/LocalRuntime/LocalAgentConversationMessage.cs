@@ -61,7 +61,11 @@ public abstract record LocalAgentMessagePart
     /// </summary>
     /// <param name="Value">The optional visible reasoning text.</param>
     /// <param name="ProtectedData">Optional provider-protected reasoning payload.</param>
-    public sealed record Reasoning(string? Value, string? ProtectedData = null) : LocalAgentMessagePart;
+    /// <param name="Provenance">Optional provider/model identity that produced the reasoning payload.</param>
+    public sealed record Reasoning(
+        string? Value,
+        string? ProtectedData = null,
+        LocalAgentReasoningProvenance? Provenance = null) : LocalAgentMessagePart;
 
     /// <summary>
     /// A tool-call message part.

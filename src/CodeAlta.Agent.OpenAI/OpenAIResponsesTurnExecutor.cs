@@ -302,7 +302,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
                         throw CreateResponseFailureException(completedResponse, "incomplete");
                     }
 
-                    var (assistantMessage, assistantPartContentIds) = MapAssistantMessage(completedResponse, streamedOutputItemIds);
+                    var (assistantMessage, assistantPartContentIds) = MapAssistantMessage(request, completedResponse, streamedOutputItemIds);
                     attemptState.CommittedFinalContent = true;
                     UpdateLiveContinuation(request, fullOptions, completedResponse, assistantMessage);
                     WriteCodexConsoleDiagnostic(
@@ -1110,7 +1110,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
             MaxOutputTokenCount = request.MaxOutputTokens,
         };
 
-        foreach (var inputItem in CreateConversationItems(request.Conversation))
+        foreach (var inputItem in CreateConversationItems(LocalAgentReasoningReplay.SanitizeForRequest(request.Conversation, request)))
         {
             options.InputItems.Add(inputItem);
         }
@@ -1398,11 +1398,13 @@ internal sealed class OpenAIResponsesTurnExecutor(
             functionDescription: tool.Spec.Description);
 
     private static (LocalAgentConversationMessage Message, IReadOnlyList<string?> PartContentIds) MapAssistantMessage(
+        LocalAgentTurnRequest request,
         ResponseResult response,
         IReadOnlyDictionary<int, string>? streamedOutputItemIds = null)
     {
         var parts = new List<LocalAgentMessagePart>();
         var partContentIds = new List<string?>();
+        var reasoningProvenance = LocalAgentReasoningReplay.CreateProvenance(request);
         for (var outputIndex = 0; outputIndex < response.OutputItems.Count; outputIndex++)
         {
             var item = response.OutputItems[outputIndex];
@@ -1436,7 +1438,8 @@ internal sealed class OpenAIResponsesTurnExecutor(
                     {
                         parts.Add(new LocalAgentMessagePart.Reasoning(
                             reasoning.GetSummaryText() ?? string.Empty,
-                            string.IsNullOrWhiteSpace(reasoning.EncryptedContent) ? null : reasoning.EncryptedContent));
+                            string.IsNullOrWhiteSpace(reasoning.EncryptedContent) ? null : reasoning.EncryptedContent,
+                            reasoningProvenance));
                         partContentIds.Add(stableItemId);
                     }
 

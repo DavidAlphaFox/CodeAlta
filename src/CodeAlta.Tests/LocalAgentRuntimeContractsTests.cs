@@ -87,4 +87,118 @@ public sealed class LocalAgentRuntimeContractsTests
         Assert.AreEqual(1024, root.GetProperty("lastCompactionTokensAfter").GetInt64());
         Assert.AreEqual(17, root.GetProperty("providerState").GetProperty("cursor").GetInt32());
     }
+
+    [TestMethod]
+    public void LocalAgentReasoningReplay_SameProviderAndModel_PreservesProtectedReasoning()
+    {
+        var request = CreateTurnRequest("openai", "openai", LocalAgentTransportKind.OpenAIResponses, "gpt-5.5");
+        var provenance = LocalAgentReasoningReplay.CreateProvenance(request);
+        var reasoning = new LocalAgentMessagePart.Reasoning("summary", "ciphertext", provenance);
+        var conversation = new[]
+        {
+            new LocalAgentConversationMessage(LocalAgentConversationRole.Assistant, [reasoning]),
+        };
+
+        var sanitized = LocalAgentReasoningReplay.SanitizeForRequest(conversation, request);
+
+        Assert.AreSame(conversation, sanitized);
+        var sanitizedReasoning = (LocalAgentMessagePart.Reasoning)sanitized[0].Parts[0];
+        Assert.AreEqual("ciphertext", sanitizedReasoning.ProtectedData);
+        Assert.AreEqual(provenance, sanitizedReasoning.Provenance);
+    }
+
+    [TestMethod]
+    public void LocalAgentReasoningReplay_DifferentProvider_DowngradesReasoningToText()
+    {
+        var source = CreateTurnRequest("openai-responses", "copilot", LocalAgentTransportKind.OpenAIResponses, "gpt-5.5");
+        var target = CreateTurnRequest("openai-responses", "codex", LocalAgentTransportKind.OpenAIResponses, "gpt-5.5");
+        var conversation = new[]
+        {
+            new LocalAgentConversationMessage(
+                LocalAgentConversationRole.Assistant,
+                [
+                    new LocalAgentMessagePart.Reasoning("summary", "ciphertext", LocalAgentReasoningReplay.CreateProvenance(source)),
+                    new LocalAgentMessagePart.Text("visible answer"),
+                ]),
+        };
+
+        var sanitized = LocalAgentReasoningReplay.SanitizeForRequest(conversation, target);
+
+        Assert.AreNotSame(conversation, sanitized);
+        Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(sanitized[0].Parts[0]);
+        Assert.AreEqual("<assistant_reasoning_summary>summary</assistant_reasoning_summary>", ((LocalAgentMessagePart.Text)sanitized[0].Parts[0]).Value);
+        Assert.AreEqual("visible answer", ((LocalAgentMessagePart.Text)sanitized[0].Parts[1]).Value);
+    }
+
+    [TestMethod]
+    public void LocalAgentReasoningReplay_DifferentModel_DropsOpaqueReasoningWithoutSummary()
+    {
+        var source = CreateTurnRequest("anthropic", "anthropic", LocalAgentTransportKind.AnthropicMessages, "claude-sonnet-4.5");
+        var target = CreateTurnRequest("anthropic", "anthropic", LocalAgentTransportKind.AnthropicMessages, "claude-opus-4.5");
+        var conversation = new[]
+        {
+            new LocalAgentConversationMessage(
+                LocalAgentConversationRole.Assistant,
+                [
+                    new LocalAgentMessagePart.Reasoning(null, "signature", LocalAgentReasoningReplay.CreateProvenance(source)),
+                    new LocalAgentMessagePart.ToolCall("call-1", "read_file", JsonDocument.Parse("{}").RootElement.Clone()),
+                ]),
+        };
+
+        var sanitized = LocalAgentReasoningReplay.SanitizeForRequest(conversation, target);
+
+        Assert.AreEqual(1, sanitized[0].Parts.Count);
+        Assert.IsInstanceOfType<LocalAgentMessagePart.ToolCall>(sanitized[0].Parts[0]);
+    }
+
+    [TestMethod]
+    public void LocalAgentReasoningReplay_LegacyReasoningWithoutProvenance_DowngradesToText()
+    {
+        var target = CreateTurnRequest("openai-responses", "openai", LocalAgentTransportKind.OpenAIResponses, "gpt-5.5");
+        var conversation = new[]
+        {
+            new LocalAgentConversationMessage(
+                LocalAgentConversationRole.Assistant,
+                [new LocalAgentMessagePart.Reasoning("legacy summary", "legacy-ciphertext")]),
+        };
+
+        var sanitized = LocalAgentReasoningReplay.SanitizeForRequest(conversation, target);
+
+        Assert.IsInstanceOfType<LocalAgentMessagePart.Text>(sanitized[0].Parts[0]);
+        Assert.AreEqual("<assistant_reasoning_summary>legacy summary</assistant_reasoning_summary>", ((LocalAgentMessagePart.Text)sanitized[0].Parts[0]).Value);
+    }
+
+    private static LocalAgentTurnRequest CreateTurnRequest(
+        string protocolFamily,
+        string providerKey,
+        LocalAgentTransportKind transportKind,
+        string modelId)
+    {
+        var provider = new LocalAgentProviderDescriptor
+        {
+            ProtocolFamily = protocolFamily,
+            ProviderKey = providerKey,
+            DisplayName = providerKey,
+            BackendId = new AgentBackendId(providerKey),
+            TransportKind = transportKind,
+        };
+
+        return new LocalAgentTurnRequest
+        {
+            Provider = provider,
+            BackendId = provider.BackendId,
+            SessionId = "session-1",
+            RunId = new AgentRunId("run-1"),
+            ModelId = modelId,
+            Conversation = [],
+            Tools = [],
+            State = new LocalAgentSessionState
+            {
+                SessionId = "session-1",
+                ProtocolFamily = protocolFamily,
+                ProviderKey = providerKey,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            },
+        };
+    }
 }
