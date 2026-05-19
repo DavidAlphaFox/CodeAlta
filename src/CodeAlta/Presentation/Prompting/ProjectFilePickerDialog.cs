@@ -328,11 +328,7 @@ internal sealed class ProjectFilePickerDialog
     {
         var label = new HStack(
         [
-            new TextBlock(item.Appearance.Icon)
-            {
-                Wrap = false,
-                IsSelectable = false,
-            }.Style(TextBlockStyle.Default with { Foreground = item.Appearance.IconForeground }),
+            CreateIconBlock(item.Appearance),
             new TextBlock(item.PrimaryText)
             {
                 Wrap = false,
@@ -354,6 +350,20 @@ internal sealed class ProjectFilePickerDialog
         }
 
         return new OptionListItem(label, shortcut);
+    }
+
+    private static TextBlock CreateIconBlock(ProjectFileAppearance appearance)
+    {
+        TextBlock? icon = null;
+        icon = new TextBlock(appearance.Icon)
+        {
+            Wrap = false,
+            IsSelectable = false,
+        }.Style(() => TextBlockStyle.Default with
+        {
+            Foreground = UiPalette.GetProjectFileIconColor(icon!.GetTheme(), appearance.Category, appearance.IconForeground),
+        });
+        return icon;
     }
 
     private static string ShortenParentPath(string parentPath)

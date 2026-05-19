@@ -533,7 +533,7 @@ public sealed class ArchitectureGuardrailTests
             "App/ThreadRuntimeEventCoordinator.cs:255:Task.Run(async () =>",
             "App/ThreadRuntimeEventCoordinator.cs:461:_ = InvalidateProjectFileSearchAsync(thread.WorkingDirectory);",
             "App/ThreadRuntimeEventCoordinator.cs:484:_ = InvalidateProjectFileSearchAsync(thread.WorkingDirectory);",
-            "Presentation/Editing/FileEditorTab.cs:213:_ = RefreshExternalStateAsync();",
+            "Presentation/Editing/FileEditorTab.cs:223:_ = RefreshExternalStateAsync();",
             "Presentation/Editing/ProjectFileOpenDialogController.cs:217:_ = AcceptSelectedAsync(selected);",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:153:var sessionCreateTask = Task.Run(",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:164:_ = sessionCreateTask.ContinueWith(",

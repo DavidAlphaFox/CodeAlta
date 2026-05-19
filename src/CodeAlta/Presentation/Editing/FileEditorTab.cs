@@ -182,11 +182,7 @@ internal sealed partial class FileEditorTab : IAsyncDisposable
                 var title = Item.Basename + (IsDirty ? "*" : string.Empty);
                 return new HStack(
                 [
-                    new TextBlock(Appearance.Icon)
-                    {
-                        Wrap = false,
-                        IsSelectable = false,
-                    }.Style(TextBlockStyle.Default with { Foreground = Appearance.IconForeground }),
+                    CreateIconBlock(),
                     new TextBlock(CompactTitle(title))
                     {
                         Wrap = false,
@@ -197,6 +193,20 @@ internal sealed partial class FileEditorTab : IAsyncDisposable
                     Spacing = 1,
                 };
             });
+    }
+
+    private TextBlock CreateIconBlock()
+    {
+        TextBlock? icon = null;
+        icon = new TextBlock(Appearance.Icon)
+        {
+            Wrap = false,
+            IsSelectable = false,
+        }.Style(() => TextBlockStyle.Default with
+        {
+            Foreground = UiPalette.GetProjectFileIconColor(icon!.GetTheme(), Appearance.Category, Appearance.IconForeground),
+        });
+        return icon;
     }
 
     public void QueueExternalStateRefresh()

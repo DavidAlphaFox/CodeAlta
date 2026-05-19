@@ -94,6 +94,35 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
+    public void UiPalette_DerivesProjectFileIconColorsFromThemeAndCategory()
+    {
+        var darkTheme = CodeAltaThemeResolver.Resolve(ColorScheme.ElderberryDarkSoft.Name);
+        var lightTheme = CodeAltaThemeResolver.Resolve(ColorScheme.BlueberryLight.Name);
+
+        var darkDirectory = UiPalette.GetProjectFileIconColor(darkTheme, "directory", Color.Default);
+        var darkCSharp = UiPalette.GetProjectFileIconColor(darkTheme, "csharp", Color.Default);
+        var darkTypeScript = UiPalette.GetProjectFileIconColor(darkTheme, "typescript", Color.Default);
+        var lightDirectory = UiPalette.GetProjectFileIconColor(lightTheme, "directory", Color.Default);
+
+        Assert.AreNotEqual(Color.Default, darkDirectory);
+        Assert.AreNotEqual(Color.Default, darkCSharp);
+        Assert.AreNotEqual(Color.Default, darkTypeScript);
+        Assert.AreNotEqual(darkDirectory, darkCSharp);
+        Assert.AreNotEqual(darkCSharp, darkTypeScript);
+        Assert.AreNotEqual(darkDirectory, lightDirectory);
+    }
+
+    [TestMethod]
+    public void UiPalette_ProjectFileIconColorKeepsConfiguredForeground()
+    {
+        var theme = CodeAltaThemeResolver.Resolve(ColorScheme.ElderberryDarkSoft.Name);
+
+        var color = UiPalette.GetProjectFileIconColor(theme, "directory", Colors.Red);
+
+        Assert.AreEqual(Colors.Red, color);
+    }
+
+    [TestMethod]
     public void UiPalette_UsesVisibleOpaqueTimelineBackgroundsForLightThemes()
     {
         var lightTheme = CodeAltaThemeResolver.Resolve(ColorScheme.BlueberryLight.Name);

@@ -185,6 +185,30 @@ namespace CodeAlta.Presentation.Styling
             return GetThemeColor(theme.Muted, GetThemeColor(theme.Foreground, Color.Default));
         }
 
+        internal static Color GetProjectFileIconColor(Theme theme, string? category, Color configuredForeground)
+        {
+            ArgumentNullException.ThrowIfNull(theme);
+            if (configuredForeground != Color.Default)
+            {
+                return configuredForeground;
+            }
+
+            return category switch
+            {
+                "directory" => GetSchemeAccent(theme, static scheme => scheme.BrightYellow, GetThemeColor(theme.Warning, Colors.Goldenrod)),
+                "csharp" or "dotnet" or "kotlin" or "scss" => GetSchemeAccent(theme, static scheme => scheme.BrightPurple, GetThemeColor(theme.Accent, Colors.MediumPurple)),
+                "json" or "yaml" or "toml" or "javascript" => GetSchemeAccent(theme, static scheme => scheme.Yellow, GetThemeColor(theme.Warning, Colors.Goldenrod)),
+                "markdown" or "typescript" or "cpp" or "powershell" or "docker" => GetSchemeAccent(theme, static scheme => scheme.BrightBlue, GetThemeColor(theme.Primary, Colors.DeepSkyBlue)),
+                "python" => GetSchemeAccent(theme, static scheme => Color.Mix(scheme.BrightBlue, scheme.BrightYellow, 0.35f, ColorMixSpace.Oklab), GetThemeColor(theme.Primary, Colors.DeepSkyBlue)),
+                "go" or "sql" => GetSchemeAccent(theme, static scheme => scheme.BrightCyan, GetThemeColor(theme.Primary, Colors.DeepSkyBlue)),
+                "rust" or "java" or "html" => GetSchemeAccent(theme, static scheme => Color.Mix(scheme.BrightRed, scheme.Yellow, 0.38f, ColorMixSpace.Oklab), GetThemeColor(theme.Warning, Colors.Orange)),
+                "css" => GetSchemeAccent(theme, static scheme => scheme.Blue, GetThemeColor(theme.Primary, Colors.DodgerBlue)),
+                "xml" => GetSchemeAccent(theme, static scheme => scheme.Cyan, GetThemeColor(theme.Primary, Colors.CadetBlue)),
+                "shell" => GetSchemeAccent(theme, static scheme => scheme.BrightGreen, GetThemeColor(theme.Success, Colors.MediumSeaGreen)),
+                _ => GetThemeColor(theme.Muted, GetThemeColor(theme.Foreground, Color.Default)),
+            };
+        }
+
         internal static Color GetWelcomeSubtitleColor(Theme theme)
         {
             ArgumentNullException.ThrowIfNull(theme);
