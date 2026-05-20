@@ -8,14 +8,10 @@ title: Getting Started
 
 CodeAlta is distributed as a .NET global tool. The package id is `CodeAlta`; the installed command is `alta`.
 
+Install [.NET 10](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) first, then install/update CodeAlta:
+
 ```sh
 dotnet tool install -g CodeAlta
-```
-
-To update later:
-
-```sh
-dotnet tool update -g CodeAlta
 ```
 
 Then launch the terminal UI:

@@ -168,7 +168,7 @@ alta skill show codealta-plugin-runtime
 alta skill activate codealta-plugin-runtime --session <thread-id>
 ```
 
-Visibility and provenance are enforced by the host. The global coordinator can inspect local projects and sessions, while project-scoped sessions can inspect/control their own project and same-project descendants; denied cross-project reads/mutations return a policy-denied JSONL error. Sessions created or controlled by agents/plugins carry `createdBy`/`submittedBy` metadata so sidebars and timelines can reconstruct parent/child relationships and prompt ownership after restart.
+Visibility and provenance are recorded by the host. Agent/plugin-originated live-tool calls can inspect and coordinate across global/project sessions; project context is still used for defaults, child-session placement, and attribution. Sessions created or controlled by agents/plugins carry `createdBy`/`submittedBy` metadata so sidebars and timelines can reconstruct parent/child relationships and prompt ownership after restart.
 
 Plugins can add fresh `alta` command roots that appear in `alta --help`, and trusted plugins can invoke built-in `alta` commands through `Services.Alta.InvokeAsync(...)`. `plugin list` defaults to compact runtime refs; add `--detailed` for version, scope, state, and diagnostics. Plugin-originated mutating commands include the runtime-owned plugin key in provenance.
 

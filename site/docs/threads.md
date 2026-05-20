@@ -37,7 +37,7 @@ Use `Ctrl+Enter` with an empty draft to steer the first queued prompt immediatel
 
 Steering lets you adjust a running turn without waiting for completion.
 
-```text
+```markdown
 Focus on the parser only. Do not refactor unrelated files.
 ```
 
@@ -49,71 +49,93 @@ Press `F11` or click the compact button beside the provider/model/reasoning sele
 
 Local compaction targets a smaller post-compaction context by default so long sessions can continue without immediately hitting the context limit.
 
-## The in-session `alta` live tool
+## Agent delegation and self-inspection
 
-CodeAlta-managed local-runtime sessions receive an in-process tool named `alta`. It lets an agent inspect projects, inspect sessions, create child sessions, send/queue/steer prompts, activate skills, and use plugin-contributed commands through bounded JSONL responses.
+CodeAlta-managed local-runtime sessions include an in-process `alta` live tool, but it is not a command surface that you normally type into the terminal. It is a tool the selected agent can use when your prompt asks it to inspect CodeAlta state, coordinate with other sessions, or delegate work.
 
-Agents can discover it progressively:
+Think of it as CodeAlta giving the agent a safe, scoped way to ask the host questions such as:
 
-```text
-alta --help
-alta session --help
-alta tool capability list
+- which projects are known or currently open;
+- what sessions already exist for this project;
+- which model providers and model refs are available;
+- whether a related thread has finished and what its final result was;
+- how to create a child session for another project, provider, model, or reasoning effort.
+
+## Prompting for delegated work
+
+Use the UI delegation shortcut (`F7`) for an explicit delegation flow, or ask the current agent to create and coordinate child sessions for you.
+
+Examples:
+
+```markdown
+Create two child sessions for the current project with the same prompt.
+Use Codex high reasoning for one and Anthropic Sonnet for the other.
+Ask both to propose the smallest safe fix, then compare their final
+answers when they report back.
 ```
 
-Non-help commands return newline-delimited JSON records headed by an `alta.result` record. The command returns a finite response; it does not keep streaming future activity.
-
-## Delegating work to another session
-
-Use the UI delegation shortcut (`F7`) or let an agent create a child session with the live tool:
-
-```text
-alta session create --project CodeAlta --title "Investigate parser" --same-model-as <thread-id> --reasoning low
-alta session send <thread-id> --message "Summarize the latest failing test."
-alta session queue <thread-id> --message "Run this after the current turn."
-alta session steer <thread-id> --message "Focus on the smallest fix."
-alta session abort <thread-id> --reason "Superseded by user request"
-alta session compact <thread-id>
+```markdown
+Start a low-reasoning child session for the current project to inspect
+the latest test failure logs while you continue reading the parser code
+here. Have the child report only the likely failing assertion and
+relevant files.
 ```
 
-For parent/child delegated work, the default pattern is notification-based: the child final reply or child-run error is forwarded back to the parent thread automatically. Agents should not poll or sleep by default while waiting for a child session.
-
-## Inspecting sessions
-
-Useful diagnostic commands:
-
-```text
-alta project list
-alta project current
-alta session list --project CodeAlta --state all --limit 20
-alta session show <thread-id>
-alta session status <thread-id>
-alta session children <thread-id> --recursive
-alta session tail <thread-id> --last 10
-alta session metrics <thread-id> --scope last-turn
-alta session result <thread-id>
+```markdown
+Create a project-scoped session for `../OtherRepo` using the fastest
+available model. Ask it to summarize the public API shape and send the
+summary back here.
 ```
 
-Use `tail`, `events`, and `status` for diagnostics or explicit observation. Use small limits and fields to keep tool results compact.
+For parent/child delegated work, CodeAlta uses a notification-based pattern: the child final reply or child-run error is forwarded back to the parent thread automatically. The parent agent should yield instead of repeatedly polling while waiting.
 
-## Provider and model discovery from a session
+## Prompting for CodeAlta self-inspection
 
-```text
-alta provider list
-alta provider list --detailed
-alta provider model list --provider codex
-alta model list --provider anthropic --contains sonnet
-alta model show --model-ref copilot:claude-sonnet-4.6@high
-alta model resolve --model-ref codex:gpt-5.5@high
+You can also ask a session to inspect CodeAlta-managed project/thread state before acting. This is useful when you have many open threads, want to recover prior context, or want to compare work across providers.
+
+Examples:
+
+```markdown
+Look at the 10 most recent sessions for this project and tell me which
+ones modified provider configuration docs.
 ```
 
-Provider/model discovery is id/ref based so copied refs are stable in prompts, session creation, and reports.
+```markdown
+Find the child sessions created from this thread and summarize their
+final answers, grouped by model.
+```
 
-## Visibility and provenance
+```markdown
+Which enabled providers can run a high-reasoning model for this project?
+Pick two good candidates for a comparison run and explain the tradeoff
+before creating sessions.
+```
 
-The live tool enforces scope and provenance:
+```markdown
+Before changing files, inspect the recent CodeAlta sessions for this
+project and check whether a recent thread already investigated the
+plugin startup issue.
+```
 
-- the global coordinator can inspect local projects and sessions;
-- project-scoped sessions can inspect/control their own project and same-project descendants;
-- denied cross-project reads or mutations return policy-denied JSONL errors;
+The agent may use the live tool to gather this information, but the important user workflow is the prompt: ask for the coordination outcome you want, not for individual low-level commands.
+
+## Comparing models on the same task
+
+A powerful workflow is to ask CodeAlta to fan out the same task to several providers or reasoning settings, then bring back a comparison.
+
+```markdown
+Run the same investigation in three child sessions: Codex high,
+Copilot high, and Anthropic high. Give each child the same task and ask
+them not to edit files. When all replies arrive, compare correctness,
+risk, and recommended next step.
+```
+
+This works best when you ask for a bounded result from each child: summary, relevant files, proposed patch outline, test command, or risk assessment. Let one parent thread synthesize the answers before you choose what to apply.
+
+## Scope, visibility, and provenance
+
+Behind these workflows, CodeAlta records scope and provenance:
+
+- global and project-scoped sessions can inspect reachable CodeAlta projects and sessions through host-managed live-tool APIs;
+- project context is still used for defaults, child-session placement, and attribution;
 - sessions created or controlled by agents/plugins carry `createdBy` and `submittedBy` metadata so sidebars and timelines can reconstruct parent/child relationships after restart.
