@@ -35,22 +35,14 @@ alta</code></pre>
     <div class="workflow-preview-copy">
       <p class="text-uppercase text-secondary fw-semibold mb-2">Terminal workflow preview</p>
       <h2 class="display-6 mb-3">One terminal surface for prompts, tools, files, and agent state.</h2>
-      <p class="lead mb-0">A short usage video will be embedded here to show first launch, provider setup, prompt sending, tool calls, and timeline cards.</p>
+      <p class="lead mb-0">Watch CodeAlta coordinate prompts, tools, files, and delegated agents without leaving the terminal workspace.</p>
     </div>
-    <div class="terminal-demo-placeholder" role="img" aria-label="CodeAlta terminal demo placeholder">
-      <div class="demo-titlebar"><span></span><span></span><span></span><strong>alta</strong></div>
-      <pre><code>Projects  ▸ CodeAlta
-Threads   ▸ Fix parser test
-
-provider: Codex · gpt-5.5 · reasoning high · ctx 18%
-
-&gt; Use the smallest safe change and run the focused test.
-
-assistant  Planning the change…
-tool       read_file src/CodeAlta/...
-result     1 file modified · +12 -3</code></pre>
+    <div class="workflow-demo-video">
+      <video controls muted playsinline preload="metadata" poster="{{site.basepath}}/img/alta-home.png" aria-label="CodeAlta terminal workflow video">
+        <source src="{{site.basepath}}/img/alta-multi-agents.mp4" type="video/mp4">
+        <a href="{{site.basepath}}/img/alta-multi-agents.mp4">Download the CodeAlta terminal workflow video.</a>
+      </video>
     </div>
-    <!-- Replace the placeholder above with a video element when the demo capture is available. -->
   </div>
 </section>
 
@@ -66,11 +58,8 @@ result     1 file modified · +12 -3</code></pre>
         <span class="principle-kicker">Efficient interface</span>
         <h3><i class="bi bi-arrows-collapse"></i> Using terminal space efficiently</h3>
       </div>
-      <div class="principle-shot" role="img" aria-label="Screenshot placeholder for the compact workspace timeline">
-        <div class="shot-topline"><span></span><span></span><span></span><strong>Main workspace</strong></div>
-        <div class="shot-body shot-body--workspace">
-          <span class="rail"></span><span class="timeline wide"></span><span class="timeline"></span><span class="chip"></span><span class="chip alt"></span><span class="footer"></span>
-        </div>
+      <div class="principle-shot principle-shot--image">
+        <img src="{{site.basepath}}/img/alta-home.png" alt="CodeAlta main workspace with projects, thread timeline, prompt editor, and provider footer" loading="lazy">
       </div>
     </article>
     <article class="principle-feature" style="--accent: #60a5fa; --accent-2: #c084fc;">
@@ -78,9 +67,8 @@ result     1 file modified · +12 -3</code></pre>
         <span class="principle-kicker">Transparent execution</span>
         <h3><i class="bi bi-eye"></i> Keeping execution inspectable</h3>
       </div>
-      <div class="principle-shot" role="img" aria-label="Screenshot placeholder for expanded system prompt and execution details">
-        <div class="shot-topline"><span></span><span></span><span></span><strong>Execution trace</strong></div>
-        <div class="shot-body"><span class="diff plus"></span><span class="diff"></span><span class="diff plus short"></span><span class="stats"></span></div>
+      <div class="principle-shot principle-shot--image principle-shot--wide">
+        <img src="{{site.basepath}}/img/alta-tool-input-output-dialog.png" alt="CodeAlta tool input and output dialog showing inspectable execution details" loading="lazy">
       </div>
     </article>
     <article class="principle-feature" style="--accent: #34d399; --accent-2: #facc15;">
@@ -88,9 +76,8 @@ result     1 file modified · +12 -3</code></pre>
         <span class="principle-kicker">Keyboard-first workflow</span>
         <h3><i class="bi bi-keyboard"></i> Working keyboard-first</h3>
       </div>
-      <div class="principle-shot" role="img" aria-label="Screenshot placeholder for command discovery and shortcuts">
-        <div class="shot-topline"><span></span><span></span><span></span><strong>Command help</strong></div>
-        <div class="shot-body shot-body--commands"><kbd>/providers</kbd><kbd>/threads</kbd><kbd>Ctrl+K</kbd><kbd>Alt+↑</kbd></div>
+      <div class="principle-shot principle-shot--image principle-shot--wide">
+        <img src="{{site.basepath}}/img/alta-command-palette.png" alt="CodeAlta command palette with keyboard-first commands" loading="lazy">
       </div>
     </article>
     <article class="principle-feature" style="--accent: #22d3ee; --accent-2: #a78bfa;">
@@ -98,9 +85,8 @@ result     1 file modified · +12 -3</code></pre>
         <span class="principle-kicker">Thread-oriented workspace</span>
         <h3><i class="bi bi-diagram-3"></i> Coordinating multiple agents in durable threads</h3>
       </div>
-      <div class="principle-shot" role="img" aria-label="Screenshot placeholder for project threads and delegated child agents">
-        <div class="shot-topline"><span></span><span></span><span></span><strong>Agents &amp; threads</strong></div>
-        <div class="shot-body shot-body--tree"><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="principle-shot principle-shot--image">
+        <img src="{{site.basepath}}/img/alta-help.png" alt="CodeAlta help dialog listing thread, queue, steering, and delegation shortcuts" loading="lazy">
       </div>
     </article>
     <article class="principle-feature" style="--accent: #fb923c; --accent-2: #38bdf8;">
@@ -108,9 +94,8 @@ result     1 file modified · +12 -3</code></pre>
         <span class="principle-kicker">Provider-agnostic runtime</span>
         <h3><i class="bi bi-cpu"></i> Switching between multiple providers and models, local and remote</h3>
       </div>
-      <div class="principle-shot" role="img" aria-label="Screenshot placeholder for provider and model selection">
-        <div class="shot-topline"><span></span><span></span><span></span><strong>Providers</strong></div>
-        <div class="shot-body shot-body--providers"><span>Codex</span><span>OpenAI</span><span>Anthropic</span><span>Gemini</span></div>
+      <div class="principle-shot principle-shot--image">
+        <img src="{{site.basepath}}/img/alta-model-providers.png" alt="CodeAlta Model Providers dialog for configuring providers and models" loading="lazy">
       </div>
     </article>
     <article class="principle-feature" style="--accent: #818cf8; --accent-2: #2dd4bf;">
@@ -118,9 +103,8 @@ result     1 file modified · +12 -3</code></pre>
         <span class="principle-kicker">Native .NET foundation</span>
         <h3><i class="bi bi-braces-asterisk"></i> Staying native to C# and .NET</h3>
       </div>
-      <div class="principle-shot" role="img" aria-label="Screenshot placeholder for the native .NET foundation">
-        <div class="shot-topline"><span></span><span></span><span></span><strong>.NET TUI</strong></div>
-        <div class="shot-body shot-body--stack"><span>CodeAlta</span><span>XenoAtom.Terminal.UI</span><span>.NET</span></div>
+      <div class="principle-shot principle-shot--image">
+        <img src="{{site.basepath}}/img/alta-code-editor.png" alt="CodeAlta native terminal editor with syntax-highlighted C# code" loading="lazy">
       </div>
     </article>
     <article class="principle-feature" style="--accent: #f43f5e; --accent-2: #fbbf24;">
@@ -128,9 +112,8 @@ result     1 file modified · +12 -3</code></pre>
         <span class="principle-kicker">Actionable errors</span>
         <h3><i class="bi bi-life-preserver"></i> Turning failures into repair paths</h3>
       </div>
-      <div class="principle-shot" role="img" aria-label="Screenshot placeholder for validation and recovery UI">
-        <div class="shot-topline"><span></span><span></span><span></span><strong>Recovery</strong></div>
-        <div class="shot-body shot-body--error"><span>!</span><span></span><span></span><span class="fix-button">Fix</span></div>
+      <div class="principle-shot principle-shot--image">
+        <img src="{{site.basepath}}/img/alta-context-usage.png" alt="CodeAlta context usage dialog with usage details and compaction pressure" loading="lazy">
       </div>
     </article>
     <article class="principle-feature" style="--accent: #a3e635; --accent-2: #06b6d4;">
@@ -138,9 +121,8 @@ result     1 file modified · +12 -3</code></pre>
         <span class="principle-kicker">Plugin support</span>
         <h3><i class="bi bi-puzzle"></i> Adding trusted local plugins</h3>
       </div>
-      <div class="principle-shot" role="img" aria-label="Screenshot placeholder for plugin management">
-        <div class="shot-topline"><span></span><span></span><span></span><strong>Plugins</strong></div>
-        <div class="shot-body shot-body--plugins"><span>plugin.cs</span><span>commands</span><span>tools</span></div>
+      <div class="principle-shot principle-shot--image">
+        <img src="{{site.basepath}}/img/alta-plugins.png" alt="CodeAlta plugin management dialog with plugin diagnostics and contributions" loading="lazy">
       </div>
     </article>
   </div>
@@ -200,34 +182,19 @@ result     1 file modified · +12 -3</code></pre>
 .workflow-preview-copy h2 {
   font-size: clamp(1.6rem, 2.6vw, 2.45rem);
 }
-.terminal-demo-placeholder {
+.workflow-demo-video {
   border-radius: 1.3rem;
   border: 1px solid rgba(255,255,255,.13);
   background: #07111f;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.035), 0 1.25rem 3rem rgba(0,0,0,.28);
   overflow: hidden;
 }
-.demo-titlebar {
-  display: flex;
-  align-items: center;
-  gap: .45rem;
-  padding: .7rem .9rem;
-  background: linear-gradient(90deg, rgba(255,255,255,.09), rgba(255,255,255,.035));
-  color: rgba(255,255,255,.72);
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: .85rem;
-}
-.demo-titlebar span { width: .7rem; height: .7rem; border-radius: 50%; display: inline-block; }
-.demo-titlebar span:nth-child(1) { background: #ff5f56; }
-.demo-titlebar span:nth-child(2) { background: #ffbd2e; }
-.demo-titlebar span:nth-child(3) { background: #27c93f; margin-right: .45rem; }
-.terminal-demo-placeholder pre {
-  margin: 0;
-  padding: clamp(1rem, 2.3vw, 1.5rem);
-  color: #d9e6ff;
-  background: transparent;
-  white-space: pre-wrap;
-  font-size: clamp(.82rem, 1.05vw, .98rem);
+.workflow-demo-video video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: center top;
 }
 .codealta-principles {
   position: relative;
@@ -330,121 +297,17 @@ result     1 file modified · +12 -3</code></pre>
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.035), 0 .85rem 2rem rgba(0,0,0,.22);
   overflow: hidden;
 }
-.shot-topline {
-  display: flex;
-  align-items: center;
-  gap: .38rem;
-  padding: .55rem .7rem;
-  color: rgba(234, 242, 255, .64);
-  background: linear-gradient(90deg, rgba(255,255,255,.085), rgba(255,255,255,.025));
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: .68rem;
-}
-.shot-topline span {
-  width: .5rem;
-  height: .5rem;
-  border-radius: 50%;
-  background: var(--accent);
-}
-.shot-topline span:nth-child(2) { background: var(--accent-2); }
-.shot-topline span:nth-child(3) { background: rgba(255,255,255,.32); margin-right: .25rem; }
-.shot-body {
-  min-height: 8.6rem;
-  padding: .85rem;
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: .82rem;
-}
-.shot-body--workspace {
-  display: grid;
-  grid-template-columns: 3.2rem 1fr 1fr;
-  gap: .5rem;
-}
-.shot-body--workspace .rail { grid-row: 1 / 5; border-radius: .65rem; background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.04)); }
-.shot-body--workspace .timeline,
-.shot-body--workspace .chip,
-.shot-body--workspace .footer,
-.shot-body .diff,
-.shot-body .stats {
+.principle-shot--image {
   display: block;
-  border-radius: .5rem;
-  background: rgba(255,255,255,.10);
 }
-.shot-body--workspace .timeline { height: 1.75rem; grid-column: 2 / 4; }
-.shot-body--workspace .timeline.wide { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 34%, transparent), rgba(255,255,255,.08)); }
-.shot-body--workspace .chip { height: 1.35rem; background: color-mix(in srgb, var(--accent) 30%, rgba(255,255,255,.08)); }
-.shot-body--workspace .chip.alt { background: color-mix(in srgb, var(--accent-2) 32%, rgba(255,255,255,.08)); }
-.shot-body--workspace .footer { height: 1.45rem; grid-column: 2 / 4; }
-.shot-body .diff { height: 1rem; margin-bottom: .55rem; }
-.shot-body .diff.plus { background: color-mix(in srgb, var(--accent) 32%, rgba(255,255,255,.08)); }
-.shot-body .diff.short { width: 68%; }
-.shot-body .stats { height: 2.65rem; margin-top: .85rem; background: linear-gradient(135deg, color-mix(in srgb, var(--accent-2) 25%, transparent), rgba(255,255,255,.075)); }
-.shot-body--commands {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: center;
-  gap: .55rem;
-}
-.shot-body--commands kbd,
-.shot-body--providers span,
-.shot-body--stack span,
-.shot-body--plugins span,
-.shot-body--error .fix-button {
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: .7rem;
-  padding: .42rem .58rem;
-  color: rgba(245, 250, 255, .9);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 25%, transparent), rgba(255,255,255,.06));
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.025);
-}
-.shot-body--tree {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-content: center;
-  gap: .55rem;
-}
-.shot-body--tree span {
+.principle-shot--image img {
   display: block;
-  height: 1.55rem;
-  border-left: 3px solid var(--accent);
-  border-radius: .45rem;
-  background: rgba(255,255,255,.08);
+  width: 100%;
+  height: clamp(9.4rem, 13vw, 12.5rem);
+  object-fit: cover;
+  object-position: center top;
 }
-.shot-body--tree span:first-child { grid-column: 1 / 3; width: 72%; }
-.shot-body--tree span:nth-child(3),
-.shot-body--tree span:nth-child(5) { border-left-color: var(--accent-2); transform: translateX(.75rem); }
-.shot-body--providers,
-.shot-body--stack,
-.shot-body--plugins {
-  display: grid;
-  align-content: center;
-  gap: .55rem;
-}
-.shot-body--providers { grid-template-columns: 1fr 1fr; }
-.shot-body--stack span:nth-child(2) { margin-left: .85rem; }
-.shot-body--stack span:nth-child(3) { margin-left: 1.7rem; }
-.shot-body--error {
-  display: grid;
-  grid-template-columns: 2rem 1fr;
-  align-content: center;
-  gap: .6rem;
-}
-.shot-body--error span:first-child {
-  display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  color: #08111f;
-  font-weight: 800;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-}
-.shot-body--error span:not(:first-child):not(.fix-button) {
-  display: block;
-  height: 1rem;
-  border-radius: .55rem;
-  background: rgba(255,255,255,.10);
-}
-.shot-body--error .fix-button { justify-self: start; grid-column: 2; }
+.principle-shot--wide img { height: clamp(8rem, 11vw, 10rem); }
 .principles-cta .btn {
   border-radius: 999px;
 }

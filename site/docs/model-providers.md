@@ -37,7 +37,10 @@ Project-local overrides can live in `<project>/.alta/config.toml`. CodeAlta reso
 
 Open the dialog with `Ctrl+G Ctrl+R` or the provider summary in the footer.
 
-<!-- screenshot: model providers dialog provider list and editor -->
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-model-providers.png" alt="CodeAlta Model Providers dialog with provider list and editable provider settings" loading="lazy">
+  <figcaption class="small text-secondary mt-2">The provider dialog edits the same TOML-backed configuration while keeping credentials, model selection, login flows, and validation visible.</figcaption>
+</figure>
 
 The dialog can:
 

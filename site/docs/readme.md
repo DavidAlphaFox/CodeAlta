@@ -8,6 +8,11 @@ CodeAlta is a terminal workspace for agentic coding. It brings together local pr
 
 Start with the first two pages, then use the topic pages as a reference while you work.
 
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-home.png" alt="CodeAlta home workspace showing the projects sidebar, active thread timeline, prompt editor, and provider footer" loading="lazy">
+  <figcaption class="small text-secondary mt-2">The main <code>alta</code> workspace keeps projects, threads, timeline entries, prompt drafting, provider state, and context usage in one terminal surface.</figcaption>
+</figure>
+
 ## Start here
 
 1. [Getting Started](getting-started.md): install the tool, launch it, configure the first provider, and send a first prompt.

@@ -26,7 +26,10 @@ CodeAlta stores user state under `~/.alta/`, including configuration, logs, cach
 
 On first launch, CodeAlta creates a starter `~/.alta/config.toml` with common provider entries disabled. If no provider is enabled yet, the app opens the Model Providers dialog automatically.
 
-<!-- screenshot: first launch with Model Providers dialog -->
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-model-providers.png" alt="CodeAlta Model Providers dialog opened during first launch" loading="lazy">
+  <figcaption class="small text-secondary mt-2">First launch routes you directly to provider setup so you can enable a provider, choose a model, and validate credentials before sending prompts.</figcaption>
+</figure>
 
 Use the dialog to:
 
@@ -94,6 +97,16 @@ Type `@` in the prompt editor to open the project file/folder picker. Accepted e
 Paste images with `Ctrl+V` when the selected model supports image input. CodeAlta opens a preview/title dialog and stores the image beside the session journal.
 
 ## Essential shortcuts
+
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-command-bar-with-shortcuts.png" alt="CodeAlta command bar showing commonly used keyboard shortcuts" loading="lazy">
+  <figcaption class="small text-secondary mt-2">The command bar keeps high-frequency shortcuts visible while you work, so common actions are discoverable without interrupting the prompt flow.</figcaption>
+</figure>
+
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-help.png" alt="CodeAlta help dialog listing common shortcuts and commands" loading="lazy">
+  <figcaption class="small text-secondary mt-2">Open help with <code>F1</code>, <code>/help</code>, or <code>?</code> whenever you need a reminder of workspace, provider, thread, and dialog shortcuts.</figcaption>
+</figure>
 
 | Action | Shortcut or command |
 | --- | --- |

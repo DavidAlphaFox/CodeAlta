@@ -21,7 +21,10 @@ Project-scoped plugins apply only to the matching project. Global plugins apply 
 
 Open plugin management with `Ctrl+G Ctrl+N`, `/plugins`, or `/plugin`.
 
-<!-- screenshot: plugin management dialog plugin list and selected plugin diagnostics -->
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-plugins.png" alt="CodeAlta plugin management dialog with plugin list, diagnostics, and selected plugin contributions" loading="lazy">
+  <figcaption class="small text-secondary mt-2">Plugin management keeps discovered plugins, diagnostics, source actions, and contribution summaries visible in one dialog.</figcaption>
+</figure>
 
 The dialog shows:
 
@@ -123,6 +126,11 @@ Plugins can contribute:
 - transient thread event projections for plugin-owned timeline cards.
 
 Built-in plugins use the same model. For example, the statistics plugin projects per-turn/session statistics from normalized agent events without writing plugin messages into canonical conversation history.
+
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-plugin-statistics.png" alt="CodeAlta timeline statistics card contributed by a plugin" loading="lazy">
+  <figcaption class="small text-secondary mt-2">The built-in statistics plugin demonstrates how plugins can project useful timeline cards without changing conversation history.</figcaption>
+</figure>
 
 ## Extend the `alta` live tool
 
