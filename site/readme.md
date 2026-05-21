@@ -54,42 +54,83 @@ result     1 file modified · +12 -3</code></pre>
 </section>
 
 <section class="container my-5">
+  <div class="text-center mb-4">
+    <p class="text-uppercase text-secondary fw-semibold mb-2">CodeAlta principles</p>
+    <h2 class="display-6 mb-3">Efficient. Transparent. Keyboard-first. Thread-oriented. Provider-agnostic. Native .NET. Error-aware. Pluggable.</h2>
+    <p class="lead mb-0">These principles guide the product design without turning the workspace into a marketing surface.</p>
+  </div>
   <div class="row row-cols-1 row-cols-lg-2 gx-4 gy-4">
     <div class="col">
       <div class="card h-100">
-        <div class="card-header h4"><i class="bi bi-cpu lunet-feature-icon lunet-icon--controls"></i> Model providers in one place</div>
+        <div class="card-header h4"><i class="bi bi-arrows-collapse lunet-feature-icon lunet-icon--layout"></i> Efficient interface</div>
         <div class="card-body">
-          Configure Codex, Copilot, OpenAI, Anthropic, Gemini, Vertex AI, and compatible endpoints from the provider dialog or <code>~/.alta/config.toml</code>.
-          <p class="mb-0 mt-3"><a href="{{site.basepath}}/docs/model-providers/">Provider setup guide</a></p>
+          CodeAlta uses terminal space efficiently.
         </div>
       </div>
     </div>
     <div class="col">
       <div class="card h-100">
-        <div class="card-header h4"><i class="bi bi-window-stack lunet-feature-icon lunet-icon--layout"></i> Rich terminal workspace</div>
+        <div class="card-header h4"><i class="bi bi-eye lunet-feature-icon lunet-icon--data"></i> Transparent execution</div>
         <div class="card-body">
-          Work with projects, thread tabs, prompt attachments, editor tabs, logs, usage popups, and timeline cards without leaving the terminal.
-          <p class="mb-0 mt-3"><a href="{{site.basepath}}/docs/workspace/">Workspace walkthrough</a></p>
+          CodeAlta keeps agent execution inspectable.
         </div>
       </div>
     </div>
     <div class="col">
       <div class="card h-100">
-        <div class="card-header h4"><i class="bi bi-diagram-3 lunet-feature-icon lunet-icon--binding"></i> Global and project threads</div>
+        <div class="card-header h4"><i class="bi bi-keyboard lunet-feature-icon lunet-icon--controls"></i> Keyboard-first workflow</div>
         <div class="card-body">
-          Keep global coordination separate from project-specific work, queue prompts on busy threads, steer running work, and delegate tasks through the in-session <code>alta</code> live tool.
-          <p class="mb-0 mt-3"><a href="{{site.basepath}}/docs/threads/">Threads and delegation</a></p>
+          CodeAlta supports normal work from the keyboard.
         </div>
       </div>
     </div>
     <div class="col">
       <div class="card h-100">
-        <div class="card-header h4"><i class="bi bi-puzzle lunet-feature-icon lunet-icon--data"></i> Trusted source plugins</div>
+        <div class="card-header h4"><i class="bi bi-diagram-3 lunet-feature-icon lunet-icon--binding"></i> Thread-oriented workspace</div>
         <div class="card-body">
-          Add prompt guidance, commands, tools, UI regions, thread projections, and live-tool commands with source plugins under user or project <code>.alta/plugins</code> folders.
-          <p class="mb-0 mt-3"><a href="{{site.basepath}}/docs/plugins/">Plugin development</a></p>
+          CodeAlta models agent work as durable threads rather than disposable chat scrollback.
         </div>
       </div>
+    </div>
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-header h4"><i class="bi bi-cpu lunet-feature-icon lunet-icon--controls"></i> Provider-agnostic runtime</div>
+        <div class="card-body">
+          CodeAlta models LLM execution as providers, not as a single-vendor integration.
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-header h4"><i class="bi bi-braces-asterisk lunet-feature-icon lunet-icon--data"></i> Native .NET foundation</div>
+        <div class="card-body">
+          CodeAlta stays native to C#/.NET and keeps the runtime and dependency surface easy to understand, audit, and control.
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-header h4"><i class="bi bi-life-preserver lunet-feature-icon lunet-icon--controls"></i> Actionable errors</div>
+        <div class="card-body">
+          CodeAlta turns setup and runtime failures into visible repair paths.
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-header h4"><i class="bi bi-puzzle lunet-feature-icon lunet-icon--data"></i> Plugin support</div>
+        <div class="card-body">
+          CodeAlta supports trusted local plugins that remain visible as source and manageable from the UI.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card screenshot-placeholder-card mt-4">
+    <div class="card-body text-center py-5">
+      <i class="bi bi-images display-5 d-block mb-3 text-secondary"></i>
+      <h3 class="h4">Screenshot placeholders</h3>
+      <p class="mb-3 text-secondary">Upcoming screenshots will show the main workspace, timeline cards, provider dialogs, thread delegation, theme selection, and plugin management.</p>
+      <a href="{{site.basepath}}/docs/principles/" class="btn btn-outline-primary">Read the full principles manifesto</a>
     </div>
   </div>
 </section>
@@ -150,6 +191,10 @@ result     1 file modified · +12 -3</code></pre>
   color: #d9e6ff;
   background: transparent;
   white-space: pre-wrap;
+}
+.screenshot-placeholder-card {
+  border-style: dashed;
+  background: linear-gradient(135deg, rgba(0, 209, 255, 0.06), rgba(168, 85, 247, 0.05));
 }
 @media (prefers-reduced-motion: reduce) {
   .logo-alta { background-position: 50% 50%; }
