@@ -5,37 +5,28 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>preview</LangVersion>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
 
     <PackAsTool>true</PackAsTool>
+    <PackageId>CodeAlta</PackageId>
+    <AssemblyName>alta</AssemblyName>
     <ToolCommandName>alta</ToolCommandName>
-
-    <!--<PublishAot>true</PublishAot>-->
 
     <!-- Enable AOT analyzers -->
     <IsAotCompatible>true</IsAotCompatible>
-    <AssemblyName>alta</AssemblyName>
-
-    <RuntimeIdentifiers>linux-x64;linux-arm64;linux-musl-x64;linux-musl-arm64;win-x64;win-arm64;osx-arm64;any</RuntimeIdentifiers>
+    <RuntimeIdentifiers>linux-x64;linux-arm64;linux-musl-x64;linux-musl-arm64;win-x64;win-arm64;osx-arm64</RuntimeIdentifiers>
     <PublishSelfContained>false</PublishSelfContained>
   </PropertyGroup>
 
   <PropertyGroup>
-    <Description>An agentic AI coding CLI assistant developed in .NET</Description>
-    <Copyright>Alexandre Mutel</Copyright>
-    <NeutralLanguage>en-US</NeutralLanguage>
-    <Authors>Alexandre Mutel</Authors>
+    <ApplicationIcon>..\..\img\alta.ico</ApplicationIcon>
     <PackageTags>agentic;ai;cli</PackageTags>
     <PackageReadmeFile>readme.md</PackageReadmeFile>
     <PackageIcon>CodeAlta.png</PackageIcon>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageProjectUrl>https://github.com/CodeAlta/CodeAlta</PackageProjectUrl>
     <PackageLicenseExpression>BSD-2-Clause</PackageLicenseExpression>
-    <!--Add support for sourcelink-->
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>

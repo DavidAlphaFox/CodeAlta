@@ -2,6 +2,11 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <Description>An agentic AI coding CLI assistant developed in .NET</Description>
+    <Copyright>Alexandre Mutel</Copyright>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <Authors>Alexandre Mutel</Authors>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 <!--    <UseLocalGitHubCopilotSdk Condition="'$(UseLocalGitHubCopilotSdk)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\github\copilot-sdk\dotnet\src\GitHub.Copilot.SDK.csproj')">true</UseLocalGitHubCopilotSdk>-->
     <CodeAltaCompatibilityConstants Condition="'$(UseLocalGitHubCopilotSdk)' == 'true'">CODEALTA_LOCAL_COPILOT_SDK</CodeAltaCompatibilityConstants>
