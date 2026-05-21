@@ -49,11 +49,30 @@ public sealed class ShellStateStoreTests
     }
 
     [TestMethod]
-    public async Task Snapshot_RejectsAccessFromNonOwnerThread()
+    public void Snapshot_RejectsAccessFromNonOwnerThread()
     {
         var store = new ShellStateStore();
+        var ownerThreadId = Environment.CurrentManagedThreadId;
+        var workerThreadId = 0;
+        Exception? capturedException = null;
 
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => Task.Run(() => _ = store.Snapshot));
+        var worker = new Thread(() =>
+        {
+            workerThreadId = Environment.CurrentManagedThreadId;
+            try
+            {
+                _ = store.Snapshot;
+            }
+            catch (Exception ex)
+            {
+                capturedException = ex;
+            }
+        });
+        worker.Start();
+        Assert.IsTrue(worker.Join(TimeSpan.FromSeconds(5)), "Timed out waiting for the worker thread to complete.");
+
+        Assert.AreNotEqual(ownerThreadId, workerThreadId);
+        Assert.IsInstanceOfType<InvalidOperationException>(capturedException);
     }
 
     [TestMethod]
