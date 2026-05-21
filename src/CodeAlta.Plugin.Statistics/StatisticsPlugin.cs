@@ -1136,6 +1136,7 @@ public sealed class StatisticsPlugin : PluginBase
 
     private sealed class ToolCallBuilder(string activityId, AgentActivityKind kind, string? name)
     {
+        private const string ToolPartSeparator = "\n\n";
         private DateTimeOffset? _startedAt;
         private DateTimeOffset? _endedAt;
         private AgentActivityPhase _lastPhase;
@@ -1182,8 +1183,8 @@ public sealed class StatisticsPlugin : PluginBase
 
         public ToolCallStatistics Build(ContentStats contentOutput)
         {
-            var input = ContentStats.ForText(string.Join(Environment.NewLine + Environment.NewLine, _inputParts));
-            var activityOutput = ContentStats.ForText(string.Join(Environment.NewLine + Environment.NewLine, _outputParts));
+            var input = ContentStats.ForText(string.Join(ToolPartSeparator, _inputParts));
+            var activityOutput = ContentStats.ForText(string.Join(ToolPartSeparator, _outputParts));
             var output = contentOutput.Characters > 0 || contentOutput.Bytes > 0 ? contentOutput : activityOutput;
             return new ToolCallStatistics(
                 ActivityId,
@@ -1234,7 +1235,7 @@ public sealed class StatisticsPlugin : PluginBase
 
             return parts.Count == 0
                 ? null
-                : string.Join(Environment.NewLine + Environment.NewLine, parts.Where(static item => !string.IsNullOrWhiteSpace(item)).Distinct(StringComparer.Ordinal));
+                : string.Join(ToolPartSeparator, parts.Where(static item => !string.IsNullOrWhiteSpace(item)).Distinct(StringComparer.Ordinal));
         }
 
         private static string? ResolveToolOutput(AgentActivityEvent activity)

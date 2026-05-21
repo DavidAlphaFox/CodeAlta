@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 
@@ -33,20 +34,7 @@ internal sealed class CodeAltaSingleInstanceGuard : IDisposable
             Directory.CreateDirectory(directory);
         }
 
-        FileStream lockStream;
-        try
-        {
-            lockStream = new FileStream(
-                fullLockFilePath,
-                FileMode.OpenOrCreate,
-                FileAccess.ReadWrite,
-                FileShare.Read);
-        }
-        catch (IOException ex)
-        {
-            var runningProcessId = ReadRunningProcessId(fullLockFilePath);
-            throw new CodeAltaAlreadyRunningException(runningProcessId, ex);
-        }
+        var lockStream = CreateLockFile(fullLockFilePath);
 
         try
         {
@@ -68,6 +56,7 @@ internal sealed class CodeAltaSingleInstanceGuard : IDisposable
         }
 
         _lockStream.Dispose();
+        TryDeleteLockFile(LockFilePath);
         _disposed = true;
     }
 
@@ -94,6 +83,57 @@ internal sealed class CodeAltaSingleInstanceGuard : IDisposable
         writer.Flush();
         lockStream.Flush(flushToDisk: true);
         lockStream.Position = 0;
+    }
+
+    private static FileStream CreateLockFile(string lockFilePath)
+    {
+        while (true)
+        {
+            try
+            {
+                return new FileStream(
+                    lockFilePath,
+                    FileMode.CreateNew,
+                    FileAccess.ReadWrite,
+                    FileShare.Read);
+            }
+            catch (IOException ex)
+            {
+                var runningProcessId = ReadRunningProcessId(lockFilePath);
+                if (runningProcessId is { } processId && !IsProcessRunning(processId) && TryDeleteLockFile(lockFilePath))
+                {
+                    continue;
+                }
+
+                throw new CodeAltaAlreadyRunningException(runningProcessId, ex);
+            }
+        }
+    }
+
+    private static bool IsProcessRunning(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return !process.HasExited;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryDeleteLockFile(string lockFilePath)
+    {
+        try
+        {
+            File.Delete(lockFilePath);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static int? ReadRunningProcessId(string lockFilePath)

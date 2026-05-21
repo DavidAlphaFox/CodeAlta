@@ -7,4 +7,5 @@ project = "CodeAlta.slnx"
 user = "CodeAlta"
 repo = "CodeAlta"
 [changelog]
+publish = false # Disable for now until release (as the changelog takes a huge amount of time to generate)
 owners = ["xoofx"] # To avoid to be mentioned in the changelog

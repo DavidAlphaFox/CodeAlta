@@ -13,13 +13,29 @@ public sealed class ProgramThreadGuardTests
     }
 
     [TestMethod]
-    public async Task ThrowIfCurrentThreadIsWorkerThread_ThrowsInvalidOperationException()
+    public void ThrowIfCurrentThreadIsWorkerThread_ThrowsInvalidOperationException()
     {
         var mainThreadId = Environment.CurrentManagedThreadId;
+        var workerThreadId = 0;
+        Exception? capturedException = null;
 
-        var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
-            () => Task.Run(() => InvokeGuard(mainThreadId)));
+        var worker = new Thread(() =>
+        {
+            workerThreadId = Environment.CurrentManagedThreadId;
+            try
+            {
+                InvokeGuard(mainThreadId);
+            }
+            catch (Exception ex)
+            {
+                capturedException = ex;
+            }
+        });
+        worker.Start();
+        Assert.IsTrue(worker.Join(TimeSpan.FromSeconds(5)), "Timed out waiting for the worker thread to complete.");
 
+        Assert.AreNotEqual(mainThreadId, workerThreadId);
+        var exception = Assert.IsInstanceOfType<InvalidOperationException>(capturedException);
         StringAssert.Contains(exception.Message, "Program.RunAsync must start on the process main thread.");
         StringAssert.Contains(exception.Message, mainThreadId.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
