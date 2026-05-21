@@ -2881,11 +2881,11 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void ResolveSidebarThreadAccent_UsesCopilotAccentForCopilotThreads()
+    public void ResolveSidebarThreadAccent_UsesKindAccentForCopilotThreads()
     {
         var accent = SidebarThreadPresentation.ResolveThreadAccent(AgentBackendIds.Copilot.Value, WorkThreadKind.ProjectThread);
 
-        Assert.AreEqual(SidebarAccent.CopilotThread, accent);
+        Assert.AreEqual(SidebarAccent.ProjectThread, accent);
     }
 
     [TestMethod]
@@ -2901,7 +2901,7 @@ public sealed class CodeAltaAppTests
     {
         var markup = SidebarThreadPresentation.BuildProviderMarkup(AgentBackendIds.Copilot.Value, displayName: null, WorkThreadKind.ProjectThread);
 
-        StringAssert.Contains(markup, UiPalette.GetSidebarAccentMarkup(SidebarAccent.CopilotThread));
+        StringAssert.Contains(markup, UiPalette.GetSidebarAccentMarkup(SidebarAccent.ProjectThread));
         StringAssert.Contains(markup, "Copilot");
         StringAssert.Contains(markup, NerdFont.MdCircleSmall.ToString());
     }

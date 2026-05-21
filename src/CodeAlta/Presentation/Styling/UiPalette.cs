@@ -11,7 +11,6 @@ namespace CodeAlta.Presentation.Styling
         Projects,
         ProjectThread,
         InternalThread,
-        CopilotThread,
         Fallback,
     }
 
@@ -139,7 +138,6 @@ namespace CodeAlta.Presentation.Styling
                 SidebarAccent.Projects => "primary",
                 SidebarAccent.ProjectThread => "success",
                 SidebarAccent.InternalThread => "accent",
-                SidebarAccent.CopilotThread => "accent",
                 _ => "muted",
             };
         }
@@ -282,7 +280,6 @@ namespace CodeAlta.Presentation.Styling
                 SidebarAccent.Projects => ConsoleColor.Blue,
                 SidebarAccent.ProjectThread => ConsoleColor.Green,
                 SidebarAccent.InternalThread => ConsoleColor.Magenta,
-                SidebarAccent.CopilotThread => ConsoleColor.Magenta,
                 _ => ConsoleColor.DarkGray,
             };
         }

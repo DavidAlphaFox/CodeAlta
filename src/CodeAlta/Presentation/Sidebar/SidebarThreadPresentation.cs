@@ -10,11 +10,7 @@ internal static class SidebarThreadPresentation
 {
     public static SidebarAccent ResolveThreadAccent(string? providerKey, WorkThreadKind kind)
     {
-        if (string.Equals(providerKey, AgentBackendIds.Copilot.Value, StringComparison.OrdinalIgnoreCase))
-        {
-            return SidebarAccent.CopilotThread;
-        }
-
+        _ = providerKey;
         return kind switch
         {
             WorkThreadKind.GlobalThread => SidebarAccent.Global,
