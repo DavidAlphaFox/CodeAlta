@@ -115,7 +115,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
 
     public static async Task<CodeAltaApp> CreateAsync(CancellationToken cancellationToken)
         => Create(await CodeAltaOwnedServices.CreateAsync(cancellationToken));
-    internal static CodeAltaApp Create(CodeAltaOwnedServices ownedServices)
+    internal static CodeAltaApp Create(CodeAltaOwnedServices ownedServices, CodeAltaUpdateService? updateService = null)
     {
         ArgumentNullException.ThrowIfNull(ownedServices);
         return new(
@@ -127,7 +127,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             ownedServices.AgentHub,
             ownedServices.ProjectFileSearchService,
             new KnownProjectImporter(ownedServices.AgentHub, ownedServices.BackendDescriptors, ownedServices.ProjectCatalog, ownedServices.CatalogOptions),
-            ownedServices);
+            ownedServices,
+            updateService);
     }
 
     private CodeAltaApp(
@@ -139,7 +140,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         AgentHub agentHub,
         IProjectFileSearchService projectFileSearchService,
         KnownProjectImporter? knownProjectImporter,
-        CodeAltaOwnedServices? ownedServices)
+        CodeAltaOwnedServices? ownedServices,
+        CodeAltaUpdateService? updateService = null)
     {
         ArgumentNullException.ThrowIfNull(projectCatalog);
         ArgumentNullException.ThrowIfNull(threadCatalog);
@@ -260,7 +262,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         var threadSvc = new DelegatingShellThreadCommandService(GetSelectedThread, EnsureThreadTab);
         var dialogs = new DelegatingShellDialogCommandService(
             () => DialogBoundsResolver.ResolveAppBounds(ThreadInput), () => ThreadInput, () => _threadStateCoordinator.Projects,
-            OpenFolderAsync, OpenAcp, OpenModelProvidersAsync, () => new AboutDialog(() => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()), GetDialogAnchor, _shellAnimationRuntime.WelcomePhase01).Show(), composition.ModelCatalogCoordinator.Open, _sidebarCoordinator.OpenLogs, _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
+            OpenFolderAsync, OpenAcp, OpenModelProvidersAsync, () => new AboutDialog(() => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()), GetDialogAnchor, _shellAnimationRuntime.WelcomePhase01, updateService).Show(), composition.ModelCatalogCoordinator.Open, _sidebarCoordinator.OpenLogs, _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
             SkillsManagementCoordinatorFactory.Create(_ownedServices, _catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync, _threadCommandCoordinator.ActivateSelectedSkillAsync, SetStatus),
             PluginManagementCoordinatorFactory.Create(_catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync), _sidebarCoordinator.OpenNavigatorSettings,
             () => EnsureSessionUsagePresenter().TogglePopupFromIndicator(),

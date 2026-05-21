@@ -52,6 +52,7 @@
     <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all">
       <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="NuGet.Versioning" />
     <PackageReference Include="XenoAtom.CommandLine.Terminal" />
     <PackageReference Include="XenoAtom.Logging.Terminal" />
     <PackageReference Include="XenoAtom.Terminal.UI" />

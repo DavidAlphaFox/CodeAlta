@@ -101,6 +101,10 @@ Open it with `Ctrl+G Ctrl+T` or the thread info icon. The report summarizes sele
 
 Open it with `Ctrl+G Ctrl+W` or `/settings`. Workspace settings cover the selected workspace/project behavior and are separate from the model-provider editor.
 
+## About and updates
+
+Open it with `Ctrl+G Ctrl+A` or `/about`. The dialog shows the animated CodeAlta logo, current version, copyright, and whether the startup update check found a newer .NET tool package. If a newer package is found, CodeAlta also shows a toast during the session and prints the matching `dotnet tool update` command after the terminal UI exits.
+
 ## Plugin management
 
 <!-- screenshot: plugin management dialog with diagnostics and contributions -->

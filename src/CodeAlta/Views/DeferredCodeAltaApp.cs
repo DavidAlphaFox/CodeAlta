@@ -19,6 +19,7 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
     private readonly Padder _commandBarHost;
     private readonly ToastHost _toastHost;
     private readonly TerminalImageGraphicsPresenter _graphicsPresenter;
+    private readonly CodeAltaUpdateService _updateService = new();
     private readonly PluginRuntimeManager? _prestartedPluginRuntime;
     private Task<CodeAltaOwnedServices>? _ownedServicesTask;
     private CodeAltaApp? _app;
@@ -27,6 +28,7 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
     private bool _configRecoveryChecked;
     private bool _exitRequested;
     private bool _openProvidersAfterStartup;
+    private bool _updateToastShown;
 
     public DeferredCodeAltaApp(PluginRuntimeManager? prestartedPluginRuntime = null)
     {
@@ -50,7 +52,10 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
                 CodeAltaGlobalCommandConfigurator.Configure).Root);
         _rootHost = CreateStretchHost(_toastHost);
         _rootHost.RegisterClipboardScreenshotCommand();
+        _updateService.Start();
     }
+
+    public CodeAltaUpdateCheckSnapshot UpdateCheckSnapshot => _updateService.Snapshot;
 
     public ValueTask<TerminalInstance> RunAsync(CancellationToken cancellationToken)
         => Terminal.RunAsync(
@@ -80,6 +85,7 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
         }
         finally
         {
+            _updateService.Dispose();
             _graphicsPresenter.Dispose();
         }
     }
@@ -93,6 +99,7 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
 
         if (_app is not null)
         {
+            SyncUpdateNotifications();
             return _app.Tick(cancellationToken);
         }
 
@@ -122,7 +129,7 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
         try
         {
             var ownedServices = _ownedServicesTask.GetAwaiter().GetResult();
-            _app = CodeAltaApp.Create(ownedServices);
+            _app = CodeAltaApp.Create(ownedServices, _updateService);
             _app.PrepareForRun();
             _toastHost.Content = _app.GetRoot();
             if (_openProvidersAfterStartup)
@@ -144,7 +151,28 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
             return TerminalLoopResult.Continue;
         }
 
+        SyncUpdateNotifications();
         return _app.Tick(cancellationToken);
+    }
+
+    private void SyncUpdateNotifications()
+    {
+        _updateService.SynchronizeUiState();
+        var snapshot = _updateService.Snapshot;
+        if (_updateToastShown || !snapshot.HasNewerVersion)
+        {
+            return;
+        }
+
+        _updateToastShown = true;
+        ToastService.Show(() => new Toast
+        {
+            Title = "Update available",
+            Content = $"CodeAlta {snapshot.LatestVersionText} is available. Run {snapshot.UpdateCommand}",
+            Severity = ToastSeverity.Info,
+            Duration = TimeSpan.FromSeconds(10),
+            ShowCloseButton = true,
+        });
     }
 
     private bool EnsureConfigCanLoadBeforeStartup()

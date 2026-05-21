@@ -104,6 +104,7 @@ Paste images with `Ctrl+V` when the selected model supports image input. CodeAlt
 | Focus provider/model selector | `/model` |
 | Open model providers | `Ctrl+G Ctrl+R` |
 | Browse models | `Ctrl+G Ctrl+O` or `/models` |
+| About / update status | `Ctrl+G Ctrl+A` or `/about` |
 | Open workspace settings | `Ctrl+G Ctrl+W` or `/settings` |
 | Open plugins | `Ctrl+G Ctrl+N` or `/plugins` |
 | Open logs | `Ctrl+G Ctrl+L` or `/logs` |

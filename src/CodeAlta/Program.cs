@@ -87,6 +87,7 @@ internal partial class Program
         // initialization from inside the loop instead of before Terminal.RunAsync starts.
         Program.ThrowIfCurrentThreadIsNotMainThread(mainThreadId);
         await app.RunAsync(cancellationTokenSource.Token);
+        PrintUpdateAvailableMessage(app.UpdateCheckSnapshot);
 
         if (options.TestMode)
         {
@@ -97,6 +98,17 @@ internal partial class Program
         }
 
         return 0;
+    }
+
+    private static void PrintUpdateAvailableMessage(CodeAltaUpdateCheckSnapshot snapshot)
+    {
+        if (!snapshot.HasNewerVersion)
+        {
+            return;
+        }
+
+        Terminal.WriteLine($"A new version {snapshot.LatestVersionText} of CodeAlta is available!");
+        Terminal.WriteLine($"To update: {snapshot.UpdateCommand}");
     }
 
     internal static PluginRuntimeManager? StartPluginRuntimeForCommandLine(
