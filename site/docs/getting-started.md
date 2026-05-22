@@ -25,6 +25,11 @@ alta
 
 CodeAlta stores user state under `~/.alta/`, including configuration, logs, cached provider state, session journals, saved prompts, plugins, and skills.
 
+## Terminal font requirement
+
+> [!IMPORTANT]
+> CodeAlta uses [Nerd Fonts](https://www.nerdfonts.com/) icons throughout the terminal UI. Install a Nerd Font-patched font and select it in your terminal profile before using CodeAlta. Without a font that includes Nerd Font glyphs, icons may appear as empty boxes, question marks, or misaligned symbols.
+
 ## First launch
 
 On first launch, CodeAlta creates a starter `~/.alta/config.toml` with common provider entries disabled. If no provider is enabled yet, the app opens the Model Providers dialog automatically.
