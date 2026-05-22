@@ -106,6 +106,11 @@ Inspect the failing test output below and propose the smallest safe fix.
 
 Type `@` in the prompt editor to open the project file/folder picker. Accepted entries are inserted as Markdown links such as `[Program.cs](src/CodeAlta/Program.cs)` and are sent as structured attachments. Raw `@path`, quoted paths, and optional `:line` or `:start-end` suffixes are also recognized at send time.
 
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-file-selection.gif" alt="CodeAlta animated file selection dialog for attaching project files to a prompt" loading="lazy">
+  <figcaption class="small text-secondary mt-2">Type <code>@</code>, search for files or folders, and accept entries to add them to the prompt as structured attachments.</figcaption>
+</figure>
+
 Paste images with `Ctrl+V` when the selected model supports image input. CodeAlta opens a preview/title dialog and stores the image beside the session journal.
 
 ## Essential shortcuts
