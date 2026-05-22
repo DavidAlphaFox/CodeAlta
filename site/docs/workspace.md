@@ -96,7 +96,7 @@ The dialog supports project-name and directory completion. Rooted paths such as 
 ## File/folder picker and prompt attachments
 
 <figure class="my-4">
-  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-file-selection.png" alt="CodeAlta file selection dialog for attaching project files to a prompt" loading="lazy">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-file-selection.gif" alt="CodeAlta animated file selection dialog for attaching project files to a prompt" loading="lazy">
   <figcaption class="small text-secondary mt-2">The <code>@</code> picker searches project files and folders, then inserts accepted entries as structured prompt attachments.</figcaption>
 </figure>
 
