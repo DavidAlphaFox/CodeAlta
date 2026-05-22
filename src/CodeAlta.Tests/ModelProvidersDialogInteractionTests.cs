@@ -1,4 +1,5 @@
 using System.Reflection;
+using CodeAlta.Agent;
 using CodeAlta.App;
 using CodeAlta.Catalog;
 using CodeAlta.Views;
@@ -591,14 +592,84 @@ public sealed class ModelProvidersDialogInteractionTests
         }
     }
 
+    [TestMethod]
+    public void ModelProvidersDialog_ModelSelectorListsModelsOnDemandAndAppliesSelection()
+    {
+        using var session = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(120, 40)), new TerminalOptions { ImplicitStartInput = true }, force: true);
+        var root = new TextBlock("Root");
+        var app = new TerminalApp(
+            root,
+            session.Instance,
+            new TerminalAppOptions
+            {
+                HostKind = TerminalHostKind.Fullscreen,
+            });
+
+        var definitions = new[]
+        {
+            new CodeAltaProviderDocument
+            {
+                ProviderKey = "provider-1",
+                Enabled = true,
+                ProviderType = "openai-chat",
+                Model = "model-a",
+                ApiKey = "key-1",
+            },
+        };
+        var listCallCount = 0;
+        var dialog = CreateDialog(
+            () => definitions,
+            getFocusTarget: () => root,
+            listSelectableModelsAsync: definition =>
+            {
+                listCallCount++;
+                Assert.AreEqual("provider-1", definition.ProviderKey);
+                return Task.FromResult(new ProviderModelListResult(
+                    true,
+                    "Listed models.",
+                    [
+                        new AgentModelInfo("model-a", "Model A"),
+                        new AgentModelInfo("model-b", "Model B"),
+                    ]));
+            });
+
+        InvokeTerminalApp(app, "BeginRun");
+        try
+        {
+            dialog.Show();
+            WaitUntil(() => GetProviderCount(dialog) == 1, app);
+
+            var provider = GetProviders(dialog)[0];
+            InvokeStartModelSelection(dialog, provider);
+            WaitUntil(() => GetActiveModelSelectionDialog(dialog)?.IsOpen == true, app);
+
+            Assert.AreEqual(1, listCallCount);
+
+            var modelSelectionDialog = GetActiveModelSelectionDialog(dialog)!;
+            Assert.AreEqual(0, GetModelSelectionSelectedIndex(modelSelectionDialog), "The current provider model should be preselected when it exists in the listed models.");
+
+            SetModelSelectionSelectedIndex(modelSelectionDialog, 1);
+            InvokeModelSelection(modelSelectionDialog);
+            TickTerminalApp(app);
+
+            Assert.AreEqual("model-b", provider.Model);
+            Assert.IsTrue(HasUnsavedChanges(dialog));
+        }
+        finally
+        {
+            InvokeTerminalApp(app, "EndRun");
+        }
+    }
+
     private static ModelProvidersDialog CreateDialog(
         Func<IReadOnlyList<CodeAltaProviderDocument>> loadDefinitions,
         Func<IReadOnlyList<CodeAltaProviderDocument>, Task<ProviderConfigurationSaveResult>>? saveDefinitionsAsync = null,
         Func<CodeAltaProviderDocument, Task<ProviderTestResult>>? testProviderAsync = null,
-        Func<Visual?>? getFocusTarget = null)
+        Func<Visual?>? getFocusTarget = null,
+        Func<CodeAltaProviderDocument, Task<ProviderModelListResult>>? listSelectableModelsAsync = null)
     {
         return new ModelProvidersDialog(
-            new TestModelProviderDialogService(loadDefinitions, saveDefinitionsAsync, testProviderAsync),
+            new TestModelProviderDialogService(loadDefinitions, saveDefinitionsAsync, testProviderAsync, listSelectableModelsAsync),
             () => new Rectangle(0, 0, 120, 40),
             getFocusTarget ?? (() => null));
     }
@@ -636,9 +707,41 @@ public sealed class ModelProvidersDialogInteractionTests
             .GetField("_activeLoginDialog", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(dialog))?.App is not null;
 
+    private static ModelProviderModelSelectionDialog? GetActiveModelSelectionDialog(ModelProvidersDialog dialog)
+        => (ModelProviderModelSelectionDialog?)typeof(ModelProvidersDialog)
+            .GetField("_activeModelSelectionDialog", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(dialog);
+
+    private static int GetModelSelectionSelectedIndex(ModelProviderModelSelectionDialog dialog)
+    {
+        var list = GetModelSelectionList(dialog);
+        return (int)list.GetType().GetProperty("SelectedIndex")!.GetValue(list)!;
+    }
+
+    private static void SetModelSelectionSelectedIndex(ModelProviderModelSelectionDialog dialog, int selectedIndex)
+    {
+        var list = GetModelSelectionList(dialog);
+        list.GetType().GetProperty("SelectedIndex")!.SetValue(list, selectedIndex);
+    }
+
+    private static object GetModelSelectionList(ModelProviderModelSelectionDialog dialog)
+        => typeof(ModelProviderModelSelectionDialog)
+            .GetField("_modelList", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(dialog)!;
+
+    private static void InvokeModelSelection(ModelProviderModelSelectionDialog dialog)
+        => typeof(ModelProviderModelSelectionDialog)
+            .GetMethod("SelectHighlighted", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(dialog, null);
+
     private static void InvokeStartTest(ModelProvidersDialog dialog, ViewModels.ModelProviderEditorItemViewModel item)
         => typeof(ModelProvidersDialog)
             .GetMethod("StartTest", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(dialog, [item]);
+
+    private static void InvokeStartModelSelection(ModelProvidersDialog dialog, ViewModels.ModelProviderEditorItemViewModel item)
+        => typeof(ModelProvidersDialog)
+            .GetMethod("StartModelSelection", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(dialog, [item]);
 
     private static void InvokeStartSave(ModelProvidersDialog dialog)
@@ -738,15 +841,21 @@ public sealed class ModelProvidersDialogInteractionTests
         private readonly Func<IReadOnlyList<CodeAltaProviderDocument>> _loadDefinitions;
         private readonly Func<IReadOnlyList<CodeAltaProviderDocument>, Task<ProviderConfigurationSaveResult>> _saveDefinitionsAsync;
         private readonly Func<CodeAltaProviderDocument, Task<ProviderTestResult>> _testProviderAsync;
+        private readonly Func<CodeAltaProviderDocument, Task<ProviderModelListResult>> _listSelectableModelsAsync;
 
         public TestModelProviderDialogService(
             Func<IReadOnlyList<CodeAltaProviderDocument>> loadDefinitions,
             Func<IReadOnlyList<CodeAltaProviderDocument>, Task<ProviderConfigurationSaveResult>>? saveDefinitionsAsync,
-            Func<CodeAltaProviderDocument, Task<ProviderTestResult>>? testProviderAsync)
+            Func<CodeAltaProviderDocument, Task<ProviderTestResult>>? testProviderAsync,
+            Func<CodeAltaProviderDocument, Task<ProviderModelListResult>>? listSelectableModelsAsync)
         {
             _loadDefinitions = loadDefinitions;
             _saveDefinitionsAsync = saveDefinitionsAsync ?? (_ => Task.FromResult(ProviderConfigurationSaveResult.Success));
             _testProviderAsync = testProviderAsync ?? (definition => Task.FromResult(new ProviderTestResult(true, $"Connected successfully · {definition.ProviderKey}", 1)));
+            _listSelectableModelsAsync = listSelectableModelsAsync ?? (definition => Task.FromResult(new ProviderModelListResult(
+                true,
+                $"Model listing completed · {definition.ProviderKey}",
+                [new AgentModelInfo("model-1", "Model 1")])));
         }
 
         public string ConfigurationPath => Path.Combine(Path.GetTempPath(), "config.toml");
@@ -777,6 +886,9 @@ public sealed class ModelProvidersDialogInteractionTests
         public Task<ProviderTestResult> TestAuthenticationAsync(CodeAltaProviderDocument definition, CancellationToken cancellationToken = default) => TestProviderAsync(definition, cancellationToken);
 
         public Task<ProviderTestResult> ListModelsAsync(CodeAltaProviderDocument definition, CancellationToken cancellationToken = default) => TestProviderAsync(definition, cancellationToken);
+
+        public Task<ProviderModelListResult> ListSelectableModelsAsync(CodeAltaProviderDocument definition, CancellationToken cancellationToken = default)
+            => _listSelectableModelsAsync(definition);
 
         public Task<ProviderTestResult> ListAccountsAsync(CodeAltaProviderDocument definition, CancellationToken cancellationToken = default)
             => Task.FromResult(new ProviderTestResult(false, "Account/workspace listing is unavailable in this host.", 0));

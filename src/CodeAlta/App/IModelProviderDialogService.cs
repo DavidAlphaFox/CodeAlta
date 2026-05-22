@@ -1,3 +1,4 @@
+using CodeAlta.Agent;
 using CodeAlta.Catalog;
 
 namespace CodeAlta.App;
@@ -28,7 +29,14 @@ internal interface IModelProviderDialogService
 
     Task<ProviderTestResult> ListModelsAsync(CodeAltaProviderDocument definition, CancellationToken cancellationToken = default);
 
+    Task<ProviderModelListResult> ListSelectableModelsAsync(CodeAltaProviderDocument definition, CancellationToken cancellationToken = default);
+
     Task<ProviderTestResult> ListAccountsAsync(CodeAltaProviderDocument definition, CancellationToken cancellationToken = default);
+}
+
+internal readonly record struct ProviderModelListResult(bool Success, string Message, IReadOnlyList<AgentModelInfo> Models)
+{
+    public int ModelCount => Models.Count;
 }
 
 internal readonly record struct ProviderConfigurationSaveResult(bool RuntimeRefreshSucceeded, string? RuntimeRefreshErrorMessage)
@@ -96,6 +104,9 @@ internal sealed class ModelProviderDialogService : IModelProviderDialogService
         => string.Equals(definition.ProviderType, "copilot", StringComparison.Ordinal)
             ? _providerUi.ListCopilotDirectModelsAsync(definition, cancellationToken)
             : _providerUi.ListCodexSubscriptionModelsAsync(definition, cancellationToken);
+
+    public Task<ProviderModelListResult> ListSelectableModelsAsync(CodeAltaProviderDocument definition, CancellationToken cancellationToken = default)
+        => _providerUi.ListProviderModelsAsync(definition, cancellationToken);
 
     public Task<ProviderTestResult> ListAccountsAsync(CodeAltaProviderDocument definition, CancellationToken cancellationToken = default)
         => _providerUi.ListCodexSubscriptionAccountsAsync(definition, cancellationToken);

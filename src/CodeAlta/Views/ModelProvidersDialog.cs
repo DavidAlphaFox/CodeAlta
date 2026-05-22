@@ -62,6 +62,7 @@ internal sealed class ModelProvidersDialog
     private readonly State<string> _statusText = new("[dim]Configure model providers and save to refresh the runtime.[/]");
     private CancellationTokenSource? _activeOperationCancellation;
     private Dialog? _activeLoginDialog;
+    private ModelProviderModelSelectionDialog? _activeModelSelectionDialog;
 
     public ModelProvidersDialog(
         IModelProviderDialogService modelProviders,
@@ -659,7 +660,7 @@ internal sealed class ModelProvidersDialog
         AddSelectRow(form, ref row, "Type", CreateTypeSelect(item), CreateSpacer());
         AddCheckRow(form, ref row, "Enabled", CreateEnabledCheckBox(item), CreateSpacer());
         AddTextRow(form, ref row, "Display Name", CreateDefaultTextField(bindings.DisplayName, () => item.UseDefaultDisplayName), CreateDefaultCheckBox("Default", bindings.UseDefaultDisplayName));
-        AddTextRow(form, ref row, "Model", CreateDefaultTextField(bindings.Model, () => item.UseDefaultModel), CreateDefaultCheckBox("Default", bindings.UseDefaultModel));
+        AddTextRow(form, ref row, "Model", CreateModelField(item), CreateDefaultCheckBox("Default", bindings.UseDefaultModel));
         AddSelectRow(form, ref row, "Reasoning", CreateReasoningSelect(item), CreateDefaultCheckBox("Default", bindings.UseDefaultReasoningEffort));
 
         if (item.ProviderType is "openai-chat" or "openai-responses" or "azure-openai" or "anthropic" or "google-genai")
@@ -914,6 +915,126 @@ internal sealed class ModelProvidersDialog
 
     private CheckBox CreateEnabledCheckBox(ModelProviderEditorItemViewModel item)
         => new CheckBox("Enabled").IsChecked(GetBindings(item).Enabled);
+
+    private Visual CreateModelField(ModelProviderEditorItemViewModel item)
+    {
+        var binding = GetBindings(item).Model;
+        var selectorButton = new Button("Models")
+            .Tone(ControlTone.Default)
+            .IsEnabled(() => !item.UseDefaultModel && !IsDialogOperationActive())
+            .Click(() => StartModelSelection(item));
+
+        return new HStack(
+            selectorButton,
+            new TextBox(binding)
+                .IsEnabled(() => !item.UseDefaultModel)
+                .Stretch())
+        {
+            HorizontalAlignment = Align.Stretch,
+            Spacing = 1,
+        };
+    }
+
+    private void StartModelSelection(ModelProviderEditorItemViewModel item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        if (IsDialogOperationActive())
+        {
+            ReportActiveOperationBlock("list provider models");
+            return;
+        }
+
+        if (item.UseDefaultModel)
+        {
+            SetStatus("[warning]Uncheck Model Default before choosing a provider model.[/]");
+            return;
+        }
+
+        if (!_providers.Contains(item))
+        {
+            SetStatus("[warning]Select a provider before choosing a model.[/]");
+            return;
+        }
+
+        if (_activeModelSelectionDialog?.IsOpen == true)
+        {
+            _activeModelSelectionDialog.Focus();
+            return;
+        }
+
+        if (!TryBuildDefinition(item, out var definition, out var errorMessage))
+        {
+            SetStatus($"[warning]{AnsiMarkup.Escape(errorMessage)}[/]");
+            return;
+        }
+
+        if (!TryBeginDialogOperation("list provider models", canCancel: true))
+        {
+            return;
+        }
+
+        SetStatus($"[primary]Listing models for {AnsiMarkup.Escape(item.Label)}...[/]");
+        QueueBackgroundOperation(
+            cancellationToken => _modelProviders.ListSelectableModelsAsync(definition, cancellationToken),
+            result => CompleteModelSelectionListing(item, result),
+            ex =>
+            {
+                if (ex is OperationCanceledException || ex.GetBaseException() is OperationCanceledException)
+                {
+                    SetStatus("[warning]Model listing canceled.[/]");
+                    return;
+                }
+
+                SetStatus($"[error]{AnsiMarkup.Escape(ex.GetBaseException().Message)}[/]");
+            });
+    }
+
+    private void CompleteModelSelectionListing(ModelProviderEditorItemViewModel item, ProviderModelListResult result)
+    {
+        if (!_providers.Contains(item))
+        {
+            SetStatus("[warning]The provider was removed before model listing completed.[/]");
+            return;
+        }
+
+        if (!result.Success)
+        {
+            SetStatus($"[warning]{AnsiMarkup.Escape(result.Message)}[/]");
+            return;
+        }
+
+        if (result.Models.Count == 0)
+        {
+            SetStatus("[warning]No models were returned for this provider.[/]");
+            return;
+        }
+
+        _activeModelSelectionDialog = new ModelProviderModelSelectionDialog(
+            item.Label,
+            result.Models,
+            item.Model,
+            modelId => SelectModel(item, modelId),
+            _getBounds,
+            () => _dialog);
+        _activeModelSelectionDialog.Show();
+        SetStatus($"[success]{AnsiMarkup.Escape(result.Message)} Select a model from the popup.[/]");
+    }
+
+    private void SelectModel(ModelProviderEditorItemViewModel item, string modelId)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
+
+        if (!_providers.Contains(item))
+        {
+            SetStatus("[warning]The provider was removed before the selected model could be applied.[/]");
+            return;
+        }
+
+        item.Model = modelId;
+        SetStatus($"[warning]Selected model {AnsiMarkup.Escape(modelId)}. Save to apply the provider change.[/]");
+    }
 
     private Visual CreateReasoningSelect(ModelProviderEditorItemViewModel item)
     {

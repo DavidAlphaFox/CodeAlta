@@ -160,6 +160,32 @@ internal sealed class ProviderFrontendCoordinator
         return new ProviderTestResult(true, $"Connected successfully · {models.Count} model(s) discovered.", models.Count);
     }
 
+    public async Task<ProviderModelListResult> ListProviderModelsAsync(
+        CodeAltaProviderDocument definition,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if (TryBuildActiveBackendModelListResult(definition, _chatBackendStates, out var activeResult))
+        {
+            return activeResult;
+        }
+
+        var homeRoot = _ownedServices?.CatalogOptions.GlobalRoot
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".alta");
+        var modelCatalog = _ownedServices?.ModelsDevCatalogService;
+
+        if (!TryCreateBackend(definition, homeRoot, modelCatalog, out var backend))
+        {
+            return new ProviderModelListResult(false, "Enter valid provider settings before listing models.", []);
+        }
+
+        await using var _ = backend;
+        await backend.StartAsync(cancellationToken);
+        var models = await backend.ListModelsAsync(cancellationToken);
+        return new ProviderModelListResult(true, $"Model listing completed · {models.Count} model(s) available.", models);
+    }
+
     public async Task<ProviderTestResult> LoginCodexSubscriptionWithBrowserAsync(
         CodeAltaProviderDocument definition,
         Action<string> reportStatus,
@@ -369,6 +395,28 @@ internal sealed class ProviderFrontendCoordinator
             default:
                 return false;
         }
+    }
+
+    internal static bool TryBuildActiveBackendModelListResult(
+        CodeAltaProviderDocument definition,
+        IReadOnlyDictionary<string, ChatBackendState> chatBackendStates,
+        out ProviderModelListResult result)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(chatBackendStates);
+
+        result = default;
+        if (!chatBackendStates.TryGetValue(definition.ProviderKey, out var state) ||
+            state.Availability != ChatBackendAvailability.Ready)
+        {
+            return false;
+        }
+
+        result = new ProviderModelListResult(
+            true,
+            $"Using active provider backend · {state.Models.Count} model(s) available.",
+            state.Models);
+        return true;
     }
 
     private bool TryCreateBackend(
