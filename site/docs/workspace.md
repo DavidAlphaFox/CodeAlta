@@ -210,9 +210,19 @@ Open it with `Ctrl+G Ctrl+N`, `/plugins`, or `/plugin`. The dialog shows discove
 
 ## Skills management
 
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-skills.png" alt="CodeAlta skills management dialog showing discovered skills and activation details" loading="lazy">
+  <figcaption class="small text-secondary mt-2">Skills management shows discovered skill packages, descriptions, and activation state for providers that support injected skill context.</figcaption>
+</figure>
+
 CodeAlta discovers Agent Skills-compatible `SKILL.md` packages from user and project locations. The skills dialog lets you inspect and activate skills when the selected provider supports injected skill context.
 
 ## Logs viewer
+
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-logs.png" alt="CodeAlta logs viewer with diagnostic output and search controls" loading="lazy">
+  <figcaption class="small text-secondary mt-2">The logs viewer keeps startup, provider, credential, and plugin diagnostics available inside the terminal UI.</figcaption>
+</figure>
 
 Open logs with `Ctrl+G Ctrl+L`, `/logs`, or the navigator footer. The log viewer replays diagnostic output from startup, supports search, wraps by default, and can clear the retained session log buffer.
 
