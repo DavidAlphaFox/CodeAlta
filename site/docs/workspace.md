@@ -132,6 +132,11 @@ Open it with `Ctrl+G Ctrl+R` or the provider summary. Use it to enable providers
 
 ## Model browser
 
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-models.png" alt="CodeAlta model browser showing provider models, model references, and capability metadata" loading="lazy">
+  <figcaption class="small text-secondary mt-2">The model browser lists available provider models, copyable model refs, reasoning settings, and capability metadata.</figcaption>
+</figure>
+
 Open it with `Ctrl+G Ctrl+O` or `/models`. It shows provider/model metadata and copyable model refs such as `codex:gpt-5.5@high`. Use it to select the current model and verify whether reasoning/tool-call/image capabilities are available.
 
 ## Context usage popup
