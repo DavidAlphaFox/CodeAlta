@@ -20,6 +20,7 @@ internal sealed class ModelProvidersDialog
     [
         new("openai-chat", "OpenAI Chat"),
         new("openai-responses", "OpenAI Responses"),
+        new("azure-openai", "Azure OpenAI"),
         new("codex", "Codex"),
         new("copilot", "Copilot"),
         new("anthropic", "Anthropic"),
@@ -658,13 +659,13 @@ internal sealed class ModelProvidersDialog
         AddTextRow(form, ref row, "Model", CreateDefaultTextField(bindings.Model, () => item.UseDefaultModel), CreateDefaultCheckBox("Default", bindings.UseDefaultModel));
         AddSelectRow(form, ref row, "Reasoning", CreateReasoningSelect(item), CreateDefaultCheckBox("Default", bindings.UseDefaultReasoningEffort));
 
-        if (item.ProviderType is "openai-chat" or "openai-responses" or "anthropic" or "google-genai")
+        if (item.ProviderType is "openai-chat" or "openai-responses" or "azure-openai" or "anthropic" or "google-genai")
         {
             AddTextRow(form, ref row, "API Key", CreateApiKeyBox(item), CreateDefaultCheckBox("Default", bindings.UseDefaultApiKey));
             AddTextRow(form, ref row, "API Key Env", CreateApiKeyEnvField(item), CreateDefaultCheckBox("Default", bindings.UseDefaultApiKeyEnv));
         }
 
-        if (item.ProviderType is "openai-chat" or "openai-responses" or "codex" or "copilot" or "anthropic" or "google-genai" or "vertex-ai")
+        if (item.ProviderType is "openai-chat" or "openai-responses" or "azure-openai" or "codex" or "copilot" or "anthropic" or "google-genai" or "vertex-ai")
         {
             AddTextRow(form, ref row, "API URL", CreateApiUrlField(item), CreateDefaultCheckBox("Default", bindings.UseDefaultApiUrl));
         }
@@ -681,7 +682,7 @@ internal sealed class ModelProvidersDialog
             AddTextRow(form, ref row, "Location", CreateVertexLocationField(item), CreateDefaultCheckBox("Default", bindings.UseDefaultLocation));
         }
 
-        if (item.ProviderType is "openai-chat" or "openai-responses" or "codex" or "copilot" or "anthropic" or "google-genai" or "vertex-ai")
+        if (item.ProviderType is "openai-chat" or "openai-responses" or "azure-openai" or "codex" or "copilot" or "anthropic" or "google-genai" or "vertex-ai")
         {
             AddTextRow(form, ref row, "Models.dev Id", CreateDefaultTextField(bindings.ModelsDevProviderId, () => item.UseDefaultModelsDevProviderId), CreateDefaultCheckBox("Default", bindings.UseDefaultModelsDevProviderId));
             AddTextRow(form, ref row, "Single Model Id", CreateDefaultTextField(bindings.SingleModelId, () => item.UseDefaultSingleModelId), CreateDefaultCheckBox("Default", bindings.UseDefaultSingleModelId));

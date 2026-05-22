@@ -145,6 +145,28 @@ public sealed class ModelProviderEditorDiagnosticsTests
     }
 
     [TestMethod]
+    public void Analyze_AzureOpenAIProviderRequiresEndpointAndDeploymentName()
+    {
+        var item = ModelProviderEditorItemViewModel.FromDocument(new CodeAlta.Catalog.CodeAltaProviderDocument
+        {
+            ProviderKey = "azure",
+            Enabled = true,
+            ProviderType = "azure-openai",
+            ApiKey = "secret",
+        });
+
+        var snapshot = ModelProviderEditorDiagnostics.Analyze(item, [item]);
+
+        Assert.AreEqual(ModelProviderUiStatusKind.Error, snapshot.StatusKind);
+        Assert.IsTrue(snapshot.Entries.Any(static entry =>
+            entry.Severity == ValidationSeverity.Error &&
+            entry.Message.Contains("API URL", StringComparison.Ordinal)));
+        Assert.IsTrue(snapshot.Entries.Any(static entry =>
+            entry.Severity == ValidationSeverity.Error &&
+            entry.Message.Contains("deployment name", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
     public void CodexSubscriptionEditor_RoundTripsAccountAuthAndModelDiscoveryFields()
     {
         var item = CreateCodexSubscriptionItem(enabled: true, experimental: true);

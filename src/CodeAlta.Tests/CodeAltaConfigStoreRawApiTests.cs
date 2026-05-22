@@ -57,6 +57,13 @@ public sealed class CodeAltaConfigStoreRawApiTests
             type = "responses"
             api_key_env = "CODEALTA_OPENAI_API_KEY"
             api_url = "https://api.openai.com/v1"
+
+            [providers.azure]
+            display_name = "Azure OpenAI"
+            type = "aoai"
+            model = " my-gpt-4o-mini-deployment "
+            api_key_env = " AZURE_OPENAI_API_KEY "
+            api_url = " https://example.openai.azure.com "
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -105,6 +112,13 @@ public sealed class CodeAltaConfigStoreRawApiTests
         var responses = providers["responses"];
         Assert.AreEqual("openai-responses", responses.ProviderType);
         Assert.AreEqual("OpenAI (Responses)", responses.DisplayName);
+
+        var azure = providers["azure"];
+        Assert.AreEqual("azure-openai", azure.ProviderType);
+        Assert.AreEqual("Azure OpenAI", azure.DisplayName);
+        Assert.AreEqual("my-gpt-4o-mini-deployment", azure.Model);
+        Assert.AreEqual("AZURE_OPENAI_API_KEY", azure.ApiKeyEnv);
+        Assert.AreEqual("https://example.openai.azure.com", azure.ApiUrl);
     }
 
     [TestMethod]

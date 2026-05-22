@@ -87,7 +87,7 @@ api_url = "https://api.openai.com/v1"
 
 The in-app dialog edits the same file and preserves advanced TOML values.
 
-Other API-key providers use the same pattern with their own environment variables, such as `CODEALTA_ANTHROPIC_API_KEY`, `CODEALTA_DEEPSEEK_API_KEY`, or `CODEALTA_ZAI_API_KEY`.
+Other API-key providers use the same pattern with their own environment variables, such as `CODEALTA_AZURE_OPENAI_API_KEY`, `CODEALTA_ANTHROPIC_API_KEY`, `CODEALTA_DEEPSEEK_API_KEY`, or `CODEALTA_ZAI_API_KEY`. For Azure OpenAI, choose `type = "azure-openai"`, set `api_url` to the resource endpoint, and use the deployment name as the model.
 
 ## Send a first prompt
 

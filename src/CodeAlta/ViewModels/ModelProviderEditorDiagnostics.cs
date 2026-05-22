@@ -44,6 +44,7 @@ internal static class ModelProviderEditorDiagnostics
         Add(entries, ValidateApiKey(item));
         Add(entries, ValidateApiKeyEnv(item));
         Add(entries, ValidateApiUrl(item));
+        Add(entries, ValidateAzureOpenAIModel(item));
         Add(entries, ValidateVertexProject(item));
         Add(entries, ValidateVertexLocation(item));
 
@@ -52,6 +53,13 @@ internal static class ModelProviderEditorDiagnostics
             entries.Add(new ModelProviderDiagnosticEntry(
                 ValidationSeverity.Info,
                 "Vertex AI uses Google application-default credentials from the current environment."));
+        }
+
+        if (item.ProviderType == "azure-openai" && item.Enabled)
+        {
+            entries.Add(new ModelProviderDiagnosticEntry(
+                ValidationSeverity.Info,
+                "Azure OpenAI uses deployment names as model IDs; set Model or Single Model Id to your deployment name."));
         }
 
         if (ShouldShowCustomApiUrlGuidance(item))
@@ -149,6 +157,12 @@ internal static class ModelProviderEditorDiagnostics
     {
         ArgumentNullException.ThrowIfNull(item);
 
+        if (item.ProviderType == "azure-openai" && item.Enabled &&
+            (item.UseDefaultApiUrl || string.IsNullOrWhiteSpace(item.ApiUrl)))
+        {
+            return new ValidationMessage(ValidationSeverity.Error, "Azure OpenAI requires the resource endpoint in API URL.");
+        }
+
         if (item.UseDefaultApiUrl || string.IsNullOrWhiteSpace(item.ApiUrl))
         {
             return null;
@@ -173,6 +187,22 @@ internal static class ModelProviderEditorDiagnostics
             : null;
     }
 
+    public static ValidationMessage? ValidateAzureOpenAIModel(ModelProviderEditorItemViewModel item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        if (item.ProviderType != "azure-openai" || !item.Enabled)
+        {
+            return null;
+        }
+
+        var hasModel = !item.UseDefaultModel && !string.IsNullOrWhiteSpace(item.Model);
+        var hasSingleModelId = !item.UseDefaultSingleModelId && !string.IsNullOrWhiteSpace(item.SingleModelId);
+        return hasModel || hasSingleModelId
+            ? null
+            : new ValidationMessage(ValidationSeverity.Error, "Azure OpenAI requires Model or Single Model Id to be a deployment name.");
+    }
+
     public static ValidationMessage? ValidateVertexLocation(ModelProviderEditorItemViewModel item)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -190,7 +220,7 @@ internal static class ModelProviderEditorDiagnostics
     public static bool RequiresApiKey(ModelProviderEditorItemViewModel item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        return item.ProviderType is "openai-chat" or "openai-responses" or "anthropic" or "google-genai";
+        return item.ProviderType is "openai-chat" or "openai-responses" or "azure-openai" or "anthropic" or "google-genai";
     }
 
     private static void Add(List<ModelProviderDiagnosticEntry> entries, ValidationMessage? message)

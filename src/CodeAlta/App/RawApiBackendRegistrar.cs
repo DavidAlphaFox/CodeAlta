@@ -105,6 +105,8 @@ internal static class RawApiBackendRegistrar
                 return TryCreateOpenAIChatProvider(definition, stateRootPath, modelCatalog, out descriptor, out createBackend);
             case "openai-responses":
                 return TryCreateOpenAIResponsesProvider(definition, stateRootPath, modelCatalog, out descriptor, out createBackend);
+            case "azure-openai":
+                return TryCreateAzureOpenAIProvider(definition, stateRootPath, modelCatalog, out descriptor, out createBackend);
             case "codex":
                 return TryCreateCodexSubscriptionProvider(definition, stateRootPath, modelCatalog, codexSubscriptionConcurrencyLimiter, out descriptor, out createBackend);
             case "copilot":
@@ -245,6 +247,64 @@ internal static class RawApiBackendRegistrar
         createBackend = () => new OpenAIResponsesAgentBackend(options);
         LogInfo(
             $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
+        return true;
+    }
+
+    private static bool TryCreateAzureOpenAIProvider(
+        CodeAltaProviderDocument definition,
+        string stateRootPath,
+        ModelsDevCatalogService? modelCatalog,
+        out AgentBackendDescriptor descriptor,
+        out Func<IAgentBackend> createBackend)
+    {
+        var apiKey = ResolveSecret(definition.ApiKey, definition.ApiKeyEnv);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            LogInfo(
+                $"Skipping provider provider={definition.ProviderKey} type={definition.ProviderType} displayName={FormatDisplayName(definition.DisplayName)} reason=missing-credentials");
+            descriptor = null!;
+            createBackend = null!;
+            return false;
+        }
+
+        var backendId = new AgentBackendId(definition.ProviderKey);
+        var displayName = ResolveProviderDisplayName(definition);
+        var baseUri = ParseUri(definition.ApiUrl);
+        var singleModelId = NormalizeText(definition.SingleModelId) ?? NormalizeText(definition.Model);
+        var options = new OpenAIChatAgentBackendOptions
+        {
+            BackendIdOverride = backendId,
+            DisplayNameOverride = displayName,
+            StateRootPath = stateRootPath,
+            Providers =
+            {
+                new OpenAIProviderOptions
+                {
+                    ProviderKey = definition.ProviderKey,
+                    DisplayName = displayName,
+                    ApiKey = apiKey,
+                    IsAzureOpenAI = true,
+                    BaseUri = baseUri,
+                    IsDefault = true,
+                    Profile = CreateAzureOpenAIProfile(definition.Profile),
+                    Compaction = CreateCompactionSettings(definition.Compaction),
+                    ModelsDevProviderId = ResolveModelsDevProviderId(
+                        definition.ModelsDevProviderId,
+                        definition.ProviderKey,
+                        "openai",
+                        modelCatalog),
+                    SingleModelId = singleModelId,
+                    ModelOverrides = CreateModelOverrides(definition.ModelOverrides),
+                    ModelCatalog = modelCatalog,
+                    ProtocolTracing = CreateOpenAIProtocolTraceOptions(definition, stateRootPath),
+                },
+            },
+        };
+
+        descriptor = new AgentBackendDescriptor(backendId, displayName);
+        createBackend = () => new OpenAIChatAgentBackend(options);
+        LogInfo(
+            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} azureOpenAI=true");
         return true;
     }
 
@@ -574,6 +634,21 @@ internal static class RawApiBackendRegistrar
         CodeAltaProviderProfileDocument? document)
     {
         var profile = CreateOpenAIBaseProfile(LocalAgentTransportKind.OpenAIChatCompletions, providerKey, apiUrl, responses: false);
+        return document is null ? profile : ApplyProfileOverrides(profile, document);
+    }
+
+    private static LocalAgentProviderProfile CreateAzureOpenAIProfile(CodeAltaProviderProfileDocument? document)
+    {
+        var profile = new LocalAgentProviderProfile
+        {
+            SupportsDeveloperRole = true,
+            SupportsStore = false,
+            SupportsReasoningEffort = true,
+            StreamsUsage = true,
+            MaxTokensFieldName = "max_completion_tokens",
+            ReasoningFieldNames = ["reasoning_content", "reasoning"],
+        };
+
         return document is null ? profile : ApplyProfileOverrides(profile, document);
     }
 

@@ -6,6 +6,14 @@ type = "anthropic"
 model = "claude-sonnet-4-6"
 api_key_env = "CODEALTA_ANTHROPIC_API_KEY"
 
+[providers.azure-openai]
+enabled = false
+display_name = "Azure OpenAI"
+type = "azure-openai"
+model = "gpt-4.1"
+api_key_env = "CODEALTA_AZURE_OPENAI_API_KEY"
+api_url = "https://your-resource.openai.azure.com"
+
 [providers.codex]
 enabled = false
 display_name = "Codex"

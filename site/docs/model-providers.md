@@ -18,6 +18,7 @@ On first run, CodeAlta creates a default `~/.alta/config.toml` with common provi
 | Provider key | Display name | Type | Default model or role | Credential field |
 | --- | --- | --- | --- | --- |
 | `anthropic` | Anthropic | `anthropic` | `claude-sonnet-4-6` | `CODEALTA_ANTHROPIC_API_KEY` |
+| `azure-openai` | Azure OpenAI | `azure-openai` | Azure deployment name | `CODEALTA_AZURE_OPENAI_API_KEY` |
 | `codex` | Codex | `codex` | `gpt-5.5`, high reasoning | ChatGPT/Codex OAuth state |
 | `copilot` | Copilot | `copilot` | `claude-sonnet-4.6`, high reasoning | GitHub device flow by default |
 | `deepseek` | DeepSeek | `openai-chat` | `deepseek-v4-pro` | `CODEALTA_DEEPSEEK_API_KEY` |
@@ -60,7 +61,7 @@ The dialog can:
 
 ## Advanced TOML reference
 
-Global provider entries live under `[providers.<provider-key>]`. Provider keys are normalized to lower case; `codex` and `copilot` also receive their default provider type when `type` is omitted. Supported canonical provider types are `codex`, `copilot`, `openai-chat`, `openai-responses`, `anthropic`, `google-genai`, and `vertex-ai`.
+Global provider entries live under `[providers.<provider-key>]`. Provider keys are normalized to lower case; `codex` and `copilot` also receive their default provider type when `type` is omitted. Supported canonical provider types are `codex`, `copilot`, `openai-chat`, `openai-responses`, `azure-openai`, `anthropic`, `google-genai`, and `vertex-ai`.
 
 Common provider fields are:
 
@@ -68,11 +69,11 @@ Common provider fields are:
 | --- | --- |
 | `enabled` | Enables or disables the provider entry. Missing means enabled after normalization. |
 | `display_name` | Label shown in provider selectors and dialogs. |
-| `type` | Provider type. Common aliases such as `openai`, `responses`, `gemini`, `vertex`, and `github-copilot` are normalized to the canonical types above. |
+| `type` | Provider type. Common aliases such as `openai`, `responses`, `aoai`, `gemini`, `vertex`, and `github-copilot` are normalized to the canonical types above. |
 | `model` | Default model id for this provider. |
 | `reasoning_effort` | Default reasoning effort: `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`. |
 | `api_key` / `api_key_env` | Literal API key or environment variable name for API-key providers. Prefer `api_key_env`. |
-| `api_url` | Absolute endpoint override. Codex and Copilot require HTTPS except localhost test transports. |
+| `api_url` | Absolute endpoint override. Azure OpenAI, Codex, and Copilot require HTTPS except localhost test transports. |
 | `protocol_trace` | Enables low-level protocol tracing for OpenAI, Codex, and Copilot transports. |
 | `models_dev_provider_id` | Optional models.dev provider id used to enrich model metadata where supported. |
 | `single_model_id` | Fixed model id for endpoints that do not expose a model list. |
@@ -86,6 +87,7 @@ Provider-type-specific fields and restrictions:
 | Type | Credential and endpoint fields | Additional fields handled for that type |
 | --- | --- | --- |
 | `openai-chat`, `openai-responses` | `api_key` or `api_key_env`; optional `api_url`, `organization_id`, `project_id` | `models_dev_provider_id`, `single_model_id`, `extra_body`, `profile`, `compaction`, `model_overrides`, `protocol_trace` |
+| `azure-openai` | `api_key` or `api_key_env`; required Azure OpenAI resource `api_url` | `models_dev_provider_id`, `single_model_id`, `profile`, `compaction`, `model_overrides`, `protocol_trace` |
 | `anthropic` | `api_key` or `api_key_env`; optional `api_url` | `models_dev_provider_id`, `single_model_id`, `profile`, `compaction`, `model_overrides` |
 | `google-genai` | `api_key` or `api_key_env`; optional `api_url` | `models_dev_provider_id`, `single_model_id`, `profile`, `compaction`, `model_overrides` |
 | `vertex-ai` | `project` and `location` are required when enabled; optional `api_url` | `models_dev_provider_id`, `single_model_id`, `profile`, `compaction`, `model_overrides` |
@@ -174,6 +176,22 @@ api_url = "https://api.openai.com/v1"
 ```
 
 Use `openai-chat` for OpenAI-compatible Chat Completions endpoints.
+
+### Azure OpenAI
+
+Use `azure-openai` for Azure OpenAI resource endpoints. The Azure OpenAI SDK uses deployment names where OpenAI APIs use model ids, so set `model` and/or `single_model_id` to your deployment name:
+
+```toml
+[providers.azure-openai]
+enabled = true
+display_name = "Azure OpenAI"
+type = "azure-openai"
+model = "my-gpt-4o-mini-deployment"
+api_key_env = "CODEALTA_AZURE_OPENAI_API_KEY"
+api_url = "https://your-resource.openai.azure.com"
+```
+
+Azure OpenAI does not expose model listing through the SDK used by CodeAlta. If `single_model_id` is not set, CodeAlta uses `model` as the single deployment shown in model selectors.
 
 ### Anthropic
 

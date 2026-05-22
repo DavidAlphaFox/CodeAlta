@@ -23,7 +23,7 @@ Update an existing installation with:
 dotnet tool update -g CodeAlta
 ```
 
-On first launch, CodeAlta creates `~/.alta/config.toml`. If no provider is enabled yet, the Model Providers dialog opens so you can configure Codex, Copilot, OpenAI-compatible APIs, Anthropic, Gemini/Vertex, or custom endpoints.
+On first launch, CodeAlta creates `~/.alta/config.toml`. If no provider is enabled yet, the Model Providers dialog opens so you can configure Codex, Copilot, OpenAI/Azure OpenAI APIs, Anthropic, Gemini/Vertex, or custom endpoints.
 
 ## ✨ What it gives you
 

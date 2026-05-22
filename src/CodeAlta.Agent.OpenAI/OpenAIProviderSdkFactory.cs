@@ -3,6 +3,7 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Text.Json;
+using Azure.AI.OpenAI;
 using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Agent.ModelCatalog;
 using CodeAlta.Agent.OpenAI.Codex;
@@ -24,9 +25,19 @@ internal static class OpenAIProviderSdkFactory
         => new(CreateCredential(provider), CreateClientOptions(provider));
 
     public static ResponsesClient CreateResponsesClient(OpenAIProviderOptions provider, string? model)
-        => provider.ResponsesClientFactory is not null
-            ? provider.ResponsesClientFactory(model)
-            : new ResponsesClient(CreateCredential(provider), CreateResponsesClientOptions(provider));
+    {
+        if (provider.ResponsesClientFactory is not null)
+        {
+            return provider.ResponsesClientFactory(model);
+        }
+
+        if (provider.IsAzureOpenAI)
+        {
+            throw CreateAzureOpenAIResponsesNotSupportedException();
+        }
+
+        return new ResponsesClient(CreateCredential(provider), CreateResponsesClientOptions(provider));
+    }
 
     public static ResponsesClient CreateResponsesClient(
         OpenAIProviderOptions provider,
@@ -50,6 +61,11 @@ internal static class OpenAIProviderSdkFactory
             return CreateCodexSubscriptionResponsesClient(provider, context);
         }
 
+        if (provider.IsAzureOpenAI)
+        {
+            throw CreateAzureOpenAIResponsesNotSupportedException();
+        }
+
         var protocolTrace = OpenAIProtocolTraceLogger.Create(provider.ProtocolTracing, context);
         return new ResponsesClient(CreateCredential(provider), CreateResponsesClientOptions(provider, protocolTrace));
     }
@@ -60,6 +76,8 @@ internal static class OpenAIProviderSdkFactory
         OpenAIProtocolTraceLogger? protocolTrace = null)
         => provider.ChatClientFactory is not null
             ? provider.ChatClientFactory(model)
+            : provider.IsAzureOpenAI
+                ? CreateAzureOpenAIClient(provider, protocolTrace).GetChatClient(model ?? string.Empty)
             : new ChatClient(model ?? string.Empty, CreateCredential(provider), CreateClientOptionsCore(provider, protocolTrace));
 
     public static async ValueTask ForceRefreshCodexSubscriptionCredentialAsync(
@@ -129,6 +147,13 @@ internal static class OpenAIProviderSdkFactory
             if (provider.ModelListAsync is not null)
             {
                 return await provider.ModelListAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (provider.IsAzureOpenAI)
+            {
+                LogInfo(
+                    $"Azure OpenAI model discovery is not supported by the Azure OpenAI SDK; using empty catalog backend={providerDescriptor.BackendId.Value} provider={providerDescriptor.ProviderKey} displayName={providerDescriptor.DisplayName}");
+                return [];
             }
 
             var client = CreateModelClient(provider);
@@ -381,6 +406,44 @@ internal static class OpenAIProviderSdkFactory
         OpenAIProviderOptions provider,
         OpenAIProtocolTraceLogger? protocolTrace = null)
         => CreateClientOptionsCore(provider, protocolTrace);
+
+    private static AzureOpenAIClient CreateAzureOpenAIClient(
+        OpenAIProviderOptions provider,
+        OpenAIProtocolTraceLogger? protocolTrace)
+    {
+        if (provider.BaseUri is not { } endpoint)
+        {
+            throw new InvalidOperationException("Azure OpenAI providers require an Azure OpenAI resource endpoint in api_url.");
+        }
+
+        return new AzureOpenAIClient(endpoint, CreateCredential(provider), CreateAzureOpenAIClientOptions(provider, protocolTrace));
+    }
+
+    private static AzureOpenAIClientOptions CreateAzureOpenAIClientOptions(
+        OpenAIProviderOptions provider,
+        OpenAIProtocolTraceLogger? protocolTrace)
+    {
+        var options = new AzureOpenAIClientOptions
+        {
+            Transport = provider.HttpClient is null ? null : new HttpClientPipelineTransport(provider.HttpClient),
+            NetworkTimeout = provider.CodexSubscription is null ? null : CodexSubscriptionNetworkTimeout,
+        };
+
+        if (protocolTrace is not null)
+        {
+            options.AddPolicy(protocolTrace.CreateHttpPolicy(), PipelinePosition.BeforeTransport);
+        }
+
+        if (provider.ExtraHeaders is { Count: > 0 } extraHeaders)
+        {
+            options.AddPolicy(new OpenAIExtraHeadersPolicy(extraHeaders), PipelinePosition.BeforeTransport);
+        }
+
+        return options;
+    }
+
+    private static InvalidOperationException CreateAzureOpenAIResponsesNotSupportedException()
+        => new("Azure OpenAI is supported through the azure-openai chat-completions provider. The Azure.AI.OpenAI 2.1 SDK used by CodeAlta does not expose the Responses client.");
 
     private static ResponsesClient CreateCodexSubscriptionResponsesClient(
         OpenAIProviderOptions provider,

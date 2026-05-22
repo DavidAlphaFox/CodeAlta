@@ -177,6 +177,7 @@ internal sealed class ThreadProviderSwitchCoordinator
         {
             "openai-chat" => "openai-chat",
             "openai-responses" => "openai-responses",
+            "azure-openai" => "openai-chat",
             "codex" => "codex",
             "copilot" => "copilot",
             "anthropic" => "anthropic-messages",

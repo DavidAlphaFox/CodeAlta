@@ -20,8 +20,10 @@ public sealed class RawApiBackendRegistrarTests
     {
         using var temp = TempDirectory.Create();
         var openAiKeyName = $"CODEALTA_OPENAI_{Guid.NewGuid():N}";
+        var azureOpenAiKeyName = $"CODEALTA_AZURE_OPENAI_{Guid.NewGuid():N}";
         var anthropicKeyName = $"CODEALTA_ANTHROPIC_{Guid.NewGuid():N}";
         Environment.SetEnvironmentVariable(openAiKeyName, "openai-test-key");
+        Environment.SetEnvironmentVariable(azureOpenAiKeyName, "azure-openai-test-key");
         Environment.SetEnvironmentVariable(anthropicKeyName, "anthropic-test-key");
 
         try
@@ -38,6 +40,13 @@ public sealed class RawApiBackendRegistrarTests
                 display_name = "OpenAI Responses"
                 type = "openai-responses"
                 api_key_env = "{{openAiKeyName}}"
+
+                [providers.azure]
+                display_name = "Azure OpenAI"
+                type = "azure-openai"
+                model = "my-gpt-4o-mini-deployment"
+                api_key_env = "{{azureOpenAiKeyName}}"
+                api_url = "https://example.openai.azure.com"
 
                 [providers.anthropic]
                 display_name = "Anthropic"
@@ -65,32 +74,41 @@ public sealed class RawApiBackendRegistrarTests
                 StringComparer.OrdinalIgnoreCase);
 
             CollectionAssert.AreEquivalent(
-                new[] { "openai_chat", "openai_responses", "anthropic", "vertex" },
+                new[] { "openai_chat", "openai_responses", "azure", "anthropic", "vertex" },
                 descriptors.Select(static descriptor => descriptor.BackendId.Value).ToArray());
 
             Assert.AreEqual("OpenAI Responses", descriptorsById["openai_responses"]);
             Assert.AreEqual("OpenAI Chat", descriptorsById["openai_chat"]);
+            Assert.AreEqual("Azure OpenAI", descriptorsById["azure"]);
             Assert.AreEqual("Anthropic", descriptorsById["anthropic"]);
             Assert.AreEqual("Vertex", descriptorsById["vertex"]);
 
             Assert.IsTrue(factory.IsRegistered("openai_responses"));
             Assert.IsTrue(factory.IsRegistered("openai_chat"));
+            Assert.IsTrue(factory.IsRegistered("azure"));
             Assert.IsTrue(factory.IsRegistered("anthropic"));
             Assert.IsTrue(factory.IsRegistered("vertex"));
 
             await using var responsesBackend = factory.Create("openai_responses");
             await using var chatBackend = factory.Create("openai_chat");
+            await using var azureBackend = factory.Create("azure");
             await using var anthropicBackend = factory.Create("anthropic");
             await using var googleBackend = factory.Create("vertex");
 
             Assert.IsInstanceOfType<OpenAIResponsesAgentBackend>(responsesBackend);
             Assert.IsInstanceOfType<OpenAIChatAgentBackend>(chatBackend);
+            Assert.IsInstanceOfType<OpenAIChatAgentBackend>(azureBackend);
             Assert.IsInstanceOfType<AnthropicAgentBackend>(anthropicBackend);
             Assert.IsInstanceOfType<GoogleGenAIAgentBackend>(googleBackend);
+
+            var azureModels = await azureBackend.ListModelsAsync().ConfigureAwait(false);
+            Assert.AreEqual(1, azureModels.Count);
+            Assert.AreEqual("my-gpt-4o-mini-deployment", azureModels[0].Id);
         }
         finally
         {
             Environment.SetEnvironmentVariable(openAiKeyName, null);
+            Environment.SetEnvironmentVariable(azureOpenAiKeyName, null);
             Environment.SetEnvironmentVariable(anthropicKeyName, null);
         }
     }

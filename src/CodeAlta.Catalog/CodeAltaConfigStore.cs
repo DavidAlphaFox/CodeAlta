@@ -1000,6 +1000,7 @@ public sealed class CodeAltaConfigStore
             null => null,
             "openai" or "openai-chat" or "openai-chat-completions" or "chat" or "chat-completions" or "chat_completions" => "openai-chat",
             "openai-responses" or "responses" or "response" => "openai-responses",
+            "azure-openai" or "azure-openai-chat" or "azure_openai" or "azure_openai_chat" or "aoai" => "azure-openai",
             "openai-codex-subscription" or "codex-subscription" or "codex_subscription" => CodexSubscriptionProviderType,
             "github-copilot-direct" or "copilot-direct" or "github-copilot" or "github-copilot-local" => CopilotDirectProviderType,
             "anthropic" or "anthropic-messages" or "messages" or "message" => "anthropic",
@@ -1029,7 +1030,7 @@ public sealed class CodeAltaConfigStore
         definition.Enabled ??= GetDefaultProviderEnabled(definition.ProviderKey);
         definition.ProviderType = NormalizeProviderType(definition.ProviderKey, definition.ProviderType)
             ?? throw new InvalidOperationException(
-                $"providers.{definition.ProviderKey} type must be one of: codex, copilot, openai-chat, openai-responses, anthropic, google-genai, vertex-ai.");
+                $"providers.{definition.ProviderKey} type must be one of: codex, copilot, openai-chat, openai-responses, azure-openai, anthropic, google-genai, vertex-ai.");
         definition.Compaction = NormalizeAndCompleteCompactionSettings(definition.Compaction, DefaultCompaction);
         ApplyCodexSubscriptionDefaults(definition);
         ApplyCopilotDirectDefaults(definition);
@@ -1091,6 +1092,26 @@ public sealed class CodeAltaConfigStore
             case "openai-responses":
                 RejectUnsupportedField(definition, "project", definition.Project);
                 RejectUnsupportedField(definition, "location", definition.Location);
+                break;
+
+            case "azure-openai":
+                RejectUnsupportedField(definition, "organization_id", definition.OrganizationId);
+                RejectUnsupportedField(definition, "project_id", definition.ProjectId);
+                RejectUnsupportedField(definition, "project", definition.Project);
+                RejectUnsupportedField(definition, "location", definition.Location);
+                RejectUnsupportedField(definition, "extra_body", definition.ExtraBody);
+                if (definition.Enabled != false && string.IsNullOrWhiteSpace(definition.ApiUrl))
+                {
+                    throw new InvalidOperationException($"providers.{definition.ProviderKey} api_url is required for type 'azure-openai'.");
+                }
+
+                if (definition.Enabled != false &&
+                    string.IsNullOrWhiteSpace(definition.Model) &&
+                    string.IsNullOrWhiteSpace(definition.SingleModelId))
+                {
+                    throw new InvalidOperationException($"providers.{definition.ProviderKey} model or single_model_id is required for type 'azure-openai'.");
+                }
+
                 break;
 
             case CodexSubscriptionProviderType:
@@ -1165,6 +1186,7 @@ public sealed class CodeAltaConfigStore
         }
 
         if ((string.Equals(definition.ProviderType, CodexSubscriptionProviderType, StringComparison.Ordinal) ||
+             string.Equals(definition.ProviderType, "azure-openai", StringComparison.Ordinal) ||
              string.Equals(definition.ProviderType, CopilotDirectProviderType, StringComparison.Ordinal)) &&
             !string.IsNullOrWhiteSpace(definition.ApiUrl) &&
             Uri.TryCreate(definition.ApiUrl, UriKind.Absolute, out var directUri) &&
@@ -1531,6 +1553,7 @@ public sealed class CodeAltaConfigStore
         {
             case "openai-chat":
             case "openai-responses":
+            case "azure-openai":
             case "anthropic":
             case "google-genai":
                 if (string.IsNullOrWhiteSpace(definition.ApiKey) &&

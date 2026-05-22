@@ -70,6 +70,11 @@ public sealed class OpenAIProviderOptions
     public string? ApiKey { get; set; }
 
     /// <summary>
+    /// Gets or sets whether this provider should use the Azure OpenAI SDK client instead of the OpenAI platform SDK client.
+    /// </summary>
+    public bool IsAzureOpenAI { get; set; }
+
+    /// <summary>
     /// Gets or sets the base endpoint for the provider.
     /// </summary>
     public Uri? BaseUri { get; set; }

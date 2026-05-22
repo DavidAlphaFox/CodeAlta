@@ -448,6 +448,7 @@ internal sealed class CodeAltaFrontendComposition
     private static bool SupportsHostInjectedTools(string? providerType)
         => string.Equals(providerType, "openai-chat", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(providerType, "openai-responses", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(providerType, "azure-openai", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(providerType, "codex", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(providerType, "copilot", StringComparison.OrdinalIgnoreCase);
 
