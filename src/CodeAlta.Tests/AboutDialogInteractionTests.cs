@@ -80,6 +80,36 @@ public sealed class AboutDialogInteractionTests
             link.Text?.Contains("Website", StringComparison.Ordinal) == true));
     }
 
+    [TestMethod]
+    public void AboutDialog_UpdateAvailableStatusUsesWrappedCommandRowWithCopyButton()
+    {
+        using var updateService = new CodeAltaUpdateService();
+        var snapshot = new CodeAltaUpdateCheckSnapshot(
+            CodeAltaUpdateCheckStatus.UpdateAvailable,
+            "CodeAlta",
+            "0.9.1",
+            "0.9.2",
+            LatestVersionIsPrerelease: false,
+            IncludePrerelease: false,
+            ErrorMessage: null);
+        typeof(CodeAltaUpdateService)
+            .GetField("_snapshot", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(updateService, snapshot);
+        var dialog = new AboutDialog(
+            () => new Rectangle(0, 0, 120, 40),
+            () => null,
+            new State<float>(0f),
+            updateService);
+
+        var updateStatus = (Visual)typeof(AboutDialog)
+            .GetMethod("BuildUpdateStatusVisual", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(dialog, null)!;
+
+        var command = FindMarkups(updateStatus).Single(markup => markup.Text?.Contains(snapshot.UpdateCommand, StringComparison.Ordinal) == true);
+        Assert.IsTrue(command.Wrap, "The about dialog update command should wrap.");
+        Assert.IsTrue(FindButtons(updateStatus).Any(IsCopyButton), "Expected a copy-to-clipboard button for the update command.");
+    }
+
     private static bool IsDialogOpen(AboutDialog dialog)
         => GetDialog(dialog).App is not null;
 
@@ -116,6 +146,75 @@ public sealed class AboutDialogInteractionTests
                 {
                     yield return childLink;
                 }
+            }
+        }
+    }
+
+    private static IEnumerable<Markup> FindMarkups(Visual? visual)
+    {
+        if (visual is null)
+        {
+            yield break;
+        }
+
+        if (visual is Markup markup)
+        {
+            yield return markup;
+        }
+
+        foreach (var child in EnumerateChildren(visual))
+        {
+            foreach (var childMarkup in FindMarkups(child))
+            {
+                yield return childMarkup;
+            }
+        }
+    }
+
+    private static IEnumerable<Button> FindButtons(Visual? visual)
+    {
+        if (visual is null)
+        {
+            yield break;
+        }
+
+        if (visual is Button button)
+        {
+            yield return button;
+        }
+
+        foreach (var child in EnumerateChildren(visual))
+        {
+            foreach (var childButton in FindButtons(child))
+            {
+                yield return childButton;
+            }
+        }
+    }
+
+    private static bool IsCopyButton(Button button)
+        => button.Content is TextBlock textBlock && textBlock.Text == $"{NerdFont.MdContentCopy}";
+
+    private static IEnumerable<Visual> EnumerateChildren(Visual visual)
+    {
+        if (visual is ContentVisual contentVisual && contentVisual.Content is { } content)
+        {
+            yield return content;
+        }
+
+        if (visual is Panel panel)
+        {
+            foreach (var child in panel)
+            {
+                yield return child;
+            }
+        }
+
+        if (visual is Grid grid)
+        {
+            foreach (var cell in grid.Cells)
+            {
+                yield return cell;
             }
         }
     }

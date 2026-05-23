@@ -168,12 +168,15 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
         ToastService.Show(() => new Toast
         {
             Title = "Update available",
-            Content = $"CodeAlta {snapshot.LatestVersionText} is available. Run {snapshot.UpdateCommand}",
+            Content = CodeAltaUpdateVisualFactory.CreateToastContent(snapshot, CopyUpdateCommand),
             Severity = ToastSeverity.Info,
             Duration = TimeSpan.FromSeconds(10),
             ShowCloseButton = true,
         });
     }
+
+    private void CopyUpdateCommand(string command)
+        => _rootHost.App?.Terminal.Clipboard.TrySetText(command);
 
     private bool EnsureConfigCanLoadBeforeStartup()
     {

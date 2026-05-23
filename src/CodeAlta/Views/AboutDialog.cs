@@ -22,6 +22,8 @@ internal sealed class AboutDialog
     private readonly State<float> _logoAnimationPhase01;
     private readonly State<int>? _updateStatusVersion;
     private readonly Dialog _dialog;
+    private CodeAltaUpdateCheckSnapshot? _lastUpdateStatusSnapshot;
+    private Visual? _lastUpdateStatusVisual;
 
     public AboutDialog(
         Func<Rectangle?> getBounds,
@@ -48,7 +50,7 @@ internal sealed class AboutDialog
             return;
         }
 
-        ResponsiveDialogSize.Apply(_dialog, _getBounds(), minWidth: 86, minHeight: 18, widthFactor: 0.56, heightFactor: 0.42);
+        ResponsiveDialogSize.Apply(_dialog, _getBounds(), minWidth: 86, minHeight: 24, widthFactor: 0.56, heightFactor: 0.52);
         _dialog.Show();
     }
 
@@ -63,11 +65,7 @@ internal sealed class AboutDialog
         };
         closeButton.Click(Close);
 
-        var updateNote = new Markup(BuildUpdateStatusMarkup)
-        {
-            HorizontalAlignment = Align.Center,
-            Wrap = true,
-        };
+        var updateNote = new ComputedVisual(BuildUpdateStatusVisual);
 
         var versionLines = new List<Visual>
         {
@@ -191,18 +189,20 @@ internal sealed class AboutDialog
         }
     }
 
-    private string BuildUpdateStatusMarkup()
+    private Visual BuildUpdateStatusVisual()
     {
         _ = _updateStatusVersion?.Value;
         var snapshot = _getUpdateSnapshot();
-        return snapshot.Status switch
+        if (_lastUpdateStatusVisual is not null && snapshot == _lastUpdateStatusSnapshot)
         {
-            CodeAltaUpdateCheckStatus.Checking => $"[info]{NerdFont.MdCloudSearchOutline} Checking for updates...[/]",
-            CodeAltaUpdateCheckStatus.Latest => $"[success]{NerdFont.MdCheckCircleOutline} You are running the latest {CodeAltaApplicationInfo.ProductName} version.[/]",
-            CodeAltaUpdateCheckStatus.UpdateAvailable => $"[warning]{NerdFont.MdUpdate} Version {AnsiMarkup.Escape(snapshot.LatestVersionText ?? "?")} is available.[/] [dim]{AnsiMarkup.Escape(snapshot.UpdateCommand)}[/]",
-            CodeAltaUpdateCheckStatus.PackageNotFound => $"[dim]{NerdFont.MdPackageVariantClosed} No published {AnsiMarkup.Escape(snapshot.PackageId)} package was found yet.[/]",
-            CodeAltaUpdateCheckStatus.Failed => $"[warning]{NerdFont.MdAlertCircleOutline} Update check failed: {AnsiMarkup.Escape(snapshot.ErrorMessage ?? "unknown error")}[/]",
-            _ => $"[info]{NerdFont.MdInformationOutline} Update status has not been checked yet.[/]",
-        };
+            return _lastUpdateStatusVisual;
+        }
+
+        _lastUpdateStatusSnapshot = snapshot;
+        _lastUpdateStatusVisual = CodeAltaUpdateVisualFactory.CreateAboutUpdateStatus(snapshot, CopyUpdateCommand);
+        return _lastUpdateStatusVisual;
     }
+
+    private void CopyUpdateCommand(string command)
+        => _dialog.App?.Terminal.Clipboard.TrySetText(command);
 }
