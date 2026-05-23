@@ -28,7 +28,7 @@ CodeAlta stores user state under `~/.alta/`, including configuration, logs, cach
 ## Terminal font requirement
 
 > [!IMPORTANT]
-> CodeAlta uses [Nerd Fonts](https://www.nerdfonts.com/) icons throughout the terminal UI. Install a current Nerd Font-patched monospace font and select it in your terminal profile before using CodeAlta. Without a font that includes the required Nerd Font glyphs, icons may appear as empty boxes, question marks, or misaligned symbols.
+> CodeAlta uses [Nerd Fonts](https://www.nerdfonts.com/) icons throughout the terminal UI. Install a current Nerd Font-patched font and select it in your terminal profile before using CodeAlta. Without a font that includes the required Nerd Font glyphs, icons may appear as empty boxes, question marks, or misaligned symbols.
 
 Use the latest Nerd Fonts release when possible. Nerd Fonts v3.0.0 changed many icon code points, so older v2-era patched fonts can still render CodeAlta incorrectly even when the font name includes `NF` or `Nerd Font`.
 
@@ -36,7 +36,7 @@ Recommended setup:
 
 1. Download a recent font from the official [Nerd Fonts downloads](https://www.nerdfonts.com/font-downloads) page.
 2. Remove older copies of the same Nerd Font before installing the new one, especially if you have had the font installed for years. Duplicate old and new font files can cause the terminal or OS font cache to keep using the outdated glyph set.
-3. Choose a fixed-width Nerd Font family in your terminal profile, preferably the `Mono` variant when one is available. For example, if `CaskaydiaCove NF` still shows broken tree-view icons, try `CaskaydiaCove Nerd Font Mono`.
+3. Choose the updated Nerd Font family in your terminal profile, such as `CaskaydiaCove Nerd Font`. If a similarly named family such as `CaskaydiaCove NF` still shows broken tree-view icons, check for stale older copies and reinstall the current font.
 4. Restart the terminal window and `alta` after changing or reinstalling fonts.
 
 See [Troubleshooting: glyphs or tree icons look wrong]({{site.basepath}}/docs/troubleshooting/#glyphs-or-tree-icons-look-wrong) if icons still do not display correctly.

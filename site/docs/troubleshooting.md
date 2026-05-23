@@ -16,18 +16,18 @@ Logs are the first place to check for provider startup, credential, plugin build
 
 ## Glyphs or tree icons look wrong
 
-CodeAlta's terminal UI uses Nerd Fonts icons for tree expanders, status indicators, and other compact symbols. If these appear as empty boxes, question marks, unrelated icons, or misaligned glyphs, the terminal is usually not using a current Nerd Font-compatible monospace font.
+CodeAlta's terminal UI uses Nerd Fonts icons for tree expanders, status indicators, and other compact symbols. If these appear as empty boxes, question marks, unrelated icons, or misaligned glyphs, the terminal is usually not using a current Nerd Font-compatible font.
 
 Check the font setup in this order:
 
 1. Install the latest version of your preferred font from [Nerd Fonts](https://www.nerdfonts.com/font-downloads). Nerd Fonts v3.0.0 included breaking glyph code-point changes, so an older v2-era Nerd Font can be installed and still display the wrong symbols.
 2. Uninstall or delete older copies of the same patched font before reinstalling. Having both old and new variants installed can make the terminal keep selecting the outdated font.
-3. Select the Nerd Font in the terminal profile that runs `alta`; changing an editor font does not affect CodeAlta. Prefer the fixed-width `Mono` variant when available, such as `CaskaydiaCove Nerd Font Mono`.
+3. Select the updated Nerd Font in the terminal profile that runs `alta`; changing an editor font does not affect CodeAlta. For example, `CaskaydiaCove Nerd Font` is expected to work when the installed font files are current.
 4. Close all terminal windows and start a fresh terminal before launching `alta` again. On Linux, refresh the font cache if needed with `fc-cache -f -v`.
 
 Platform-specific places to check for stale font copies include Windows **Settings > Personalization > Fonts**, `%LOCALAPPDATA%\Microsoft\Windows\Fonts`, `C:\Windows\Fonts`, macOS **Font Book**, and Linux user font directories such as `~/.local/share/fonts` or `~/.fonts`.
 
-If only some icons are wrong after updating, verify that the active terminal profile is not falling back to a different font family and that the selected family is not a proportional (`Propo`) variant.
+If only some icons are wrong after updating, verify that the active terminal profile is not falling back to a different font family.
 
 ## Windows Terminal feels slow after a long session
 
