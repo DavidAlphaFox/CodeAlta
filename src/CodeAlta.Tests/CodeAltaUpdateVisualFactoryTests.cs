@@ -16,15 +16,27 @@ public sealed class CodeAltaUpdateVisualFactoryTests
         var visual = CodeAltaUpdateVisualFactory.CreateToastContent(snapshot, _ => { });
 
         var root = AssertIsPanel<VStack>(visual);
-        Assert.IsTrue(root.Children.Count >= 2, "The toast should put the message and command on separate rows.");
+        Assert.IsTrue(root.Children.Count >= 3, "The toast should put the message, release notes link, and command on separate rows.");
 
         var message = Assert.IsInstanceOfType<Markup>(root.Children[0]);
         Assert.IsTrue(message.Wrap, "The toast message should wrap.");
         Assert.IsFalse(message.Text?.Contains(snapshot.UpdateCommand, StringComparison.Ordinal) == true, "The command should not be embedded in the message row.");
 
-        var command = FindMarkups(root.Children[1]).Single(markup => markup.Text?.Contains(snapshot.UpdateCommand, StringComparison.Ordinal) == true);
+        var command = FindMarkups(root.Children[^1]).Single(markup => markup.Text?.Contains(snapshot.UpdateCommand, StringComparison.Ordinal) == true);
         Assert.IsTrue(command.Wrap, "The update command should wrap within the toast.");
-        AssertCopyButtonExists(root.Children[1]);
+        AssertCopyButtonExists(root.Children[^1]);
+    }
+
+    [TestMethod]
+    public void CreateToastContent_AddsReleaseNotesLinkForLatestVersion()
+    {
+        var snapshot = CreateUpdateAvailableSnapshot();
+
+        var visual = CodeAltaUpdateVisualFactory.CreateToastContent(snapshot, _ => { });
+
+        var link = FindLinks(visual).Single();
+        Assert.AreEqual("View release notes", link.Text);
+        Assert.AreEqual("https://github.com/CodeAlta/CodeAlta/releases/tag/0.9.2", link.Uri);
     }
 
     [TestMethod]
@@ -114,6 +126,27 @@ public sealed class CodeAltaUpdateVisualFactoryTests
             foreach (var childButton in FindButtons(child))
             {
                 yield return childButton;
+            }
+        }
+    }
+
+    private static IEnumerable<Link> FindLinks(Visual? visual)
+    {
+        if (visual is null)
+        {
+            yield break;
+        }
+
+        if (visual is Link link)
+        {
+            yield return link;
+        }
+
+        foreach (var child in EnumerateChildren(visual))
+        {
+            foreach (var childLink in FindLinks(child))
+            {
+                yield return childLink;
             }
         }
     }

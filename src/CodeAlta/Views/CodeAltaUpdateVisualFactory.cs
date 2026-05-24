@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using XenoAtom.Ansi;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI;
@@ -13,15 +14,22 @@ internal static class CodeAltaUpdateVisualFactory
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(copyUpdateCommand);
 
-        return new VStack(
-            [
-                new Markup($"CodeAlta {AnsiMarkup.Escape(snapshot.LatestVersionText ?? "?")} is available.")
-                {
-                    HorizontalAlignment = Align.Stretch,
-                    Wrap = true,
-                },
-                CreateStretchedUpdateCommandRow(snapshot.UpdateCommand, copyUpdateCommand),
-            ])
+        var children = new List<Visual>
+        {
+            new Markup($"CodeAlta {AnsiMarkup.Escape(snapshot.LatestVersionText ?? "?")} is available.")
+            {
+                HorizontalAlignment = Align.Stretch,
+                Wrap = true,
+            },
+        };
+        if (CreateReleaseNotesLink(snapshot.LatestVersionText) is { } releaseNotesLink)
+        {
+            children.Add(releaseNotesLink);
+        }
+
+        children.Add(CreateStretchedUpdateCommandRow(snapshot.UpdateCommand, copyUpdateCommand));
+
+        return new VStack(children.ToArray())
         {
             HorizontalAlignment = Align.Stretch,
             Spacing = 1,
@@ -89,6 +97,23 @@ internal static class CodeAltaUpdateVisualFactory
             Spacing = 1,
         };
 
+    private static Visual? CreateReleaseNotesLink(string? versionText)
+    {
+        if (string.IsNullOrWhiteSpace(versionText))
+        {
+            return null;
+        }
+
+        var uri = $"{AboutDialog.GitHubProjectUri}/releases/tag/{Uri.EscapeDataString(versionText.Trim())}";
+        return new Link(uri, "View release notes")
+            .Opened((_, e) =>
+            {
+                TryOpenBrowser(e.Uri);
+                e.Handled = true;
+            })
+            .Tooltip(new TextBlock($"Open {uri}"));
+    }
+
     private static Markup CreateCenteredStatusMarkup(string markup)
         => new(markup)
         {
@@ -117,5 +142,21 @@ internal static class CodeAltaUpdateVisualFactory
             }
             .Click(onClick);
         return button.Tooltip(new TextBlock("Copy update command to the clipboard."));
+    }
+
+    private static void TryOpenBrowser(string uri)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = uri,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception)
+        {
+            // The Link still renders as an OSC 8 terminal hyperlink when shell launch is unavailable.
+        }
     }
 }
