@@ -25,7 +25,7 @@ og_type: website
     <div class="mt-4 text-start mx-auto" style="max-width: 48rem;">
       <pre class="language-shell-session"><code>dotnet tool install -g CodeAlta
 alta</code></pre>
-      <p class="text-center text-secondary mt-2" style="font-size: 0.85rem;">The NuGet package is <a href="https://www.nuget.org/packages/CodeAlta/" class="text-secondary">CodeAlta</a>; the installed command is <code>alta</code>. Requires <a href="https://dotnet.microsoft.com/en-us/download/dotnet/10.0" class="text-secondary">.NET 10</a>.</p>
+      <p class="text-center text-secondary mt-2" style="font-size: 0.85rem;">The NuGet package is <a href="https://www.nuget.org/packages/CodeAlta/" class="text-secondary">CodeAlta</a>; the installed command is <code>alta</code>. Requires <a href="https://dotnet.microsoft.com/en-us/download/dotnet/10.0" class="text-secondary">.NET 10</a>. Alternatively, use <code>dnx --yes CodeAlta</code> to install, update, and run in a single command.</p>
     </div>
   </div>
 </section>

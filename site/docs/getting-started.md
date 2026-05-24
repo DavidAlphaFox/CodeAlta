@@ -17,6 +17,12 @@ Install [.NET 10](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) first
 dotnet tool install -g CodeAlta
 ```
 
+Alternatively, use `dnx` to install, update, and run in a single command:
+
+```sh
+dnx --yes CodeAlta
+```
+
 Then launch the terminal UI:
 
 ```sh
