@@ -200,7 +200,16 @@ Open it with `Ctrl+G Ctrl+W` or `/settings`. Workspace settings cover the select
 
 ## About and updates
 
-Open it with `Ctrl+G Ctrl+A` or `/about`. The dialog shows the animated CodeAlta logo, current version, copyright, and whether the startup update check found a newer .NET tool package. If a newer package is found, CodeAlta also shows a toast during the session and prints the matching `dotnet tool update` command after the terminal UI exits.
+Open it with `Ctrl+G Ctrl+A` or `/about`. The dialog shows the animated CodeAlta logo, current version, copyright, and whether the startup update check found a newer .NET tool package.
+
+### New version toast
+
+When the startup update check finds a newer CodeAlta package on NuGet, CodeAlta shows a non-blocking toast during the session. The toast includes the latest version and the matching `dotnet tool update` command, with a copy action for the command. CodeAlta does not update itself automatically; after you exit the terminal UI, it also prints the same command so you can run it in your shell.
+
+<figure class="my-4">
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-release-toast.png" alt="CodeAlta update-available toast showing a newer package version and a dotnet tool update command" loading="lazy">
+  <figcaption class="small text-secondary mt-2">The update toast appears once per session when a newer CodeAlta package is available.</figcaption>
+</figure>
 
 ## Plugin management
 
