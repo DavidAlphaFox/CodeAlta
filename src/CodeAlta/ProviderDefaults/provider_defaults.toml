@@ -1,0 +1,25 @@
+version = 1
+
+[[rules]]
+id = "minimax-openai-chat"
+display_name = "MiniMax OpenAI Chat"
+types = ["openai-chat"]
+provider_keys = ["minimax"]
+host_suffixes = ["minimax.io", "minimaxi.com"]
+
+[rules.profile]
+supports_developer_role = false
+reasoning_field_names_prepend = ["reasoning_details[0].text"]
+
+[rules.openai]
+extra_body_defaults = { reasoning_split = true }
+
+[[rules]]
+id = "deepseek-openai-chat"
+display_name = "DeepSeek OpenAI Chat"
+types = ["openai-chat"]
+provider_keys = ["deepseek"]
+host_suffixes = ["deepseek.com"]
+
+[rules.profile]
+reasoning_input_field_name = "reasoning_content"

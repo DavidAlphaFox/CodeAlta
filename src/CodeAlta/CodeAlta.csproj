@@ -44,6 +44,7 @@
       <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="NuGet.Versioning" />
+    <PackageReference Include="Tomlyn" />
     <PackageReference Include="XenoAtom.CommandLine.Terminal" />
     <PackageReference Include="XenoAtom.Logging.Terminal" />
     <PackageReference Include="XenoAtom.Terminal.UI" />
@@ -54,6 +55,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="ProviderDefaults\provider_defaults.toml" CopyToOutputDirectory="PreserveNewest" />
 <!-- Used when debugging locally a problem with XenoAtom -->
 <!--    <ProjectReference Include="..\..\..\XenoAtom\XenoAtom.Terminal.UI\src\XenoAtom.Terminal.UI.Extensions.Markdown\XenoAtom.Terminal.UI.Extensions.Markdown.csproj" />-->
 <!--    <ProjectReference Include="..\..\..\XenoAtom\XenoAtom.Terminal.UI\src\XenoAtom.Terminal.UI.SourceGen\XenoAtom.Terminal.UI.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />-->

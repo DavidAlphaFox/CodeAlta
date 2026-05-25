@@ -9,13 +9,19 @@ namespace CodeAlta.Agent.ModelCatalog;
 public sealed class ModelsDevCatalogService : IAsyncDisposable
 {
     /// <summary>
-    /// The embedded snapshot resource name shipped with <c>CodeAlta.Agent</c>.
+    /// The snapshot content file name shipped with <c>CodeAlta.Agent</c>.
+    /// </summary>
+    public const string DefaultSnapshotFileName = "Data/models_dev_db.json";
+
+    /// <summary>
+    /// The legacy embedded snapshot resource name used by older builds.
     /// </summary>
     public const string DefaultSnapshotResourceName = "CodeAlta.Agent.Data.models_dev_db.json";
 
     private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.ModelCatalog");
 
     private readonly object _gate = new();
+    private readonly string _snapshotFilePath;
     private readonly string _snapshotResourceName;
     private readonly string? _cacheFilePath;
     private readonly Uri _refreshUri;
@@ -38,6 +44,9 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
     internal ModelsDevCatalogService(ModelsDevDatabase? initialDatabase, ModelsDevCatalogServiceOptions? options)
     {
         options ??= new ModelsDevCatalogServiceOptions();
+        _snapshotFilePath = string.IsNullOrWhiteSpace(options.SnapshotFilePath)
+            ? Path.Combine(AppContext.BaseDirectory, DefaultSnapshotFileName)
+            : Path.GetFullPath(options.SnapshotFilePath);
         _snapshotResourceName = string.IsNullOrWhiteSpace(options.SnapshotResourceName)
             ? DefaultSnapshotResourceName
             : options.SnapshotResourceName.Trim();
@@ -127,19 +136,37 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
 
     private ModelsDevDatabase LoadInitialDatabase()
     {
-        var snapshot = LoadEmbeddedDatabase();
+        var snapshot = LoadSnapshotDatabase();
         var cached = TryLoadCachedDatabase();
         return cached ?? snapshot;
     }
 
-    private ModelsDevDatabase LoadEmbeddedDatabase()
+    private ModelsDevDatabase LoadSnapshotDatabase()
+    {
+        if (File.Exists(_snapshotFilePath))
+        {
+            try
+            {
+                using var stream = File.OpenRead(_snapshotFilePath);
+                return ModelsDevDatabaseJson.Deserialize(stream);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            {
+                Logger.Warn($"Failed to load models.dev snapshot content file '{_snapshotFilePath}': {ex.Message}");
+            }
+        }
+
+        return LoadEmbeddedDatabaseFallback();
+    }
+
+    private ModelsDevDatabase LoadEmbeddedDatabaseFallback()
     {
         var assembly = typeof(ModelsDevCatalogService).Assembly;
         using var stream = assembly.GetManifestResourceStream(_snapshotResourceName);
         if (stream is null)
         {
             throw new InvalidOperationException(
-                $"The embedded models.dev snapshot resource '{_snapshotResourceName}' was not found.");
+                $"The models.dev snapshot content file '{_snapshotFilePath}' and legacy embedded resource '{_snapshotResourceName}' were not found.");
         }
 
         return ModelsDevDatabaseJson.Deserialize(stream);
@@ -239,6 +266,11 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
 /// </summary>
 public sealed class ModelsDevCatalogServiceOptions
 {
+    /// <summary>
+    /// Gets or sets the snapshot content-file path.
+    /// </summary>
+    public string? SnapshotFilePath { get; init; }
+
     /// <summary>
     /// Gets or sets the embedded snapshot resource name.
     /// </summary>

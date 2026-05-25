@@ -26,6 +26,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Data\models_dev_db.json" LogicalName="CodeAlta.Agent.Data.models_dev_db.json" />
+    <Content Include="Data\models_dev_db.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

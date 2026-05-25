@@ -1,42 +1,16 @@
+using System.Text.Json.Serialization;
 using CodeAlta.Agent.LocalRuntime;
+using Tomlyn;
+using Tomlyn.Model;
+using Tomlyn.Serialization;
+using XenoAtom.Logging;
 
 namespace CodeAlta.App;
 
 internal static class RawApiProviderDefaultsCatalog
 {
-    private static readonly IReadOnlyList<RawApiProviderDefaultsRule> Rules =
-    [
-        new(
-            "MiniMax OpenAI Chat",
-            static context =>
-                context.TransportKind == LocalAgentTransportKind.OpenAIChatCompletions &&
-                (string.Equals(context.ProviderKey, "minimax", StringComparison.OrdinalIgnoreCase) ||
-                 HasHost(context.BaseUri, "minimax.io") ||
-                 HasHost(context.BaseUri, "minimaxi.com")),
-            static profile => profile with
-            {
-                SupportsDeveloperRole = false,
-                ReasoningFieldNames = PrependDistinct(
-                    profile.ReasoningFieldNames,
-                    "reasoning_details[0].text"),
-            },
-            static extraBody => MergeExtraBody(
-                extraBody,
-                new Dictionary<string, object?>(StringComparer.Ordinal)
-                {
-                    ["reasoning_split"] = true,
-                })),
-        new(
-            "DeepSeek OpenAI Chat",
-            static context =>
-                context.TransportKind == LocalAgentTransportKind.OpenAIChatCompletions &&
-                (string.Equals(context.ProviderKey, "deepseek", StringComparison.OrdinalIgnoreCase) ||
-                 HasHost(context.BaseUri, "deepseek.com")),
-            static profile => profile with
-            {
-                ReasoningInputFieldName = "reasoning_content",
-            }),
-    ];
+    private const string ProviderDefaultsRelativePath = "ProviderDefaults/provider_defaults.toml";
+    private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.ProviderDefaults");
 
     public static LocalAgentProviderProfile ApplyProfileDefaults(
         LocalAgentTransportKind transportKind,
@@ -48,11 +22,11 @@ internal static class RawApiProviderDefaultsCatalog
         ArgumentNullException.ThrowIfNull(profile);
 
         var context = new RawApiProviderDefaultsContext(transportKind, providerKey.Trim(), baseUri);
-        foreach (var rule in Rules)
+        foreach (var rule in LoadRules())
         {
-            if (rule.IsMatch(context))
+            if (IsMatch(rule, context) && rule.Profile is not null)
             {
-                profile = rule.ApplyProfile(profile);
+                profile = ApplyProfile(profile, rule.Profile);
             }
         }
 
@@ -68,20 +42,156 @@ internal static class RawApiProviderDefaultsCatalog
         ArgumentException.ThrowIfNullOrWhiteSpace(providerKey);
 
         var context = new RawApiProviderDefaultsContext(transportKind, providerKey.Trim(), baseUri);
-        foreach (var rule in Rules)
+        foreach (var rule in LoadRules())
         {
-            if (rule.IsMatch(context) && rule.ApplyOpenAIExtraBody is not null)
+            if (IsMatch(rule, context) && rule.OpenAI?.ExtraBodyDefaults is { Count: > 0 } defaults)
             {
-                extraBody = rule.ApplyOpenAIExtraBody(extraBody);
+                extraBody = MergeExtraBody(extraBody, ConvertTomlTable(defaults));
             }
         }
 
         return extraBody;
     }
 
-    private static bool HasHost(Uri? baseUri, string expectedHost)
+    private static IReadOnlyList<RawApiProviderDefaultsRule> LoadRules()
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(expectedHost);
+        var path = Path.Combine(AppContext.BaseDirectory, ProviderDefaultsRelativePath);
+        if (!File.Exists(path))
+        {
+            Logger.Warn($"Provider defaults content file '{path}' was not found; using built-in compatibility fallback defaults.");
+            return CreateFallbackRules();
+        }
+
+        try
+        {
+            var document = TomlSerializer.Deserialize(
+                File.ReadAllText(path),
+                RawApiProviderDefaultsTomlContext.Default.RawApiProviderDefaultsDocument);
+            var rules = document?.Rules?
+                .Where(static rule => !string.IsNullOrWhiteSpace(rule.Id))
+                .ToArray();
+            return rules is { Length: > 0 }
+                ? rules
+                : CreateFallbackRules();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or TomlException or InvalidOperationException or FormatException)
+        {
+            Logger.Warn($"Failed to load provider defaults content file '{path}': {ex.Message}; using built-in compatibility fallback defaults.");
+            return CreateFallbackRules();
+        }
+    }
+
+    private static IReadOnlyList<RawApiProviderDefaultsRule> CreateFallbackRules()
+        =>
+        [
+            new RawApiProviderDefaultsRule
+            {
+                Id = "minimax-openai-chat",
+                DisplayName = "MiniMax OpenAI Chat",
+                Types = ["openai-chat"],
+                ProviderKeys = ["minimax"],
+                HostSuffixes = ["minimax.io", "minimaxi.com"],
+                Profile = new RawApiProviderDefaultsProfile
+                {
+                    SupportsDeveloperRole = false,
+                    ReasoningFieldNamesPrepend = ["reasoning_details[0].text"],
+                },
+                OpenAI = new RawApiProviderDefaultsOpenAI
+                {
+                    ExtraBodyDefaults = new TomlTable(true)
+                    {
+                        ["reasoning_split"] = true,
+                    },
+                },
+            },
+            new RawApiProviderDefaultsRule
+            {
+                Id = "deepseek-openai-chat",
+                DisplayName = "DeepSeek OpenAI Chat",
+                Types = ["openai-chat"],
+                ProviderKeys = ["deepseek"],
+                HostSuffixes = ["deepseek.com"],
+                Profile = new RawApiProviderDefaultsProfile
+                {
+                    ReasoningInputFieldName = "reasoning_content",
+                },
+            },
+        ];
+
+    private static bool IsMatch(RawApiProviderDefaultsRule rule, RawApiProviderDefaultsContext context)
+    {
+        if (rule.Types is { Count: > 0 } types &&
+            !types.Any(type => IsTransportTypeMatch(type, context.TransportKind)))
+        {
+            return false;
+        }
+
+        var hasProviderKeyCriteria = rule.ProviderKeys is { Count: > 0 };
+        var hasHostCriteria = rule.HostSuffixes is { Count: > 0 };
+        if (!hasProviderKeyCriteria && !hasHostCriteria)
+        {
+            return true;
+        }
+
+        return (hasProviderKeyCriteria && rule.ProviderKeys!.Any(providerKey =>
+                   string.Equals(providerKey?.Trim(), context.ProviderKey, StringComparison.OrdinalIgnoreCase))) ||
+               (hasHostCriteria && rule.HostSuffixes!.Any(hostSuffix => HasHost(context.BaseUri, hostSuffix)));
+    }
+
+    private static bool IsTransportTypeMatch(string? configuredType, LocalAgentTransportKind transportKind)
+    {
+        var normalized = configuredType?.Trim().ToLowerInvariant();
+        return transportKind switch
+        {
+            LocalAgentTransportKind.OpenAIChatCompletions => normalized is "openai-chat" or "openai" or "chat",
+            LocalAgentTransportKind.OpenAIResponses => normalized is "openai-responses" or "responses",
+            LocalAgentTransportKind.AnthropicMessages => normalized is "anthropic" or "anthropic-messages",
+            LocalAgentTransportKind.GoogleGeminiApi => normalized is "google" or "google-genai" or "gemini",
+            LocalAgentTransportKind.GoogleVertexAI => normalized is "vertex" or "vertex-ai" or "google-vertex",
+            _ => false,
+        };
+    }
+
+    private static LocalAgentProviderProfile ApplyProfile(
+        LocalAgentProviderProfile profile,
+        RawApiProviderDefaultsProfile defaults)
+    {
+        var reasoningFieldNames = profile.ReasoningFieldNames;
+        if (defaults.ReasoningFieldNamesPrepend is { Count: > 0 } prepend)
+        {
+            reasoningFieldNames = PrependDistinct(reasoningFieldNames, [.. prepend]);
+        }
+
+        if (defaults.ReasoningFieldNamesAppend is { Count: > 0 } append)
+        {
+            reasoningFieldNames = AppendDistinct(reasoningFieldNames, [.. append]);
+        }
+
+        return profile with
+        {
+            SupportsDeveloperRole = defaults.SupportsDeveloperRole ?? profile.SupportsDeveloperRole,
+            SupportsStore = defaults.SupportsStore ?? profile.SupportsStore,
+            SupportsReasoningEffort = defaults.SupportsReasoningEffort ?? profile.SupportsReasoningEffort,
+            StreamsUsage = defaults.StreamsUsage ?? profile.StreamsUsage,
+            SupportsThoughtSignatures = defaults.SupportsThoughtSignatures ?? profile.SupportsThoughtSignatures,
+            MaxTokensFieldName = string.IsNullOrWhiteSpace(defaults.MaxTokensFieldName)
+                ? profile.MaxTokensFieldName
+                : defaults.MaxTokensFieldName.Trim(),
+            ReasoningFieldNames = defaults.ReasoningFieldNames is { Count: > 0 } reasoningFieldNamesOverride
+                ? [.. reasoningFieldNamesOverride.Where(static value => !string.IsNullOrWhiteSpace(value)).Select(static value => value.Trim())]
+                : reasoningFieldNames,
+            ReasoningInputFieldName = string.IsNullOrWhiteSpace(defaults.ReasoningInputFieldName)
+                ? profile.ReasoningInputFieldName
+                : defaults.ReasoningInputFieldName.Trim(),
+        };
+    }
+
+    private static bool HasHost(Uri? baseUri, string? expectedHost)
+    {
+        if (string.IsNullOrWhiteSpace(expectedHost))
+        {
+            return false;
+        }
 
         var host = baseUri?.Host;
         if (string.IsNullOrWhiteSpace(host))
@@ -89,20 +199,10 @@ internal static class RawApiProviderDefaultsCatalog
             return false;
         }
 
-        return host.Equals(expectedHost, StringComparison.OrdinalIgnoreCase) ||
-            host.EndsWith($".{expectedHost}", StringComparison.OrdinalIgnoreCase);
+        var normalizedExpectedHost = expectedHost.Trim();
+        return host.Equals(normalizedExpectedHost, StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith($".{normalizedExpectedHost}", StringComparison.OrdinalIgnoreCase);
     }
-
-    private sealed record RawApiProviderDefaultsRule(
-        string Name,
-        Func<RawApiProviderDefaultsContext, bool> IsMatch,
-        Func<LocalAgentProviderProfile, LocalAgentProviderProfile> ApplyProfile,
-        Func<IReadOnlyDictionary<string, object?>?, IReadOnlyDictionary<string, object?>?>? ApplyOpenAIExtraBody = null);
-
-    private readonly record struct RawApiProviderDefaultsContext(
-        LocalAgentTransportKind TransportKind,
-        string ProviderKey,
-        Uri? BaseUri);
 
     private static IReadOnlyList<string> PrependDistinct(
         IReadOnlyList<string> existingValues,
@@ -111,7 +211,17 @@ internal static class RawApiProviderDefaultsCatalog
         ArgumentNullException.ThrowIfNull(existingValues);
         ArgumentNullException.ThrowIfNull(newValues);
 
-        return [.. newValues.Concat(existingValues).Where(static value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.Ordinal)];
+        return [.. newValues.Concat(existingValues).Where(static value => !string.IsNullOrWhiteSpace(value)).Select(static value => value.Trim()).Distinct(StringComparer.Ordinal)];
+    }
+
+    private static IReadOnlyList<string> AppendDistinct(
+        IReadOnlyList<string> existingValues,
+        params string[] newValues)
+    {
+        ArgumentNullException.ThrowIfNull(existingValues);
+        ArgumentNullException.ThrowIfNull(newValues);
+
+        return [.. existingValues.Concat(newValues).Where(static value => !string.IsNullOrWhiteSpace(value)).Select(static value => value.Trim()).Distinct(StringComparer.Ordinal)];
     }
 
     private static IReadOnlyDictionary<string, object?>? MergeExtraBody(
@@ -135,4 +245,111 @@ internal static class RawApiProviderDefaultsCatalog
 
         return merged;
     }
+
+    private static IReadOnlyDictionary<string, object?> ConvertTomlTable(TomlTable table)
+    {
+        var converted = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var entry in table)
+        {
+            if (!string.IsNullOrWhiteSpace(entry.Key))
+            {
+                converted[entry.Key.Trim()] = ConvertTomlValue(entry.Value);
+            }
+        }
+
+        return converted;
+    }
+
+    private static object? ConvertTomlValue(object? value)
+        => value switch
+        {
+            TomlTable table => ConvertTomlTable(table),
+            TomlArray array => array.Select(ConvertTomlValue).ToArray(),
+            _ => value,
+        };
+
+    private readonly record struct RawApiProviderDefaultsContext(
+        LocalAgentTransportKind TransportKind,
+        string ProviderKey,
+        Uri? BaseUri);
+}
+
+internal sealed class RawApiProviderDefaultsDocument
+{
+    [JsonPropertyName("version")]
+    public int? Version { get; set; }
+
+    [JsonPropertyName("rules")]
+    public List<RawApiProviderDefaultsRule>? Rules { get; set; }
+}
+
+internal sealed class RawApiProviderDefaultsRule
+{
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [JsonPropertyName("display_name")]
+    public string? DisplayName { get; set; }
+
+    [JsonPropertyName("types")]
+    public List<string>? Types { get; set; }
+
+    [JsonPropertyName("provider_keys")]
+    public List<string>? ProviderKeys { get; set; }
+
+    [JsonPropertyName("host_suffixes")]
+    public List<string>? HostSuffixes { get; set; }
+
+    [JsonPropertyName("profile")]
+    public RawApiProviderDefaultsProfile? Profile { get; set; }
+
+    [JsonPropertyName("openai")]
+    public RawApiProviderDefaultsOpenAI? OpenAI { get; set; }
+}
+
+internal sealed class RawApiProviderDefaultsProfile
+{
+    [JsonPropertyName("supports_developer_role")]
+    public bool? SupportsDeveloperRole { get; set; }
+
+    [JsonPropertyName("supports_store")]
+    public bool? SupportsStore { get; set; }
+
+    [JsonPropertyName("supports_reasoning_effort")]
+    public bool? SupportsReasoningEffort { get; set; }
+
+    [JsonPropertyName("streams_usage")]
+    public bool? StreamsUsage { get; set; }
+
+    [JsonPropertyName("supports_thought_signatures")]
+    public bool? SupportsThoughtSignatures { get; set; }
+
+    [JsonPropertyName("max_tokens_field_name")]
+    public string? MaxTokensFieldName { get; set; }
+
+    [JsonPropertyName("reasoning_field_names")]
+    public List<string>? ReasoningFieldNames { get; set; }
+
+    [JsonPropertyName("reasoning_field_names_prepend")]
+    public List<string>? ReasoningFieldNamesPrepend { get; set; }
+
+    [JsonPropertyName("reasoning_field_names_append")]
+    public List<string>? ReasoningFieldNamesAppend { get; set; }
+
+    [JsonPropertyName("reasoning_input_field_name")]
+    public string? ReasoningInputFieldName { get; set; }
+}
+
+internal sealed class RawApiProviderDefaultsOpenAI
+{
+    [JsonPropertyName("extra_body_defaults")]
+    public TomlTable? ExtraBodyDefaults { get; set; }
+}
+
+[TomlSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
+    DefaultIgnoreCondition = TomlIgnoreCondition.WhenWritingNull)]
+[TomlSerializable(typeof(RawApiProviderDefaultsDocument))]
+internal partial class RawApiProviderDefaultsTomlContext : TomlSerializerContext
+{
 }
