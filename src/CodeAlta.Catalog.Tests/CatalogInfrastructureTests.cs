@@ -875,6 +875,66 @@ public sealed class CatalogInfrastructureTests
     }
 
     [TestMethod]
+    public void CodeAltaConfigStore_UpgradeGlobalConfigFromDefaults_AppendsMissingProviderEntriesWithBackup()
+    {
+        using var root = TempDirectory.Create();
+        var configPath = Path.Combine(root.Path, "config.toml");
+        const string originalContent = """
+            [providers.openai]
+            enabled = true
+            display_name = "Work OpenAI"
+            type = "openai-responses"
+            model = "work-model"
+            api_key_env = "WORK_OPENAI_KEY"
+            """;
+        File.WriteAllText(configPath, originalContent);
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = root.Path });
+
+        var upgraded = store.UpgradeGlobalConfigFromDefaults(out var backupPath);
+
+        Assert.IsTrue(upgraded);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(backupPath));
+        Assert.IsTrue(File.Exists(backupPath));
+        Assert.AreEqual(originalContent, File.ReadAllText(backupPath));
+        var content = File.ReadAllText(configPath);
+        StringAssert.Contains(content, "display_name = \"Work OpenAI\"");
+        StringAssert.Contains(content, "model = \"work-model\"");
+        StringAssert.Contains(content, "[providers.xai]");
+        StringAssert.Contains(content, "[providers.minimax]");
+    }
+
+    [TestMethod]
+    public void CodeAltaConfigStore_UpgradeGlobalConfigFromDefaults_AddsMissingKeysWithoutChangingExistingValues()
+    {
+        using var root = TempDirectory.Create();
+        var configPath = Path.Combine(root.Path, "config.toml");
+        File.WriteAllText(
+            configPath,
+            """
+            [providers.xai]
+            display_name = "My Grok"
+            type = "xai"
+            model = "grok-custom"
+            """);
+        var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = root.Path });
+
+        var upgraded = store.UpgradeGlobalConfigFromDefaults(out var backupPath);
+
+        Assert.IsTrue(upgraded);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(backupPath));
+        var content = File.ReadAllText(configPath);
+        var xaiSectionStart = content.IndexOf("[providers.xai]", StringComparison.Ordinal);
+        var xaiSectionEnd = content.IndexOf("\n[", xaiSectionStart + "[providers.xai]".Length, StringComparison.Ordinal);
+        var xaiSection = xaiSectionEnd < 0 ? content[xaiSectionStart..] : content[xaiSectionStart..xaiSectionEnd];
+        StringAssert.Contains(content, "display_name = \"My Grok\"");
+        StringAssert.Contains(content, "model = \"grok-custom\"");
+        Assert.IsFalse(xaiSection.Contains("enabled = false", StringComparison.Ordinal));
+        StringAssert.Contains(content, "reasoning_effort = \"high\"");
+        StringAssert.Contains(content, "auth_source = \"xai_browser_oauth\"");
+        StringAssert.Contains(content, "model_discovery = \"xai_endpoint_with_static_fallback\"");
+    }
+
+    [TestMethod]
     public void CodeAltaConfigStore_SaveGlobalConfigContent_RejectsInvalidWithoutOverwrite()
     {
         using var root = TempDirectory.Create();

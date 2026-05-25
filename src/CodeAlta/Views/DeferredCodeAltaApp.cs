@@ -207,11 +207,25 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
         var validation = CodeAltaConfigStore.ValidateGlobalConfigContent(content, configPath);
         if (validation.IsValid)
         {
+            TryUpgradeConfigFromDefaults();
             return true;
         }
 
         ShowConfigRecoveryDialog(configPath, content, validation);
         return false;
+    }
+
+    private static void TryUpgradeConfigFromDefaults()
+    {
+        try
+        {
+            var configStore = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = GetGlobalRoot() });
+            _ = configStore.UpgradeGlobalConfigFromDefaults(out _);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
+        {
+            // Automatic default-entry upgrades must never prevent startup when the user's existing config is valid.
+        }
     }
 
     private void ShowConfigRecoveryDialog(string configPath, string content, CodeAltaConfigValidationResult validation)

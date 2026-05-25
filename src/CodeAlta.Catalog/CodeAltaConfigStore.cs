@@ -1,7 +1,10 @@
+using System.Text;
 using CodeAlta.Agent;
 using CodeAlta.Agent.LocalRuntime.Compaction;
 using Tomlyn;
 using Tomlyn.Model;
+using Tomlyn.Parsing;
+using Tomlyn.Syntax;
 using Tomlyn.Text;
 
 namespace CodeAlta.Catalog;
@@ -61,6 +64,16 @@ public sealed class CodeAltaConfigStore
 
     private readonly CatalogOptions _options;
 
+    private sealed record ConfigSection(
+        string Path,
+        int StartOffset,
+        int EndOffset,
+        IReadOnlyDictionary<string, ConfigEntrySpan> KeyValues);
+
+    private readonly record struct ConfigEntrySpan(int StartOffset, int EndOffset);
+
+    private readonly record struct ConfigTextEdit(int Offset, string Text);
+
     /// <summary>
     /// Initializes a new instance of the <see cref="CodeAltaConfigStore"/> class.
     /// </summary>
@@ -103,6 +116,55 @@ public sealed class CodeAltaConfigStore
 
         Directory.CreateDirectory(Path.GetDirectoryName(_options.ConfigPath)!);
         File.WriteAllText(_options.ConfigPath, GetDefaultGlobalConfigContent());
+        return true;
+    }
+
+    /// <summary>
+    /// Adds entries that are present in the bundled default global configuration but missing from the user config.
+    /// </summary>
+    /// <param name="backupPath">Receives the backup path when an existing config file is upgraded.</param>
+    /// <returns><see langword="true"/> when the config file was created or upgraded.</returns>
+    /// <remarks>
+    /// Existing user entries are preserved verbatim. When an existing config is upgraded, the previous file is retained
+    /// next to it using a unique <c>.backup</c> path before the upgraded content replaces it.
+    /// </remarks>
+    /// <exception cref="IOException">Thrown when the config file, backup, or temp file cannot be read or written.</exception>
+    /// <exception cref="UnauthorizedAccessException">Thrown when access to the config file, backup, or temp file is denied.</exception>
+    /// <exception cref="InvalidDataException">Thrown when the existing or upgraded configuration cannot be loaded.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the bundled first-run template is unavailable.</exception>
+    public bool UpgradeGlobalConfigFromDefaults(out string? backupPath)
+    {
+        backupPath = null;
+        if (!File.Exists(_options.ConfigPath))
+        {
+            return EnsureGlobalConfigExists();
+        }
+
+        var existingContent = File.ReadAllText(_options.ConfigPath);
+        var validation = ValidateGlobalConfigContent(existingContent, _options.ConfigPath);
+        if (!validation.IsValid)
+        {
+            throw new InvalidDataException(validation.Message ?? $"CodeAlta configuration '{_options.ConfigPath}' is invalid.");
+        }
+
+        var upgradedContent = AddMissingDefaultConfigEntries(
+            existingContent,
+            GetDefaultGlobalConfigContent(),
+            _options.ConfigPath);
+        if (string.Equals(existingContent, upgradedContent, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        validation = ValidateGlobalConfigContent(upgradedContent, _options.ConfigPath);
+        if (!validation.IsValid)
+        {
+            throw new InvalidDataException(validation.Message ?? "Upgraded CodeAlta configuration is invalid.");
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(_options.ConfigPath)!);
+        backupPath = GetAvailableBackupPath(_options.ConfigPath);
+        ReplaceFileWithBackup(_options.ConfigPath, upgradedContent, backupPath);
         return true;
     }
 
@@ -687,6 +749,296 @@ public sealed class CodeAltaConfigStore
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var content = TomlSerializer.Serialize(document);
         File.WriteAllText(path, content);
+    }
+
+    private static string AddMissingDefaultConfigEntries(string existingContent, string defaultContent, string sourcePath)
+    {
+        var existingSyntax = ParseSyntaxDocument(existingContent, sourcePath);
+        var defaultSyntax = ParseSyntaxDocument(defaultContent, DefaultGlobalConfigResourceName);
+        var existingSections = GetConfigSections(existingContent, existingSyntax);
+        var defaultSections = GetConfigSections(defaultContent, defaultSyntax);
+        if (defaultSections.Count == 0)
+        {
+            return existingContent;
+        }
+
+        var newline = DetectNewline(existingContent);
+        var edits = new List<ConfigTextEdit>();
+        var appendedBlocks = new List<ConfigTextEdit>();
+        foreach (var defaultSection in defaultSections.Values)
+        {
+            if (!existingSections.TryGetValue(defaultSection.Path, out var existingSection))
+            {
+                if (defaultSection.KeyValues.Count == 0)
+                {
+                    continue;
+                }
+
+                var block = defaultContent[defaultSection.StartOffset..defaultSection.EndOffset].TrimEnd('\r', '\n');
+                if (!string.IsNullOrWhiteSpace(block))
+                {
+                    appendedBlocks.Add(new ConfigTextEdit(existingContent.Length, CreateAppendedBlock(existingContent, block, newline)));
+                }
+
+                continue;
+            }
+
+            var missingKeyLines = new List<string>();
+            foreach (var defaultKey in defaultSection.KeyValues)
+            {
+                if (string.Equals(defaultKey.Key, "enabled", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (existingSection.KeyValues.ContainsKey(defaultKey.Key))
+                {
+                    continue;
+                }
+
+                var line = defaultContent[defaultKey.Value.StartOffset..defaultKey.Value.EndOffset].TrimEnd('\r', '\n');
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    missingKeyLines.Add(line);
+                }
+            }
+
+            if (missingKeyLines.Count == 0)
+            {
+                continue;
+            }
+
+            var text = CreateInsertedKeyLines(existingContent, existingSection.EndOffset, missingKeyLines, newline);
+            edits.Add(new ConfigTextEdit(existingSection.EndOffset, text));
+        }
+
+        edits.AddRange(appendedBlocks);
+
+        if (edits.Count == 0)
+        {
+            return existingContent;
+        }
+
+        return ApplyTextEdits(existingContent, edits);
+    }
+
+    private static DocumentSyntax ParseSyntaxDocument(string content, string sourcePath)
+    {
+        if (!string.IsNullOrWhiteSpace(content))
+        {
+            ThrowIfLegacyConfigShapeDetected(content, sourcePath);
+        }
+
+        return SyntaxParser.ParseStrict(content, sourcePath);
+    }
+
+    private static Dictionary<string, ConfigSection> GetConfigSections(string content, DocumentSyntax document)
+    {
+        var result = new Dictionary<string, ConfigSection>(StringComparer.OrdinalIgnoreCase);
+        var tables = document.Tables.ToArray();
+        for (var i = 0; i < tables.Length; i++)
+        {
+            var table = tables[i];
+            if (table is not TableSyntax || GetKeyPath(table.Name) is not { } path)
+            {
+                continue;
+            }
+
+            var startOffset = GetNodeStartOffset(table.OpenBracket is null ? table : table.OpenBracket);
+            var nextTable = i + 1 < tables.Length ? tables[i + 1] : null;
+            var endOffset = nextTable is null
+                ? content.Length
+                : GetNodeStartOffset(nextTable.OpenBracket is null ? nextTable : nextTable.OpenBracket);
+            var keyValues = new Dictionary<string, ConfigEntrySpan>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in table.Items)
+            {
+                if (GetKeyPath(item.Key) is not { } key)
+                {
+                    continue;
+                }
+
+                keyValues.TryAdd(
+                    key,
+                    new ConfigEntrySpan(
+                        GetNodeStartOffset(item.Key is null ? item : item.Key),
+                        GetNodeEndOffset(item.EndOfLineToken is null ? item : item.EndOfLineToken)));
+            }
+
+            result.TryAdd(path, new ConfigSection(path, startOffset, endOffset, keyValues));
+        }
+
+        return result;
+    }
+
+    private static string? GetKeyPath(KeySyntax? key)
+    {
+        if (key?.Key is null)
+        {
+            return null;
+        }
+
+        var parts = new List<string>();
+        AddKeyPart(parts, key.Key);
+        foreach (var dotKey in key.DotKeys)
+        {
+            if (dotKey.Key is null)
+            {
+                return null;
+            }
+
+            AddKeyPart(parts, dotKey.Key);
+        }
+
+        return parts.Count == 0 || parts.Any(static part => string.IsNullOrWhiteSpace(part))
+            ? null
+            : string.Join('.', parts);
+    }
+
+    private static void AddKeyPart(List<string> parts, BareKeyOrStringValueSyntax key)
+    {
+        switch (key)
+        {
+            case BareKeySyntax bareKey:
+                parts.Add(bareKey.Key?.Text ?? string.Empty);
+                break;
+
+            case StringValueSyntax stringValue:
+                parts.Add(stringValue.Value ?? string.Empty);
+                break;
+        }
+    }
+
+    private static string DetectNewline(string content)
+        => content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+
+    private static string CreateAppendedBlock(string existingContent, string block, string newline)
+    {
+        var builder = new StringBuilder();
+        if (existingContent.Length > 0)
+        {
+            if (!EndsWithNewline(existingContent))
+            {
+                builder.Append(newline);
+            }
+
+            if (!EndsWithBlankLine(existingContent))
+            {
+                builder.Append(newline);
+            }
+        }
+
+        builder.Append(NormalizeNewlines(block, newline));
+        builder.Append(newline);
+        return builder.ToString();
+    }
+
+    private static string CreateInsertedKeyLines(string existingContent, int offset, IReadOnlyList<string> lines, string newline)
+    {
+        var builder = new StringBuilder();
+        if (offset > 0 && !IsNewline(existingContent[offset - 1]))
+        {
+            builder.Append(newline);
+        }
+
+        foreach (var line in lines)
+        {
+            builder.Append(NormalizeNewlines(line, newline));
+            builder.Append(newline);
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool EndsWithNewline(string text)
+        => text.Length > 0 && IsNewline(text[^1]);
+
+    private static bool EndsWithBlankLine(string text)
+    {
+        if (!EndsWithNewline(text))
+        {
+            return false;
+        }
+
+        var index = text.Length - 2;
+        if (index >= 0 && text[index] == '\r' && text[^1] == '\n')
+        {
+            index--;
+        }
+
+        while (index >= 0 && !IsNewline(text[index]))
+        {
+            index--;
+        }
+
+        return index >= 0 && IsNewline(text[index]);
+    }
+
+    private static bool IsNewline(char character)
+        => character is '\r' or '\n';
+
+    private static string NormalizeNewlines(string text, string newline)
+    {
+        var normalized = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
+        return newline == "\n"
+            ? normalized
+            : normalized.Replace("\n", newline, StringComparison.Ordinal);
+    }
+
+    private static string ApplyTextEdits(string content, List<ConfigTextEdit> edits)
+    {
+        var builder = new StringBuilder(content);
+        foreach (var group in edits
+                     .Select(static (edit, index) => new { Edit = edit, Index = index })
+                     .GroupBy(static entry => entry.Edit.Offset)
+                     .OrderByDescending(static group => group.Key))
+        {
+            var text = string.Concat(group.OrderBy(static entry => entry.Index).Select(static entry => entry.Edit.Text));
+            builder.Insert(group.Key, text);
+        }
+
+        return builder.ToString();
+    }
+
+    private static int GetNodeStartOffset(SyntaxNodeBase node)
+        => Math.Clamp(node.Span.Start.Offset, 0, int.MaxValue);
+
+    private static int GetNodeEndOffset(SyntaxNodeBase node)
+        => Math.Clamp(node.Span.End.Offset + 1, 0, int.MaxValue);
+
+    private static string GetAvailableBackupPath(string path)
+    {
+        var backupPath = path + ".backup";
+        if (!File.Exists(backupPath))
+        {
+            return backupPath;
+        }
+
+        for (var index = 1; ; index++)
+        {
+            backupPath = path + $".backup.{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            if (!File.Exists(backupPath))
+            {
+                return backupPath;
+            }
+        }
+    }
+
+    private static void ReplaceFileWithBackup(string path, string content, string backupPath)
+    {
+        var directory = Path.GetDirectoryName(path)!;
+        var tempPath = Path.Combine(directory, Path.GetRandomFileName());
+        try
+        {
+            File.WriteAllText(tempPath, content);
+            File.Replace(tempPath, path, backupPath);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
     }
 
     private static void SavePluginEnabled(string path, CodeAltaConfigDocument document, string pluginId, bool enabled)

@@ -70,7 +70,7 @@ args = ["--stdio"]
 - `plugins`: plugin enablement keyed by built-in id or source package id;
 - `acp.agents`: ACP backend definitions keyed by agent id.
 
-Global config is loaded from `~/.alta/config.toml`. Project config is loaded from `<project>/.alta/config.toml` when a project scope is active. The provider-management UI edits the same global file and validates TOML before saving.
+Global config is loaded from `~/.alta/config.toml`. Project config is loaded from `<project>/.alta/config.toml` when a project scope is active. The provider-management UI edits the same global file and validates TOML before saving. During startup, `CodeAltaConfigStore` upgrades a valid existing global config by adding entries that are present in the bundled default template but missing from the user file; it preserves existing text, validates the merged result, and writes a `config.toml.backup*` copy before replacement.
 
 ### Provider enablement
 
