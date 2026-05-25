@@ -303,6 +303,7 @@ internal sealed class ThreadWorkspaceView
             CanExecute = _ => binding.CanExecute(),
             Gesture = metadata.Gesture,
             Sequence = metadata.Sequence,
+            Importance = metadata.Importance,
             Presentation = ResolvePresentation(metadata),
         };
     }

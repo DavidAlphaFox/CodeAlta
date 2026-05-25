@@ -1,4 +1,5 @@
 using XenoAtom.Ansi;
+using XenoAtom.Terminal.UI.Commands;
 using XenoAtom.Terminal.UI.Input;
 
 namespace CodeAlta.Frontend.Commands;
@@ -46,6 +47,7 @@ internal sealed record ShellCommandMetadata(
     bool ShowInCommandBar = true,
     bool ShowInCommandPalette = true,
     bool SupportsTextCommand = true,
+    CommandImportance Importance = CommandImportance.Secondary,
     IReadOnlyList<string>? AdditionalHelpBindings = null,
     bool ShowInHelp = true)
 {

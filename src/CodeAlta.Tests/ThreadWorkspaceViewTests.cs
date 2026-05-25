@@ -346,9 +346,29 @@ public sealed class ThreadWorkspaceViewTests
     {
         var metadata = ShellCommandCatalog.Get("CodeAlta.Shell.ToggleCommandBarMultiLine");
 
+        Assert.AreEqual("Show More Shortcuts", metadata.Label);
         Assert.AreEqual(ShellCommandCatalog.ToggleCommandBarMultiLineShortcutSequence, metadata.Sequence);
+        Assert.AreEqual(CommandImportance.Primary, metadata.Importance);
         Assert.IsTrue(metadata.ShowInCommandBar);
         Assert.IsTrue(metadata.ShowInCommandPalette);
+
+        var command = ShellCommandViewFactory.Create(metadata, static () => { });
+
+        Assert.AreEqual(CommandImportance.Primary, command.Importance);
+    }
+
+    [TestMethod]
+    public void CommandBarToggleCommand_LabelReflectsExpandedState()
+    {
+        var showMoreCommand = CodeAltaShellViewFactory.CreateToggleCommandBarMultiLineCommand(static () => { }, commandBarMultiLine: false);
+        var showLessCommand = CodeAltaShellViewFactory.CreateToggleCommandBarMultiLineCommand(static () => { }, commandBarMultiLine: true);
+
+        Assert.AreEqual("Show More Shortcuts", showMoreCommand.LabelMarkup);
+        Assert.AreEqual("Show Less Shortcuts", showLessCommand.LabelMarkup);
+        Assert.AreEqual(ShellCommandCatalog.ToggleCommandBarMultiLineShortcutSequence, showMoreCommand.Sequence);
+        Assert.AreEqual(showMoreCommand.Sequence, showLessCommand.Sequence);
+        Assert.AreEqual(CommandImportance.Primary, showMoreCommand.Importance);
+        Assert.AreEqual(CommandImportance.Primary, showLessCommand.Importance);
     }
 
     [TestMethod]

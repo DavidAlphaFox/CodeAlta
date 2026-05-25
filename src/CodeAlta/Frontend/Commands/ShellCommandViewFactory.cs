@@ -7,7 +7,8 @@ internal static class ShellCommandViewFactory
     public static Command Create(
         ShellCommandMetadata metadata,
         Action execute,
-        CommandPresentation? presentation = null)
+        CommandPresentation? presentation = null,
+        string? labelMarkup = null)
     {
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(execute);
@@ -15,12 +16,13 @@ internal static class ShellCommandViewFactory
         return new Command
         {
             Id = metadata.Id,
-            LabelMarkup = metadata.DisplayLabelMarkup,
+            LabelMarkup = labelMarkup ?? metadata.DisplayLabelMarkup,
             Name = metadata.CommandName,
             SearchText = metadata.CommandSearchText,
             DescriptionMarkup = metadata.DescriptionMarkup,
             Gesture = metadata.Gesture,
             Sequence = metadata.Sequence,
+            Importance = metadata.Importance,
             Presentation = presentation ?? ResolvePresentation(metadata),
             Execute = _ => execute(),
         };

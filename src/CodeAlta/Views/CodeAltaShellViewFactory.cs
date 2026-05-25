@@ -58,6 +58,7 @@ internal static class CodeAltaShellViewFactory
             options.ToggleTerminalLoopCallback,
             options.ToggleNavigator,
             options.CanUseCommandPalette,
+            () => workspaceView.ThreadCommandBar.MultiLine,
             options.ComposePluginFooter?.Invoke(workspaceView.ThreadCommandBar));
 
         return new CodeAltaShellSurface(shellView, workspaceView, options.Sidebar);
@@ -72,6 +73,7 @@ internal static class CodeAltaShellViewFactory
         Action toggleTerminalLoopCallback,
         Action toggleNavigator,
         Func<bool> canUseCommandPalette,
+        Func<bool> isCommandBarMultiLine,
         Visual? pluginFooter = null)
     {
         ArgumentNullException.ThrowIfNull(sidebar);
@@ -82,6 +84,7 @@ internal static class CodeAltaShellViewFactory
         ArgumentNullException.ThrowIfNull(toggleTerminalLoopCallback);
         ArgumentNullException.ThrowIfNull(toggleNavigator);
         ArgumentNullException.ThrowIfNull(canUseCommandPalette);
+        ArgumentNullException.ThrowIfNull(isCommandBarMultiLine);
 
         var shellView = new CodeAltaShellView(
             sidebar,
@@ -154,10 +157,25 @@ internal static class CodeAltaShellViewFactory
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.Shell.FocusModelProvider"),
             () => _ = shellCommandSurfaceCoordinator.FocusModelProviderAsync()));
-        shellView.Root.AddCommand(ShellCommandViewFactory.Create(
-            ShellCommandCatalog.Get("CodeAlta.Shell.ToggleCommandBarMultiLine"),
-            shellCommandSurfaceCoordinator.ToggleCommandBarMultiLine));
+        shellView.Root.AddCommand(CreateToggleCommandBarMultiLineCommand(ToggleCommandBarMultiLine, isCommandBarMultiLine()));
         return shellView;
+
+        void ToggleCommandBarMultiLine()
+        {
+            shellCommandSurfaceCoordinator.ToggleCommandBarMultiLine();
+            shellView.Root.AddCommand(CreateToggleCommandBarMultiLineCommand(ToggleCommandBarMultiLine, isCommandBarMultiLine()));
+        }
+    }
+
+    internal static Command CreateToggleCommandBarMultiLineCommand(Action toggleCommandBarMultiLine, bool commandBarMultiLine)
+    {
+        ArgumentNullException.ThrowIfNull(toggleCommandBarMultiLine);
+
+        var metadata = ShellCommandCatalog.Get("CodeAlta.Shell.ToggleCommandBarMultiLine");
+        return ShellCommandViewFactory.Create(
+            metadata,
+            toggleCommandBarMultiLine,
+            labelMarkup: commandBarMultiLine ? "Show Less Shortcuts" : metadata.DisplayLabelMarkup);
     }
 
 }

@@ -299,6 +299,7 @@ internal sealed class PromptComposerView
             CanExecute = _ => binding.CanExecute(),
             Gesture = metadata.Gesture,
             Sequence = metadata.Sequence,
+            Importance = metadata.Importance,
             Presentation = ResolvePresentation(metadata),
         };
     }

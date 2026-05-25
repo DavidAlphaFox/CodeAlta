@@ -432,8 +432,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
 
         SetStatus(
             _commandBarMultiLine
-                ? "Command bar multiline enabled."
-                : "Command bar single-line enabled.",
+                ? "Command bar expanded."
+                : "Command bar collapsed.",
             tone: StatusTone.Info);
     }
 

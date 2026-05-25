@@ -1,4 +1,5 @@
 using XenoAtom.Terminal;
+using XenoAtom.Terminal.UI.Commands;
 using XenoAtom.Terminal.UI.Input;
 
 namespace CodeAlta.Frontend.Commands;
@@ -242,7 +243,7 @@ internal static class ShellCommandCatalog
             ShowInCommandBar: true),
         new(
             "CodeAlta.Shell.ToggleCommandBarMultiLine",
-            "Command Bar Lines",
+            "Show More Shortcuts",
             "Toggle the command bar between a stable single-line layout and a multi-line layout.",
             ShellCommandHelpCategory.General,
             ShellCommandScope.AnyShell,
@@ -250,6 +251,7 @@ internal static class ShellCommandCatalog
             Sequence: ToggleCommandBarMultiLineShortcutSequence,
             CommandName: "command_bar_lines",
             Aliases: ["command_bar", "bar"],
+            Importance: CommandImportance.Primary,
             ShowInCommandBar: true),
         new(
             "CodeAlta.Thread.SessionUsage",
