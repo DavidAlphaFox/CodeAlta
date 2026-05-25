@@ -360,7 +360,7 @@ internal static class ShellCommandCatalog
             ShellCommandHelpCategory.Thread,
             ShellCommandScope.DraftOrThread,
             ShellCommandAvailability.Always,
-            Gesture: new KeyGesture(TerminalKey.Left, TerminalModifiers.Alt),
+            Gesture: new KeyGesture(TerminalKey.Left, TerminalModifiers.Ctrl | TerminalModifiers.Alt),
             Aliases: ["tab_left"]),
         new(
             "CodeAlta.Thread.TabRight",
@@ -369,7 +369,7 @@ internal static class ShellCommandCatalog
             ShellCommandHelpCategory.Thread,
             ShellCommandScope.DraftOrThread,
             ShellCommandAvailability.Always,
-            Gesture: new KeyGesture(TerminalKey.Right, TerminalModifiers.Alt),
+            Gesture: new KeyGesture(TerminalKey.Right, TerminalModifiers.Ctrl | TerminalModifiers.Alt),
             Aliases: ["tab_right"]),
         new(
             "CodeAlta.Thread.ClearQueue",

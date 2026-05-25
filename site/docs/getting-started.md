@@ -180,6 +180,6 @@ When the selected model supports image input, copy an image to the clipboard and
 | Compact idle thread | `F11` |
 | Clear prompt queue | `F10` |
 | Previous/next user or assistant message | `F3` / `F4` |
-| Switch tabs | `Alt+Left` / `Alt+Right` |
+| Switch tabs | `Ctrl+Alt+Left` / `Ctrl+Alt+Right` |
 
 If these shortcuts do not work in Windows Terminal, see [Troubleshooting: Windows Terminal shortcuts do not reach CodeAlta]({{site.basepath}}/docs/troubleshooting/#windows-terminal-shortcuts-do-not-reach-codealta).

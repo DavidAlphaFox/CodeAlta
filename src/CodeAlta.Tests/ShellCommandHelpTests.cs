@@ -219,13 +219,13 @@ public sealed class ShellCommandHelpTests
         CollectionAssert.Contains(tabLeftCommand.Aliases.ToArray(), "tab_left");
         CollectionAssert.Contains(tabLeftCommand.TextCommandAliases.ToArray(), "tab_left");
         StringAssert.Contains(tabLeftCommand.CommandSearchText, "/tab_left");
-        Assert.AreEqual(new KeyGesture(TerminalKey.Left, TerminalModifiers.Alt), tabLeftCommand.Gesture);
+        Assert.AreEqual(new KeyGesture(TerminalKey.Left, TerminalModifiers.Ctrl | TerminalModifiers.Alt), tabLeftCommand.Gesture);
         Assert.AreEqual("tab_right", tabRightCommand.CommandName);
         Assert.AreEqual("/tab_right", tabRightCommand.SlashCommandText);
         CollectionAssert.Contains(tabRightCommand.Aliases.ToArray(), "tab_right");
         CollectionAssert.Contains(tabRightCommand.TextCommandAliases.ToArray(), "tab_right");
         StringAssert.Contains(tabRightCommand.CommandSearchText, "/tab_right");
-        Assert.AreEqual(new KeyGesture(TerminalKey.Right, TerminalModifiers.Alt), tabRightCommand.Gesture);
+        Assert.AreEqual(new KeyGesture(TerminalKey.Right, TerminalModifiers.Ctrl | TerminalModifiers.Alt), tabRightCommand.Gesture);
         Assert.AreEqual("Full Prompt", fullPromptCommand.DisplayLabelMarkup);
         Assert.AreEqual("Close Tab", closeTabCommand.DisplayLabelMarkup);
         Assert.AreEqual("Steer", steerCommand.DisplayLabelMarkup);

@@ -47,7 +47,7 @@ CodeAlta also expects a current [Nerd Fonts](https://www.nerdfonts.com/) patched
 | Browse models | `Ctrl+G Ctrl+O` or `/models` |
 | Open logs | `Ctrl+G Ctrl+L` or `/logs` |
 | Toggle navigator | `Ctrl+G Ctrl+G` |
-| Switch tabs | `Alt+Left` / `Alt+Right` |
+| Switch tabs | `Ctrl+Alt+Left` / `Ctrl+Alt+Right` |
 | Focus sidebar / prompt | `Ctrl+G Ctrl+S` / `Ctrl+G Ctrl+P` |
 
 ## 📖 Documentation

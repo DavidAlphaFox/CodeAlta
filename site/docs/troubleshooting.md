@@ -31,14 +31,12 @@ If only some icons are wrong after updating, verify that the active terminal pro
 
 ## Windows Terminal shortcuts do not reach CodeAlta
 
-Windows Terminal can reserve shortcuts for its own paste, pane, and navigation actions before CodeAlta can receive them. If `Ctrl+V`, `Alt+Left`, `Alt+Right`, or another CodeAlta shortcut does not behave as expected, review your Windows Terminal settings and unbind terminal-level shortcuts that CodeAlta needs to receive directly.
+Windows Terminal can reserve shortcuts for its own paste, pane, and navigation actions before CodeAlta can receive them. CodeAlta uses `Ctrl+Alt+Left` and `Ctrl+Alt+Right` for tab switching so Windows Terminal's default `Alt+Left` and `Alt+Right` pane switching can remain enabled. If `Ctrl+V` or another CodeAlta shortcut does not behave as expected, review your Windows Terminal settings and unbind only the terminal-level shortcuts that CodeAlta needs to receive directly.
 
-Add entries like these to the `keybindings` array in Windows Terminal's `settings.json` when those keys are currently assigned to terminal actions:
+Add entries like this to the `keybindings` array in Windows Terminal's `settings.json` when a key is currently assigned to a terminal action:
 
 ```json
-{ "keys": "ctrl+v", "id": "unbound" },
-{ "keys": "alt+left", "id": "unbound" },
-{ "keys": "alt+right", "id": "unbound" }
+{ "keys": "ctrl+v", "id": "unbound" }
 ```
 
 ## Windows Terminal feels slow after a long session

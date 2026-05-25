@@ -204,19 +204,19 @@ public sealed class ResponsiveDialogSizeTests
     }
 
     [TestMethod]
-    public void ShellCommandCatalog_UsesAltLeftForTabLeftShortcut()
+    public void ShellCommandCatalog_UsesCtrlAltLeftForTabLeftShortcut()
     {
         var gesture = ShellCommandCatalog.Get("CodeAlta.Thread.TabLeft").Gesture;
 
-        Assert.AreEqual(new KeyGesture(TerminalKey.Left, TerminalModifiers.Alt), gesture);
+        Assert.AreEqual(new KeyGesture(TerminalKey.Left, TerminalModifiers.Ctrl | TerminalModifiers.Alt), gesture);
     }
 
     [TestMethod]
-    public void ShellCommandCatalog_UsesAltRightForTabRightShortcut()
+    public void ShellCommandCatalog_UsesCtrlAltRightForTabRightShortcut()
     {
         var gesture = ShellCommandCatalog.Get("CodeAlta.Thread.TabRight").Gesture;
 
-        Assert.AreEqual(new KeyGesture(TerminalKey.Right, TerminalModifiers.Alt), gesture);
+        Assert.AreEqual(new KeyGesture(TerminalKey.Right, TerminalModifiers.Ctrl | TerminalModifiers.Alt), gesture);
     }
 
     [TestMethod]
