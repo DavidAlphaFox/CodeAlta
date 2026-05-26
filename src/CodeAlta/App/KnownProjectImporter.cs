@@ -96,7 +96,7 @@ internal sealed class KnownProjectImporter : IKnownProjectImporterWithProgress
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(catalogOptions.GlobalRoot));
         var workingDirectories = new List<string?>();
-        await foreach (var session in store.ListSessionsAsync(cancellationToken).ConfigureAwait(false))
+        await foreach (var session in store.ListSessionSummariesAsync(cancellationToken).ConfigureAwait(false))
         {
             if (string.IsNullOrWhiteSpace(session.ProviderKey) ||
                 !backendIds.Contains(session.ProviderKey) ||

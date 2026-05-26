@@ -1,21 +1,21 @@
 namespace CodeAlta.Agent.LocalRuntime;
 
 /// <summary>
-/// Defines the shared local-runtime session store abstraction.
+/// Defines local-runtime persistence operations for CodeAlta-owned sessions.
 /// </summary>
-public interface ILocalAgentSessionStore
+public interface ILocalAgentSessionStore : IAgentSessionStore
 {
     /// <summary>
-     /// Creates or updates the persisted session summary.
-     /// </summary>
-     /// <param name="session">Session summary.</param>
-     /// <param name="cancellationToken">Cancellation token.</param>
+    /// Creates or updates the persisted local session summary.
+    /// </summary>
+    /// <param name="session">Session summary.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     Task UpsertSessionAsync(
         LocalAgentSessionSummary session,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets a session summary.
+    /// Gets a session summary for a provider scope.
     /// </summary>
     /// <param name="protocolFamily">Protocol family.</param>
     /// <param name="providerKey">Provider key.</param>
@@ -29,33 +29,34 @@ public interface ILocalAgentSessionStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets a session summary without applying a provider-scope filter.
+    /// Gets a local session summary without applying a provider-scope filter.
     /// </summary>
     /// <param name="sessionId">Local session identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The session summary when found; otherwise <see langword="null" />.</returns>
-    Task<LocalAgentSessionSummary?> GetSessionAsync(
+    /// <exception cref="ArgumentException">Thrown when <paramref name="sessionId" /> is empty.</exception>
+    Task<LocalAgentSessionSummary?> GetSessionSummaryAsync(
         string sessionId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists sessions for a configured provider.
+    /// Lists local session summaries for a provider scope.
     /// </summary>
     /// <param name="protocolFamily">Protocol family.</param>
     /// <param name="providerKey">Provider key.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Session summaries ordered by most recent update first.</returns>
-    IAsyncEnumerable<LocalAgentSessionSummary> ListSessionsAsync(
+    IAsyncEnumerable<LocalAgentSessionSummary> ListSessionSummariesAsync(
         string protocolFamily,
         string providerKey,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists sessions across configured providers.
+    /// Lists local session summaries without applying a provider-scope filter.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Session summaries ordered by most recent update first.</returns>
-    IAsyncEnumerable<LocalAgentSessionSummary> ListSessionsAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<LocalAgentSessionSummary> ListSessionSummariesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Appends canonical events to the session event log.
@@ -73,7 +74,7 @@ public interface ILocalAgentSessionStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Reads canonical session events.
+    /// Reads canonical session events for a provider scope.
     /// </summary>
     /// <param name="protocolFamily">Protocol family.</param>
     /// <param name="providerKey">Provider key.</param>
@@ -87,16 +88,6 @@ public interface ILocalAgentSessionStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Reads canonical session events without applying a provider-scope filter.
-    /// </summary>
-    /// <param name="sessionId">Local session identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The canonical event list when the session exists; otherwise an empty list.</returns>
-    Task<IReadOnlyList<AgentEvent>> ReadEventsAsync(
-        string sessionId,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Persists session state.
     /// </summary>
     /// <param name="state">Session state.</param>
@@ -106,7 +97,7 @@ public interface ILocalAgentSessionStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets session state.
+    /// Gets session state for a provider scope.
     /// </summary>
     /// <param name="protocolFamily">Protocol family.</param>
     /// <param name="providerKey">Provider key.</param>
@@ -125,12 +116,13 @@ public interface ILocalAgentSessionStore
     /// <param name="sessionId">Local session identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The session state when found; otherwise <see langword="null" />.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="sessionId" /> is empty.</exception>
     Task<LocalAgentSessionState?> GetStateAsync(
         string sessionId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Deletes a persisted session when present.
+    /// Deletes a persisted session when present for a provider scope.
     /// </summary>
     /// <param name="protocolFamily">Protocol family.</param>
     /// <param name="providerKey">Provider key.</param>

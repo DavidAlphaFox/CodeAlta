@@ -3,18 +3,18 @@ using System.Text.Json.Serialization;
 namespace CodeAlta.Agent;
 
 /// <summary>
-/// Describes a stored or active session known to a backend.
+/// Describes a stored or active CodeAlta agent session.
 /// </summary>
-/// <param name="SessionId">The backend session identifier.</param>
+/// <param name="SessionId">The durable session identifier.</param>
 /// <param name="CreatedAt">The time the session was created.</param>
 /// <param name="UpdatedAt">The time the session was last updated.</param>
 /// <param name="Summary">Optional session summary or preview text.</param>
 /// <param name="Context">Optional directory/repo context.</param>
-/// <param name="WorkspacePath">Optional backend-managed workspace path for the session.</param>
-/// <param name="Details">Optional backend-specific metadata details.</param>
-/// <param name="ProtocolFamily">Optional protocol family for provider-backed runtimes.</param>
-/// <param name="ProviderKey">Optional configured provider key for provider-backed runtimes.</param>
-/// <param name="ModelId">Optional model identifier used by the session.</param>
+/// <param name="WorkspacePath">Optional workspace path for the session.</param>
+/// <param name="Details">Optional provider or runtime-specific metadata details.</param>
+/// <param name="ProtocolFamily">Optional last-used protocol family.</param>
+/// <param name="ProviderKey">Optional last-used configured provider key.</param>
+/// <param name="ModelId">Optional last-used model identifier.</param>
 public sealed record AgentSessionMetadata(
     string SessionId,
     DateTimeOffset CreatedAt,

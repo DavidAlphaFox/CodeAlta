@@ -379,7 +379,7 @@ public sealed class WorkThreadRuntimeService : IAsyncDisposable
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var store = _threadCatalog.JournalStore.CreateSessionStore();
-        await foreach (var session in store.ListSessionsAsync(cancellationToken).ConfigureAwait(false))
+        await foreach (var session in store.ListSessionSummariesAsync(cancellationToken).ConfigureAwait(false))
         {
             if (string.IsNullOrWhiteSpace(session.ProviderKey) ||
                 (!includeUnregisteredLocalRuntimeSessions && !loadableBackendIds.Contains(session.ProviderKey)))

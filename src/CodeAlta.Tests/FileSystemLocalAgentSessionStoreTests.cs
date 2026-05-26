@@ -32,7 +32,7 @@ public sealed class FileSystemLocalAgentSessionStoreTests
 
         var persistedSession = await store.GetSessionAsync("openai", "openai", "session-2").ConfigureAwait(false);
         var persistedState = await store.GetStateAsync("openai", "openai", "session-2").ConfigureAwait(false);
-        var sessions = await store.ListSessionsAsync("openai", "openai").ToArrayAsync().ConfigureAwait(false);
+        var sessions = await store.ListSessionSummariesAsync("openai", "openai").ToArrayAsync().ConfigureAwait(false);
 
         Assert.IsNotNull(persistedSession);
         Assert.AreEqual("gpt-5.4", persistedSession.ModelId);
@@ -127,7 +127,7 @@ public sealed class FileSystemLocalAgentSessionStoreTests
         var session = CreateSession("session-cache", createdAt: "2026-04-06T10:00:00+00:00", updatedAt: "2026-04-06T10:00:00+00:00");
 
         await firstStore.UpsertSessionAsync(session).ConfigureAwait(false);
-        _ = await firstStore.ListSessionsAsync("openai", "openai").ToArrayAsync().ConfigureAwait(false);
+        _ = await firstStore.ListSessionSummariesAsync("openai", "openai").ToArrayAsync().ConfigureAwait(false);
 
         await secondStore.UpsertStateAsync(
                 new LocalAgentSessionState
@@ -182,6 +182,54 @@ public sealed class FileSystemLocalAgentSessionStoreTests
     }
 
     [TestMethod]
+    public async Task AppendEventsAsync_DoesNotWaitForDifferentSessionPathLock()
+    {
+        using var temp = TestTempDirectory.Create();
+        var layout = new LocalAgentRuntimePathLayout(temp.Path);
+        var journalFile = new LocalAgentSessionJournalFile();
+        var store = new FileSystemLocalAgentSessionStore(layout, journalFile);
+        var lockedSession = CreateSession("session-locked-append", createdAt: "2026-04-06T10:00:00+00:00", updatedAt: "2026-04-06T10:00:00+00:00");
+        var otherSession = CreateSession("session-independent-append", createdAt: "2026-04-06T10:05:00+00:00", updatedAt: "2026-04-06T10:05:00+00:00");
+        await store.UpsertSessionAsync(lockedSession).ConfigureAwait(false);
+        await store.UpsertSessionAsync(otherSession).ConfigureAwait(false);
+        var lockedSessionFile = layout.GetSessionFilePath(lockedSession.SessionId, lockedSession.CreatedAt);
+        var lockEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseLock = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var lockTask = journalFile.WithPathLockAsync(
+            lockedSessionFile,
+            async () =>
+            {
+                lockEntered.SetResult();
+                await releaseLock.Task.ConfigureAwait(false);
+            },
+            CancellationToken.None);
+        await lockEntered.Task.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+
+        await store.AppendEventsAsync(
+                otherSession.ProtocolFamily,
+                otherSession.ProviderKey,
+                otherSession.SessionId,
+                [
+                    new AgentSessionUpdateEvent(
+                        AgentBackendIds.OpenAIResponses,
+                        otherSession.SessionId,
+                        DateTimeOffset.Parse("2026-04-06T10:05:01+00:00"),
+                        new AgentRunId("run_1"),
+                        AgentSessionUpdateKind.Started,
+                        "Session started"),
+                ])
+            .WaitAsync(TimeSpan.FromSeconds(1))
+            .ConfigureAwait(false);
+
+        releaseLock.SetResult();
+        await lockTask.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+        var persistedEvents = await store.ReadEventsAsync(otherSession.ProtocolFamily, otherSession.ProviderKey, otherSession.SessionId).ConfigureAwait(false);
+
+        Assert.AreEqual(1, persistedEvents.Count);
+    }
+
+    [TestMethod]
     public async Task UpsertStateAsync_RetriesWhenSessionFileIsTemporarilyLocked()
     {
         using var temp = TestTempDirectory.Create();
@@ -228,7 +276,7 @@ public sealed class FileSystemLocalAgentSessionStoreTests
         var updatedSession = session with { UpdatedAt = DateTimeOffset.Parse("2026-04-06T12:00:00+00:00") };
         await store.UpsertSessionAsync(updatedSession).ConfigureAwait(false);
 
-        var sessions = await store.ListSessionsAsync("openai", "openai").ToArrayAsync().ConfigureAwait(false);
+        var sessions = await store.ListSessionSummariesAsync("openai", "openai").ToArrayAsync().ConfigureAwait(false);
 
         Assert.AreEqual(1, sessions.Length);
         Assert.AreEqual("session-metadata-probe", sessions[0].SessionId);

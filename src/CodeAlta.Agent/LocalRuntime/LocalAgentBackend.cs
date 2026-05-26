@@ -159,7 +159,7 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
     {
         await StartAsync(cancellationToken).ConfigureAwait(false);
 
-        await foreach (var summary in Store.ListSessionsAsync(cancellationToken).ConfigureAwait(false))
+        await foreach (var summary in Store.ListSessionSummariesAsync(cancellationToken).ConfigureAwait(false))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!_providersByKey.TryGetValue(summary.ProviderKey, out var provider) ||
@@ -314,7 +314,7 @@ public sealed class LocalAgentBackend : IAgentBackend, IAgentSharedSessionMetada
         if (resumeProviders.Length == 1)
         {
             var provider = resumeProviders[0];
-            var summary = await Store.GetSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
+            var summary = await Store.GetSessionSummaryAsync(sessionId, cancellationToken).ConfigureAwait(false);
             if (summary is not null)
             {
                 var state = await Store.GetStateAsync(sessionId, cancellationToken).ConfigureAwait(false)
