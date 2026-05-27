@@ -211,7 +211,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         createBackend = () => new OpenAIChatAgentBackend(options);
         createRuntime = () => new OpenAIChatAgentBackend(options);
         LogInfo(
-            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
+            $"Registered model provider key={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
         return true;
     }
 
@@ -283,7 +283,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         createBackend = () => new OpenAIResponsesAgentBackend(options);
         createRuntime = () => new OpenAIResponsesAgentBackend(options);
         LogInfo(
-            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
+            $"Registered model provider key={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
         return true;
     }
 
@@ -344,7 +344,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         createBackend = () => new OpenAIChatAgentBackend(options);
         createRuntime = () => new OpenAIChatAgentBackend(options);
         LogInfo(
-            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} azureOpenAI=true");
+            $"Registered model provider key={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} azureOpenAI=true");
         return true;
     }
 
@@ -399,7 +399,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         createBackend = () => new OpenAIResponsesAgentBackend(options);
         createRuntime = () => new OpenAIResponsesAgentBackend(options);
         LogInfo(
-            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} authSource={providerOptions.CodexSubscription.AuthSource}");
+            $"Registered model provider key={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} authSource={providerOptions.CodexSubscription.AuthSource}");
         return true;
     }
 
@@ -473,7 +473,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         createBackend = () => new CopilotDirectAgentBackend(options);
         createRuntime = () => new CopilotDirectAgentBackend(options);
         LogInfo(
-            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} authSource={providerOptions.Auth.AuthSource} modelDiscovery={providerOptions.ModelDiscovery}");
+            $"Registered model provider key={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} authSource={providerOptions.Auth.AuthSource} modelDiscovery={providerOptions.ModelDiscovery}");
         return true;
     }
 
@@ -542,7 +542,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         createBackend = () => new XaiDirectAgentBackend(options);
         createRuntime = () => new XaiDirectAgentBackend(options);
         LogInfo(
-            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} authSource={providerOptions.Auth.AuthSource} modelDiscovery={providerOptions.ModelDiscovery}");
+            $"Registered model provider key={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} authSource={providerOptions.Auth.AuthSource} modelDiscovery={providerOptions.ModelDiscovery}");
         return true;
     }
 
@@ -620,7 +620,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         createBackend = () => new AnthropicAgentBackend(options);
         createRuntime = () => new AnthropicAgentBackend(options);
         LogInfo(
-            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
+            $"Registered model provider key={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
         return true;
     }
 
@@ -726,7 +726,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         createBackend = () => new GoogleGenAIAgentBackend(options);
         createRuntime = () => new GoogleGenAIAgentBackend(options);
         LogInfo(
-            $"Registered provider backend={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} vertex={useVertexAI}");
+            $"Registered model provider key={backendId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} vertex={useVertexAI}");
         return true;
     }
 

@@ -15,7 +15,7 @@ og_type: website
 <span class="logo-code"> ░░██████  ░░██████  ░░██████ ░░██████  </span><span class="logo-alta">░██     ░██  ███   ░░██  ░░████████</span>
 <span class="logo-code">  ░░░░░░    ░░░░░░    ░░░░░░   ░░░░░░   </span><span class="logo-alta">░░      ░░  ░░░     ░░    ░░░░░░░░</span></pre>
     <p class="lead mt-4 mb-4">
-      A keyboard-first, terminal AI coding workspace for managing projects, model providers, threads, plugins, and delegated agents.
+      A keyboard-first, terminal AI coding workspace for managing projects, model providers, durable sessions, plugins, and delegated agents.
     </p>
     <div class="d-flex justify-content-center gap-3 mt-4 flex-wrap">
       <a href="{{site.basepath}}/docs/getting-started/" class="btn btn-primary btn-lg"><i class="bi bi-rocket-takeoff"></i> Get started</a>
@@ -49,7 +49,7 @@ alta</code></pre>
 <section class="container my-5 codealta-principles">
   <div class="principles-intro mx-auto text-center">
     <p class="text-uppercase text-secondary fw-semibold mb-2">CodeAlta principles</p>
-    <h2 class="display-6 mb-3">Efficient. Transparent. Keyboard-first. Thread-oriented. Provider-agnostic. Native .NET. Error-aware. Pluggable.</h2>
+    <h2 class="display-6 mb-3">Efficient. Transparent. Keyboard-first. Session-oriented. Provider-agnostic. Native .NET. Error-aware. Pluggable.</h2>
     <p class="lead mb-0">A compact design manifesto for a terminal workspace that stays practical while it grows.</p>
   </div>
   <div class="principle-flow mt-5">
@@ -59,7 +59,7 @@ alta</code></pre>
         <h3><i class="bi bi-arrows-collapse"></i> Using terminal space efficiently</h3>
       </div>
       <div class="principle-shot principle-shot--image">
-        <img src="{{site.basepath}}/img/alta-home.png" alt="CodeAlta main workspace with projects, thread timeline, prompt editor, and provider footer" loading="lazy">
+        <img src="{{site.basepath}}/img/alta-home.png" alt="CodeAlta main workspace with projects, session timeline, prompt editor, and provider footer" loading="lazy">
       </div>
     </article>
     <article class="principle-feature" style="--accent: #60a5fa; --accent-2: #c084fc;">
@@ -82,11 +82,11 @@ alta</code></pre>
     </article>
     <article class="principle-feature" style="--accent: #22d3ee; --accent-2: #a78bfa;">
       <div class="principle-copy">
-        <span class="principle-kicker">Thread-oriented workspace</span>
-        <h3><i class="bi bi-diagram-3"></i> Coordinating multiple agents in durable threads</h3>
+        <span class="principle-kicker">Session-oriented workspace</span>
+        <h3><i class="bi bi-diagram-3"></i> Coordinating multiple agents in durable sessions</h3>
       </div>
       <div class="principle-shot principle-shot--image">
-        <img src="{{site.basepath}}/img/alta-help.png" alt="CodeAlta help dialog listing thread, queue, steering, and delegation shortcuts" loading="lazy">
+        <img src="{{site.basepath}}/img/alta-help.png" alt="CodeAlta help dialog listing session, queue, steering, and delegation shortcuts" loading="lazy">
       </div>
     </article>
     <article class="principle-feature" style="--accent: #fb923c; --accent-2: #38bdf8;">

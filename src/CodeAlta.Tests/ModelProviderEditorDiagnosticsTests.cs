@@ -86,7 +86,7 @@ public sealed class ModelProviderEditorDiagnosticsTests
             ("Token expired; refresh token is available.", "Token expired; refresh available"),
             ("ChatGPT/Codex account, workspace, plan, or policy does not allow this request.", "Account/workspace selection required"),
             ("ChatGPT/Codex rate limit or quota was reached.", "Rate or quota limited"),
-            ("ChatGPT/Codex response stream did not match the expected protocol.", "Unsupported backend/protocol drift"),
+            ("ChatGPT/Codex response stream did not match the expected protocol.", "Unsupported provider/protocol drift"),
         };
 
         foreach (var testCase in cases)

@@ -122,7 +122,7 @@ Restart CodeAlta or refresh plugin state from the management UI. CodeAlta genera
 Plugins can contribute:
 
 - startup hooks and command-line commands;
-- shell, prompt, and thread commands;
+- shell, prompt, and session commands;
 - UI visuals, status rows, dialogs, and renderers;
 - prompt processors, prompt-editor attachments, and system/developer prompt parts;
 - before-agent-run hooks;
@@ -132,7 +132,7 @@ Plugins can contribute:
 - resource roots such as skills, prompts, templates, themes, MCP manifests, and agent definitions;
 - compaction hooks;
 - normalized agent event observers;
-- transient thread event projections for plugin-owned timeline cards.
+- transient session event projections for plugin-owned timeline cards (current APIs still use some legacy `Thread` names).
 
 Prompt-editor attachments can attach plugin-owned behavior to prompt editors. CodeAlta provides only a small editor host, including the prompt project path; each plugin owns its trigger detection and visual presentation. Attachments can also set `PluginPromptEditorContribution.PlaceholderText` with a short placeholder segment such as `[#] to reference a GitHub issue`, which appears in the ready prompt placeholder while that contribution applies.
 

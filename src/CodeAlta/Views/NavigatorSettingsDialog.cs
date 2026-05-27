@@ -95,7 +95,7 @@ internal sealed class NavigatorSettingsDialog
         form.Cell(sortModeSelect, 0, 1);
         form.Cell(new TextBlock("Theme") { VerticalAlignment = Align.Center }, 1, 0);
         form.Cell(themeSelect, 1, 1);
-        form.Cell(new TextBlock("Recent threads") { VerticalAlignment = Align.Center }, 2, 0);
+        form.Cell(new TextBlock("Recent sessions") { VerticalAlignment = Align.Center }, 2, 0);
         form.Cell(recentThreadsField, 2, 1);
 
         var cancelButton = new Button("Cancel")

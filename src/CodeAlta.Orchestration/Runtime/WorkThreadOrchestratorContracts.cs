@@ -434,7 +434,7 @@ public enum WorkThreadLifecycleEventKind
     /// <summary>A backend run was aborted.</summary>
     RunAborted,
 
-    /// <summary>The thread was rekeyed to a new runtime/backend session identifier.</summary>
+    /// <summary>The legacy thread view was rekeyed to a new runtime session identifier.</summary>
     SessionRekeyed,
 }
 

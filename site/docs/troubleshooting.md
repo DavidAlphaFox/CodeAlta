@@ -111,7 +111,7 @@ Only one `alta` application instance can run on a machine at a time. CodeAlta us
 ~/.alta/alta.lock
 ```
 
-A second launch exits with the PID of the already-running instance because multiple instances would share thread/session state unsafely.
+A second launch exits with the PID of the already-running instance because multiple instances would share session state unsafely.
 
 ## A prompt did not send
 
@@ -120,11 +120,11 @@ CodeAlta preserves prompt text when dispatch fails. Check:
 - the selected provider is enabled and ready;
 - credentials are still valid;
 - the selected model exists for that provider;
-- the thread is not waiting for a login or provider startup operation;
+- the session is not waiting for a login or provider startup operation;
 - logs for provider-specific failures.
 
-If the thread is busy, the prompt may be in the waiting list rather than sent immediately.
+If the session is busy, the prompt may be in the waiting list rather than sent immediately.
 
 ## Context is too large
 
-Open the context usage popup with `Ctrl+G Ctrl+U`. For idle started threads, press `F11` to run manual compaction. If compaction repeatedly misses its target, review attached file sizes and provider context metadata in the provider configuration.
+Open the context usage popup with `Ctrl+G Ctrl+U`. For idle started sessions, press `F11` to run manual compaction. If compaction repeatedly misses its target, review attached file sizes and provider context metadata in the provider configuration.

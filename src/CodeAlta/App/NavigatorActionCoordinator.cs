@@ -54,14 +54,14 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         var thread = _threadStateCoordinator.FindThread(threadId);
         if (thread is null)
         {
-            _setStatus($"Thread '{threadId}' was not found.", false, StatusTone.Warning);
+            _setStatus($"Session '{threadId}' was not found.", false, StatusTone.Warning);
             return;
         }
 
         var project = _threadStateCoordinator.GetProjectById(thread.ProjectRef);
         var bodyLines = new List<string>
         {
-            $"Delete thread '{thread.Title}'?",
+            $"Delete session '{thread.Title}'?",
         };
         if (project is not null)
         {
@@ -69,7 +69,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         }
 
         new ConfirmationDialog(
-            "Delete Thread",
+            "Delete Session",
             bodyLines,
             "Delete",
             ControlTone.Error,
@@ -97,9 +97,9 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
             .ToArray();
 
         new ConfirmationDialog(
-            "Delete Project Threads",
+            "Delete Project Sessions",
             [
-                $"Delete {visibleThreads.Length} thread(s) from '{project.DisplayName}'?",
+                $"Delete {visibleThreads.Length} session(s) from '{project.DisplayName}'?",
                 "The project will be hidden from the default navigator view.",
             ],
             "Delete",
@@ -107,7 +107,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
             () => DeleteProjectAsync(project, visibleThreads),
             _getDialogBounds,
             _getFocusTarget,
-            noteText: "This deletes thread history only. The project directory on disk is not deleted.")
+            noteText: "This deletes session history only. The project directory on disk is not deleted.")
             .Show();
     }
 
@@ -212,7 +212,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
     {
         try
         {
-            _setStatus($"Deleting thread '{thread.Title}'...", true, StatusTone.Info);
+            _setStatus($"Deleting session '{thread.Title}'...", true, StatusTone.Info);
             var result = await _shellController.DeleteSessionAsync(thread, _threadStateCoordinator.Threads, CancellationToken.None);
             _threadStateCoordinator.RemoveDeletedThreads(result.DeletedThreadIds, thread.ProjectRef);
             await _threadStateCoordinator.RemoveDeletedThreadArtifactsAsync(result.DeletedThreadIds);
@@ -220,7 +220,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         }
         catch (Exception ex)
         {
-            _setStatus($"Failed to delete thread: {ex.Message}", false, StatusTone.Error);
+            _setStatus($"Failed to delete session: {ex.Message}", false, StatusTone.Error);
         }
     }
 
@@ -228,7 +228,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
     {
         try
         {
-            _setStatus($"Deleting threads for project '{project.DisplayName}'...", true, StatusTone.Info);
+            _setStatus($"Deleting sessions for project '{project.DisplayName}'...", true, StatusTone.Info);
             var result = await _shellController.DeleteProjectAsync(project, threads, CancellationToken.None);
             _threadStateCoordinator.RemoveDeletedProject(project, result.DeletedThreadIds);
             await _threadStateCoordinator.RemoveDeletedThreadArtifactsAsync(result.DeletedThreadIds);
@@ -236,7 +236,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         }
         catch (Exception ex)
         {
-            _setStatus($"Failed to delete project threads: {ex.Message}", false, StatusTone.Error);
+            _setStatus($"Failed to delete project sessions: {ex.Message}", false, StatusTone.Error);
         }
     }
 
@@ -244,7 +244,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
     {
         try
         {
-            _setStatus($"Deleting {threadIds.Count} thread(s)...", true, StatusTone.Info);
+            _setStatus($"Deleting {threadIds.Count} session(s)...", true, StatusTone.Info);
             var deletedThreadIds = new List<string>();
             var deletedThreadIdSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var threadId in threadIds)
@@ -271,7 +271,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         }
         catch (Exception ex)
         {
-            _setStatus($"Failed to delete selected threads: {ex.Message}", false, StatusTone.Error);
+            _setStatus($"Failed to delete selected sessions: {ex.Message}", false, StatusTone.Error);
         }
     }
 

@@ -64,7 +64,7 @@ internal sealed class ProjectThreadsDialog
             _document
                 .AddColumn(new DataGridColumnInfo<bool>("select", "✅", false, ProjectThreadsDialogRowViewModel.Accessor.IsSelected))
                 .AddColumn(new DataGridColumnInfo<string>("backend", "🤖 Provider", true, ProjectThreadsDialogRowViewModel.Accessor.BackendDisplayName))
-                .AddColumn(new DataGridColumnInfo<string>("title", "🧵 Thread", false, ProjectThreadsDialogRowViewModel.Accessor.Title))
+                .AddColumn(new DataGridColumnInfo<string>("title", "🧵 Session", false, ProjectThreadsDialogRowViewModel.Accessor.Title))
                 .AddColumn(new DataGridColumnInfo<DateTimeOffset?>("updated", "🕒 Updated", true, ProjectThreadsDialogRowViewModel.Accessor.LastUpdatedAt))
                 .AddColumn(new DataGridColumnInfo<int?>("messages", "💬 Messages", true, ProjectThreadsDialogRowViewModel.Accessor.MessageCount))
                 .AddColumn(new DataGridColumnInfo<string>("open", "🚀 Open", false, ProjectThreadsDialogRowViewModel.Accessor.ThreadId));
@@ -134,7 +134,7 @@ internal sealed class ProjectThreadsDialog
         grid.Columns.Add(new DataGridColumn<string>
         {
             Key = "title",
-            Header = new TextBlock("🧵 Thread"),
+            Header = new TextBlock("🧵 Session"),
             TypedValueAccessor = ProjectThreadsDialogRowViewModel.Accessor.Title,
             Width = GridLength.Star(2),
             Sortable = true,
@@ -229,7 +229,7 @@ internal sealed class ProjectThreadsDialog
         content.Cells.Add(new GridCell() { Column = 0, Row = 1, Content = new ScrollViewer(grid.Stretch()).Stretch() });
 
         _dialog = new Dialog()
-            .Title($"Threads · {project.DisplayName}")
+            .Title($"Sessions · {project.DisplayName}")
             .TopRightText(closeButton)
             .BottomRightText(new Markup("[dim]Esc Close[/]"))
             .IsModal(true)
@@ -240,7 +240,7 @@ internal sealed class ProjectThreadsDialog
         {
             Id = "CodeAlta.ProjectThreads.Close",
             LabelMarkup = "Close",
-            DescriptionMarkup = "Close the project thread list dialog.",
+            DescriptionMarkup = "Close the project session list dialog.",
             Gesture = new KeyGesture(TerminalKey.Escape),
             Importance = CommandImportance.Primary,
             Execute = _ => Close(),
@@ -259,8 +259,8 @@ internal sealed class ProjectThreadsDialog
         }
 
         new ConfirmationDialog(
-            "Delete Selected Threads",
-            [$"Delete {selectedThreadIds.Count} selected thread(s)?"],
+            "Delete Selected Sessions",
+            [$"Delete {selectedThreadIds.Count} selected session(s)?"],
             "Delete",
             ControlTone.Error,
             async () =>

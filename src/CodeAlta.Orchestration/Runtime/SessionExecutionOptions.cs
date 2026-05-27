@@ -18,7 +18,7 @@ public sealed class SessionExecutionOptions
     public string? ProviderKey { get; init; }
 
     /// <summary>
-    /// Gets or initializes the working directory for the thread session.
+    /// Gets or initializes the working directory for the session.
     /// </summary>
     public required string WorkingDirectory { get; init; }
 

@@ -231,9 +231,9 @@ internal sealed class ThreadRuntimeEventCoordinator
         }
         catch (Exception ex)
         {
-            CodeAltaApp.UiLogger.Error(ex, $"Failed to render thread {context}");
+            CodeAltaApp.UiLogger.Error(ex, $"Failed to render session {context}");
 
-            _statusPort.SetShellStatus(new ShellStatusUpdate($"Failed to render thread {context}: {ex.Message}", false, StatusTone.Error));
+            _statusPort.SetShellStatus(new ShellStatusUpdate($"Failed to render session {context}: {ex.Message}", false, StatusTone.Error));
             tab.Timeline.ClearPendingAssistant();
         }
     }
@@ -241,7 +241,7 @@ internal sealed class ThreadRuntimeEventCoordinator
     private void ObservePluginAgentEvent(SessionViewDescriptor thread, AgentEvent @event)
         => global::CodeAlta.CodeAltaTaskMonitor.Observe(
             _pluginAgentEventObserver.ObserveAgentEventAsync(thread, @event),
-            $"Plugin agent event observer for thread {thread.ThreadId}");
+            $"Plugin agent event observer for session {thread.ThreadId}");
 
     private void ProjectPluginThreadEvents(
         SessionViewDescriptor thread,
@@ -262,7 +262,7 @@ internal sealed class ThreadRuntimeEventCoordinator
 
                 await ProjectPluginThreadEventsAsync(thread, tab, projectionEvents, isReplay, version);
             }),
-            $"Plugin thread event projection for thread {thread.ThreadId}");
+            $"Plugin thread event projection for session {thread.ThreadId}");
     }
 
     private async Task ProjectPluginThreadEventsAsync(
@@ -400,7 +400,7 @@ internal sealed class ThreadRuntimeEventCoordinator
         RemoveDynamicProjectionSubscription(tab, projection.EventId);
         EventHandler handler = (_, _) => global::CodeAlta.CodeAltaTaskMonitor.Observe(
             RefreshDynamicPluginProjectionAsync(thread, tab, projection.EventId),
-            $"Dynamic plugin projection update for thread {thread.ThreadId}");
+            $"Dynamic plugin projection update for session {thread.ThreadId}");
         tab.Session.PluginDynamicProjectionSubscriptions[projection.EventId] = new PluginDynamicProjectionSubscription(dynamicContent, handler);
     }
 
@@ -525,7 +525,7 @@ internal sealed class ThreadRuntimeEventCoordinator
             {
                 global::CodeAlta.CodeAltaTaskMonitor.Observe(
                     _drainQueuedPromptAsync(tab, CancellationToken.None),
-                    $"Queued prompt drain for thread {tab.Thread.ThreadId}");
+                    $"Queued prompt drain for session {tab.Thread.ThreadId}");
             }
         }
 

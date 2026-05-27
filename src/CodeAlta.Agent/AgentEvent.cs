@@ -358,7 +358,7 @@ public enum AgentPlanStepStatus
 }
 
 /// <summary>
-/// A raw, backend-specific event emitted when no normalized mapping exists.
+/// A raw, provider-specific event emitted when no normalized mapping exists.
 /// </summary>
 /// <param name="BackendId">The backend identifier.</param>
 /// <param name="SessionId">The session identifier.</param>

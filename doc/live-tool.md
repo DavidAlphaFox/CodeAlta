@@ -14,7 +14,7 @@ flowchart TD
     PluginContributor[PluginAltaCommandContributor]
     Services[AltaServiceCollection]
     Runtime[SessionRuntimeService]
-    Catalog[Project/Thread/Skill catalogs]
+    Catalog[Project/Session/Skill catalogs]
     Plugins[Plugin runtime]
 
     Session --> Tool
@@ -44,7 +44,7 @@ The tool accepts CLI-style arguments excluding the executable name:
 
 ```json
 {
-  "args": ["session", "status", "<thread-id>"],
+  "args": ["session", "status", "<session-id>"],
   "stdin": null,
   "cwd": null,
   "maxOutputRecords": 50,
@@ -80,7 +80,7 @@ Use `--detailed` only when per-item metadata is needed. Discovery commands defau
 | --- | --- |
 | `version` | Report host/live-tool version metadata. |
 | `project` | List, show, resolve, upsert, and inspect current project context. |
-| `session` | List, create, show, send, queue, steer, abort, compact, inspect, report, and coordinate work threads. |
+| `session` | List, create, show, send, queue, steer, abort, compact, inspect, report, and coordinate sessions. |
 | `skill` | List, show, and activate CodeAlta-managed skills. |
 | `tool` | Inspect live-tool status and command capabilities. |
 | `provider` | List configured providers and provider model refs. |
@@ -111,40 +111,40 @@ Useful read commands:
 
 ```text
 alta session list --project <project> --state all --limit 20
-alta session show <thread-id>
-alta session status <thread-id>
-alta session children <thread-id> --recursive
-alta session model <thread-id>
-alta session result <thread-id>
-alta session metrics <thread-id> --scope last-turn
-alta session tail <thread-id> --last 10
-alta session events <thread-id> --kind assistant.message --fields timestamp,kind,text
+alta session show <session-id>
+alta session status <session-id>
+alta session children <session-id> --recursive
+alta session model <session-id>
+alta session result <session-id>
+alta session metrics <session-id> --scope last-turn
+alta session tail <session-id> --last 10
+alta session events <session-id> --kind assistant.message --fields timestamp,kind,text
 ```
 
 Useful control commands:
 
 ```text
 alta session create --project <project> --title "Investigate parser"
-alta session create --project <project> --same-model-as <thread-id>
-alta session send <thread-id> --message "Summarize the latest failure."
-alta session send <thread-id> --stdin --queue-if-busy
-alta session queue <thread-id> --message "Run this after the current turn."
-alta session steer <thread-id> --message "Focus on the smallest fix."
-alta session abort <thread-id> --reason "Superseded"
-alta session compact <thread-id>
+alta session create --project <project> --same-model-as <session-id>
+alta session send <session-id> --message "Summarize the latest failure."
+alta session send <session-id> --stdin --queue-if-busy
+alta session queue <session-id> --message "Run this after the current turn."
+alta session steer <session-id> --message "Focus on the smallest fix."
+alta session abort <session-id> --reason "Superseded"
+alta session compact <session-id>
 ```
 
-Control commands acknowledge submission. They do not block until the target model finishes. If a session is busy, `send --queue-if-busy` and `session queue` persist queue items with caller attribution; the runtime drains at most one queued prompt when that thread becomes idle.
+Control commands acknowledge submission. They do not block until the target model finishes. If a session is busy, `send --queue-if-busy` and `session queue` persist queue items with caller attribution; the runtime drains at most one queued prompt when that session becomes idle.
 
 ## Delegated work and peer messages
 
-Agent-originated delegated work is designed to yield after submission. Parented session creation/send paths include metadata such as `notificationExpected`, `shouldPoll`, `shouldYield`, and `nextStep` so a coordinator can stop active waiting and let CodeAlta forward the child final reply or error back to the parent thread.
+Agent-originated delegated work is designed to yield after submission. Parented session creation/send paths include metadata such as `notificationExpected`, `shouldPoll`, `shouldYield`, and `nextStep` so a coordinator can stop active waiting and let CodeAlta forward the child final reply or error back to the parent session.
 
 Use normal `session send` for actionable prompts that should make the target model run. Use message/request commands for coordination notes that should be attributed as delegated-agent traffic instead of user/developer/system instructions:
 
 ```text
-alta session message <thread-id> --kind handoff --message "Context collected."
-alta session request <thread-id> --reply-requested --stdin
+alta session message <session-id> --kind handoff --message "Context collected."
+alta session request <session-id> --reply-requested --stdin
 ```
 
 Polling commands such as `status`, `tail`, and `events` are for diagnostics, explicit observation, or cases where no parent notification is expected.
@@ -170,7 +170,7 @@ alta model resolve --model-ref <provider-key>:<model-id>@high
 alta skill list --project <project>
 alta skill list --project <project> --detailed
 alta skill show <skill-name>
-alta skill activate <skill-name> --session <thread-id>
+alta skill activate <skill-name> --session <session-id>
 ```
 
 Activation uses the same runtime path as the UI. It succeeds only when CodeAlta can inject skill context into the target local-runtime session; provider-managed native skill sessions return an unsupported-capability diagnostic.
@@ -194,4 +194,4 @@ Plugins can also call built-in commands through `Services.Alta.InvokeAsync(...)`
 - requires in-process runtime vs catalog-only context;
 - plugin provenance for plugin-contributed or plugin-invoked commands.
 
-The command gateway is available only to CodeAlta-managed sessions whose configured backend id supports host-injected tools.
+The command gateway is available only to CodeAlta-managed sessions whose configured provider id supports host-injected tools.

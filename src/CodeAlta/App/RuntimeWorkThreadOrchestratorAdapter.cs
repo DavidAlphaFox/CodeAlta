@@ -109,10 +109,10 @@ internal sealed class RuntimeWorkThreadOrchestratorAdapter : IWorkThreadOrchestr
         ArgumentNullException.ThrowIfNull(context);
         if (string.IsNullOrWhiteSpace(context.ThreadId))
         {
-            throw new ArgumentException("A materialized thread id is required.", nameof(context));
+            throw new ArgumentException("A materialized session id is required.", nameof(context));
         }
 
         return _findThread(context.ThreadId)
-            ?? throw new InvalidOperationException($"Thread '{context.ThreadId}' was not found.");
+            ?? throw new InvalidOperationException($"Session '{context.ThreadId}' was not found.");
     }
 }

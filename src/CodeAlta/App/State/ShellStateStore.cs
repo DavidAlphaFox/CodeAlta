@@ -78,9 +78,9 @@ internal class ShellStateStore
 /// <param name="ActiveTabId">The active tab identifier, when one is selected.</param>
 /// <param name="StatusText">The shell status text, when available.</param>
 /// <param name="Projects">The catalog project snapshot.</param>
-/// <param name="Threads">The catalog thread snapshot.</param>
+/// <param name="Threads">The catalog session snapshot.</param>
 /// <param name="Selection">The selected shell target snapshot.</param>
-/// <param name="OpenThreadIds">The ordered open thread identifiers.</param>
+/// <param name="OpenThreadIds">The ordered open session identifiers.</param>
 /// <param name="NavigatorSettings">The navigator settings snapshot.</param>
 internal sealed record ShellFrontendStateSnapshot(
     IReadOnlyList<ShellFrontendTabSnapshot> Tabs,

@@ -9,9 +9,9 @@ namespace CodeAlta.Agent;
 /// <param name="LastOperation">The most recent meaningful operation usage snapshot when available.</param>
 /// <param name="RateLimits">The normalized rate-limit summary when available.</param>
 /// <param name="Scope">The scope represented by this usage snapshot.</param>
-/// <param name="Source">The backend event source that produced this usage snapshot.</param>
+/// <param name="Source">The provider/runtime event source that produced this usage snapshot.</param>
 /// <param name="UpdatedAt">The time the usage snapshot was last updated.</param>
-/// <param name="Details">Optional backend-specific usage details.</param>
+/// <param name="Details">Optional provider/runtime-specific usage details.</param>
 public sealed record AgentSessionUsage(
     AgentWindowUsageSnapshot? Window = null,
     AgentOperationUsageSnapshot? LastOperation = null,
@@ -222,7 +222,7 @@ public enum AgentUsageSource
 }
 
 /// <summary>
-/// Base type for backend-specific session usage information.
+/// Base type for provider/runtime-specific session usage information.
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(CodexSessionUsageDetails), "codex")]
@@ -273,8 +273,8 @@ public sealed record CodexTokenUsage(
 /// <summary>
 /// Codex rate-limit snapshot.
 /// </summary>
-/// <param name="LimitId">The backend-specific limit identifier.</param>
-/// <param name="LimitName">The backend-specific limit display name.</param>
+/// <param name="LimitId">The provider-specific limit identifier.</param>
+/// <param name="LimitName">The provider-specific limit display name.</param>
 /// <param name="PlanType">The active Codex plan type when known.</param>
 /// <param name="Primary">The primary rate-limit window when available.</param>
 /// <param name="Secondary">The secondary rate-limit window when available.</param>

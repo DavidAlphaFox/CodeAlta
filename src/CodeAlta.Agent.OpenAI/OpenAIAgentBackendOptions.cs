@@ -121,7 +121,7 @@ public sealed class OpenAIProviderOptions
 
     /// <summary>
     /// Gets or sets additional static HTTP headers to include with provider requests.
-    /// Authentication headers are owned by the backend and should not be supplied here.
+    /// Authentication headers are owned by the provider runtime and should not be supplied here.
     /// </summary>
     public IReadOnlyDictionary<string, string>? ExtraHeaders { get; set; }
 
@@ -186,7 +186,7 @@ public sealed class OpenAIProtocolTraceOptions
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// Gets or sets the root directory used to write per-session trace files. When unset, the backend state root is used.
+    /// Gets or sets the root directory used to write per-session trace files. When unset, the provider state root is used.
     /// </summary>
     public string? StateRootPath { get; set; }
 

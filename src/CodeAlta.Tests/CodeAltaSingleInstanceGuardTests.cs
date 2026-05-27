@@ -51,7 +51,7 @@ public sealed class CodeAltaSingleInstanceGuardTests
             Assert.AreEqual(Environment.ProcessId, exception.ProcessId);
             StringAssert.Contains(exception.Message, $"PID {Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}");
             StringAssert.Contains(exception.Message, "only one application instance per machine");
-            StringAssert.Contains(exception.Message, "same threads and shared application state");
+            StringAssert.Contains(exception.Message, "same sessions and shared application state");
         }
         finally
         {

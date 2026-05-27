@@ -148,7 +148,7 @@ internal sealed class ThreadInfoPresenter
             Tone = ControlTone.Error,
         };
         closeButton.Click(ClosePopup);
-        var closeButtonHost = closeButton.Tooltip(new TextBlock("Close the thread info popup."));
+        var closeButtonHost = closeButton.Tooltip(new TextBlock("Close the session info popup."));
 
         var content = new VStack
         {
@@ -156,7 +156,7 @@ internal sealed class ThreadInfoPresenter
         };
         content.Add(new StatusBar()
             .LeftText(new VStack(
-                new Markup("[bold]Thread info[/]"),
+                new Markup("[bold]Session info[/]"),
                 new Markup($"[dim]{AnsiMarkup.Escape(ThreadInfoFormatter.BuildSubtitle(_report, _isLoading))}[/]"))
             {
                 Spacing = 0,

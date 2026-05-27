@@ -175,7 +175,7 @@ public sealed class CodeAltaAppSidebarTests
     {
         var globalThread = CreateThread(
             "global-1",
-            "Global thread",
+            "Global session",
             WorkThreadKind.GlobalThread,
             projectId: null,
             AgentBackendIds.Codex.Value,

@@ -35,7 +35,7 @@ public sealed class ProviderFrontendCoordinatorTests
         Assert.IsTrue(reused);
         Assert.IsTrue(result.Success);
         Assert.AreEqual(2, result.ModelCount);
-        StringAssert.Contains(result.Message, "Using active provider backend");
+        StringAssert.Contains(result.Message, "Using active model provider");
     }
 
     [TestMethod]

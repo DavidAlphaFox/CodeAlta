@@ -62,7 +62,7 @@ internal sealed class ThreadCreationCoordinator
     {
         try
         {
-            _setStatus("Creating global thread...", true, StatusTone.Info);
+            _setStatus("Creating global session...", true, StatusTone.Info);
             var title = ResolveTitle(titleOverride);
             string? createdThreadId = null;
             var executionOptions = _buildPreferredExecutionOptions(
@@ -83,7 +83,7 @@ internal sealed class ThreadCreationCoordinator
         }
         catch (Exception ex)
         {
-            _setStatus($"Failed to create global thread: {ex.Message}", false, StatusTone.Error);
+            _setStatus($"Failed to create global session: {ex.Message}", false, StatusTone.Error);
             return null;
         }
     }
@@ -93,13 +93,13 @@ internal sealed class ThreadCreationCoordinator
         var project = _getSelectedProject();
         if (project is null)
         {
-            _setStatus("Select a project before creating a project thread.", false, StatusTone.Warning);
+            _setStatus("Select a project before creating a project session.", false, StatusTone.Warning);
             return null;
         }
 
         try
         {
-            _setStatus($"Creating thread for '{project.DisplayName}'...", true, StatusTone.Info);
+            _setStatus($"Creating session for '{project.DisplayName}'...", true, StatusTone.Info);
             var title = ResolveTitle(titleOverride);
             string? createdThreadId = null;
             var executionOptions = _buildPreferredExecutionOptions(
@@ -120,7 +120,7 @@ internal sealed class ThreadCreationCoordinator
         }
         catch (Exception ex)
         {
-            _setStatus($"Failed to create project thread: {ex.Message}", false, StatusTone.Error);
+            _setStatus($"Failed to create project session: {ex.Message}", false, StatusTone.Error);
             return null;
         }
     }

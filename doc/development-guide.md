@@ -15,39 +15,36 @@ Add a rule here when it is important enough that contributors and agents should 
 
 ## Architecture Boundaries
 
-- Keep reusable agent/session/thread orchestration out of the `CodeAlta` frontend project. Frontend code should own terminal controls, view models, visual projections, dialogs, and adapters from user actions to application/runtime commands.
+- Keep reusable agent/session orchestration out of the `CodeAlta` frontend project. Frontend code should own terminal controls, view models, visual projections, dialogs, and adapters from user actions to application/runtime commands.
 - Keep `CodeAlta.Orchestration`, `CodeAlta.Orchestration.Hosting`, `CodeAlta.Plugins`, and `CodeAlta.Catalog` independent from the TUI project and terminal UI controls.
 - Keep plugin orchestration hooks headless. Frontend code may render plugin-derived projections or adapt plugin UI/tab services, but should not own agent event observer dispatch or derived-event creation.
 - Keep plugin prompt/notification abstractions minimal data contracts. Do not reproduce `XenoAtom.Terminal.UI` toast or control APIs in plugin abstractions; terminal controls and dialogs stay owned by the frontend.
-- Treat plugin-derived thread events as transient projections. Do not persist them as canonical user/agent transcript events unless a future decision explicitly changes the event model.
+- Treat plugin-derived session/timeline events as transient projections. Do not persist them as canonical user/agent transcript events unless a future decision explicitly changes the event model.
 - Prefer named ports, request/response DTOs, immutable snapshots, and event streams over large callback aggregates or callback-wrapper context classes.
 - New shell/application contracts should use `ModelProvider` terminology for selectable LLM runtime and endpoint configuration. Do not introduce new `Backend` names for provider/session ownership; existing `IAgentBackend` terminology is transitional during the backend refactor.
 
 ### Agent runtime, sessions, and model providers
 
-Phase 0 of the backend refactor locks the target boundaries and names before code churn starts:
+The current provider/session split is intentional and should be preserved:
 
-- Final target names are `AgentRuntime`/`IAgentRuntime` for the CodeAlta-owned active-session facade, `SessionRuntimeService` for the session orchestration service, `SessionViewDescriptor` for the UI/catalog projection, `ModelProviderId`, `ModelProviderDescriptor`, `ModelProviderState`, and `IAgentSessionStore`. Avoid introducing a broad `SessionDescriptor`; use `AgentSessionMetadata` for durable stored session metadata unless a narrower descriptor is required.
-- `AgentRuntime` owns active session handles, per-session run coordination, abort/steer/compact flow, and provider resolution for start/resume/run. It must not own persisted session discovery or model-provider probing.
-- `IAgentSessionStore` and the session catalog are the durable session owners. Session listing, metadata reads, history reads, and deletion are provider-independent and should scan one configured sessions root once per runtime/catalog instance.
-- Model providers own configured provider identity, protocol adaptation, readiness, capabilities, and model catalogs only. Provider initialization must be independent per provider and must not gate local session listing or history loading.
-- Conversation-like orchestration and UI concepts should use `Session` naming. Keep `Thread` only for actual OS/runtime threading concepts and tolerant readers for legacy persisted fields.
-- Do not add public/internal API compatibility shims for old backend/session APIs. Direct renames, splits, and deletions are acceptable; temporary bridges are implementation scaffolding only and should be removed within the refactor.
-- Compatibility constraints are user data and configuration only: existing session journals and work-thread view state must remain loadable with tolerant reads of legacy `BackendId`/`ThreadId`/provider fields, and existing provider `config.toml` / `[providers]` semantics must stay stable unless a focused migrator is added.
+- `AgentHub` is the in-process active-session facade. It owns active session handles, per-session run coordination, abort/steer/compact flow, and provider resolution for start/resume/run. It must not own persisted session discovery or model-provider probing.
+- `SessionRuntimeService` is the headless orchestration service that maps UI/live-tool session actions to runtime requests, prompt queues, skill activation, session history, and `WorkThreadRuntimeEvent` projections.
+- `IAgentSessionStore` and `IAgentSessionCatalog` are the durable session owners. Session listing, metadata reads, history reads, and deletion are provider-independent and scan one configured sessions root for the current runtime. Keep the listing surface streaming-only through `IAsyncEnumerable<AgentSessionMetadata> ListSessionsAsync(...)`; callers that need a list can materialize at the edge.
+- Model providers own configured provider identity, protocol adaptation, readiness, capabilities, and model catalogs only. `IModelProviderRegistry` and `IModelProviderInitializationService` initialize/probe providers independently and must not gate local session listing, session history loading, or project import.
+- Provider initialization starts eagerly after provider descriptors/configuration are available and runs concurrently with session catalog listing and pending-session restore. A slow or failing provider must become a provider state, not an application startup failure.
 - Active sessions must remain independently scheduled. Use per-session ownership/serialization for mutable runtime state and event append ordering; do not add a process-wide run lock, event-writer lock, or provider/session deduplication layer.
+- Parent/sub-session relationships are lineage/orchestration metadata only. Do not make child sessions share the parent's run gate, cancellation token, provider continuation state, or journal writer after creation.
+- Conversation-like orchestration and UI concepts should use `Session` or `SessionView` naming. Keep `Thread` only for actual OS/runtime threading, framework terms, or explicit tolerant readers/legacy view-state APIs that still load old `ThreadId`/work-thread data.
+- `AgentBackendId`, `BackendId`, `IAgentBackend`, and `AgentBackendFactory` are transitional low-level compatibility names when they identify provider runtime adapters. Do not expose them in new user-facing UI/docs or use them to imply backend-owned sessions.
+- Avoid `LocalAgentBackend` and new broad `Local*` names for runtime/session ownership. The CodeAlta-owned runtime is `CodeAltaAgentRuntime`/`AgentHub`; provider-specific raw API pieces may still use `LocalAgent*` when they describe the local replay/journal implementation.
+- Compatibility constraints are user data and configuration only: existing session journals and legacy work-thread view state must remain loadable with tolerant reads of legacy `BackendId`/`ThreadId`/provider fields, and existing provider `config.toml` / `[providers]` semantics must stay stable unless a focused migrator is added.
 
-Phase 0 baseline on 2026-05-26: `dotnet test -c Release` from `src` passed with 0 failed, 1512 passed, and 1 skipped (`ProjectFileSearchSession_PublishesIncrementalUpdatesAndIgnoresStaleRefreshes`).
+Existing guardrail coverage to keep intact when touching startup/session boundaries:
 
-Tests identified as assuming backend-owned sessions or the current backend/session coupling and therefore expected to move or change during the refactor:
-
-- `src/CodeAlta.Orchestration.Tests/SessionRuntimeServiceTests.cs`: session-runtime recovery and missing-resume coverage that moved off backend-owned session enumeration.
-- `src/CodeAlta.Tests/AgentHubBackendReloadTests.cs`: `ListSessionsAsync_CachesProcessBackedBackendSessions`, `ListSessionsAsync_CachesRegularBackendSessions`, `DeleteSessionAsync_InvalidatesProcessBackedSessionCache`.
-- `src/CodeAlta.Tests/FileSystemLocalAgentSessionStoreTests.cs`: provider-scoped `ListSessionsAsync` and persisted `BackendId`/provider metadata coverage.
-- `src/CodeAlta.Tests/LocalAgentBackendTests.cs`: backend create/list/resume/delete, default-provider resume, provider-switch resume, and resume-time usage repair tests.
-- `src/CodeAlta.Tests/RawApiBackendRegistrarTests.cs`: configured-provider registration through `AgentBackendFactory` and `CreateSessionAsync` persistence coverage.
-- `src/CodeAlta.Tests/OpenAIRawApiAgentBackendTests.cs`, `src/CodeAlta.Tests/RawApiAgentBackendTests.cs`, `src/CodeAlta.Tests/CopilotDirectProviderTests.cs`, and `src/CodeAlta.Tests/ModelsDevCatalogTests.cs`: provider backend tests that directly create or resume sessions through provider-specific `IAgentBackend` wrappers.
-- `src/CodeAlta.Tests/ChatAgentConnectionTests.cs` and `src/CodeAlta.Tests/ChatBackendInitializationCoordinatorTests.cs`: tests covering backend-bound session recreation and provider initialization enabling session loading.
-- `src/CodeAlta.Plugins.Abstractions.Tests/PluginAbstractionsTests.cs` and `src/CodeAlta.Plugins.Tests/PluginContributionAdapterServiceTests.cs`: plugin contribution coverage for tools, prompts, resources, UI, callbacks, and compaction.
+- `src/CodeAlta.Tests/AgentSessionCatalogTests.cs` covers concurrent callers sharing one catalog load, cached streaming snapshots, corrupt-file tolerance, and provider-independent listing for missing/disabled providers.
+- `src/CodeAlta.Tests/CodeAltaShellControllerTests.cs` covers sessions becoming visible before provider initialization completes, provider initialization starting before slow session scans complete, and complete startup catalog loading through one recoverable session stream.
+- `src/CodeAlta.Tests/ModelProviderInitializationServiceTests.cs` covers per-provider failure/timeout isolation and model-list caching/reuse.
+- `src/CodeAlta.Tests/AgentHubBackendReloadTests.cs`, `src/CodeAlta.Tests/LocalAgentSessionJournalFileTests.cs`, and `src/CodeAlta.Orchestration.Tests/SessionRuntimeStressTests.cs` cover per-session runtime coordination and journal/concurrency behavior.
 
 ## Frontend Shell Shape
 
@@ -84,17 +81,17 @@ flowchart LR
 
 - `CodeAltaApp` is the TUI shell composition root and compatibility facade. `ShellFrontendHost` is only the run/tick/dispose lifecycle wrapper; do not treat it as the owner of frontend service composition.
 - Guardrails should prevent `CodeAltaApp` from becoming a broad callback target again: new behavior belongs in named command services, domain coordinators, events, projection controllers, or explicit adapters.
-- Remaining `CodeAltaApp` internal methods are grouped by owner: composition/lifecycle wiring; provider and prompt services; projection/status/focus adapters; catalog/selection/thread restore coordinators; and tab/file/dialog command routing. Move a method only when doing so deletes callbacks/adapters or shortens an existing call path.
+- Remaining `CodeAltaApp` internal methods are grouped by owner: composition/lifecycle wiring; provider and prompt services; projection/status/focus adapters; catalog/selection/session restore coordinators; and tab/file/dialog command routing. Move a method only when doing so deletes callbacks/adapters or shortens an existing call path.
 - Views and dialogs receive view models plus command/service interfaces; they should not receive long domain callback lists.
 - Selection, catalog, tab, prompt, model-provider, runtime, persistence, and plugin changes should either publish a typed frontend event or return a typed command/use-case result that a small application service projects.
 - The command palette, command bar, slash commands, and shortcuts should share the same shell command metadata and dispatcher path.
-- Logical draft, thread, editor, and plugin tabs should be inspectable through a single shell tab state/service model even when a visual toolkit requires cached tab-page instances.
+- Logical draft, session, editor, and plugin tabs should be inspectable through a single shell tab state/service model even when a visual toolkit requires cached tab-page instances.
 
 ## Runtime Orchestration Concurrency
 
-- Runtime thread/session state should have a clear single writer. Prefer per-thread mailbox/actor-style command processors for mutable orchestration state instead of scattered locks, callback mutation, and frontend-owned workarounds.
-- Actor-style orchestration is an internal implementation pattern: public APIs should expose thread/run ids, request DTOs, snapshots, handles, and events, not actor references, actor paths, or mailbox channels.
-- Async completions, backend/session callbacks, and plugin observer results must be converted into runtime commands/events before they mutate mailbox-owned state.
+- Runtime session state should have a clear single writer. Prefer per-session mailbox/actor-style command processors for mutable orchestration state instead of scattered locks, callback mutation, and frontend-owned workarounds.
+- Actor-style orchestration is an internal implementation pattern: public APIs should expose session/run ids, request DTOs, snapshots, handles, and events, not actor references, actor paths, or mailbox channels.
+- Async completions, provider/session callbacks, and plugin observer results must be converted into runtime commands/events before they mutate mailbox-owned state.
 - Use bounded queues or documented overflow/coalescing policies for runtime and plugin event streams.
 - Do not add Akka.NET or another actor framework as a default dependency. A framework dependency requires a separate decision record/spike showing that it simplifies supervision, testing, shutdown, and host integration compared with the internal mailbox pattern.
 

@@ -9,14 +9,14 @@ CodeAlta is designed for keyboard-first work in a terminal UI. Most popups close
 ## Main workspace
 
 <figure class="my-4">
-  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-home.png" alt="CodeAlta main workspace with projects sidebar, thread tab, timeline, prompt editor, and provider footer" loading="lazy">
-  <figcaption class="small text-secondary mt-2">The default workspace keeps navigation, the active thread, prompt drafting, provider selection, and context status visible together.</figcaption>
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-home.png" alt="CodeAlta main workspace with projects sidebar, session tab, timeline, prompt editor, and provider footer" loading="lazy">
+  <figcaption class="small text-secondary mt-2">The default workspace keeps navigation, the active session, prompt drafting, provider selection, and context status visible together.</figcaption>
 </figure>
 
 The main screen has four important areas:
 
-- **Navigator/sidebar**: projects, open threads, running work, and navigator actions.
-- **Workspace tabs**: thread/session tabs and editor tabs share the same tab strip.
+- **Navigator/sidebar**: projects, open sessions, running work, and navigator actions.
+- **Workspace tabs**: session tabs and editor tabs share the same tab strip.
 - **Timeline**: user messages, assistant messages, reasoning/status updates, tool-call chips, results, statistics cards, compaction notices, and modified-file summaries.
 - **Prompt/footer**: prompt editor, queue strip, provider/model/reasoning selectors, context usage, compact button, and status text.
 
@@ -74,12 +74,12 @@ Use `F3` / `F4` to jump between previous and next user or assistant messages. Us
   <div class="col-lg-6">
     <figure class="h-100">
       <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-prompt-fullscreen.png" alt="CodeAlta full-screen prompt editor for longer multi-line prompts" loading="lazy">
-      <figcaption class="small text-secondary mt-2">Use the full-screen prompt editor for longer multi-line prompts without leaving the selected thread.</figcaption>
+      <figcaption class="small text-secondary mt-2">Use the full-screen prompt editor for longer multi-line prompts without leaving the selected session.</figcaption>
     </figure>
   </div>
 </div>
 
-Press `Enter` to send and `Shift+Enter` for a new line. If the selected thread is busy, `Enter` adds the prompt to the waiting list instead of dropping it. Queued prompts can be edited, repeated, steered immediately when supported, deleted, or cleared with `F10`.
+Press `Enter` to send and `Shift+Enter` for a new line. If the selected session is busy, `Enter` adds the prompt to the waiting list instead of dropping it. Queued prompts can be edited, repeated, steered immediately when supported, deleted, or cleared with `F10`.
 
 `Ctrl+Enter` steers a running provider session. If the provider cannot steer live, CodeAlta re-queues the prompt for the next normal turn.
 
@@ -119,10 +119,10 @@ Use `Ctrl+E` or `/edit` to open the same picker in editor mode.
 
 <figure class="my-4">
   <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-code-editor.png" alt="CodeAlta editor tab with syntax-highlighted source code" loading="lazy">
-  <figcaption class="small text-secondary mt-2">Editor tabs sit beside thread tabs for quick inspection and focused edits without leaving the terminal UI.</figcaption>
+  <figcaption class="small text-secondary mt-2">Editor tabs sit beside session tabs for quick inspection and focused edits without leaving the terminal UI.</figcaption>
 </figure>
 
-Editor tabs support TextMate syntax highlighting, line/column status, dirty markers, `Ctrl+S` save, reload prompts for on-disk changes, and close confirmation for unsaved edits. Editor tabs sit beside thread tabs so you can inspect files without leaving CodeAlta.
+Editor tabs support TextMate syntax highlighting, line/column status, dirty markers, `Ctrl+S` save, reload prompts for on-disk changes, and close confirmation for unsaved edits. Editor tabs sit beside session tabs so you can inspect files without leaving CodeAlta.
 
 ## Model Providers dialog
 
@@ -151,9 +151,9 @@ Open it with `Ctrl+G Ctrl+O` or `/models`. It shows provider/model metadata and 
 
 Open it with `Ctrl+G Ctrl+U` or the footer context indicator. The popup explains the current context denominator, active usage, compaction pressure, recent operation usage, and provider-specific usage details when available.
 
-## Thread report
+## Session report
 
-Open it with `Ctrl+G Ctrl+T` or the thread info icon. The report summarizes selected-thread scope, provider/model state, run status, queue state, and history/session details useful for troubleshooting or handoff.
+Open it with `Ctrl+G Ctrl+T` or the session info icon. The report summarizes selected-session scope, provider/model state, run status, queue state, and history/session details useful for troubleshooting or handoff.
 
 ## Workspace settings
 

@@ -83,7 +83,7 @@ public sealed class AnthropicProviderOptions
 
     /// <summary>
     /// Gets or sets additional static HTTP headers to include with provider requests.
-    /// Authentication headers are owned by the backend and should not be supplied here.
+    /// Authentication headers are owned by the provider runtime and should not be supplied here.
     /// </summary>
     public IReadOnlyDictionary<string, string>? ExtraHeaders { get; set; }
 

@@ -192,7 +192,7 @@ internal sealed class FrontendModelProviderPreferencePort : IModelProviderPrefer
         => ApplyDraftModelProviderState(CreateLegacyModelProviderState(preference));
 
     public void ApplyThreadPreference(string threadId, ModelProviderPreference preference)
-        => throw new NotSupportedException("Applying thread preference still requires the open thread projection during frontend migration.");
+        => throw new NotSupportedException("Applying session preference still requires the open session projection during frontend migration.");
 
     public void RememberProjectPreference(ProjectId projectId, ModelProviderPreference preference)
         => RememberGlobalPreference(preference);

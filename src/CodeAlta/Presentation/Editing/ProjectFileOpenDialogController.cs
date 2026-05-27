@@ -70,7 +70,7 @@ internal sealed class ProjectFileOpenDialogController : IAsyncDisposable
         var projectRoot = _getProjectRoot();
         if (string.IsNullOrWhiteSpace(projectRoot))
         {
-            _setStatus("Select a project or a project-backed thread before opening a file.", false, StatusTone.Warning);
+            _setStatus("Select a project or a project-backed session before opening a file.", false, StatusTone.Warning);
             return;
         }
 

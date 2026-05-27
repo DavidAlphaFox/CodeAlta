@@ -12,7 +12,7 @@ namespace CodeAlta.Agent;
 /// <param name="DefaultReasoningEffort">Optional default reasoning effort for this model.</param>
 /// <param name="SupportedReasoningEfforts">Optional set of reasoning effort values supported by this model.</param>
 /// <param name="Capabilities">
-/// Optional backend-defined capabilities metadata. The shape is backend-specific.
+/// Optional provider-defined capabilities metadata. The shape is provider-specific.
 /// </param>
 public sealed record AgentModelInfo(
     string Id,

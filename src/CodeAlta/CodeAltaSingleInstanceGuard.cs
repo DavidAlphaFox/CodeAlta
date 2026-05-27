@@ -194,6 +194,6 @@ internal sealed class CodeAltaAlreadyRunningException : Exception
             ? $" with PID {pid.ToString(CultureInfo.InvariantCulture)}"
             : " with an unknown PID";
 
-        return $"An alta process is already running{processText}. CodeAlta allows only one application instance per machine because multiple instances would access the same threads and shared application state.";
+        return $"An alta process is already running{processText}. CodeAlta allows only one application instance per machine because multiple instances would access the same sessions and shared application state.";
     }
 }

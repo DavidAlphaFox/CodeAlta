@@ -8,8 +8,8 @@ internal static class ShellTextFormatter
     public static string BuildDraftPromptMessage(bool globalScopeSelected)
     {
         return globalScopeSelected
-            ? "Send the first prompt to start a global thread."
-            : "Send the first prompt to start a thread for the selected project.";
+            ? "Send the first prompt to start a global session."
+            : "Send the first prompt to start a session for the selected project.";
     }
 
     public static string BuildDraftTabTitle(
@@ -32,24 +32,24 @@ internal static class ShellTextFormatter
     {
         if (globalScopeSelected)
         {
-            return "Draft scope selected. Send a prompt to start a global thread.";
+            return "Draft scope selected. Send a prompt to start a global session.";
         }
 
         return selectedProject is null
-            ? "Draft scope selected. Choose a project or send a prompt to start a thread."
-            : $"Draft scope selected for '{selectedProject.DisplayName}'. Send a prompt to start a thread.";
+            ? "Draft scope selected. Choose a project or send a prompt to start a session."
+            : $"Draft scope selected for '{selectedProject.DisplayName}'. Send a prompt to start a session.";
     }
 
     public static string BuildWelcomeSubtitle(ProjectDescriptor? selectedProject, bool globalScopeSelected)
     {
         if (globalScopeSelected)
         {
-            return "Global workspace ready for a new thread.";
+            return "Global workspace ready for a new session.";
         }
 
         return selectedProject is null
             ? "Project draft selected. Choose a project or start typing below."
-            : $"Next thread will start in {FormatProjectLaunchScope(selectedProject)}.";
+            : $"Next session will start in {FormatProjectLaunchScope(selectedProject)}.";
     }
 
     public static IReadOnlyList<string> BuildWelcomeGuidanceLines(
@@ -60,9 +60,9 @@ internal static class ShellTextFormatter
         {
             return
             [
-                "Use the prompt below to start a new global thread.",
+                "Use the prompt below to start a new global session.",
                 "Pick a project in the sidebar before sending if you want repository context.",
-                "Reopen any thread tab to continue previous work.",
+                "Reopen any session tab to continue previous work.",
             ];
         }
 
@@ -70,26 +70,26 @@ internal static class ShellTextFormatter
         {
             return
             [
-                "Choose a project in the sidebar or keep typing below to prepare the next thread.",
+                "Choose a project in the sidebar or keep typing below to prepare the next session.",
                 "Your first prompt will create the draft once a scope is selected.",
-                "Reopen any thread tab to continue previous work.",
+                "Reopen any session tab to continue previous work.",
             ];
         }
 
         return
         [
-            $"Use the prompt below to start a new thread for {selectedProject.DisplayName}.",
+            $"Use the prompt below to start a new session for {selectedProject.DisplayName}.",
             "Switch projects in the sidebar before sending if you want a different scope.",
-            "Reopen any thread tab to continue previous work.",
+            "Reopen any session tab to continue previous work.",
         ];
     }
 
     public static string BuildReadyStatusText(
-        SessionViewDescriptor? thread,
+        SessionViewDescriptor? session,
         ProjectDescriptor? selectedProject,
         bool globalScopeSelected)
     {
-        _ = thread;
+        _ = session;
         _ = selectedProject;
         _ = globalScopeSelected;
         return "Prompt ready";

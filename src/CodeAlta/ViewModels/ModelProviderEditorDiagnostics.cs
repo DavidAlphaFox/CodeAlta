@@ -408,7 +408,7 @@ internal static class ModelProviderEditorDiagnostics
                 failure.Contains("unsupported", StringComparison.OrdinalIgnoreCase) ||
                 failure.Contains("request shape", StringComparison.OrdinalIgnoreCase))
             {
-                statusText = "Unsupported backend/protocol drift";
+                statusText = "Unsupported provider/protocol drift";
                 return true;
             }
 

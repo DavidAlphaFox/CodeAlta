@@ -160,7 +160,7 @@ internal sealed class ModelCatalogDialog
         {
             Id = "CodeAlta.Models.Select",
             LabelMarkup = "Select",
-            DescriptionMarkup = "Select the highlighted provider/model for the current prompt or thread.",
+            DescriptionMarkup = "Select the highlighted provider/model for the current prompt or session.",
             Gesture = new KeyGesture(TerminalKey.Enter),
             Importance = CommandImportance.Primary,
             Execute = _ => SelectHighlighted(),

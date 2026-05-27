@@ -1,30 +1,30 @@
 ---
-title: Threads and Delegation
+title: Sessions and Delegation
 ---
 
-# Threads and Delegation
+# Sessions and Delegation
 
-A CodeAlta thread is a durable work session with provider/model state, prompt history, queue state, session journal, and timeline projections. Threads can be global or project-scoped.
+A CodeAlta session is a durable work unit with provider/model state, prompt history, queue state, a session journal, and timeline projections. Sessions can be global or project-scoped.
 
-## Global vs project threads
+## Global vs project sessions
 
-- **Global threads** are useful for coordination across projects: planning, triage, comparing work, or creating project-specific child sessions.
-- **Project threads** are scoped to one project. They can attach project files, see same-project thread context, and use project-local configuration from `<project>/.alta/config.toml`.
+- **Global sessions** are useful for coordination across projects: planning, triage, comparing work, or creating project-specific child sessions.
+- **Project sessions** are scoped to one project. They can attach project files, see same-project session context, and use project-local configuration from `<project>/.alta/config.toml`.
 
-The sidebar keeps running threads visible even when their tab is closed. Closing a tab does not stop active work, and unsent thread drafts are saved under `~/.alta/saved_prompts/`.
+The sidebar keeps running sessions visible even when their tab is closed. Closing a tab does not stop active work, and unsent session drafts are saved under `~/.alta/saved_prompts/`.
 
 > [!NOTE]
-> Closing a tab only closes that view. Check the sidebar for running threads before assuming work has stopped.
+> Closing a tab only closes that view. Check the sidebar for running sessions before assuming work has stopped.
 
 ## Starting and reopening work
 
-Open a project with `Ctrl+O`, select a provider/model/reasoning combination, and send a prompt. CodeAlta stores local raw-API session journals under `~/.alta/sessions/yyyy/mm/dd/<session-id>.jsonl`.
+Open a project with `Ctrl+O`, select a provider/model/reasoning combination, and send a prompt. CodeAlta stores provider-independent session journals under `~/.alta/sessions/yyyy/mm/dd/<session-id>.jsonl`.
 
-When reopening an existing thread, CodeAlta restores history and provider state where the provider supports it. Local raw-API threads can switch providers while idle; Codex and Copilot threads stay locked to their original provider when hidden runtime state cannot be reconstructed safely.
+When reopening an existing session, CodeAlta restores local history before provider initialization has to finish. A ready compatible provider can resume or switch a CodeAlta-owned local session while it is idle; provider-native continuation state is reused only when it is safe.
 
-## Busy threads and queues
+## Busy sessions and queues
 
-If a thread is busy, `Enter` queues your prompt instead of losing it. The waiting list appears above the status line.
+If a session is busy, `Enter` queues your prompt instead of losing it. The waiting list appears above the status line.
 
 Queued prompts can be:
 
@@ -48,7 +48,7 @@ If no provider run is active, CodeAlta falls back to a normal send. If the provi
 
 ## Compaction
 
-Press `F11` or click the compact button beside the provider/model/reasoning selectors to compact an idle started thread. Manual compaction uses the thread's current provider/model/reasoning configuration and emits visible start/completion notices in the timeline.
+Press `F11` or click the compact button beside the provider/model/reasoning selectors to compact an idle started session. Manual compaction uses the session's current provider/model/reasoning configuration and emits visible start/completion notices in the timeline.
 
 Local compaction targets a smaller post-compaction context by default so long sessions can continue without immediately hitting the context limit.
 
@@ -61,7 +61,7 @@ Think of it as CodeAlta giving the agent a safe, scoped way to ask the host ques
 - which projects are known or currently open;
 - what sessions already exist for this project;
 - which model providers and model refs are available;
-- whether a related thread has finished and what its final result was;
+- whether a related session has finished and what its final result was;
 - how to create a child session for another project, provider, model, or reasoning effort.
 
 ## Prompting for delegated work
@@ -90,11 +90,11 @@ available model. Ask it to summarize the public API shape and send the
 summary back here.
 ```
 
-For parent/child delegated work, CodeAlta uses a notification-based pattern: the child final reply or child-run error is forwarded back to the parent thread automatically. The parent agent should yield instead of repeatedly polling while waiting.
+For parent/child delegated work, CodeAlta uses a notification-based pattern: the child final reply or child-run error is forwarded back to the parent session automatically. The parent agent should yield instead of repeatedly polling while waiting.
 
 ## Prompting for CodeAlta self-inspection
 
-You can also ask a session to inspect CodeAlta-managed project/thread state before acting. This is useful when you have many open threads, want to recover prior context, or want to compare work across providers.
+You can also ask a session to inspect CodeAlta-managed project/session state before acting. This is useful when you have many open sessions, want to recover prior context, or want to compare work across providers.
 
 Examples:
 
@@ -104,7 +104,7 @@ ones modified provider configuration docs.
 ```
 
 ```markdown
-Find the child sessions created from this thread and summarize their
+Find the child sessions created from this session and summarize their
 final answers, grouped by model.
 ```
 
@@ -116,7 +116,7 @@ before creating sessions.
 
 ```markdown
 Before changing files, inspect the recent CodeAlta sessions for this
-project and check whether a recent thread already investigated the
+project and check whether a recent session already investigated the
 plugin startup issue.
 ```
 
@@ -133,10 +133,10 @@ them not to edit files. When all replies arrive, compare correctness,
 risk, and recommended next step.
 ```
 
-This works best when you ask for a bounded result from each child: summary, relevant files, proposed patch outline, test command, or risk assessment. Let one parent thread synthesize the answers before you choose what to apply.
+This works best when you ask for a bounded result from each child: summary, relevant files, proposed patch outline, test command, or risk assessment. Let one parent session synthesize the answers before you choose what to apply.
 
 > [!TIP]
-> Give delegated agents a narrow expected output, such as “do not edit files; return likely cause, files inspected, and one recommended test.” Bounded child results are easier for the parent thread to compare.
+> Give delegated agents a narrow expected output, such as “do not edit files; return likely cause, files inspected, and one recommended test.” Bounded child results are easier for the parent session to compare.
 
 ## Scope, visibility, and provenance
 

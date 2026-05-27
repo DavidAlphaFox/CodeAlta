@@ -1,6 +1,6 @@
 # Runtime and agent sessions
 
-The runtime turns shell or live-tool requests into ordered work-thread commands, provider sessions, normalized events, journals, and UI/plugin projections. This document describes the headless runtime contracts; frontend rendering is covered by [Architecture overview](architecture.md).
+The runtime turns shell, plugin, and live-tool requests into CodeAlta-owned sessions, ordered per-session commands, normalized events, journals, and UI/plugin projections. Model providers execute turns and expose model metadata, but they do not own persisted session discovery.
 
 ## Runtime layers
 
@@ -8,55 +8,67 @@ The runtime turns shell or live-tool requests into ordered work-thread commands,
 flowchart TD
     Request[Create/send/queue/steer/abort/compact request]
     Service[SessionRuntimeService]
-    Actor[Per-thread WorkThreadActor]
+    Actor[Per-session WorkThreadActor mailbox]
     Hub[AgentHub]
-    Backend[IAgentBackend]
+    Registry[ModelProviderRegistry]
+    Provider[Model provider runtime adapter]
     Session[IAgentSession]
+    Catalog[AgentSessionCatalog]
+    Store[IAgentSessionStore]
     Tools[Host tools]
-    Journal[Local session journal]
+    Journal[Session JSONL journal]
     RuntimeEvents[WorkThreadRuntimeEvent]
 
     Request --> Service
     Service --> Actor
     Actor --> Hub
-    Hub --> Backend
-    Backend --> Session
+    Hub --> Registry
+    Registry --> Provider
+    Provider --> Session
     Session --> Tools
     Tools --> Session
     Session --> Journal
+    Catalog --> Store
+    Service --> Catalog
     Session --> Hub
     Hub --> Service
     Service --> RuntimeEvents
 ```
 
-`SessionRuntimeService` is the public runtime service used by the TUI, `alta` commands, and plugin orchestration adapters. It owns work-thread creation, coordinator-session setup, prompt queueing, prompt sending, steering fallback, abort, manual compaction, skill activation, runtime event publication, and thread metadata journaling.
+`SessionRuntimeService` is the public runtime service used by the TUI, `alta` commands, and plugin orchestration adapters. It owns session-view creation, coordinator-session setup, prompt queueing, prompt sending, steering fallback, abort, manual compaction, skill activation, runtime event publication, and legacy work-thread/session-view metadata journaling.
 
-`AgentHub` owns backend/session lifecycle. It lazily creates and starts backends from `AgentBackendFactory`, caches active sessions, lists models and recoverable sessions, resumes sessions, and exposes normalized metadata to orchestration.
+`AgentHub` is the active CodeAlta agent/session facade. It starts or resumes runnable sessions by resolving the selected `ModelProviderId`/provider key through `IModelProviderRegistry`, then coordinates run/abort/steer/compact operations through per-session handles. It does not list persisted sessions and does not probe providers for models.
 
-Same-thread mutation is serialized by internal mailbox actors. Callers use request records, ids, snapshots, and events; actor references are never public API.
+`AgentSessionCatalog` and `IAgentSessionStore` own durable session discovery and history reads. `ListSessionsAsync` is streaming-only (`IAsyncEnumerable<AgentSessionMetadata>`) and reads from one configured sessions root for the current runtime.
+
+Same-session mutation is serialized by internal mailbox actors and session coordinators. Different sessions can run concurrently; a blocked provider call, tool execution, or journal append for one session must not serialize unrelated sessions. Runtime events use bounded streams so slow readers do not create unbounded memory pressure.
+
+## Provider initialization
+
+`IModelProviderRegistry` lists configured `ModelProviderDescriptor` values and creates provider runtimes. `IModelProviderInitializationService` starts provider probes eagerly after provider descriptors/configuration are available. Each provider probe owns its success/failure state and model list cache:
+
+- provider initialization is independent per provider and fault-isolated;
+- one slow or failing provider does not block other providers;
+- session listing, local history loading, project import, and pending-session restore do not wait for provider readiness;
+- model lists are loaded during provider initialization or explicit refresh, then reused by session start/resume paths.
+
+Provider identity is not session ownership. Persisted sessions keep last-used provider/model metadata for UX defaults and resume choices; the session id remains the durable session identity.
 
 ## Agent contracts
 
-`CodeAlta.Agent` defines the provider-neutral contract.
+`CodeAlta.Agent` defines the headless agent/session/provider boundary.
 
-### `IAgentBackend`
+### `IAgentBackend` and provider compatibility names
 
-A backend owns a model/runtime adapter. It exposes:
-
-- `BackendId` and `DisplayName`;
-- `StartAsync` and `StopAsync` lifecycle methods;
-- `ListModelsAsync`;
-- `ListSessionsAsync` for recoverable sessions;
-- `CreateSessionAsync` and `ResumeSessionAsync`;
-- best-effort `DeleteSessionAsync`, which returns `false` when unsupported.
+`IAgentBackend`, `AgentBackendId`, and `AgentBackendFactory` remain low-level compatibility names for provider runtime adapters in parts of the code. New code should prefer `ModelProviderId`, `ModelProviderDescriptor`, `IModelProviderRegistry`, and `IModelProviderRuntime` when describing selectable providers. Do not use backend terminology to imply that providers own persisted sessions.
 
 ### `IAgentSession`
 
-A session owns one conversation. It exposes:
+A session owns one conversation/run attachment. It exposes:
 
 - normalized event streaming through `StreamEventsAsync` and `Subscribe`;
 - `SendAsync` for normal user input;
-- `SteerAsync` for live steering when a backend supports it;
+- `SteerAsync` for live steering when the selected provider/runtime supports it;
 - `AbortAsync` for best-effort cancellation;
 - `CompactAsync` for manual compaction when supported;
 - `GetHistoryAsync` for replayable stored history.
@@ -67,23 +79,23 @@ A session owns one conversation. It exposes:
 
 Runtime projections should be derived from these normalized events rather than provider-specific payloads whenever possible.
 
-## Work-thread flow
+## Session flow
 
 A normal prompt follows this path:
 
-1. The caller selects a global or project thread and model provider.
-2. `SessionRuntimeService` ensures a coordinator session exists for the thread.
+1. The caller selects a global or project session view and model provider.
+2. `SessionRuntimeService` ensures a coordinator session exists for the session view.
 3. System/developer instructions, runtime context, project context, skills metadata, and tool definitions are composed.
-4. `AgentHub` starts or resumes the selected backend/session.
+4. `AgentHub` starts or resumes the CodeAlta session using the selected provider runtime.
 5. The prompt is sent through `IAgentSession.SendAsync`.
 6. Normalized `AgentEvent` values are observed, persisted when applicable, and converted into `WorkThreadRuntimeEvent` values.
-7. The runtime marks the thread idle, updates usage/state, and drains at most one queued prompt for that thread.
+7. The runtime marks the session idle, updates usage/state, and drains at most one queued prompt for that session.
 
-Busy-thread sends are queued when requested by UI or live-tool options. Queue items keep caller attribution and are durable enough for runtime recovery paths that read thread/session state. Steering requests are sent only when the backend has an active run and supports `SteerAsync`; otherwise CodeAlta falls back to normal send or re-queues according to the caller path.
+Busy-session sends are queued when requested by UI or live-tool options. Queue items keep caller attribution and are durable enough for runtime recovery paths that read session state. Steering requests are sent only when a run is active and the provider/runtime supports `SteerAsync`; otherwise CodeAlta falls back to normal send or re-queues according to the caller path.
 
-## Local raw-API runtime
+## CodeAlta local session runtime
 
-`LocalAgentBackend` and `LocalAgentSession` implement CodeAlta-owned local sessions for raw provider APIs. Provider packages create a `LocalAgentBackend` with a provider-specific turn executor, profile, model catalog, credentials, and compaction settings.
+`CodeAltaAgentRuntime` and `LocalAgentSession` implement CodeAlta-owned local sessions for raw provider APIs. Provider packages create model-provider runtimes with provider-specific turn executors, profiles, model catalogs, credentials, and compaction settings; the session runtime attaches those providers when starting or resuming work.
 
 A local session:
 
@@ -91,14 +103,14 @@ A local session:
 - composes provider messages from normalized history, instructions, tool results, and active context;
 - emits normalized content/activity/session/permission/error events;
 - runs model/tool turns until the provider is idle;
-- can transfer replayable local history to another compatible configured local provider when no exact provider state exists;
-- persists session summary/state snapshots and CodeAlta thread headers/state into the same JSONL journal.
+- can transfer replayable local history to another compatible configured provider when no exact provider continuation state exists;
+- persists session summary/state snapshots and legacy session-view headers/state into the same JSONL journal.
 
 The journal path is `~/.alta/sessions/yyyy/MM/dd/<session-id>.jsonl`. Optional traces live at `~/.alta/sessions/traces/<session-id>.trace` when protocol tracing is enabled for a provider.
 
 ## Built-in local tools
 
-Local raw-API providers can receive host-injected tools. Current built-ins are:
+CodeAlta-runtime providers can receive host-injected tools. Current built-ins are:
 
 - `read_file`
 - `list_dir`
@@ -113,7 +125,7 @@ Local raw-API providers can receive host-injected tools. Current built-ins are:
 
 Mutation and shell tools flow through host permission handling. Tool schemas are bridged to provider-specific declarations, including strict-schema normalization where required. A user-input/request tool is intentionally not registered as a local raw-API built-in until host UI pause/resume semantics are implemented.
 
-The `alta` live tool is injected separately for configured backend ids that support host tools. See [`alta` live tool](live-tool.md).
+The `alta` live tool is injected for configured provider ids that support host tools. See [`alta` live tool](live-tool.md).
 
 ## System prompt and instruction composition
 
@@ -162,16 +174,16 @@ Local-runtime session journals contain replayable normalized history plus raw st
 - `local.sessionSummary` for session summary metadata;
 - `local.sessionState` for local runtime replay state;
 - `local.compactionCheckpoint` for compaction outcomes;
-- `codealta.threadHeader` and `codealta.threadState` for CodeAlta work-thread metadata.
+- `codealta.threadHeader` and `codealta.threadState` for legacy session-view/work-thread metadata.
 
-The runtime reads journals to restore recoverable threads, session history, usage, modified-file summaries, activated-skill state, and provider/model selections. The frontend stores only view/prompt state outside the journal.
+The runtime reads journals to restore recoverable sessions, session history, usage, modified-file summaries, activated-skill state, parent/sub-session lineage, and provider/model selections. The frontend stores only view/prompt state outside the journal.
 
 ## Runtime events and plugins
 
-`WorkThreadRuntimeEvent` is the orchestration-to-host event stream. The frontend projects it into sidebars, timelines, status lines, usage indicators, and dialogs. Plugins can observe normalized agent events and contribute transient derived thread events through the plugin orchestration bridge.
+`WorkThreadRuntimeEvent` is the current orchestration-to-host event stream name. It is a transitional legacy type name; events describe session-view/runtime changes, not operating-system threads. The frontend projects it into sidebars, timelines, status lines, usage indicators, and dialogs. Plugins can observe normalized agent events and contribute transient derived timeline cards through the plugin orchestration bridge.
 
 Derived plugin events are not canonical transcript entries. They are replayed from stored normalized events and can be recalculated after restart.
 
 ## Error and cancellation behavior
 
-Backends and sessions should surface recoverable failures as structured events or command outcomes when possible. Unrecoverable actor failures stop the affected actor and complete pending replies. Runtime event streams are bounded; callers must not depend on unbounded buffering for UI or plugin responsiveness.
+Providers and sessions should surface recoverable failures as structured events or command outcomes when possible. Unrecoverable actor failures stop the affected session actor and complete pending replies. Runtime event streams are bounded; callers must not depend on unbounded buffering for UI or plugin responsiveness.

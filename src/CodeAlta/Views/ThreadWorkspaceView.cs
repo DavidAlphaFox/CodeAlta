@@ -254,7 +254,7 @@ internal sealed class ThreadWorkspaceView
         Visual? threadInfoButton = null;
         threadInfoButton = CreateIconButton(
                 $"{NerdFont.MdInformationOutline}",
-                $"Show information about the selected thread ({ThreadInfoShortcutSequence}).",
+                $"Show information about the selected session ({ThreadInfoShortcutSequence}).",
                 () => _chromeController.ToggleThreadInfoPopup(threadInfoButton!),
                 button => button.IsEnabled(workspaceViewModel.Bind.CanShowThreadInfo));
         var modelProviderSelectorView = new ModelProviderSelectorView(

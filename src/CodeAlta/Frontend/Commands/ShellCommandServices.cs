@@ -132,7 +132,7 @@ internal sealed class DelegatingShellNavigationCommandService : IShellNavigation
             ThreadMessageScrollTarget.Next => _scrollToNextMessageAsync(),
             ThreadMessageScrollTarget.First => _scrollToFirstMessageAsync(),
             ThreadMessageScrollTarget.Last => _scrollToLastMessageAsync(),
-            _ => throw new ArgumentOutOfRangeException(nameof(target), target, "Unknown thread message scroll target."),
+            _ => throw new ArgumentOutOfRangeException(nameof(target), target, "Unknown session message scroll target."),
         };
     }
 }

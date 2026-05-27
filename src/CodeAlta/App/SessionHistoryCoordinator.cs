@@ -512,7 +512,7 @@ internal sealed class SessionHistoryCoordinator
                         _setThreadStatus(
                             tab,
                             loadOnlyFromLastUserPrompt
-                                ? $"Loading thread '{thread.Title}'..."
+                                ? $"Loading session '{thread.Title}'..."
                                 : $"Loading previous messages from '{thread.Title}'...",
                             true,
                             StatusTone.Info);

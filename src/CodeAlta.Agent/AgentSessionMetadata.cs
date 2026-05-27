@@ -34,7 +34,7 @@ public sealed record AgentSessionMetadata(
     AgentRunId? CreatedByRunId = null);
 
 /// <summary>
-/// Base type for backend-specific session metadata details.
+/// Base type for provider/runtime-specific session metadata details.
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(CodexSessionMetadataDetails), "codex")]
@@ -46,10 +46,10 @@ public abstract record AgentSessionMetadataDetails;
 /// Codex-specific session metadata details.
 /// </summary>
 /// <param name="ModelProvider">The model provider reported by Codex when available.</param>
-/// <param name="Source">The backend-reported origin for the thread.</param>
-/// <param name="Status">The backend-reported runtime status.</param>
-/// <param name="IsEphemeral">Whether the thread is ephemeral.</param>
-/// <param name="ThreadName">The optional user-facing thread title reported by Codex.</param>
+/// <param name="Source">The provider-reported origin for the session.</param>
+/// <param name="Status">The provider-reported runtime status.</param>
+/// <param name="IsEphemeral">Whether the provider-reported session is ephemeral.</param>
+/// <param name="ThreadName">The optional legacy provider title reported by Codex.</param>
 public sealed record CodexSessionMetadataDetails(
     string? ModelProvider = null,
     string? Source = null,

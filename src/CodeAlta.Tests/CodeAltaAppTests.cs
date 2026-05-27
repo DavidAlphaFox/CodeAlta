@@ -550,8 +550,8 @@ public sealed class CodeAltaAppTests
     [TestMethod]
     public void BuildDraftPromptMessage_ReflectsSelectedScope()
     {
-        Assert.AreEqual("Send the first prompt to start a global thread.", ShellTextFormatter.BuildDraftPromptMessage(globalScopeSelected: true));
-        Assert.AreEqual("Send the first prompt to start a thread for the selected project.", ShellTextFormatter.BuildDraftPromptMessage(globalScopeSelected: false));
+        Assert.AreEqual("Send the first prompt to start a global session.", ShellTextFormatter.BuildDraftPromptMessage(globalScopeSelected: true));
+        Assert.AreEqual("Send the first prompt to start a session for the selected project.", ShellTextFormatter.BuildDraftPromptMessage(globalScopeSelected: false));
     }
 
     [TestMethod]
@@ -563,9 +563,9 @@ public sealed class CodeAltaAppTests
             ProjectPath = @"C:\code\CodeAlta",
         };
 
-        Assert.AreEqual("Global workspace ready for a new thread.", ShellTextFormatter.BuildWelcomeSubtitle(null, globalScopeSelected: true));
+        Assert.AreEqual("Global workspace ready for a new session.", ShellTextFormatter.BuildWelcomeSubtitle(null, globalScopeSelected: true));
         Assert.AreEqual("Project draft selected. Choose a project or start typing below.", ShellTextFormatter.BuildWelcomeSubtitle(null, globalScopeSelected: false));
-        Assert.AreEqual(@"Next thread will start in CodeAlta from folder C:\code\CodeAlta.", ShellTextFormatter.BuildWelcomeSubtitle(project, globalScopeSelected: false));
+        Assert.AreEqual(@"Next session will start in CodeAlta from folder C:\code\CodeAlta.", ShellTextFormatter.BuildWelcomeSubtitle(project, globalScopeSelected: false));
     }
 
     [TestMethod]
@@ -579,18 +579,18 @@ public sealed class CodeAltaAppTests
         CollectionAssert.AreEqual(
             new[]
             {
-                "Use the prompt below to start a new global thread.",
+                "Use the prompt below to start a new global session.",
                 "Pick a project in the sidebar before sending if you want repository context.",
-                "Reopen any thread tab to continue previous work.",
+                "Reopen any session tab to continue previous work.",
             },
             ShellTextFormatter.BuildWelcomeGuidanceLines(null, globalScopeSelected: true).ToArray());
 
         CollectionAssert.AreEqual(
             new[]
             {
-                "Use the prompt below to start a new thread for CodeAlta.",
+                "Use the prompt below to start a new session for CodeAlta.",
                 "Switch projects in the sidebar before sending if you want a different scope.",
-                "Reopen any thread tab to continue previous work.",
+                "Reopen any session tab to continue previous work.",
             },
             ShellTextFormatter.BuildWelcomeGuidanceLines(project, globalScopeSelected: false).ToArray());
     }
@@ -1026,7 +1026,7 @@ public sealed class CodeAltaAppTests
             "Waiting for Codex to reconnect...",
             PromptComposerProjectionBuilder.BuildPromptUnavailablePlaceholder(thread, "Codex", ModelProviderAvailability.Probing, anyBackendReady: false));
         Assert.AreEqual(
-            "Configure model providers (Ctrl+G Ctrl+R) to start a thread...",
+            "Configure model providers (Ctrl+G Ctrl+R) to start a session...",
             PromptComposerProjectionBuilder.BuildPromptUnavailablePlaceholder(null, "Codex", ModelProviderAvailability.Unsupported, anyBackendReady: false));
     }
 
@@ -1048,7 +1048,7 @@ public sealed class CodeAltaAppTests
         };
 
         Assert.AreEqual(
-            "Reconnecting 'Review startup' to Codex. Prompt sending is temporarily unavailable.",
+            "Reconnecting session 'Review startup' to Codex. Prompt sending is temporarily unavailable.",
             PromptComposerProjectionBuilder.BuildPromptUnavailableStatusText(thread, "Codex", ModelProviderAvailability.Probing, anyBackendReady: false));
         Assert.AreEqual(
             "No model provider is ready. Open Model Providers (Ctrl+G Ctrl+R) to configure one.",
@@ -2467,7 +2467,7 @@ public sealed class CodeAltaAppTests
 
         Assert.AreEqual("[dim]Context[/] [warning]78%[/]", indicator);
         StringAssert.Contains(markdown, "Compaction pressure: 200,535 / 258,400 input tokens (77.6%)");
-        StringAssert.Contains(markdown, "Thread total: total 33,641,433");
+        StringAssert.Contains(markdown, "Session total: total 33,641,433");
     }
 
     [TestMethod]
@@ -2658,7 +2658,7 @@ public sealed class CodeAltaAppTests
             StringAssert.Contains(markdown, "# Codex context usage");
             StringAssert.Contains(markdown, "## Context usage: 12 messages");
             StringAssert.Contains(markdown, "## Limits");
-            StringAssert.Contains(markdown, "## Backend-specific details");
+            StringAssert.Contains(markdown, "## Provider-specific details");
             StringAssert.Contains(markdown, "50,000 / 120,000 input tokens (41.7%)");
             StringAssert.Contains(markdown, "Indicative model limits: context window 400,000 tokens; max output 128,000 tokens");
             StringAssert.Contains(markdown, "Last turn: input 1,000");
@@ -2902,7 +2902,7 @@ public sealed class CodeAltaAppTests
             projects,
             @"C:\Users\alexa\.alta");
 
-        Assert.AreEqual(@"Global thread · C:\Users\alexa\.alta", globalSummary);
+        Assert.AreEqual(@"Global session · C:\Users\alexa\.alta", globalSummary);
         Assert.AreEqual(@"CodeAlta · C:\code\CodeAlta", projectSummary);
         Assert.AreEqual("Internal · CodeAlta", internalSummary);
     }

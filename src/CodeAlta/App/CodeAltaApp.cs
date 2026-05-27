@@ -227,9 +227,9 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             new DelegatingThreadTabLifecyclePort(
                 () => ObserveUiTask(ActivateDraftTabAsync, "activate the draft tab"),
                 ActivateThreadSurface,
-                threadId => ObserveUiTask(() => CloseThreadTabAsync(threadId), "close the thread tab"),
+                threadId => ObserveUiTask(() => CloseThreadTabAsync(threadId), "close the session tab"),
                 () => ObserveUiTask(CloseDraftTabAsync, "close the draft tab"),
-                threadId => ObserveUiTask(() => _shellController.OpenThreadAsync(threadId, CancellationToken.None), "open the thread tab")),
+                threadId => ObserveUiTask(() => _shellController.OpenThreadAsync(threadId, CancellationToken.None), "open the session tab")),
             new DelegatingFileEditorTabPort(
                 tabId => _fileEditorWorkspaceCoordinator.GetFileTab(tabId),
                 tabId => _fileEditorWorkspaceCoordinator.SelectFileTab(tabId),
@@ -482,9 +482,9 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             PromptComposerViewModel = _promptComposerViewModel,
             WorkspaceCommandBindings = _shellCommandSurfaceCoordinator.BuildWorkspaceCommandBindings(),
             WorkspaceChromeController = ThreadWorkspaceChromeController.Create(() => CreateUsageComputedVisual(EnsureSessionUsagePresenter().BuildIndicatorVisual), () => ShellPluginFooterComposer.ComposeRegion(pb, PluginUiRegion.ThreadStatus), anchor => EnsureThreadInfoPresenter().TogglePopup(anchor), () => ObserveUiTask(OpenModelProvidersAsync, "open model providers")),
-            PromptComposerController = PromptComposerViewController.Create(acceptedPrompt => ObserveUiTask(() => _shellCommandSurfaceCoordinator.HandleAcceptedPromptAsync(acceptedPrompt), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync(steer: false), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.AbortSelectedThreadAsync(), "abort the selected thread"), openHelp, showPalette),
+            PromptComposerController = PromptComposerViewController.Create(acceptedPrompt => ObserveUiTask(() => _shellCommandSurfaceCoordinator.HandleAcceptedPromptAsync(acceptedPrompt), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync(steer: false), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.AbortSelectedThreadAsync(), "abort the selected session"), openHelp, showPalette),
             QueuedPromptController = QueuedPromptStripController.Create(markdown => (_threadWorkspaceView?.ThreadPaneLayout.App)?.Terminal.Clipboard.TrySetText(markdown), queuedPromptId => ObserveUiTask(() => _threadCommandCoordinator.ConvertSelectedThreadQueuedPromptToSteerAsync(queuedPromptId), "convert the queued prompt to steer"), pendingSteerId => _threadCommandCoordinator.DeleteSelectedThreadPendingSteer(pendingSteerId), queuedPromptId => _threadCommandCoordinator.DeleteSelectedThreadQueuedPrompt(queuedPromptId), (queuedPromptId, remainingCount) => _threadCommandCoordinator.UpdateSelectedThreadQueuedPromptCount(queuedPromptId, remainingCount), (queuedPromptId, text) => _threadCommandCoordinator.UpdateSelectedThreadQueuedPromptText(queuedPromptId, text), (onAccepted, placeholder) => ThreadWorkspaceView.CreateStyledPromptEditor(onAccepted, openHelp, showPalette, pfs, promptRoot, pec, placeholder)),
-            ModelProviderSelectorController = ModelProviderSelectorController.Create(OnModelProviderSelectionChanged, OnModelSelectionChanged, OnReasoningSelectionChanged, () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.CompactSelectedThreadAsync(), "compact the selected thread")),
+            ModelProviderSelectorController = ModelProviderSelectorController.Create(OnModelProviderSelectionChanged, OnModelSelectionChanged, OnReasoningSelectionChanged, () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.CompactSelectedThreadAsync(), "compact the selected session")),
             ThreadTabHostController = ThreadTabHostController.Create(selectedIndex => _threadTabStripCoordinator.ObserveBoundSelection(selectedIndex)),
             ProjectFileSearchService = pfs,
             GetPromptReferenceProjectRoot = promptRoot,
@@ -706,7 +706,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     {
         if (_threadStateCoordinator.OpenThread(threadId) == OpenThreadResult.NotFound)
         {
-            SetStatus($"Thread '{threadId}' was not found.", false, StatusTone.Warning);
+            SetStatus($"Session '{threadId}' was not found.", false, StatusTone.Warning);
             return;
         }
 
@@ -726,14 +726,14 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             _threadStateCoordinator.Selection.Target is not WorkspaceTarget.Thread ||
             GetSelectedThread() is not { } thread)
         {
-            SetStatus("Open a thread tab before navigating messages.", false, StatusTone.Warning);
+            SetStatus("Open a session tab before navigating messages.", false, StatusTone.Warning);
             return Task.CompletedTask;
         }
 
         var tab = EnsureThreadTab(thread);
         if (!tab.Timeline.HasNavigableMessages)
         {
-            SetStatus("No user or assistant messages to navigate in this thread.", false, StatusTone.Info);
+            SetStatus("No user or assistant messages to navigate in this session.", false, StatusTone.Info);
             return Task.CompletedTask;
         }
 

@@ -93,7 +93,7 @@ internal static class ThreadInfoReportBuilder
                 AddFact(facts, "Source", codex.Source);
                 AddFact(facts, "Status", codex.Status);
                 AddFact(facts, "Persistence", codex.IsEphemeral ? "Ephemeral" : "Persisted on disk");
-                AddFact(facts, "Thread name", codex.ThreadName);
+                AddFact(facts, "Session name", codex.ThreadName);
                 break;
 
             case CopilotSessionMetadataDetails copilot:

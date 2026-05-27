@@ -272,7 +272,7 @@ internal sealed class PromptComposerView
         {
             var isAbort = promptComposerViewModel.CanAbort;
             var icon = isAbort ? $"{NerdFont.MdSquare}" : $"{NerdFont.MdSend}";
-            var tooltipText = isAbort ? "Abort the selected thread run." : "Send the current prompt.";
+            var tooltipText = isAbort ? "Abort the selected session run." : "Send the current prompt.";
             var action = isAbort ? abortThread : sendPrompt;
             var tone = isAbort ? ControlTone.Error : ControlTone.Success;
             var isEnabled = isAbort ? promptComposerViewModel.CanAbort : promptComposerViewModel.CanSend;

@@ -1,7 +1,7 @@
 namespace CodeAlta.LiveTool;
 
 /// <summary>
-/// Determines whether the host can inject the <c>alta</c> agent tool into a backend session.
+/// Determines whether the host can inject the <c>alta</c> agent tool into sessions for a provider/runtime id.
 /// </summary>
 public interface IAltaSessionToolBackendPolicy
 {

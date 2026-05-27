@@ -170,9 +170,9 @@ Merge order is predictable:
 3. user `request.remove_headers` / `request.remove_extra_body` removals for inherited defaults;
 4. user `request.headers` and `request.extra_body`;
 5. existing top-level `extra_body` for OpenAI-compatible providers;
-6. backend-owned authentication headers, which cannot be removed or replaced by request config.
+6. provider-owned authentication headers, which cannot be removed or replaced by request config.
 
-Header names such as `Authorization`, `api-key`, and `x-api-key` are reserved for backend authentication. Protocol traces redact common secret-bearing header names (`Authorization`, `*-key`, `*token*`, `*secret*`, and related names).
+Header names such as `Authorization`, `api-key`, and `x-api-key` are reserved for provider authentication. Protocol traces redact common secret-bearing header names (`Authorization`, `*-key`, `*token*`, `*secret*`, and related names).
 
 ```toml
 [providers.openrouter]

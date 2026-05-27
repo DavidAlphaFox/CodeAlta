@@ -355,7 +355,7 @@ internal static class SessionUsageFormatter
         {
             AgentUsageScope.CurrentWindow => "Current window",
             AgentUsageScope.LastOperation => "Last operation",
-            AgentUsageScope.ThreadTotal => "Thread total",
+            AgentUsageScope.ThreadTotal => "Session total",
             AgentUsageScope.Compaction => "Compaction",
             AgentUsageScope.Truncation => "Truncation",
             AgentUsageScope.RateLimitOnly => "Rate-limit only",
@@ -494,9 +494,9 @@ internal static class SessionUsageFormatter
             codex.TotalUsage is not null)
         {
             builder.AppendLine()
-                .AppendLine("## Backend-specific details");
+                .AppendLine("## Provider-specific details");
             appended = true;
-            builder.Append("- Thread total: ")
+            builder.Append("- Session total: ")
                 .AppendLine(FormatCodexTokenUsage(codex.TotalUsage));
         }
 
@@ -506,7 +506,7 @@ internal static class SessionUsageFormatter
             if (!appended)
             {
                 builder.AppendLine()
-                    .AppendLine("## Backend-specific details");
+                    .AppendLine("## Provider-specific details");
             }
 
             if (copilot.LastCompaction is { } compaction)

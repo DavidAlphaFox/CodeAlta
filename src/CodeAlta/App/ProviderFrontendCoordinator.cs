@@ -462,7 +462,7 @@ internal sealed class ProviderFrontendCoordinator
             case ModelProviderAvailability.Ready:
                 result = new ProviderTestResult(
                     true,
-                    $"Using active provider backend · {state.Models.Count} model(s) discovered.",
+                    $"Using active model provider · {state.Models.Count} model(s) discovered.",
                     state.Models.Count);
                 return true;
             case ModelProviderAvailability.Probing:
@@ -492,7 +492,7 @@ internal sealed class ProviderFrontendCoordinator
 
         result = new ProviderModelListResult(
             true,
-            $"Using active provider backend · {state.Models.Count} model(s) available.",
+            $"Using active model provider · {state.Models.Count} model(s) available.",
             state.Models);
         return true;
     }

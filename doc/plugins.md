@@ -116,7 +116,7 @@ Open plugin management with `Ctrl+G Ctrl+N`, `/plugins`, `/plugin`, or the comma
 `PluginBase` exposes virtual methods for:
 
 - startup hooks and command-line contributions;
-- shell, prompt, and selected-thread commands;
+- shell, prompt, and selected-session commands;
 - agent tools;
 - `alta` live command roots;
 - static and dynamic system/developer prompt parts;
@@ -126,7 +126,7 @@ Open plugin management with `Ctrl+G Ctrl+N`, `/plugins`, `/plugin`, or the comma
 - normalized agent-event observers;
 - compaction hooks;
 - UI contributions such as status rows, visuals, dialogs, and renderers;
-- transient thread-event projections;
+- transient session/timeline projections (current APIs still use some legacy `Thread` names);
 - resource roots for skills, system prompts, templates, themes, and MCP manifests;
 - plugin-lifetime background tasks through `IPluginTaskService`.
 
@@ -174,9 +174,9 @@ public override IEnumerable<PluginResourceContribution> GetResources()
 
 Relative paths are resolved from the plugin package directory. Project-scoped plugin resources are visible only in matching project scope.
 
-## Thread-event projections
+## Session-event projections
 
-Plugins can contribute transient derived timeline cards through `GetThreadEventProjections()`. Projections are replayed from canonical normalized event history and can also run live as new events arrive. They may provide Markdown fallback content, XenoAtom visuals, collapsed detail sections, and dynamic content that starts with a placeholder and refreshes after background computation.
+Plugins can contribute transient derived timeline cards through `GetThreadEventProjections()` (legacy API name). Projections are replayed from canonical normalized event history and can also run live as new events arrive. They may provide Markdown fallback content, XenoAtom visuals, collapsed detail sections, and dynamic content that starts with a placeholder and refreshes after background computation.
 
 Projection output is not written to canonical conversation history. Store plugin-owned durable state through `IPluginStateStore` when a plugin needs persistence.
 
@@ -197,7 +197,7 @@ The statistics plugin is packaged as `CodeAlta.Plugin.Statistics`, is enabled by
 enabled = false
 ```
 
-It contributes transient per-turn/session statistics projections and a `statistics` live-tool command root without writing plugin messages into canonical thread history.
+It contributes transient per-turn/session statistics projections and a `statistics` live-tool command root without writing plugin messages into canonical session history.
 
 ## Troubleshooting
 

@@ -303,7 +303,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Creates a new global thread session and returns its descriptor.
+    /// Creates a new global session and returns its descriptor.
     /// </summary>
     public async Task<SessionViewDescriptor> CreateGlobalThreadAsync(
         SessionExecutionOptions options,
@@ -312,7 +312,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         => await CreateGlobalThreadAsync(options, title, parentThreadId: null, createdBy: null, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    /// Creates a new global thread session with optional durable lineage and returns its descriptor.
+    /// Creates a new global session with optional durable lineage and returns its descriptor.
     /// </summary>
     public async Task<SessionViewDescriptor> CreateGlobalThreadAsync(
         SessionExecutionOptions options,
@@ -357,7 +357,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Creates a new project thread session and returns its descriptor.
+    /// Creates a new project session and returns its descriptor.
     /// </summary>
     public async Task<SessionViewDescriptor> CreateProjectThreadAsync(
         ProjectDescriptor project,
@@ -367,7 +367,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         => await CreateProjectThreadAsync(project, options, title, parentThreadId: null, createdBy: null, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    /// Creates a new project thread session with optional durable lineage and returns its descriptor.
+    /// Creates a new project session with optional durable lineage and returns its descriptor.
     /// </summary>
     public async Task<SessionViewDescriptor> CreateProjectThreadAsync(
         ProjectDescriptor project,
@@ -1066,7 +1066,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets sanitized history for an active thread session.
+    /// Gets sanitized history for an active session.
     /// </summary>
     public async Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(string threadId, CancellationToken cancellationToken = default)
     {

@@ -6,7 +6,7 @@ title: CodeAlta Principles
 
 CodeAlta is designed around a small set of product and engineering principles. They are meant to keep the terminal workspace efficient, inspectable, and practical for real development work as the feature set grows.
 
-**Efficient. Transparent. Keyboard-first. Thread-oriented. Provider-agnostic. Native .NET. Error-aware. Pluggable.**
+**Efficient. Transparent. Keyboard-first. Session-oriented. Provider-agnostic. Native .NET. Error-aware. Pluggable.**
 
 ## <span class="principle-doc-icon" style="--accent: #f472ff; --accent-2: #38bdf8;"><i class="bi bi-arrows-collapse"></i></span> Efficient interface
 
@@ -46,7 +46,7 @@ CodeAlta should keep agent execution inspectable. Verbose details can be collaps
 - System prompts should be visible and expandable.
 - System-prompt changes should be able to show diffs.
 - Compaction events should be represented explicitly and their summaries should be inspectable.
-- Model and provider changes should be visible in the thread history.
+- Model and provider changes should be visible in session history.
 - Tool results and modified files should be inspectable after the fact.
 - Usage and context information should be available without leaving the app.
 
@@ -63,33 +63,33 @@ CodeAlta should support normal work from the keyboard, with mouse interactions a
 
 **What this means in practice:**
 
-- Open management dialogs such as providers, models, plugins, settings, logs, usage, thread reports, and theme or workspace preferences.
-- Move focus between the sidebar, prompt, model selector, editor tabs, and thread tabs.
-- Switch tabs and open or reopen project and thread surfaces.
+- Open management dialogs such as providers, models, plugins, settings, logs, usage, session reports, and theme or workspace preferences.
+- Move focus between the sidebar, prompt, model selector, editor tabs, and session tabs.
+- Switch tabs and open or reopen project and session surfaces.
 - Navigate the timeline by previous or next user or assistant message, first message, and latest message.
 - Open files, attach project files and folders to prompts, and inspect editor tabs.
-- Send, queue, steer, abort, compact, or delegate thread work.
+- Send, queue, steer, abort, compact, or delegate session work.
 - Close popups and return to the prompt without rebuilding the working context.
 
-## <span class="principle-doc-icon" style="--accent: #22d3ee; --accent-2: #a78bfa;"><i class="bi bi-diagram-3"></i></span> Thread-oriented workspace
+## <span class="principle-doc-icon" style="--accent: #22d3ee; --accent-2: #a78bfa;"><i class="bi bi-diagram-3"></i></span> Session-oriented workspace
 
-CodeAlta should model agent work as durable threads rather than disposable chat scrollback. Threads should keep history, provider state, queue state, journals, and project scope together, including parent and child sessions when multiple agents cooperate on the same goal.
+CodeAlta should model agent work as durable sessions rather than disposable chat scrollback. Sessions keep history, provider state, queue state, journals, and project scope together, including parent and child relationships when multiple agents cooperate on the same goal.
 
 <figure class="principle-doc-shot">
   <a href="{{site.basepath}}/img/alta-theme-default.png" target="_blank" rel="noopener">
-    <img src="{{site.basepath}}/img/alta-theme-default.png" alt="CodeAlta default theme showing durable workspace threads and timeline state" loading="lazy">
+    <img src="{{site.basepath}}/img/alta-theme-default.png" alt="CodeAlta default theme showing durable workspace sessions and timeline state" loading="lazy">
   </a>
-  <figcaption>Durable project threads keep navigation, history, provider state, queues, and prompt context together across the workspace.</figcaption>
+  <figcaption>Durable project sessions keep navigation, history, provider state, queues, and prompt context together across the workspace.</figcaption>
 </figure>
 
 **What this means in practice:**
 
-- Global threads should support planning, cross-project coordination, and multi-agent delegation.
-- Project threads should keep project context, prompt history, provider state, queues, and session journals together.
+- Global sessions should support planning, cross-project coordination, and multi-agent delegation.
+- Project sessions should keep project context, prompt history, provider state, queues, and session journals together.
 - Closing a tab should not have to stop running work.
-- Delegated child sessions should be visible and able to report back to the parent thread.
-- Parent threads should make it possible to compare, merge, or route results from multiple agents without losing which session produced which answer.
-- Busy threads should preserve prompts through queues and steering fallback behavior.
+- Delegated child sessions should be visible and able to report back to the parent session.
+- Parent sessions should make it possible to compare, merge, or route results from multiple agents without losing which child session produced which answer.
+- Busy sessions should preserve prompts through queues and steering fallback behavior.
 
 ## <span class="principle-doc-icon" style="--accent: #fb923c; --accent-2: #38bdf8;"><i class="bi bi-cpu"></i></span> Provider-agnostic runtime
 

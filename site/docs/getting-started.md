@@ -156,7 +156,7 @@ When the selected model supports image input, copy an image to the clipboard and
 
 <figure class="my-4">
   <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-help.png" alt="CodeAlta help dialog listing common shortcuts and commands" loading="lazy">
-  <figcaption class="small text-secondary mt-2">Open help with <code>F1</code>, <code>/help</code>, or <code>?</code> whenever you need a reminder of workspace, provider, thread, and dialog shortcuts.</figcaption>
+  <figcaption class="small text-secondary mt-2">Open help with <code>F1</code>, <code>/help</code>, or <code>?</code> whenever you need a reminder of workspace, provider, session, and dialog shortcuts.</figcaption>
 </figure>
 
 | Action | Shortcut or command |
@@ -174,10 +174,10 @@ When the selected model supports image input, copy an image to the clipboard and
 | Open logs | `Ctrl+G Ctrl+L` or `/logs` |
 | Toggle navigator | `Ctrl+G Ctrl+G` |
 | Context usage popup | `Ctrl+G Ctrl+U` |
-| Thread report | `Ctrl+G Ctrl+T` |
-| Steer a running thread | `Ctrl+Enter` |
+| Session report | `Ctrl+G Ctrl+T` |
+| Steer a running session | `Ctrl+Enter` |
 | Delegate to another session | `F7` |
-| Compact idle thread | `F11` |
+| Compact idle session | `F11` |
 | Clear prompt queue | `F10` |
 | Previous/next user or assistant message | `F3` / `F4` |
 | Switch tabs | `Ctrl+Alt+Left` / `Ctrl+Alt+Right` |

@@ -1,26 +1,26 @@
 # Lightweight orchestration actor model
 
-CodeAlta orchestration uses small internal mailbox actors rather than a general actor framework. The goal is single-writer per-thread mutation, bounded event flow, and testable shutdown/error behavior without exposing actor concepts through public APIs.
+CodeAlta orchestration uses small internal mailbox actors rather than a general actor framework. The goal is single-writer per-session mutation, bounded event flow, and testable shutdown/error behavior without exposing actor concepts through public APIs. Some internal type names still use `WorkThread` as legacy session-view terminology.
 
 ## Ownership boundaries
 
-- Public callers use `IWorkThreadOrchestrator`/runtime request records, thread ids, snapshots, handles, and events.
-- `WorkThreadActor`, `WorkThreadActorRegistry`, and `OrchestrationMailboxActor` are internal implementation details.
-- A thread actor owns same-thread command ordering, lifecycle cancellation, supervisor decisions, and mailbox cleanup.
-- Different thread actors may run independently; commands for one thread are serialized.
+- Public callers use runtime request records, session ids, snapshots, handles, and events.
+- `WorkThreadActor`, `WorkThreadActorRegistry`, and `OrchestrationMailboxActor` are internal implementation details with legacy names.
+- A session actor owns same-session command ordering, lifecycle cancellation, supervisor decisions, and mailbox cleanup.
+- Different session actors may run independently; commands for one session are serialized.
 - Frontend and plugin code must not mutate actor-owned state directly. Async completions and observer results are converted into commands/events first.
 
 ## Command and event naming
 
 - Mutating runtime APIs use named request records and return structured command results.
-- Orchestration events use stable thread ids and optional per-thread sequence numbers for frontend/plugin projection idempotency.
+- Orchestration events use stable session ids and optional per-session sequence numbers for frontend/plugin projection idempotency.
 - Lifecycle events identify session/run/queue transitions without requiring frontend tab state.
 - Plugin-derived events are transient projections; they do not become canonical persisted transcript entries.
 
 ## Plugin orchestration bridge
 
 - Plugin orchestration hooks live behind orchestration-layer adapter services, not in the TUI frontend.
-- Agent-event observers receive normalized `AgentEvent` values with project/thread/run scope and are dispatched in deterministic plugin order.
+- Agent-event observers receive normalized `AgentEvent` values with project/session/run scope and are dispatched in deterministic plugin order.
 - Derived event projections use one replay/live path so restored events and newly observed events produce equivalent plugin projection output.
 - Plugin observer/projection failures are diagnosed and isolated from the actor command path and from later plugins.
 
@@ -33,7 +33,7 @@ CodeAlta orchestration uses small internal mailbox actors rather than a general 
 ## Supervisor decisions
 
 - Validation failures fail the current command without stopping the actor.
-- Recoverable handler/backend/plugin failures are represented as structured command outcomes where possible.
+- Recoverable handler/provider/plugin failures are represented as structured command outcomes where possible.
 - Unrecoverable failures stop the actor, complete pending replies, and allow the registry to clean up the actor entry.
 
 ## Actor framework decision

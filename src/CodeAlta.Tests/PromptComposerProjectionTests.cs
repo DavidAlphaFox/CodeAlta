@@ -37,7 +37,7 @@ public sealed class PromptComposerProjectionTests
         Assert.IsFalse(projection.CanClearQueue);
         Assert.IsTrue(projection.CanAlwaysEnqueue);
         Assert.IsTrue(projection.HasUnavailableStatus);
-        Assert.AreEqual("Reconnecting 'Review startup' to Codex. Prompt sending is temporarily unavailable.", projection.UnavailableStatusMessage);
+        Assert.AreEqual("Reconnecting session 'Review startup' to Codex. Prompt sending is temporarily unavailable.", projection.UnavailableStatusMessage);
         Assert.AreEqual(StatusTone.Info, projection.UnavailableStatusTone);
     }
 
@@ -68,7 +68,7 @@ public sealed class PromptComposerProjectionTests
             selectedThreadCanAbort: false);
 
         Assert.AreEqual(
-            "Start a thread. [/] commands, [?] help, [@] to reference a project file, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
+            "Start a session. [/] commands, [?] help, [@] to reference a project file, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
             projection.Placeholder);
         Assert.IsTrue(projection.IsEnabled);
         Assert.IsTrue(projection.CanSend);
@@ -125,10 +125,10 @@ public sealed class PromptComposerProjectionTests
             promptPlaceholderContributions: placeholderContributions);
 
         Assert.AreEqual(
-            "Start a thread. [/] commands, [?] help, [@] to reference a project file, [#] to reference a GitHub issue, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
+            "Start a session. [/] commands, [?] help, [@] to reference a project file, [#] to reference a GitHub issue, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
             draftProjection.Placeholder);
         Assert.AreEqual(
-            "Continue the selected thread. [/] commands, [?] help, [@] to reference a project file, [#] to reference a GitHub issue, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
+            "Continue the selected session. [/] commands, [?] help, [@] to reference a project file, [#] to reference a GitHub issue, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
             threadProjection.Placeholder);
     }
 
@@ -150,7 +150,7 @@ public sealed class PromptComposerProjectionTests
             selectedThreadCanCompact: false,
             selectedThreadCanAbort: false);
 
-        Assert.AreEqual("Configure model providers (Ctrl+G Ctrl+R) to start a thread...", projection.Placeholder);
+        Assert.AreEqual("Configure model providers (Ctrl+G Ctrl+R) to start a session...", projection.Placeholder);
         Assert.IsTrue(projection.HasUnavailableStatus);
         Assert.AreEqual("No model provider is ready. Open Model Providers (Ctrl+G Ctrl+R) to configure one.", projection.UnavailableStatusMessage);
         Assert.AreEqual(StatusTone.Warning, projection.UnavailableStatusTone);
@@ -177,7 +177,7 @@ public sealed class PromptComposerProjectionTests
             selectedThreadCanAbort: false);
 
         Assert.AreEqual(
-            "Continue the selected thread. [/] commands, [?] help, [@] to reference a project file, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
+            "Continue the selected session. [/] commands, [?] help, [@] to reference a project file, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
             projection.Placeholder);
         Assert.IsTrue(projection.CanSend);
         Assert.IsTrue(projection.CanSteer);
@@ -267,7 +267,7 @@ public sealed class PromptComposerProjectionTests
             selectedThreadCanAbort: false);
 
         Assert.AreEqual(
-            "Start a thread. [/] commands, [?] help, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
+            "Start a session. [/] commands, [?] help, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
             projection.Placeholder);
         Assert.IsTrue(projection.CanCloseTab);
     }

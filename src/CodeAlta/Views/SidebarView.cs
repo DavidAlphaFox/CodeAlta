@@ -93,7 +93,7 @@ internal sealed class SidebarView
         [
             CreateToolbarButton(
                 () => NerdFont.MdRefresh,
-                "Refresh projects and threads",
+                "Refresh projects and sessions",
                 refreshCatalog),
             CreateToolbarButton(
                 () => viewModel.SortMode == NavigatorProjectSortMode.Name

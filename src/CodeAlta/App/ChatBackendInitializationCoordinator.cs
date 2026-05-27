@@ -204,7 +204,7 @@ internal sealed class ChatBackendInitializationCoordinator
             {
                 ApplyProviderState(providerState, state);
                 LogInfo(
-                    $"Chat backend state updated provider={providerState.ProviderId.Value} displayName={state.DisplayName} availability={state.Availability} models={state.Models.Count} status={state.StatusMessage}");
+                    $"Model provider state updated provider={providerState.ProviderId.Value} displayName={state.DisplayName} availability={state.Availability} models={state.Models.Count} status={state.StatusMessage}");
                 PublishProviderStateChanged(providerState.ProviderId);
             });
 
@@ -231,11 +231,11 @@ internal sealed class ChatBackendInitializationCoordinator
         if (CanReuseLoadedBackendState(providerId, state))
         {
             LogInfo(
-                $"Skipping chat backend refresh for loaded process-backed backend provider={providerId.Value} displayName={state.DisplayName} models={state.Models.Count}");
+                $"Skipping model provider refresh for loaded process-backed provider provider={providerId.Value} displayName={state.DisplayName} models={state.Models.Count}");
             return;
         }
 
-        LogInfo($"Refreshing chat backend provider={providerId.Value} displayName={state.DisplayName}");
+        LogInfo($"Refreshing model provider provider={providerId.Value} displayName={state.DisplayName}");
         _dispatchToUi(
             () =>
             {
@@ -261,7 +261,7 @@ internal sealed class ChatBackendInitializationCoordinator
                 {
                     ApplyProviderState(providerState, state);
                     LogInfo(
-                        $"Chat backend state updated provider={providerId.Value} displayName={state.DisplayName} availability={state.Availability} models={state.Models.Count} status={state.StatusMessage}");
+                        $"Model provider state updated provider={providerId.Value} displayName={state.DisplayName} availability={state.Availability} models={state.Models.Count} status={state.StatusMessage}");
                     PublishProviderStateChanged(providerId);
                 });
         }
@@ -270,7 +270,7 @@ internal sealed class ChatBackendInitializationCoordinator
             var (availability, statusMessage) = ClassifyFailure(state, ex);
             LogWarn(
                 ex,
-                $"Chat backend initialization failed provider={providerId.Value} displayName={state.DisplayName} classifiedAvailability={availability} status={statusMessage}");
+                $"Model provider initialization failed provider={providerId.Value} displayName={state.DisplayName} classifiedAvailability={availability} status={statusMessage}");
             _dispatchToUi(
                 () =>
                 {

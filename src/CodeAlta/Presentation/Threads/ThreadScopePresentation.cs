@@ -14,12 +14,12 @@ internal static class ThreadScopePresentation
 
         return thread.Kind switch
         {
-            WorkThreadKind.GlobalThread => $"Global thread · {globalRoot}",
+            WorkThreadKind.GlobalThread => $"Global session · {globalRoot}",
             WorkThreadKind.ProjectThread when projects.FirstOrDefault(project => string.Equals(project.Id, thread.ProjectRef, StringComparison.OrdinalIgnoreCase)) is { } project
                 => $"{project.DisplayName} · {project.ProjectPath}",
             WorkThreadKind.InternalThread when projects.FirstOrDefault(project => string.Equals(project.Id, thread.ProjectRef, StringComparison.OrdinalIgnoreCase)) is { } internalProject
                 => $"Internal · {internalProject.DisplayName}",
-            WorkThreadKind.InternalThread => "Internal thread",
+            WorkThreadKind.InternalThread => "Internal session",
             _ => thread.WorkingDirectory,
         };
     }

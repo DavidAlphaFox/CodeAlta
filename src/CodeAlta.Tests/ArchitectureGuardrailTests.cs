@@ -144,7 +144,7 @@ public sealed class ArchitectureGuardrailTests
 
         Assert.IsTrue(guideSource.Contains("## Architecture Boundaries", StringComparison.Ordinal));
         Assert.IsTrue(guideSource.Contains("## Runtime Orchestration Concurrency", StringComparison.Ordinal));
-        Assert.IsTrue(guideSource.Contains("per-thread mailbox/actor-style command processors", StringComparison.Ordinal));
+        Assert.IsTrue(guideSource.Contains("per-session mailbox/actor-style command processors", StringComparison.Ordinal));
         Assert.IsTrue(guideSource.Contains("Do not add Akka.NET", StringComparison.Ordinal));
     }
 
@@ -1525,7 +1525,7 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsTrue(normalizedSource.Contains("usageIndicator,\n            threadInfoButton,\n            promptComposerView.ExpandButton,\n            promptComposerView.SendButton,", StringComparison.Ordinal));
         Assert.IsTrue(promptComposerSource.Contains("var icon = isAbort ? $\"{NerdFont.MdSquare}\" : $\"{NerdFont.MdSend}\";", StringComparison.Ordinal));
         Assert.IsTrue(promptComposerSource.Contains("var tone = isAbort ? ControlTone.Error : ControlTone.Success;", StringComparison.Ordinal));
-        Assert.IsTrue(promptComposerSource.Contains("var tooltipText = isAbort ? \"Abort the selected thread run.\" : \"Send the current prompt.\";", StringComparison.Ordinal));
+        Assert.IsTrue(promptComposerSource.Contains("var tooltipText = isAbort ? \"Abort the selected session run.\" : \"Send the current prompt.\";", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -1567,7 +1567,7 @@ public sealed class ArchitectureGuardrailTests
     {
         var dialogSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ProjectThreadsDialog.cs"));
 
-        Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🧵 Thread\")", StringComparison.Ordinal));
+        Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🧵 Session\")", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🤖 Provider\")", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🕒 Updated\")", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"💬 Messages\")", StringComparison.Ordinal));

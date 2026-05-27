@@ -89,7 +89,7 @@ internal static class ShellHelpContentBuilder
         {
             ShellCommandHelpCategory.General => "General",
             ShellCommandHelpCategory.Prompt => "Prompt",
-            ShellCommandHelpCategory.Thread => "Thread",
+            ShellCommandHelpCategory.Thread => "Session",
             ShellCommandHelpCategory.Navigation => "Navigation",
             ShellCommandHelpCategory.Inspection => "Inspection",
             _ => category.ToString()

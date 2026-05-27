@@ -14,9 +14,9 @@ CodeAlta keeps user-owned durable state under a global root and project-local `.
 | `machines/` | Catalog model | Machine-specific override profile root. |
 | `agents/` | Catalog model | File-backed agent-definition root used by host-owned coordinator setup. |
 | `cache/` | Process/runtime services | Machine-local cache root, including refreshed model metadata and plugin build cache. |
-| `sessions/` | Local agent runtime and thread catalog | Date-sharded session journals and optional protocol traces. |
-| `saved_prompts/` | Frontend prompt draft service | Unsent per-thread prompt drafts. |
-| `ui-state.yaml` | Frontend view-state service | Open/selected tabs, thread/model preferences, theme, and shell view state. |
+| `sessions/` | CodeAlta session runtime and session catalog | Date-sharded session journals and optional protocol traces. |
+| `saved_prompts/` | Frontend prompt draft service | Unsent per-session prompt drafts. |
+| `ui-state.yaml` | Frontend view-state service | Open/selected tabs, session/model preferences, theme, and shell view state. |
 | `plugins/` | Plugin runtime | User-scoped source plugin packages. |
 | `skills/` | Skill catalog | User-scoped CodeAlta skill roots. |
 | `threads/internal/` | Work-thread catalog | Internal thread linkage descriptors still read by the catalog. |
@@ -71,7 +71,7 @@ Provider registrations are skipped at startup when required credentials or provi
 
 ### Project overrides
 
-Project-local config can override effective chat/provider behavior for that project. The frontend also persists thread-specific provider/model/reasoning selections in `ui-state.yaml`, so an existing thread can keep its selected runtime after global defaults change.
+Project-local config can override effective chat/provider behavior for that project. The frontend also persists session-specific provider/model/reasoning selections in `ui-state.yaml`, so an existing session view can keep its selected runtime after global defaults change.
 
 ## Project catalog
 
@@ -79,22 +79,22 @@ Project-local config can override effective chat/provider behavior for that proj
 
 A project descriptor includes stable id, slug, display name, project path, archive/visibility state, and timestamps. Opening a folder upserts a descriptor for that path, then the shell selects it in the sidebar. Filesystem roots are valid project paths: because they have no leaf folder name, the catalog stores a safe synthetic project `name` and uses the normalized root path (for example `D:\` or `/`) as the sidebar display name.
 
-## Work-thread and session storage
+## Session and session-view storage
 
 CodeAlta uses two related records for active work:
 
-- **Work-thread descriptors** are catalog/runtime metadata for global, project, and internal threads. They carry title, project reference, provider/model/reasoning preferences, parent/created-by attribution, and last-active timestamps.
-- **Agent session journals** are local-runtime JSONL files under `~/.alta/sessions/yyyy/MM/dd/<session-id>.jsonl`. They contain replayable normalized `AgentEvent` records plus raw snapshot events for `local.sessionSummary`, `local.sessionState`, `codealta.threadHeader`, and `codealta.threadState`.
+- **Session-view descriptors** are catalog/runtime metadata for global, project, and internal session views. They carry title, project reference, provider/model/reasoning preferences, parent/created-by attribution, and last-active timestamps. Some persisted readers and file names still use `WorkThread`/`ThreadId` for legacy compatibility.
+- **Agent session journals** are CodeAlta-owned JSONL files under `~/.alta/sessions/yyyy/MM/dd/<session-id>.jsonl`. They contain replayable normalized `AgentEvent` records plus raw snapshot events for `local.sessionSummary`, `local.sessionState`, `codealta.threadHeader`, and `codealta.threadState`.
 
-`WorkThreadJournalStore` reads and writes CodeAlta thread headers/state in the same journal used by the local agent runtime. This avoids maintaining separate provider-bound state files for the same thread.
+`WorkThreadJournalStore` still reads and writes the legacy header/state event names in the same journal used by the local agent runtime. This avoids maintaining separate provider-bound state files for the same session while preserving existing user data.
 
 Optional protocol traces are written to `~/.alta/sessions/traces/<session-id>.trace` only when a provider has tracing enabled. Credential headers are redacted, but trace files can still contain sensitive prompts, outputs, tool arguments, and streamed protocol updates.
 
 ## Prompt drafts and view state
 
-Unsent per-thread prompts are stored under `~/.alta/saved_prompts/` so closing a tab or restarting the app does not discard edited drafts. The frontend stores view state in `~/.alta/ui-state.yaml`, including open/selected tabs, theme and navigator settings, and thread-specific model preferences.
+Unsent per-session prompts are stored under `~/.alta/saved_prompts/` so closing a tab or restarting the app does not discard edited drafts. The frontend stores view state in `~/.alta/ui-state.yaml`, including open/selected tabs, theme and navigator settings, and session-specific model preferences.
 
-`ShellStateStore` is a UI-thread projection of currently open shell state; it is not a replacement for the durable catalog, session journals, or runtime-owned thread state.
+`ShellStateStore` is a UI-thread projection of currently open shell state; it is not a replacement for the durable catalog, session journals, or runtime-owned session state.
 
 ## Plugin and skill state
 

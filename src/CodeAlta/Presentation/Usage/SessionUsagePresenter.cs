@@ -284,7 +284,7 @@ internal sealed class SessionUsagePresenter
         if (usage.Details is CodexSessionUsageDetails codex &&
             codex.TotalUsage is not null)
         {
-            AddSectionHeader(stack, "Backend-specific details");
+            AddSectionHeader(stack, "Provider-specific details");
             AddCodexUsageContent(stack, codex);
             added = true;
         }
@@ -294,7 +294,7 @@ internal sealed class SessionUsagePresenter
         {
             if (!added)
             {
-                AddSectionHeader(stack, "Backend-specific details");
+                AddSectionHeader(stack, "Provider-specific details");
             }
 
             AddCopilotUsageContent(stack, copilot);
@@ -324,7 +324,7 @@ internal sealed class SessionUsagePresenter
     {
         if (details.TotalUsage is not null)
         {
-            stack.Add(new Markup("[bold]Thread total[/]"));
+            stack.Add(new Markup("[bold]Session total[/]"));
             if (BuildCodexUsageChart(details.TotalUsage) is { } totalChart)
             {
                 stack.Add(totalChart);

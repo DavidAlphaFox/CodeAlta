@@ -72,7 +72,7 @@ The browser can show combined, current-project, or user/global scopes. It displa
 
 Available actions:
 
-- **Activate** loads a valid unshadowed skill into the selected local-runtime thread through `SessionRuntimeService`.
+- **Activate** loads a valid unshadowed skill into the selected CodeAlta session through `SessionRuntimeService`.
 - **Open SKILL.md** opens the selected skill document in the editor.
 - **Open related** opens selected files under `scripts/`, `references/`, or `assets/` for inspection/editing.
 - **New skill** scaffolds a skill under `<project>/.alta/skills/<name>/` when a project is selected, otherwise under `~/.alta/skills/<name>/`.
@@ -86,7 +86,7 @@ Managed sessions with the `alta` live tool use the singular `skill` command grou
 ```text
 alta skill list [--project <id|slug|path>]
 alta skill show <skill-name> [--project <id|slug|path>]
-alta skill activate <skill-name> --session <thread-id>
+alta skill activate <skill-name> --session <session-id>
 ```
 
 `alta skills activate` and `alta skills_activate` remain aliases for existing prompt text; prefer `alta skill activate` in new guidance. Activation uses the same runtime path as the UI and records the activation in the local session journal.

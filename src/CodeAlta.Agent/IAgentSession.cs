@@ -6,17 +6,17 @@ namespace CodeAlta.Agent;
 public interface IAgentSession : IAsyncDisposable
 {
     /// <summary>
-    /// Gets the backend identifier.
+    /// Gets the provider/runtime identifier carried by this session.
     /// </summary>
     AgentBackendId BackendId { get; }
 
     /// <summary>
-    /// Gets the backend session identifier.
+    /// Gets the durable CodeAlta session identifier.
     /// </summary>
     string SessionId { get; }
 
     /// <summary>
-    /// Gets the optional backend-managed workspace directory for this session.
+    /// Gets the optional provider/runtime workspace directory for this session.
     /// </summary>
     string? WorkspacePath { get; }
 
@@ -39,7 +39,7 @@ public interface IAgentSession : IAsyncDisposable
     /// </summary>
     /// <param name="options">Send options.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The backend run identifier (e.g. turn id or message id).</returns>
+    /// <returns>The provider/runtime run identifier (e.g. turn id or message id).</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
     Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default);
 
@@ -48,9 +48,9 @@ public interface IAgentSession : IAsyncDisposable
     /// </summary>
     /// <param name="options">Steering options.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The backend run identifier that accepted the steering input.</returns>
+    /// <returns>The provider/runtime run identifier that accepted the steering input.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the backend does not support steering.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the provider/runtime does not support steering.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is no active run to steer.</exception>
     Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default);
 
@@ -61,10 +61,10 @@ public interface IAgentSession : IAsyncDisposable
     Task AbortAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Triggers a manual session/thread compaction when supported by the backend.
+    /// Triggers a manual session compaction when supported by the provider/runtime.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <exception cref="NotSupportedException">Thrown when the backend does not support manual compaction.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the provider/runtime does not support manual compaction.</exception>
     Task CompactAsync(CancellationToken cancellationToken = default);
 
     /// <summary>

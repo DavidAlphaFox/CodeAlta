@@ -174,7 +174,7 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Shell.FocusPrompt",
             "Go to Prompt",
-            "Focus the current thread prompt editor.",
+            "Focus the current session prompt editor.",
             ShellCommandHelpCategory.General,
             ShellCommandScope.AnyShell,
             ShellCommandAvailability.Always,
@@ -205,7 +205,7 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Models.Browse",
             "Models",
-            "Browse provider models and enriched model metadata, then select one for the current prompt or thread.",
+            "Browse provider models and enriched model metadata, then select one for the current prompt or session.",
             ShellCommandHelpCategory.Inspection,
             ShellCommandScope.DraftOrThread,
             ShellCommandAvailability.Always,
@@ -239,23 +239,25 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Thread.SessionUsage",
             "Context Usage",
-            "Show context and usage details for the selected backend session.",
+            "Show context and usage details for the selected session.",
             ShellCommandHelpCategory.Inspection,
             ShellCommandScope.DraftOrThread,
             ShellCommandAvailability.Always,
             Sequence: SessionUsageShortcutSequence),
         new(
             "CodeAlta.Thread.Info",
-            "Thread Info",
-            "Show information about the selected thread.",
+            "Session Info",
+            "Show information about the selected session.",
             ShellCommandHelpCategory.Inspection,
             ShellCommandScope.ThreadOnly,
             ShellCommandAvailability.CanShowThreadInfo,
-            Sequence: ThreadInfoShortcutSequence),
+            Sequence: ThreadInfoShortcutSequence,
+            CommandName: "session_info",
+            Aliases: ["thread_info"]),
         new(
             "CodeAlta.Thread.MessagePrevious",
             "Previous Message",
-            "Scroll to the previous user prompt or assistant message in the selected thread.",
+            "Scroll to the previous user prompt or assistant message in the selected session.",
             ShellCommandHelpCategory.Navigation,
             ShellCommandScope.ThreadOnly,
             ShellCommandAvailability.CanShowThreadInfo,
@@ -265,7 +267,7 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Thread.MessageNext",
             "Next Message",
-            "Scroll to the next user prompt or assistant message in the selected thread.",
+            "Scroll to the next user prompt or assistant message in the selected session.",
             ShellCommandHelpCategory.Navigation,
             ShellCommandScope.ThreadOnly,
             ShellCommandAvailability.CanShowThreadInfo,
@@ -275,7 +277,7 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Thread.MessageFirst",
             "First Message",
-            "Scroll to the first user prompt or assistant message in the selected thread.",
+            "Scroll to the first user prompt or assistant message in the selected session.",
             ShellCommandHelpCategory.Navigation,
             ShellCommandScope.ThreadOnly,
             ShellCommandAvailability.CanShowThreadInfo,
@@ -285,7 +287,7 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Thread.MessageLast",
             "Last Message",
-            "Scroll to the bottom of the latest message in the selected thread.",
+            "Scroll to the bottom of the latest message in the selected session.",
             ShellCommandHelpCategory.Navigation,
             ShellCommandScope.ThreadOnly,
             ShellCommandAvailability.CanShowThreadInfo,
@@ -311,7 +313,7 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Thread.Steer",
             "Steer",
-            "Send an immediate steering instruction to the selected thread.",
+            "Send an immediate steering instruction to the selected session.",
             ShellCommandHelpCategory.Prompt,
             ShellCommandScope.ThreadOnly,
             ShellCommandAvailability.CanSteer,
@@ -321,7 +323,7 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Thread.Abort",
             "Abort",
-            "Abort the selected thread run.",
+            "Abort the selected session run.",
             ShellCommandHelpCategory.Thread,
             ShellCommandScope.ThreadOnly,
             ShellCommandAvailability.CanAbort,
@@ -330,7 +332,7 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Thread.CloseTab",
             "Close Tab",
-            "Close the current thread tab or draft tab.",
+            "Close the current session tab or draft tab.",
             ShellCommandHelpCategory.Thread,
             ShellCommandScope.DraftOrThread,
             ShellCommandAvailability.CanCloseTab,
@@ -357,7 +359,7 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Thread.ClearQueue",
             "Clear Queue",
-            "Clear all queued prompts for the selected thread.",
+            "Clear all queued prompts for the selected session.",
             ShellCommandHelpCategory.Thread,
             ShellCommandScope.ThreadOnly,
             ShellCommandAvailability.CanClearQueue,
@@ -365,7 +367,7 @@ internal static class ShellCommandCatalog
         new(
             "CodeAlta.Thread.Compact",
             "Compact",
-            "Compact the selected thread session when it is idle.",
+            "Compact the selected session when it is idle.",
             ShellCommandHelpCategory.Thread,
             ShellCommandScope.ThreadOnly,
             ShellCommandAvailability.CanCompact,

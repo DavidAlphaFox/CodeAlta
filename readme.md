@@ -1,6 +1,6 @@
 # CodeAlta [![ci](https://github.com/CodeAlta/CodeAlta/actions/workflows/ci.yml/badge.svg)](https://github.com/CodeAlta/CodeAlta/actions/workflows/ci.yml) [![NuGet](https://img.shields.io/nuget/v/CodeAlta.svg)](https://www.nuget.org/packages/CodeAlta/)
 
-CodeAlta is a terminal workspace for agentic coding. It brings model-provider setup, project navigation, prompt attachments, threaded sessions, delegated work, and trusted local plugins behind the `alta` command.
+CodeAlta is a terminal workspace for agentic coding. It brings model-provider setup, project navigation, prompt attachments, durable sessions, delegated work, and trusted local plugins behind the `alta` command.
 
 > CodeAlta is pre-release software. Configuration, screenshots, and extension APIs may change before `1.0`.
 
@@ -32,7 +32,7 @@ CodeAlta also expects a current [Nerd Fonts](https://www.nerdfonts.com/) patched
 - **Keyboard-first terminal workspace**: tabs, prompt editor, project sidebar, command discovery, model selectors, context status, and inspectable timeline cards stay in one TUI.
 - **Provider-neutral model setup**: configure hosted APIs, subscription-backed Codex/Copilot/xAI Grok, cloud providers, and compatible endpoints with the same provider workflow.
 - **Context-aware prompts**: attach files and folders with `@`, search GitHub issues with `#` in GitHub repositories, paste images when the selected model supports them, and inspect what context was sent.
-- **Threaded agent sessions**: keep project-scoped history, reopen sessions, queue prompts on busy threads, steer running work where supported, and compact long local-runtime conversations.
+- **Durable agent sessions**: keep project-scoped history in CodeAlta-owned journals, reopen sessions independently of provider startup, queue prompts on busy sessions, steer running work where supported, and compact long local-runtime conversations.
 - **Actionable operations**: model/provider tests, startup config recovery, usage details, logs, modified-file summaries, and tool input/output dialogs are built into the workspace.
 - **Trusted local extension points**: source plugins, Agent Skills-compatible skill folders, and the in-session `alta` live tool let you automate local workflows while keeping provenance visible.
 

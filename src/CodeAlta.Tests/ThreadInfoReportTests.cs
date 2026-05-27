@@ -88,7 +88,7 @@ public sealed class ThreadInfoReportTests
             Assert.AreEqual(1, report.LoadedSkills.Count);
             Assert.AreEqual("code-review", report.LoadedSkills[0].Name);
             CollectionAssert.AreEqual(
-                new[] { "Model provider", "Source", "Status", "Persistence", "Thread name" },
+                new[] { "Model provider", "Source", "Status", "Persistence", "Session name" },
                 report.BackendFacts.Select(static fact => fact.Label).ToArray());
         }
         finally
@@ -138,7 +138,7 @@ public sealed class ThreadInfoReportTests
 
         var markdown = ThreadInfoFormatter.BuildMarkdown(report);
 
-        StringAssert.Contains(markdown, "# Investigate startup thread info");
+        StringAssert.Contains(markdown, "# Investigate startup session info");
         StringAssert.Contains(markdown, "## Overview");
         StringAssert.Contains(markdown, "## Timing");
         StringAssert.Contains(markdown, "## Conversation");

@@ -102,8 +102,8 @@ namespace CodeAlta.Presentation.Prompting
             }
 
             return anyBackendReady
-                ? "Select a connected provider to start a thread..."
-                : "Configure model providers (Ctrl+G Ctrl+R) to start a thread...";
+                ? "Select a connected provider to start a session..."
+                : "Configure model providers (Ctrl+G Ctrl+R) to start a session...";
         }
 
         internal static string BuildPromptUnavailableStatusText(
@@ -115,7 +115,7 @@ namespace CodeAlta.Presentation.Prompting
             if (thread is not null)
             {
                 return availability == ModelProviderAvailability.Probing
-                    ? $"Reconnecting '{thread.Title}' to {providerDisplayName}. Prompt sending is temporarily unavailable."
+                    ? $"Reconnecting session '{thread.Title}' to {providerDisplayName}. Prompt sending is temporarily unavailable."
                     : $"'{thread.Title}' is unavailable because {providerDisplayName} is not connected.";
             }
 
@@ -135,8 +135,8 @@ namespace CodeAlta.Presentation.Prompting
             IReadOnlyList<string>? promptPlaceholderContributions = null)
         {
             var action = isContinuation
-                ? "Continue the selected thread."
-                : "Start a thread.";
+                ? "Continue the selected session."
+                : "Start a session.";
 
             return $"{action} {BuildReadyPromptGuidance(hasProjectContext, promptPlaceholderContributions)}";
         }

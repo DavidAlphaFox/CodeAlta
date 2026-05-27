@@ -131,7 +131,7 @@ internal sealed class ThreadCommandCoordinator
         {
             if (steer)
             {
-                _commandContext.SetShellStatus("Start the thread before steering it.", false, StatusTone.Warning);
+                _commandContext.SetShellStatus("Start the session before steering it.", false, StatusTone.Warning);
                 return;
             }
 
@@ -224,7 +224,7 @@ internal sealed class ThreadCommandCoordinator
         var thread = _threadSelection.GetSelectedThread();
         if (thread is null)
         {
-            _commandContext.SetShellStatus("Open a thread before compacting it.", false, StatusTone.Warning);
+            _commandContext.SetShellStatus("Open a session before compacting it.", false, StatusTone.Warning);
             return;
         }
 
@@ -243,7 +243,7 @@ internal sealed class ThreadCommandCoordinator
 
         if (thread.StartedAt is null)
         {
-            _commandContext.SetThreadStatus(tab, "Compaction is available after the thread has completed at least one run.", false, StatusTone.Warning);
+            _commandContext.SetThreadStatus(tab, "Compaction is available after the session has completed at least one run.", false, StatusTone.Warning);
             return;
         }
 
@@ -369,7 +369,7 @@ internal sealed class ThreadCommandCoordinator
         var thread = _threadSelection.GetSelectedThread();
         if (thread is null)
         {
-            _commandContext.SetShellStatus("Open a local/raw backend thread before activating a CodeAlta-managed skill.", false, StatusTone.Warning);
+            _commandContext.SetShellStatus("Open a CodeAlta-managed session before activating a CodeAlta-managed skill.", false, StatusTone.Warning);
             return;
         }
 
@@ -377,7 +377,7 @@ internal sealed class ThreadCommandCoordinator
         if (backendId == AgentBackendIds.Codex || backendId == AgentBackendIds.Copilot)
         {
             _commandContext.SetShellStatus(
-                "Codex and Copilot manage their own native skills; CodeAlta-managed skill activation is unavailable for this thread.",
+                "Codex and Copilot manage their own native skills; CodeAlta-managed skill activation is unavailable for this session.",
                 false,
                 StatusTone.Warning);
             return;

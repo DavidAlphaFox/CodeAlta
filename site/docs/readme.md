@@ -4,13 +4,13 @@ title: User Guide
 
 # User Guide
 
-CodeAlta is a terminal workspace for agentic coding. It brings together local project navigation, model-provider setup, prompt attachments, thread/session history, delegated work, and trusted plugins behind the `alta` command.
+CodeAlta is a terminal workspace for agentic coding. It brings together local project navigation, model-provider setup, prompt attachments, durable session history, delegated work, and trusted plugins behind the `alta` command.
 
 Start with the first two pages, then use the topic pages as a reference while you work.
 
 <figure class="my-4">
-  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-home.png" alt="CodeAlta home workspace showing the projects sidebar, active thread timeline, prompt editor, and provider footer" loading="lazy">
-  <figcaption class="small text-secondary mt-2">The main <code>alta</code> workspace keeps projects, threads, timeline entries, prompt drafting, provider state, and context usage in one terminal surface.</figcaption>
+  <img class="img-fluid rounded-4 shadow" src="{{site.basepath}}/img/alta-home.png" alt="CodeAlta home workspace showing the projects sidebar, active session timeline, prompt editor, and provider footer" loading="lazy">
+  <figcaption class="small text-secondary mt-2">The main <code>alta</code> workspace keeps projects, sessions, timeline entries, prompt drafting, provider state, and context usage in one terminal surface.</figcaption>
 </figure>
 
 ## Start here
@@ -21,8 +21,8 @@ Start with the first two pages, then use the topic pages as a reference while yo
 
 ## Daily workflow topics
 
-- [Threads and Delegation](threads.md): global vs project threads, multiple-agent delegation, prompt queues, steering, compaction, and the in-session `alta` live tool.
-- [CodeAlta Principles](principles.md): the efficient, transparent, keyboard-first, thread-oriented, provider-agnostic, native .NET, error-aware, and pluggable design manifesto.
+- [Sessions and Delegation](threads.md): global vs project sessions, multiple-agent delegation, prompt queues, steering, compaction, and the in-session `alta` live tool.
+- [CodeAlta Principles](principles.md): the efficient, transparent, keyboard-first, session-oriented, provider-agnostic, native .NET, error-aware, and pluggable design manifesto.
 - [Plugins](plugins.md): trusted source plugins, plugin scopes, management UI, safe mode, and a minimal plugin example.
 - [Troubleshooting](troubleshooting.md): logs, broken configuration, plugin startup failures, login flows, and single-instance behavior.
 

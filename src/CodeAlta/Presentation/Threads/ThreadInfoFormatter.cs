@@ -9,16 +9,16 @@ internal static class ThreadInfoFormatter
     {
         if (isLoading)
         {
-            return "Loading thread information from the active provider and history.";
+            return "Loading session information from the active provider and history.";
         }
 
         if (!string.IsNullOrWhiteSpace(errorMessage))
         {
-            return $"Failed to load thread information: {errorMessage}";
+            return $"Failed to load session information: {errorMessage}";
         }
 
         return report is null
-            ? "No thread is currently selected."
+            ? "No session is currently selected."
             : BuildMarkdown(report, includeTitle: false);
     }
 
@@ -31,7 +31,7 @@ internal static class ThreadInfoFormatter
         {
             builder.Append("# ")
                 .Append(report.ThreadTitle)
-                .AppendLine(" thread info");
+                .AppendLine(" session info");
         }
 
         AppendOverview(builder, report);
@@ -52,8 +52,8 @@ internal static class ThreadInfoFormatter
         }
 
         return isLoading
-            ? "Fetching current thread details."
-            : "Current selected thread.";
+            ? "Fetching current session details."
+            : "Current selected session.";
     }
 
     public static string FormatTimestamp(DateTimeOffset timestamp)
@@ -101,7 +101,7 @@ internal static class ThreadInfoFormatter
     {
         StartSection(builder, "Overview");
         builder.Append("- Provider: ").AppendLine(report.BackendName);
-        builder.Append("- Thread ID: `").Append(report.ThreadId).AppendLine("`");
+        builder.Append("- Session ID: `").Append(report.ThreadId).AppendLine("`");
         builder.Append("- Working directory: `").Append(report.WorkingDirectory).AppendLine("`");
         builder.Append("- Model: ").AppendLine(report.ModelName ?? "(default model)");
         builder.Append("- Reasoning: ").AppendLine(report.ReasoningEffort?.ToString() ?? "(default)");

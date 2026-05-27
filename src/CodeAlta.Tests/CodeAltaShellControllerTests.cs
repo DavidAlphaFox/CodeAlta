@@ -26,7 +26,7 @@ public sealed class CodeAltaShellControllerTests
 
         await controller.ReloadCatalogAsync(CancellationToken.None);
 
-        CollectionAssert.Contains(log, "Shell.Status:Refreshing project and thread catalog...:True:Info");
+        CollectionAssert.Contains(log, "Shell.Status:Refreshing project and session catalog...:True:Info");
         CollectionAssert.Contains(log, "Importer.Import");
         CollectionAssert.Contains(log, "ProjectCatalog.Load");
         CollectionAssert.Contains(log, "ThreadSource.List");
@@ -56,7 +56,7 @@ public sealed class CodeAltaShellControllerTests
         CollectionAssert.AreEqual(
             new[]
             {
-                "Shell.Status:Refreshing project and thread catalog...:True:Info",
+                "Shell.Status:Refreshing project and session catalog...:True:Info",
                 "Importer.Import",
                 "Shell.Status:Failed to refresh catalog: boom:False:Error",
             },
@@ -191,7 +191,7 @@ public sealed class CodeAltaShellControllerTests
     }
 
     [TestMethod]
-    public async Task InitializeAsync_LoadsCompleteSessionCatalogThroughSingleRecoverableSource()
+    public async Task InitializeAsync_LoadsManySessionsAcrossProvidersThroughSingleRecoverableSource()
     {
         var log = new List<string>();
         var codexBackendId = new AgentBackendId("codex");
@@ -199,10 +199,18 @@ public sealed class CodeAltaShellControllerTests
         var shell = new FakeShell(log);
         var project = new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" };
         var parent = CreateThread("thread-parent", backendId: codexBackendId.Value);
-        var children = Enumerable.Range(1, 8)
+        var providerIds = new[]
+        {
+            codexBackendId,
+            slowBackendId,
+            new AgentBackendId("anthropic"),
+            new AgentBackendId("openai"),
+        };
+        var children = Enumerable.Range(1, 64)
             .Select(index =>
             {
-                var child = CreateThread($"thread-child-{index}", backendId: codexBackendId.Value);
+                var providerId = providerIds[index % providerIds.Length];
+                var child = CreateThread($"thread-child-{index}", backendId: providerId.Value);
                 child.ParentThreadId = parent.ThreadId;
                 child.LastActiveAt = parent.LastActiveAt.AddMinutes(index);
                 return child;
@@ -216,18 +224,16 @@ public sealed class CodeAltaShellControllerTests
             new FakeProjectCatalogStore(log, [project]),
             threadSource,
             new FakeSessionDeleter(log),
-            [
-                new ModelProviderDescriptor(codexBackendId, "Codex"),
-                new ModelProviderDescriptor(slowBackendId, "Slow"),
-            ]);
+            providerIds.Select(providerId => new ModelProviderDescriptor(providerId, providerId.Value)).ToArray());
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
         await controller.InitializeAsync(CancellationToken.None);
 
         CollectionAssert.Contains(log, "ThreadSource.List");
         Assert.AreEqual(1, log.Count(static entry => entry == "ThreadSource.List"));
+        Assert.AreEqual(1, log.Count(static entry => entry == "Shell.InitializeChatBackends"));
         var finalCatalogApplication = log.Last(entry => entry.StartsWith("Shell.ApplyRecoveredCatalogState:", StringComparison.Ordinal));
-        Assert.AreEqual("Shell.ApplyRecoveredCatalogState:1:9", finalCatalogApplication);
+        Assert.AreEqual("Shell.ApplyRecoveredCatalogState:1:65", finalCatalogApplication);
     }
 
     [TestMethod]

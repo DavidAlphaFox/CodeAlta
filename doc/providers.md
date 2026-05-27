@@ -1,28 +1,30 @@
 # Model providers
 
-A model provider is the user-facing execution configuration for an LLM endpoint/runtime. Low-level runtime adapters still implement `IAgentBackend`, but frontend and configuration docs should use **model provider** for selectable entries in `config.toml` and the provider-management UI.
+A model provider is the user-facing execution configuration for an LLM endpoint/runtime. Providers own credentials, protocol adaptation, readiness, model metadata, and turn execution. They do not own persisted CodeAlta sessions; sessions are listed and restored through the session catalog.
 
-## Registration pipeline
+## Registration and initialization pipeline
 
 ```mermaid
 flowchart LR
     Config[~/.alta/config.toml - providers.*]
     Store[CodeAltaConfigStore]
-    Registrar[RawApiBackendRegistrar]
-    Factory[AgentBackendFactory]
-    Hub[AgentHub]
-    Runtime[SessionRuntimeService]
+    Builder[ConfiguredModelProviderRegistryBuilder]
+    Registry[ModelProviderRegistry]
+    Init[ModelProviderInitializationService]
+    Runtime[AgentHub / SessionRuntimeService]
+    Catalog[AgentSessionCatalog]
 
     Config --> Store
-    Store --> Registrar
-    Registrar --> Factory
-    Factory --> Hub
-    Hub --> Runtime
+    Store --> Builder
+    Builder --> Registry
+    Registry --> Init
+    Registry --> Runtime
+    Catalog --> Runtime
 ```
 
-At startup, `CodeAltaOwnedServices` loads provider definitions from `CodeAltaConfigStore` and passes them to `RawApiBackendRegistrar.RegisterConfiguredBackends`. Each valid enabled provider registers an `AgentBackendDescriptor` and a backend factory with `AgentBackendFactory`. `AgentHub` starts providers lazily when a model list, session list, create, or resume operation needs them.
+At startup, `CodeAltaOwnedServices` loads provider definitions from `CodeAltaConfigStore` and builds `ModelProviderDescriptor` entries and provider runtime factories through `ConfiguredModelProviderRegistryBuilder`. `ModelProviderInitializationService` probes each provider independently and caches readiness/model information. Session listing uses `AgentSessionCatalog` against the single configured sessions root and runs independently of provider probing.
 
-Providers that are disabled, invalid, or missing required credentials are skipped without deleting their config entries.
+Providers that are disabled, invalid, or missing required credentials are skipped or marked unavailable without deleting their config entries.
 
 ## Config shape
 
@@ -58,7 +60,7 @@ Important behavior:
 
 ## Built-in provider types
 
-`RawApiBackendRegistrar` currently recognizes these `type` values:
+`ConfiguredModelProviderRegistryBuilder` currently recognizes these `type` values:
 
 | `type` | Runtime adapter | Notes |
 | --- | --- | --- |
@@ -72,13 +74,13 @@ Important behavior:
 | `google-genai` | `CodeAlta.Agent.GoogleGenAI` | Requires API key. Wraps SDK chat streaming through the local runtime and supports model metadata enrichment. |
 | `vertex-ai` | `CodeAlta.Agent.GoogleGenAI` | Uses Vertex project/location settings instead of an API key. |
 
-External ACP CLI backends are no longer registered as model providers. Legacy `[acp]` config is ignored and preserved only as compatibility data.
+External ACP CLI adapters are no longer registered as model providers. Legacy `[acp]` config is ignored and preserved only as compatibility data.
 
-## Local-runtime provider behavior
+## CodeAlta runtime provider behavior
 
-OpenAI-compatible, Anthropic, Google, direct HTTP, and subscription-backed providers use the local runtime when they are registered by `RawApiBackendRegistrar`. They share these properties:
+OpenAI-compatible, Anthropic, Google, direct HTTP, and subscription-backed providers attach to the CodeAlta-owned local session runtime. They share these properties:
 
-- sessions are CodeAlta-owned and journaled under `~/.alta/sessions/yyyy/MM/dd/<session-id>.jsonl`;
+- sessions are CodeAlta-owned, provider-independent, and journaled under `~/.alta/sessions/yyyy/MM/dd/<session-id>.jsonl`;
 - provider/model switches are represented as events in the journal when history can be replayed safely;
 - tool declarations are generated from CodeAlta `AgentToolDefinition` values;
 - system/developer instructions and project context are composed by CodeAlta before the provider turn;
@@ -117,7 +119,7 @@ CodeAlta does not rotate accounts, bypass provider limits, or silently fall back
 
 ```mermaid
 sequenceDiagram
-    participant Runtime as LocalAgentSession
+    participant Runtime as CodeAlta local session
     participant Executor as OpenAIResponsesTurnExecutor
     participant WS as OpenAICodexSubscriptionWebSocketSession
     participant HTTP as ResponsesClient HTTP/SSE
@@ -179,7 +181,7 @@ Relevant config keys for `type = "xai"` include `auth_source`, `model_discovery`
 
 ## Anthropic and Google providers
 
-`anthropic`, `google-genai`, and `vertex-ai` are implemented local-runtime providers, not placeholders. They wrap SDK chat streaming through `LocalAgentChatClientTurnExecutor`, list upstream models when supported, and can be constrained with `single_model_id`.
+`anthropic`, `google-genai`, and `vertex-ai` are implemented CodeAlta-runtime providers, not placeholders. They wrap SDK chat streaming through `LocalAgentChatClientTurnExecutor`, list upstream models when supported, and can be constrained with `single_model_id`.
 
 `vertex-ai` uses project/location configuration and application-default/environment credentials expected by the Google SDK. `google-genai` uses API-key configuration. Both can use `models_dev_provider_id` and `model_overrides` for context-window and output-limit metadata.
 
@@ -203,7 +205,7 @@ dotnet run --project src/CodeAlta.Agent.ModelsDev.Updater/CodeAlta.Agent.ModelsD
 
 ## Compaction configuration
 
-Local-runtime providers can set a `compaction` block:
+CodeAlta-runtime providers can set a `compaction` block:
 
 ```toml
 [providers.work.compaction]

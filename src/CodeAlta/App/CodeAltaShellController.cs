@@ -78,7 +78,7 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         try
         {
             await UiDispatcher.InvokeAsync(
-                    () => _shell.SetStatus("Refreshing project and thread catalog...", showSpinner: true))
+                    () => _shell.SetStatus("Refreshing project and session catalog...", showSpinner: true))
                 .ConfigureAwait(false);
 
             await _knownProjectImporter.ImportAsync(cancellationToken).ConfigureAwait(false);
@@ -256,7 +256,7 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         ArgumentNullException.ThrowIfNull(knownThreads);
 
         var thread = knownThreads.FirstOrDefault(candidate => string.Equals(candidate.ThreadId, threadId, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException($"Thread '{threadId}' was not found.");
+            ?? throw new InvalidOperationException($"Session '{threadId}' was not found.");
         return await DeleteSessionAsync(thread, knownThreads, cancellationToken).ConfigureAwait(false);
     }
 

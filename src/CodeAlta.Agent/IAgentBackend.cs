@@ -1,28 +1,28 @@
 namespace CodeAlta.Agent;
 
 /// <summary>
-/// Represents an agent backend runtime capable of creating and resuming active sessions.
+/// Represents a model-provider runtime adapter that CodeAlta can attach to active sessions.
 /// </summary>
 public interface IAgentBackend : IAsyncDisposable
 {
     /// <summary>
-    /// Gets the identifier of this backend.
+    /// Gets the provider/runtime identifier carried by this transitional backend contract.
     /// </summary>
     AgentBackendId BackendId { get; }
 
     /// <summary>
-    /// Gets a human-friendly backend name.
+    /// Gets a human-friendly provider name.
     /// </summary>
     string DisplayName { get; }
 
     /// <summary>
-    /// Starts the backend runtime and performs any required handshake.
+    /// Starts the provider runtime and performs any required handshake.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     Task StartAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Stops the backend runtime and releases runtime resources.
+    /// Stops the provider runtime and releases runtime resources.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     Task StopAsync(CancellationToken cancellationToken = default);
@@ -34,12 +34,12 @@ public interface IAgentBackend : IAsyncDisposable
     Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Deletes an existing backend session when supported.
+    /// Requests best-effort cleanup for an existing session when supported by the provider/runtime.
     /// </summary>
-    /// <param name="sessionId">The backend session identifier.</param>
+    /// <param name="sessionId">The CodeAlta session identifier.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>
-    /// <see langword="true"/> when the backend deleted the session; otherwise <see langword="false"/>.
+    /// <see langword="true"/> when cleanup deleted provider/runtime state; otherwise <see langword="false"/>.
     /// </returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="sessionId"/> is empty.</exception>
     Task<bool> DeleteSessionAsync(

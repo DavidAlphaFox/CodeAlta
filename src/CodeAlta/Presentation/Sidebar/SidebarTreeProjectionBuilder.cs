@@ -380,7 +380,7 @@ internal static class SidebarTreeProjectionBuilder
     private static IReadOnlyList<SidebarRowActionDescriptor> CreateProjectActions()
         =>
         [
-            new SidebarRowActionDescriptor(SidebarRowActionKind.OpenProjectThreads, NerdFont.MdFormatListBulleted, "Show all project threads"),
+            new SidebarRowActionDescriptor(SidebarRowActionKind.OpenProjectThreads, NerdFont.MdFormatListBulleted, "Show all project sessions"),
             new SidebarRowActionDescriptor(SidebarRowActionKind.OpenProjectDetails, NerdFont.MdInformationOutline, "Show project details"),
             new SidebarRowActionDescriptor(SidebarRowActionKind.DeleteProject, NerdFont.MdTrashCanOutline, "Delete project"),
         ];
@@ -389,10 +389,10 @@ internal static class SidebarTreeProjectionBuilder
         => [new SidebarRowActionDescriptor(SidebarRowActionKind.OpenFolder, NerdFont.MdPlus, "Open folder", SidebarRowActionVisibility.Always)];
 
     private static IReadOnlyList<SidebarRowActionDescriptor> CreateGlobalActions()
-        => [new SidebarRowActionDescriptor(SidebarRowActionKind.OpenProjectThreads, NerdFont.MdFormatListBulleted, "Show all global threads")];
+        => [new SidebarRowActionDescriptor(SidebarRowActionKind.OpenProjectThreads, NerdFont.MdFormatListBulleted, "Show all global sessions")];
 
     private static IReadOnlyList<SidebarRowActionDescriptor> CreateThreadActions()
-        => [new SidebarRowActionDescriptor(SidebarRowActionKind.DeleteThread, NerdFont.MdTrashCanOutline, "Delete thread")];
+        => [new SidebarRowActionDescriptor(SidebarRowActionKind.DeleteThread, NerdFont.MdTrashCanOutline, "Delete session")];
 
     private static IEnumerable<ProjectDescriptor> OrderProjectsByName(IEnumerable<ProjectDescriptor> projects)
     {

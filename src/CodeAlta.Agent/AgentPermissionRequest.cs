@@ -53,7 +53,7 @@ public sealed record AgentGenericPermissionRequest(
 /// <param name="Timestamp">The event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
 /// <param name="InteractionId">Stable interaction identifier.</param>
-/// <param name="ApprovalId">Optional backend-specific approval identifier.</param>
+/// <param name="ApprovalId">Optional provider-specific approval identifier.</param>
 /// <param name="Command">Optional command text.</param>
 /// <param name="WorkingDirectory">Optional working directory.</param>
 /// <param name="Actions">Optional parsed command actions.</param>
