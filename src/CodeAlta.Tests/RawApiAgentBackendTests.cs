@@ -101,6 +101,7 @@ public sealed class RawApiAgentBackendTests
             session.SessionId,
             new AgentSessionResumeOptions
             {
+                WorkingDirectory = temp.Path,
                 OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
             }).ConfigureAwait(false);
         var resumedHistory = await resumed.GetHistoryAsync().ConfigureAwait(false);

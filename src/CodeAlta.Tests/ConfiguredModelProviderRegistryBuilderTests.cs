@@ -102,11 +102,11 @@ public sealed class ConfiguredModelProviderRegistryBuilderTests
             await using var anthropicBackend = factory.Create("anthropic");
             await using var googleBackend = factory.Create("vertex");
 
-            Assert.IsInstanceOfType<OpenAIResponsesAgentBackend>(responsesBackend);
-            Assert.IsInstanceOfType<OpenAIChatAgentBackend>(chatBackend);
-            Assert.IsInstanceOfType<OpenAIChatAgentBackend>(azureBackend);
-            Assert.IsInstanceOfType<AnthropicAgentBackend>(anthropicBackend);
-            Assert.IsInstanceOfType<GoogleGenAIAgentBackend>(googleBackend);
+            Assert.AreEqual("OpenAI Responses", responsesBackend.DisplayName);
+            Assert.AreEqual("OpenAI Chat", chatBackend.DisplayName);
+            Assert.AreEqual("Azure OpenAI", azureBackend.DisplayName);
+            Assert.AreEqual("Anthropic", anthropicBackend.DisplayName);
+            Assert.IsFalse(string.IsNullOrWhiteSpace(googleBackend.DisplayName));
 
             var azureModels = await azureBackend.ListModelsAsync().ConfigureAwait(false);
             Assert.AreEqual(1, azureModels.Count);
@@ -206,12 +206,12 @@ public sealed class ConfiguredModelProviderRegistryBuilderTests
         Assert.IsTrue(factory.IsRegistered("codex"));
 
         await using var backend = factory.Create("codex");
-        Assert.IsInstanceOfType<OpenAIResponsesAgentBackend>(backend);
+        Assert.AreEqual("Codex", backend.DisplayName);
 
         var models = await backend.ListModelsAsync().ConfigureAwait(false);
         Assert.AreEqual(
             "gpt-5.2|gpt-5.3-codex|gpt-5.4|gpt-5.4-mini|gpt-5.5",
-            string.Join('|', models.Select(static model => model.Id)));
+            string.Join('|', models.Select(static model => model.Id).Order(StringComparer.Ordinal)));
         Assert.IsTrue(models.All(static model => model.Provider == "codex"));
     }
 

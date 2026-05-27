@@ -34,24 +34,6 @@ public sealed class ModelProviderRegistry : IModelProviderRegistry, IAsyncDispos
     }
 
     /// <summary>
-    /// Registers or replaces a provider runtime factory backed by a transitional agent backend.
-    /// </summary>
-    /// <param name="descriptor">The provider descriptor.</param>
-    /// <param name="backendFactory">The backend factory.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="descriptor" /> or <paramref name="backendFactory" /> is <see langword="null" />.</exception>
-    public void RegisterOrReplaceBackendRuntime(ModelProviderDescriptor descriptor, Func<IAgentBackend> backendFactory)
-    {
-        ArgumentNullException.ThrowIfNull(descriptor);
-        ArgumentNullException.ThrowIfNull(backendFactory);
-
-        // Keep this bridge for transitional external backend registrations while
-        // configured raw-API providers register native IModelProviderRuntime instances.
-        // The descriptor is supplied by provider configuration rather than derived from
-        // the backend instance created below.
-        RegisterOrReplace(descriptor, () => new AgentBackendModelProviderRuntime(descriptor, backendFactory()));
-    }
-
-    /// <summary>
     /// Removes a provider registration.
     /// </summary>
     /// <param name="providerId">The provider identifier.</param>
@@ -144,6 +126,32 @@ public sealed class ModelProviderRegistry : IModelProviderRegistry, IAsyncDispos
         }
     }
 
+    /// <summary>
+    /// Creates a fresh runtime instance for a registered provider.
+    /// </summary>
+    /// <param name="providerId">The provider identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The provider runtime.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="providerId" /> is empty.</exception>
+    /// <exception cref="KeyNotFoundException">Thrown when <paramref name="providerId" /> is not registered.</exception>
+    public ValueTask<IModelProviderRuntime> CreateRuntimeAsync(
+        ModelProviderId providerId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var key = ModelProviderId.NormalizeValue(providerId.Value);
+        Registration registration;
+        lock (_lock)
+        {
+            if (!_registrations.TryGetValue(key, out registration))
+            {
+                throw new KeyNotFoundException($"Model provider '{key}' is not registered.");
+            }
+        }
+
+        return ValueTask.FromResult(ValidateRuntime(registration.Descriptor, registration.Factory()));
+    }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
@@ -193,40 +201,4 @@ public sealed class ModelProviderRegistry : IModelProviderRegistry, IAsyncDispos
         Func<IModelProviderRuntime> Factory,
         IModelProviderRuntime? Runtime);
 
-    private sealed class AgentBackendModelProviderRuntime : IModelProviderRuntime
-    {
-        private readonly IAgentBackend _backend;
-
-        public AgentBackendModelProviderRuntime(ModelProviderDescriptor descriptor, IAgentBackend backend)
-        {
-            Descriptor = descriptor ?? throw new ArgumentNullException(nameof(descriptor));
-            _backend = backend ?? throw new ArgumentNullException(nameof(backend));
-        }
-
-        public ModelProviderDescriptor Descriptor { get; }
-
-        public Task StartAsync(CancellationToken cancellationToken = default) => _backend.StartAsync(cancellationToken);
-
-        public Task StopAsync(CancellationToken cancellationToken = default) => _backend.StopAsync(cancellationToken);
-
-        public async Task<ModelProviderProbeResult> ProbeAsync(CancellationToken cancellationToken = default)
-        {
-            var models = await _backend.ListModelsAsync(cancellationToken).ConfigureAwait(false);
-            return new ModelProviderProbeResult
-            {
-                ProviderId = Descriptor.ProviderId,
-                Availability = ModelProviderAvailability.Ready,
-                Models = models,
-                SelectedModelId = Descriptor.DefaultModelId,
-                SelectedReasoningEffort = Descriptor.DefaultReasoningEffort,
-            };
-        }
-
-        public IModelProviderTurnExecutor CreateTurnExecutor()
-        {
-            throw new NotSupportedException($"Model provider '{Descriptor.ProviderId.Value}' uses transitional backend runtime scaffolding and does not expose a provider turn executor yet.");
-        }
-
-        public ValueTask DisposeAsync() => _backend.DisposeAsync();
-    }
 }

@@ -534,7 +534,7 @@ public sealed class CodeAltaAgentRuntimeTests
         AgentBackendId backendId)
     {
         return new CodeAltaAgentRuntime(
-            backendId,
+            new ModelProviderId(backendId.Value),
             displayName,
             new CodeAltaAgentRuntimeOptions
             {

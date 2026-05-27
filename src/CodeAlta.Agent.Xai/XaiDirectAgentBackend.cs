@@ -5,9 +5,9 @@ using CodeAlta.Agent.LocalRuntime.Compaction;
 namespace CodeAlta.Agent.Xai;
 
 /// <summary>
-/// Direct xAI (Grok) provider runtime with a transitional backend facade.
+/// Direct xAI (Grok) model-provider runtime.
 /// </summary>
-public sealed class XaiDirectAgentBackend : IAgentBackend, ICodeAltaModelProviderRuntime
+public sealed class XaiDirectAgentBackend : ICodeAltaModelProviderRuntime
 {
     /// <summary>
     /// The canonical provider type and protocol family for direct xAI access.
@@ -15,7 +15,6 @@ public sealed class XaiDirectAgentBackend : IAgentBackend, ICodeAltaModelProvide
     public const string ProtocolFamily = "xai";
 
     private readonly ICodeAltaModelProviderRuntime _runtime;
-    private readonly IAgentBackend _inner;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="XaiDirectAgentBackend"/> class.
@@ -35,44 +34,11 @@ public sealed class XaiDirectAgentBackend : IAgentBackend, ICodeAltaModelProvide
             provider.StateRootPath ??= options.StateRootPath;
         }
 
-        var backendId = options.BackendIdOverride ?? new AgentBackendId(options.Providers[0].ProviderKey.Trim());
-        var displayName = string.IsNullOrWhiteSpace(options.DisplayNameOverride)
-            ? "xAI Grok"
-            : options.DisplayNameOverride.Trim();
 
         _runtime = CreateProviderRuntime(options.Providers[0]);
-        _inner = new CodeAltaAgentRuntime(
-            backendId,
-            displayName,
-            new CodeAltaAgentRuntimeOptions
-            {
-                StateRootPath = options.StateRootPath,
-                Providers =
-                [
-                    .. options.Providers.Select(provider => new CodeAltaAgentRuntimeProviderRegistration
-                    {
-                        Provider = new ModelProviderRuntimeDescriptor
-                        {
-                            ProtocolFamily = ProtocolFamily,
-                            ProviderKey = provider.ProviderKey.Trim(),
-                            DisplayName = string.IsNullOrWhiteSpace(provider.DisplayName) ? provider.ProviderKey.Trim() : provider.DisplayName.Trim(),
-                            TransportKind = LocalAgentTransportKind.OpenAIResponses,
-                            BaseUri = provider.BaseUri ?? XaiDefaults.DefaultApiBaseUri,
-                            IsDefault = provider.IsDefault,
-                            Profile = provider.Profile ?? CreateDefaultProfile(),
-                            Compaction = provider.Compaction ?? LocalAgentCompactionSettings.Default,
-                        },
-                        TurnExecutor = new XaiDirectTurnExecutor(provider),
-                    }),
-                ],
-            });
+
     }
 
-    /// <inheritdoc />
-    public AgentBackendId BackendId => _inner.BackendId;
-
-    /// <inheritdoc />
-    public string DisplayName => _inner.DisplayName;
 
     /// <inheritdoc />
     public ModelProviderDescriptor Descriptor => _runtime.Descriptor;
@@ -84,22 +50,12 @@ public sealed class XaiDirectAgentBackend : IAgentBackend, ICodeAltaModelProvide
     public IModelProviderModelCatalog? ModelCatalog => _runtime.ModelCatalog;
 
     /// <inheritdoc />
-    public async Task StartAsync(CancellationToken cancellationToken = default)
-    {
-        await _runtime.StartAsync(cancellationToken).ConfigureAwait(false);
-        await _inner.StartAsync(cancellationToken).ConfigureAwait(false);
-    }
+    public Task StartAsync(CancellationToken cancellationToken = default)
+        => _runtime.StartAsync(cancellationToken);
 
     /// <inheritdoc />
-    public async Task StopAsync(CancellationToken cancellationToken = default)
-    {
-        await _runtime.StopAsync(cancellationToken).ConfigureAwait(false);
-        await _inner.StopAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default)
-        => _inner.ListModelsAsync(cancellationToken);
+    public Task StopAsync(CancellationToken cancellationToken = default)
+        => _runtime.StopAsync(cancellationToken);
 
     /// <inheritdoc />
     public Task<ModelProviderProbeResult> ProbeAsync(CancellationToken cancellationToken = default)
@@ -112,28 +68,7 @@ public sealed class XaiDirectAgentBackend : IAgentBackend, ICodeAltaModelProvide
     public CodeAltaAgentRuntimeProviderRegistration CreateProviderRegistration() => _runtime.CreateProviderRegistration();
 
     /// <inheritdoc />
-    public Task<bool> DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
-        => _inner.DeleteSessionAsync(sessionId, cancellationToken);
-
-    /// <inheritdoc />
-    public Task<IAgentSession> CreateSessionAsync(
-        AgentSessionCreateOptions options,
-        CancellationToken cancellationToken = default)
-        => _inner.CreateSessionAsync(options, cancellationToken);
-
-    /// <inheritdoc />
-    public Task<IAgentSession> ResumeSessionAsync(
-        string sessionId,
-        AgentSessionResumeOptions options,
-        CancellationToken cancellationToken = default)
-        => _inner.ResumeSessionAsync(sessionId, options, cancellationToken);
-
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        await _inner.DisposeAsync().ConfigureAwait(false);
-        await _runtime.DisposeAsync().ConfigureAwait(false);
-    }
+    public ValueTask DisposeAsync() => _runtime.DisposeAsync();
 
     private static CodeAltaModelProviderRuntime CreateProviderRuntime(XaiProviderOptions provider)
     {

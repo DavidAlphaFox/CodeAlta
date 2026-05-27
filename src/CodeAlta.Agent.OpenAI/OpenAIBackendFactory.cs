@@ -10,22 +10,7 @@ internal static class OpenAIBackendFactory
     {
         var codexSubscriptionConcurrencyLimiter = options.CodexSubscriptionConcurrencyLimiter ?? new CodexSubscriptionConcurrencyLimiter();
         return CreateSingleProviderRuntime(
-            options.BackendIdOverride ?? AgentBackendIds.OpenAIResponses,
-            string.IsNullOrWhiteSpace(options.DisplayNameOverride) ? "OpenAI Responses" : options.DisplayNameOverride.Trim(),
-            "openai-responses",
-            LocalAgentTransportKind.OpenAIResponses,
-            options,
-            provider => new OpenAIResponsesTurnExecutor(provider, codexSubscriptionConcurrencyLimiter),
-            static provider => provider.CodexSubscription is null
-                ? "openai-responses"
-                : "codex");
-    }
-
-    public static IAgentBackend CreateResponsesBackend(OpenAIResponsesAgentBackendOptions options)
-    {
-        var codexSubscriptionConcurrencyLimiter = options.CodexSubscriptionConcurrencyLimiter ?? new CodexSubscriptionConcurrencyLimiter();
-        return CreateBackend(
-            options.BackendIdOverride ?? AgentBackendIds.OpenAIResponses,
+            options.ProviderIdOverride ?? ModelProviderIds.OpenAIResponses,
             string.IsNullOrWhiteSpace(options.DisplayNameOverride) ? "OpenAI Responses" : options.DisplayNameOverride.Trim(),
             "openai-responses",
             LocalAgentTransportKind.OpenAIResponses,
@@ -38,16 +23,7 @@ internal static class OpenAIBackendFactory
 
     public static ICodeAltaModelProviderRuntime CreateChatProviderRuntime(OpenAIChatAgentBackendOptions options)
         => CreateSingleProviderRuntime(
-            options.BackendIdOverride ?? AgentBackendIds.OpenAIChat,
-            string.IsNullOrWhiteSpace(options.DisplayNameOverride) ? "OpenAI Chat" : options.DisplayNameOverride.Trim(),
-            "openai-chat",
-            LocalAgentTransportKind.OpenAIChatCompletions,
-            options,
-            static provider => new OpenAIChatTurnExecutor(provider));
-
-    public static IAgentBackend CreateChatBackend(OpenAIChatAgentBackendOptions options)
-        => CreateBackend(
-            options.BackendIdOverride ?? AgentBackendIds.OpenAIChat,
+            options.ProviderIdOverride ?? ModelProviderIds.OpenAIChat,
             string.IsNullOrWhiteSpace(options.DisplayNameOverride) ? "OpenAI Chat" : options.DisplayNameOverride.Trim(),
             "openai-chat",
             LocalAgentTransportKind.OpenAIChatCompletions,
@@ -55,7 +31,7 @@ internal static class OpenAIBackendFactory
             static provider => new OpenAIChatTurnExecutor(provider));
 
     private static ICodeAltaModelProviderRuntime CreateSingleProviderRuntime(
-        AgentBackendId backendId,
+        ModelProviderId providerId,
         string displayName,
         string providerType,
         LocalAgentTransportKind transportKind,
@@ -70,7 +46,7 @@ internal static class OpenAIBackendFactory
 
         PrepareProviders(options);
         return CreateProviderRuntime(
-            backendId,
+            providerId,
             displayName,
             providerType,
             transportKind,
@@ -79,44 +55,8 @@ internal static class OpenAIBackendFactory
             protocolFamilySelector);
     }
 
-    private static IAgentBackend CreateBackend(
-        AgentBackendId backendId,
-        string displayName,
-        string providerType,
-        LocalAgentTransportKind transportKind,
-        OpenAIAgentBackendOptions options,
-        Func<OpenAIProviderOptions, IModelProviderTurnExecutor> executorFactory,
-        Func<OpenAIProviderOptions, string>? protocolFamilySelector = null)
-    {
-        if (options.Providers.Count == 0)
-        {
-            throw new ArgumentException("At least one provider registration is required.", nameof(options));
-        }
-
-        PrepareProviders(options);
-        var registrations = options.Providers
-            .Select(provider => CreateProviderRuntime(
-                backendId,
-                displayName,
-                providerType,
-                transportKind,
-                provider,
-                executorFactory,
-                protocolFamilySelector).CreateProviderRegistration())
-            .ToArray();
-
-        return new CodeAltaAgentRuntime(
-            backendId,
-            displayName,
-            new CodeAltaAgentRuntimeOptions
-            {
-                StateRootPath = options.StateRootPath,
-                Providers = registrations,
-            });
-    }
-
     private static CodeAltaModelProviderRuntime CreateProviderRuntime(
-        AgentBackendId backendId,
+        ModelProviderId providerId,
         string displayName,
         string providerType,
         LocalAgentTransportKind transportKind,

@@ -16,7 +16,6 @@ namespace CodeAlta.App;
 internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 {
     private readonly bool _ownsLogging;
-    private readonly AgentBackendFactory _backendFactory;
     private readonly ModelProviderRegistry _modelProviderRegistry;
     private readonly IModelProviderInitializationService _modelProviderInitializationService;
     private readonly CodeAltaConfigStore _configStore;
@@ -25,7 +24,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 
     private CodeAltaOwnedServices(
         bool ownsLogging,
-        AgentBackendFactory backendFactory,
         ModelProviderRegistry modelProviderRegistry,
         IModelProviderInitializationService modelProviderInitializationService,
         CodeAltaConfigStore configStore,
@@ -43,7 +41,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         IProjectFileSearchService projectFileSearchService)
     {
         _ownsLogging = ownsLogging;
-        _backendFactory = backendFactory;
         _modelProviderRegistry = modelProviderRegistry;
         _modelProviderInitializationService = modelProviderInitializationService;
         _configStore = configStore;
@@ -133,13 +130,11 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
                 },
                 cancellationToken)
             .ConfigureAwait(false);
-        var backendFactory = sharedHost.BackendFactory;
         var pluginRuntime = sharedHost.PluginRuntime;
         var pluginHostBridge = new PluginHostBridge(pluginRuntime, () => sharedHost.CurrentProject, pluginAltaServiceBridge);
 
         return new CodeAltaOwnedServices(
             ownsLogging,
-            backendFactory,
             sharedHost.ModelProviderRegistry,
             sharedHost.ModelProviderInitializationService,
             configStore,
@@ -156,11 +151,10 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             sharedHost.RuntimeService,
             sharedHost.ProjectFileSearchService);
 
-        void RegisterFrontendModelProviders(ModelProviderRegistry modelProviderRegistry, AgentBackendFactory backendFactory)
+        void RegisterFrontendModelProviders(ModelProviderRegistry modelProviderRegistry)
         {
             backendDescriptors.AddRange(
                 ConfiguredModelProviderRegistryBuilder.RegisterConfiguredProviders(
-                    backendFactory,
                     modelProviderRegistry,
                     configStore,
                     homeRoot,
@@ -192,34 +186,32 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         ];
     }
 
-    public async Task<IReadOnlyList<ModelProviderDescriptor>> RefreshProviderBackendsAsync(
+    public async Task<IReadOnlyList<ModelProviderDescriptor>> RefreshModelProvidersAsync(
         CancellationToken cancellationToken = default)
     {
         var providerDefinitions = _configStore.LoadGlobalProviderDefinitions(includeDisabled: true)
             .ToDictionary(static definition => definition.ProviderKey, StringComparer.OrdinalIgnoreCase);
-        var expectedBackendIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var expectedProviderIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var providerDescriptors = new List<ModelProviderDescriptor>();
 
         providerDescriptors.AddRange(
             ConfiguredModelProviderRegistryBuilder.RegisterOrReplaceConfiguredProviders(
-                _backendFactory,
                 _modelProviderRegistry,
                 providerDefinitions.Values.Where(static definition => definition.Enabled != false),
                 CatalogOptions.GlobalRoot,
                 _modelsDevCatalogService));
         foreach (var descriptor in providerDescriptors)
         {
-            expectedBackendIds.Add(descriptor.BackendId.Value);
+            expectedProviderIds.Add(descriptor.ProviderId.Value);
         }
 
         foreach (var descriptor in _backendDescriptors.ToArray())
         {
-            if (expectedBackendIds.Contains(descriptor.BackendId.Value))
+            if (expectedProviderIds.Contains(descriptor.ProviderId.Value))
             {
                 continue;
             }
 
-            _backendFactory.Unregister(descriptor.BackendId);
             _modelProviderRegistry.Unregister(descriptor.ProviderId);
         }
 

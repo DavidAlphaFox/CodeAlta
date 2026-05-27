@@ -1,4 +1,5 @@
 using CodeAlta.Agent;
+using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Orchestration.Runtime;
 
 namespace CodeAlta.Orchestration.Tests;
@@ -9,10 +10,10 @@ public sealed class AgentHubTests
     [TestMethod]
     public async Task StartSessionAsync_DoesNotProbeModelsOrListSessions()
     {
-        var backend = new CountingBackend("provider");
-        var factory = new AgentBackendFactory();
-        factory.Register("provider", () => backend);
-        await using var hub = new AgentHub(factory);
+        var runtime = new CountingProviderRuntime("provider");
+        var registry = new ModelProviderRegistry();
+        registry.RegisterOrReplace(runtime.Descriptor, () => runtime);
+        await using var hub = new AgentHub(registry, Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()));
 
         var handle = await hub.StartSessionAsync(
                 new AgentSessionCreateOptions
@@ -23,26 +24,36 @@ public sealed class AgentHubTests
                 })
             .ConfigureAwait(false);
 
-        Assert.AreEqual("provider-session", handle.SessionId);
-        Assert.AreEqual(1, backend.StartCallCount);
-        Assert.AreEqual(1, backend.CreateSessionCallCount);
-        Assert.AreEqual(0, backend.ListModelsCallCount);
-        Assert.AreEqual(0, backend.ListSessionsCallCount);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(handle.SessionId));
+        Assert.AreEqual(1, runtime.StartCallCount);
+        Assert.AreEqual(0, runtime.ProbeCallCount);
     }
 
-    private sealed class CountingBackend(string backendId) : IAgentBackend
+    private sealed class CountingProviderRuntime(string providerId) : ICodeAltaModelProviderRuntime
     {
         public int StartCallCount { get; private set; }
 
-        public int CreateSessionCallCount { get; private set; }
+        public int ProbeCallCount { get; private set; }
 
-        public int ListModelsCallCount { get; private set; }
+        public ModelProviderDescriptor Descriptor { get; } = new(new ModelProviderId(providerId), "Counting") { DefaultModelId = "test-model" };
 
-        public int ListSessionsCallCount { get; private set; }
+        public ModelProviderRuntimeDescriptor RuntimeDescriptor { get; } = new()
+        {
+            ProtocolFamily = "test",
+            ProviderKey = providerId,
+            DisplayName = "Counting",
+            TransportKind = LocalAgentTransportKind.OpenAIResponses,
+        };
 
-        public AgentBackendId BackendId { get; } = new(backendId);
+        public IModelProviderModelCatalog? ModelCatalog => null;
 
-        public string DisplayName => "Counting";
+        public CodeAltaAgentRuntimeProviderRegistration CreateProviderRegistration() => new()
+        {
+            Provider = RuntimeDescriptor,
+            TurnExecutor = new NoOpTurnExecutor(),
+        };
+
+        public IModelProviderTurnExecutor CreateTurnExecutor() => new NoOpTurnExecutor();
 
         public Task StartAsync(CancellationToken cancellationToken = default)
         {
@@ -52,40 +63,22 @@ public sealed class AgentHubTests
 
         public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default)
+        public Task<ModelProviderProbeResult> ProbeAsync(CancellationToken cancellationToken = default)
         {
-            ListModelsCallCount++;
-            return Task.FromResult<IReadOnlyList<AgentModelInfo>>([new AgentModelInfo("test-model", "Test Model")]);
+            ProbeCallCount++;
+            return Task.FromResult(new ModelProviderProbeResult { ProviderId = Descriptor.ProviderId, Availability = ModelProviderAvailability.Ready });
         }
-
-        public async IAsyncEnumerable<AgentSessionMetadata> ListSessionsAsync(
-            AgentSessionListFilter? filter = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            ListSessionsCallCount++;
-            cancellationToken.ThrowIfCancellationRequested();
-            await Task.CompletedTask.ConfigureAwait(false);
-            yield break;
-        }
-
-        public Task<bool> DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
-            => Task.FromResult(false);
-
-        public Task<IAgentSession> CreateSessionAsync(
-            AgentSessionCreateOptions options,
-            CancellationToken cancellationToken = default)
-        {
-            CreateSessionCallCount++;
-            return Task.FromResult<IAgentSession>(new CountingSession(BackendId));
-        }
-
-        public Task<IAgentSession> ResumeSessionAsync(
-            string sessionId,
-            AgentSessionResumeOptions options,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult<IAgentSession>(new CountingSession(BackendId, sessionId));
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class NoOpTurnExecutor : IModelProviderTurnExecutor
+    {
+        public Task<LocalAgentTurnResponse> ExecuteTurnAsync(
+            LocalAgentTurnRequest request,
+            Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 
     private sealed class CountingSession(AgentBackendId backendId, string sessionId = "provider-session") : IAgentSession

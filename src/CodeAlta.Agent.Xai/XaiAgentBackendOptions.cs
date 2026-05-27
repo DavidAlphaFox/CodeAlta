@@ -11,9 +11,9 @@ namespace CodeAlta.Agent.Xai;
 public sealed class XaiAgentBackendOptions
 {
     /// <summary>
-    /// Gets or sets the optional backend identifier override.
+    /// Gets or sets the optional provider identifier override.
     /// </summary>
-    public AgentBackendId? BackendIdOverride { get; set; }
+    public ModelProviderId? ProviderIdOverride { get; set; }
 
     /// <summary>
     /// Gets or sets the optional backend display name override.

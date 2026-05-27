@@ -6,7 +6,7 @@ namespace CodeAlta.Agent.LocalRuntime;
 /// <summary>
 /// CodeAlta-owned session runtime for provider-backed raw-API sessions.
 /// </summary>
-public sealed class CodeAltaAgentRuntime : IAgentBackend
+public sealed class CodeAltaAgentRuntime : IAsyncDisposable
 {
     private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.Agent.LocalRuntime");
     private readonly CodeAltaAgentRuntimeOptions _options;
@@ -21,11 +21,11 @@ public sealed class CodeAltaAgentRuntime : IAgentBackend
     /// <summary>
     /// Initializes a new instance of the <see cref="CodeAltaAgentRuntime"/> class.
     /// </summary>
-    /// <param name="backendId">The transitional provider/backend identifier used by existing provider wrappers.</param>
+    /// <param name="providerId">The provider identifier persisted in legacy backend-id fields.</param>
     /// <param name="displayName">The user-facing runtime name.</param>
     /// <param name="options">Runtime options.</param>
     public CodeAltaAgentRuntime(
-        AgentBackendId backendId,
+        ModelProviderId providerId,
         string displayName,
         CodeAltaAgentRuntimeOptions options)
     {
@@ -36,7 +36,7 @@ public sealed class CodeAltaAgentRuntime : IAgentBackend
             throw new ArgumentException("At least one provider registration is required.", nameof(options));
         }
 
-        BackendId = backendId;
+        BackendId = new AgentBackendId(providerId.Value);
         DisplayName = displayName.Trim();
         _options = options;
         var stateRootPath = string.IsNullOrWhiteSpace(options.StateRootPath)
@@ -50,10 +50,14 @@ public sealed class CodeAltaAgentRuntime : IAgentBackend
             StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the provider identifier as stored in legacy persisted backend-id fields.
+    /// </summary>
     public AgentBackendId BackendId { get; }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the user-facing runtime name.
+    /// </summary>
     public string DisplayName { get; }
 
     private ILocalAgentSessionStore Store

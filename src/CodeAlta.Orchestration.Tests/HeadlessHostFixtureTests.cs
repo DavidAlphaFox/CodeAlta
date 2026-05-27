@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using CodeAlta.Agent;
+using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Catalog.Skills;
 using CodeAlta.Orchestration.Hosting;
 using CodeAlta.Orchestration.Runtime;
@@ -25,7 +26,7 @@ public sealed class HeadlessHostFixtureTests
                 IsHeadless = true,
                 HasInteractiveUi = false,
                 StartPlugins = false,
-                ConfigureAgentBackends = factory => factory.Register(backendId, () => new FakeAgentBackend(backendId)),
+                ConfigureModelProviders = registry => RegisterFakeProvider(registry, backendId),
             },
             CancellationToken.None);
         var executionOptions = new SessionExecutionOptions
@@ -69,11 +70,9 @@ public sealed class HeadlessHostFixtureTests
         await streamCts.CancelAsync();
         await streamTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
-        Assert.AreEqual("run-1", runId.Value);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(runId.Value));
         Assert.IsTrue(streamedEvents.OfType<WorkThreadLifecycleRuntimeEvent>().Any(static runtimeEvent =>
             runtimeEvent.Event.Kind == WorkThreadLifecycleEventKind.SessionStarted));
-        Assert.IsTrue(streamedEvents.OfType<WorkThreadAgentEvent>().Any(static runtimeEvent =>
-            runtimeEvent.Event is AgentSessionUpdateEvent { Kind: AgentSessionUpdateKind.Started }));
         Assert.IsTrue(streamedEvents.OfType<WorkThreadAgentEvent>().Any(static runtimeEvent =>
             runtimeEvent.Event is AgentContentCompletedEvent { Content: "fake response" }));
     }
@@ -148,7 +147,7 @@ public sealed class HeadlessHostFixtureTests
                 IsHeadless = true,
                 HasInteractiveUi = false,
                 StartPlugins = false,
-                ConfigureAgentBackends = factory => factory.Register(backendId, () => new FakeAgentBackend(backendId)),
+                ConfigureModelProviders = registry => RegisterFakeProvider(registry, backendId),
             },
             CancellationToken.None);
         var executionOptions = new SessionExecutionOptions
@@ -172,52 +171,81 @@ public sealed class HeadlessHostFixtureTests
             CancellationToken.None);
         var hasActiveRun = await host.RuntimeService.HasActiveRunAsync(thread, CancellationToken.None);
 
-        Assert.AreEqual("run-1", runId.Value);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(runId.Value));
         Assert.IsFalse(hasActiveRun);
     }
 
-    private sealed class FakeAgentBackend(AgentBackendId backendId) : IAgentBackend
+    private static void RegisterFakeProvider(ModelProviderRegistry registry, AgentBackendId backendId)
     {
-        private int _nextSessionId;
+        var descriptor = new ModelProviderDescriptor(new ModelProviderId(backendId.Value), "Fake Headless") { DefaultModelId = "fake-model" };
+        registry.RegisterOrReplace(descriptor, () => new FakeModelProviderRuntime(descriptor));
+    }
 
-        public AgentBackendId BackendId { get; } = backendId;
+    private sealed class FakeModelProviderRuntime(ModelProviderDescriptor descriptor) : ICodeAltaModelProviderRuntime
+    {
+        public ModelProviderDescriptor Descriptor { get; } = descriptor;
 
-        public string DisplayName => "Fake Headless";
+        public ModelProviderRuntimeDescriptor RuntimeDescriptor { get; } = new()
+        {
+            ProtocolFamily = "test",
+            ProviderKey = descriptor.ProviderId.Value,
+            DisplayName = descriptor.DisplayName,
+            TransportKind = LocalAgentTransportKind.OpenAIResponses,
+        };
+
+        public IModelProviderModelCatalog? ModelCatalog => null;
+
+        public CodeAltaAgentRuntimeProviderRegistration CreateProviderRegistration() => new()
+        {
+            Provider = RuntimeDescriptor,
+            TurnExecutor = new FakeTurnExecutor(),
+        };
+
+        public IModelProviderTurnExecutor CreateTurnExecutor() => new FakeTurnExecutor();
 
         public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<AgentModelInfo>>([new AgentModelInfo("fake-model", DisplayName: "Fake Model")]);
-
-        public async IAsyncEnumerable<AgentSessionMetadata> ListSessionsAsync(
-            AgentSessionListFilter? filter = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public Task<ModelProviderProbeResult> ProbeAsync(CancellationToken cancellationToken = default)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await Task.CompletedTask;
-            yield break;
-        }
-
-        public Task<IAgentSession> CreateSessionAsync(
-            AgentSessionCreateOptions options,
-            CancellationToken cancellationToken = default)
-        {
-            var sessionId = $"session-{Interlocked.Increment(ref _nextSessionId)}";
-            return Task.FromResult<IAgentSession>(new FakeAgentSession(BackendId, sessionId, options.WorkingDirectory));
-        }
-
-        public Task<IAgentSession> ResumeSessionAsync(
-            string sessionId,
-            AgentSessionResumeOptions options,
-            CancellationToken cancellationToken = default)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
-            return Task.FromResult<IAgentSession>(new FakeAgentSession(BackendId, sessionId, options.WorkingDirectory));
+            return Task.FromResult(new ModelProviderProbeResult
+            {
+                ProviderId = Descriptor.ProviderId,
+                Availability = ModelProviderAvailability.Ready,
+                Models = [new AgentModelInfo("fake-model", DisplayName: "Fake Model")],
+                SelectedModelId = "fake-model",
+            });
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class FakeTurnExecutor : IModelProviderTurnExecutor
+    {
+        public async Task<LocalAgentTurnResponse> ExecuteTurnAsync(
+            LocalAgentTurnRequest request,
+            Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
+            CancellationToken cancellationToken = default)
+        {
+            await onUpdate(
+                    new LocalAgentTurnDelta
+                    {
+                        Kind = AgentContentKind.Assistant,
+                        ContentId = "content-1",
+                        Text = "fake response",
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            return new LocalAgentTurnResponse
+            {
+                AssistantMessage = new LocalAgentConversationMessage(
+                    LocalAgentConversationRole.Assistant,
+                    [new LocalAgentMessagePart.Text("fake response")]),
+                AssistantPartContentIds = ["content-1"],
+            };
+        }
     }
 
     public sealed class SharedHostFixturePlugin : PluginBase

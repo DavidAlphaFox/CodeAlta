@@ -1421,7 +1421,7 @@ public sealed class OpenAIRawApiAgentBackendTests
         var models = await backend.ListModelsAsync().ConfigureAwait(false);
 
         Assert.AreEqual(
-            "gpt-5.2|gpt-5.3-codex|gpt-5.4|gpt-5.4-mini|gpt-5.5",
+            "gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.3-codex|gpt-5.2",
             string.Join('|', models.Select(static model => model.Id)));
         Assert.IsTrue(models.All(static model => Equals("codex-static-fallback", model.Capabilities?["source"])));
         Assert.AreEqual(1, handler.Requests.Count);

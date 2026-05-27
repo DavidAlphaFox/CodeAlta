@@ -22,7 +22,6 @@ public sealed class CodeAltaHost : IAsyncDisposable
         ProjectCatalog projectCatalog,
         WorkThreadCatalog threadCatalog,
         SkillCatalog skillCatalog,
-        AgentBackendFactory backendFactory,
         ModelProviderRegistry modelProviderRegistry,
         ModelProviderInitializationService modelProviderInitializationService,
         IAgentSessionCatalog sessionCatalog,
@@ -38,7 +37,6 @@ public sealed class CodeAltaHost : IAsyncDisposable
         ProjectCatalog = projectCatalog;
         ThreadCatalog = threadCatalog;
         SkillCatalog = skillCatalog;
-        BackendFactory = backendFactory;
         ModelProviderRegistry = modelProviderRegistry;
         ModelProviderInitializationService = modelProviderInitializationService;
         SessionCatalog = sessionCatalog;
@@ -70,11 +68,6 @@ public sealed class CodeAltaHost : IAsyncDisposable
     /// Gets the skill catalog.
     /// </summary>
     public SkillCatalog SkillCatalog { get; }
-
-    /// <summary>
-    /// Gets the backend factory used by the host.
-    /// </summary>
-    public AgentBackendFactory BackendFactory { get; }
 
     /// <summary>
     /// Gets the model provider registry used by the host.
@@ -187,12 +180,19 @@ public sealed class CodeAltaHost : IAsyncDisposable
             new PluginSkillRootProvider(() => pluginRuntime.Adapter.GetResources(pluginRuntime.ActivePlugins, pluginOperationOptions)),
         ]);
         var instructionTemplateProvider = new AgentInstructionTemplateProvider(skillCatalog, catalogOptions);
-        var backendFactory = new AgentBackendFactory();
         var modelProviderRegistry = new ModelProviderRegistry();
-        options.ConfigureModelProviders?.Invoke(modelProviderRegistry, backendFactory);
-        options.ConfigureAgentBackends?.Invoke(backendFactory);
+        options.ConfigureModelProviders?.Invoke(modelProviderRegistry);
         var modelProviderInitializationService = new ModelProviderInitializationService(modelProviderRegistry);
-        var agentHub = new AgentHub(backendFactory);
+        AgentBackendFactory? legacyBackendFactory = null;
+        if (options.ConfigureAgentBackends is not null)
+        {
+            legacyBackendFactory = new AgentBackendFactory();
+            options.ConfigureAgentBackends.Invoke(legacyBackendFactory);
+        }
+
+        var agentHub = legacyBackendFactory is null
+            ? new AgentHub(modelProviderRegistry, globalRoot)
+            : new AgentHub(legacyBackendFactory);
         var sessionCatalog = new AgentSessionCatalog(threadCatalog.JournalStore.CreateSessionStore());
         var runtimeService = new SessionRuntimeService(
             agentHub,
@@ -211,7 +211,6 @@ public sealed class CodeAltaHost : IAsyncDisposable
             projectCatalog,
             threadCatalog,
             skillCatalog,
-            backendFactory,
             modelProviderRegistry,
             modelProviderInitializationService,
             sessionCatalog,

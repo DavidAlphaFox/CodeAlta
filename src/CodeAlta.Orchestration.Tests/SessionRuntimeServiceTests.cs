@@ -12,8 +12,8 @@ public sealed class SessionRuntimeServiceTests
     public async Task ListRecoverableSessionsAsync_IncludesLocalRuntimeSessionsForUnregisteredProviders()
     {
         using var temp = new TempDirectory();
-        var factory = new AgentBackendFactory();
-        await using var hub = new AgentHub(factory);
+        var registry = new ModelProviderRegistry();
+        await using var hub = new AgentHub(registry, temp.Path);
         await using var runtime = CreateRuntime(temp.Path, hub);
         var store = new WorkThreadCatalog(new CatalogOptions { GlobalRoot = temp.Path }).JournalStore.CreateSessionStore();
         var createdAt = DateTimeOffset.Parse("2026-05-16T12:00:00+00:00");
@@ -43,10 +43,10 @@ public sealed class SessionRuntimeServiceTests
     {
         using var temp = new TempDirectory();
         var backendId = new AgentBackendId("registered-provider");
-        var backend = new ThrowingProviderBackend(backendId);
-        var factory = new AgentBackendFactory();
-        factory.Register(backendId, () => backend);
-        await using var hub = new AgentHub(factory);
+        var provider = new ThrowingProviderRuntime(backendId);
+        var registry = new ModelProviderRegistry();
+        registry.RegisterOrReplace(new ModelProviderDescriptor(new ModelProviderId(backendId.Value), "Throwing Provider"), () => provider);
+        await using var hub = new AgentHub(registry, temp.Path);
         await using var runtime = CreateRuntime(temp.Path, hub);
         var store = new WorkThreadCatalog(new CatalogOptions { GlobalRoot = temp.Path }).JournalStore.CreateSessionStore();
         var createdAt = DateTimeOffset.Parse("2026-05-16T12:00:00+00:00");
@@ -66,7 +66,7 @@ public sealed class SessionRuntimeServiceTests
         var threads = await CollectAsync(runtime.ListRecoverableSessionsAsync()).ConfigureAwait(false);
 
         Assert.AreEqual(1, threads.Count);
-        Assert.AreEqual(0, backend.StartAttempts);
+        Assert.AreEqual(0, provider.StartAttempts);
     }
 
     [TestMethod]
@@ -74,10 +74,11 @@ public sealed class SessionRuntimeServiceTests
     {
         using var temp = new TempDirectory();
         var backendId = new AgentBackendId("shared-missing");
-        var backend = new MissingResumeBackend(backendId);
-        var factory = new AgentBackendFactory();
-        factory.Register(backendId, () => backend);
-        await using var hub = new AgentHub(factory);
+        var registry = new ModelProviderRegistry();
+        registry.RegisterOrReplace(
+            new ModelProviderDescriptor(new ModelProviderId(backendId.Value), "Missing Resume") { DefaultModelId = "test-model" },
+            () => new MinimalProviderRuntime(backendId));
+        await using var hub = new AgentHub(registry, temp.Path);
         await using var runtime = CreateRuntime(temp.Path, hub);
         var thread = CreateThread("thread-1", backendId, temp.Path);
 
@@ -86,9 +87,6 @@ public sealed class SessionRuntimeServiceTests
 
         Assert.AreNotEqual(Guid.Empty, agentId.Value);
         Assert.AreEqual("thread-1", thread.ThreadId);
-        Assert.AreEqual(1, backend.ResumeAttempts);
-        Assert.AreEqual(1, backend.CreateAttempts);
-        Assert.AreEqual("thread-1", backend.CreatedThreadIds.Single());
         Assert.AreEqual(0, history.Count);
     }
 
@@ -143,53 +141,61 @@ public sealed class SessionRuntimeServiceTests
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
         };
 
-    private sealed class MissingResumeBackend(AgentBackendId backendId) : IAgentBackend
+    private sealed class MinimalProviderRuntime(AgentBackendId providerId) : ICodeAltaModelProviderRuntime
     {
-        public AgentBackendId BackendId { get; } = backendId;
+        public ModelProviderDescriptor Descriptor { get; } = new(new ModelProviderId(providerId.Value), "Missing Resume") { DefaultModelId = "test-model" };
 
-        public string DisplayName => "Missing Resume";
+        public ModelProviderRuntimeDescriptor RuntimeDescriptor { get; } = new()
+        {
+            ProtocolFamily = "test",
+            ProviderKey = providerId.Value,
+            DisplayName = "Missing Resume",
+            TransportKind = LocalAgentTransportKind.OpenAIResponses,
+        };
 
-        public int ResumeAttempts { get; private set; }
+        public IModelProviderModelCatalog? ModelCatalog => null;
 
-        public int CreateAttempts { get; private set; }
+        public CodeAltaAgentRuntimeProviderRegistration CreateProviderRegistration() => new()
+        {
+            Provider = RuntimeDescriptor,
+            TurnExecutor = new NoOpTurnExecutor(),
+        };
 
-        public List<string?> CreatedThreadIds { get; } = [];
+        public IModelProviderTurnExecutor CreateTurnExecutor() => new NoOpTurnExecutor();
 
         public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<AgentModelInfo>>([]);
-
-        public Task<IAgentSession> CreateSessionAsync(
-            AgentSessionCreateOptions options,
-            CancellationToken cancellationToken = default)
-        {
-            CreateAttempts++;
-            CreatedThreadIds.Add(options.ThreadId);
-            return Task.FromResult<IAgentSession>(new EmptyAgentSession(BackendId, options.ThreadId ?? "created-session"));
-        }
-
-        public Task<IAgentSession> ResumeSessionAsync(
-            string sessionId,
-            AgentSessionResumeOptions options,
-            CancellationToken cancellationToken = default)
-        {
-            ResumeAttempts++;
-            throw new KeyNotFoundException($"The session '{sessionId}' was not found for backend '{BackendId.Value}'.");
-        }
+        public Task<ModelProviderProbeResult> ProbeAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(new ModelProviderProbeResult { ProviderId = Descriptor.ProviderId, Availability = ModelProviderAvailability.Ready });
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class ThrowingProviderBackend(AgentBackendId backendId) : IAgentBackend
+    private sealed class ThrowingProviderRuntime(AgentBackendId providerId) : ICodeAltaModelProviderRuntime
     {
-        public AgentBackendId BackendId { get; } = backendId;
+        public ModelProviderDescriptor Descriptor { get; } = new(new ModelProviderId(providerId.Value), "Throwing Provider");
 
-        public string DisplayName => "Throwing Provider";
+        public ModelProviderRuntimeDescriptor RuntimeDescriptor { get; } = new()
+        {
+            ProtocolFamily = "test",
+            ProviderKey = providerId.Value,
+            DisplayName = "Throwing Provider",
+            TransportKind = LocalAgentTransportKind.OpenAIResponses,
+        };
+
+        public IModelProviderModelCatalog? ModelCatalog => null;
 
         public int StartAttempts { get; private set; }
+
+        public CodeAltaAgentRuntimeProviderRegistration CreateProviderRegistration() => new()
+        {
+            Provider = RuntimeDescriptor,
+            TurnExecutor = new NoOpTurnExecutor(),
+        };
+
+        public IModelProviderTurnExecutor CreateTurnExecutor() => new NoOpTurnExecutor();
 
         public Task StartAsync(CancellationToken cancellationToken = default)
         {
@@ -199,21 +205,19 @@ public sealed class SessionRuntimeServiceTests
 
         public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default)
+        public Task<ModelProviderProbeResult> ProbeAsync(CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("Provider models should not be listed while listing recoverable sessions.");
 
-        public Task<IAgentSession> CreateSessionAsync(
-            AgentSessionCreateOptions options,
-            CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
-
-        public Task<IAgentSession> ResumeSessionAsync(
-            string sessionId,
-            AgentSessionResumeOptions options,
-            CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
-
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class NoOpTurnExecutor : IModelProviderTurnExecutor
+    {
+        public Task<LocalAgentTurnResponse> ExecuteTurnAsync(
+            LocalAgentTurnRequest request,
+            Func<LocalAgentTurnDelta, CancellationToken, ValueTask> onUpdate,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 
     private sealed class EmptyAgentSession(AgentBackendId backendId, string sessionId) : IAgentSession

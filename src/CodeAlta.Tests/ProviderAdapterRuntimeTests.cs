@@ -15,7 +15,7 @@ public sealed class ProviderAdapterRuntimeTests
     {
         await using var runtime = new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
         {
-            BackendIdOverride = new AgentBackendId("openai-test"),
+            ProviderIdOverride = new ModelProviderId("openai-test"),
             Providers =
             {
                 new OpenAIProviderOptions
@@ -48,7 +48,7 @@ public sealed class ProviderAdapterRuntimeTests
             new ModelProviderDescriptor(new ModelProviderId("broken"), "Broken", "openai-chat"),
             () => new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
             {
-                BackendIdOverride = new AgentBackendId("broken"),
+                ProviderIdOverride = new ModelProviderId("broken"),
                 Providers =
                 {
                     new OpenAIProviderOptions
@@ -63,7 +63,7 @@ public sealed class ProviderAdapterRuntimeTests
             new ModelProviderDescriptor(new ModelProviderId("ready"), "Ready", "openai-chat"),
             () => new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
             {
-                BackendIdOverride = new AgentBackendId("ready"),
+                ProviderIdOverride = new ModelProviderId("ready"),
                 Providers =
                 {
                     new OpenAIProviderOptions
@@ -93,7 +93,7 @@ public sealed class ProviderAdapterRuntimeTests
     {
         await using var anthropic = new AnthropicAgentBackend(new AnthropicAgentBackendOptions
         {
-            BackendIdOverride = new AgentBackendId("anthropic-test"),
+            ProviderIdOverride = new ModelProviderId("anthropic-test"),
             Providers =
             {
                 new AnthropicProviderOptions
@@ -106,7 +106,7 @@ public sealed class ProviderAdapterRuntimeTests
         });
         await using var copilot = new CopilotDirectAgentBackend(new CopilotDirectAgentBackendOptions
         {
-            BackendIdOverride = new AgentBackendId("copilot-test"),
+            ProviderIdOverride = new ModelProviderId("copilot-test"),
             Providers =
             {
                 new CopilotDirectProviderOptions
@@ -118,7 +118,7 @@ public sealed class ProviderAdapterRuntimeTests
         });
         await using var google = new GoogleGenAIAgentBackend(new GoogleGenAIAgentBackendOptions
         {
-            BackendIdOverride = new AgentBackendId("google-test"),
+            ProviderIdOverride = new ModelProviderId("google-test"),
             Providers =
             {
                 new GoogleGenAIProviderOptions
@@ -131,7 +131,7 @@ public sealed class ProviderAdapterRuntimeTests
         });
         await using var vertex = new GoogleGenAIAgentBackend(new GoogleGenAIAgentBackendOptions
         {
-            BackendIdOverride = new AgentBackendId("vertex-test"),
+            ProviderIdOverride = new ModelProviderId("vertex-test"),
             Providers =
             {
                 new GoogleGenAIProviderOptions
@@ -146,7 +146,7 @@ public sealed class ProviderAdapterRuntimeTests
         });
         await using var xai = new XaiDirectAgentBackend(new XaiAgentBackendOptions
         {
-            BackendIdOverride = new AgentBackendId("xai-test"),
+            ProviderIdOverride = new ModelProviderId("xai-test"),
             Providers =
             {
                 new XaiProviderOptions

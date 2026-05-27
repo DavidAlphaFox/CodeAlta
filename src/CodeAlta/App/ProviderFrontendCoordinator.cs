@@ -105,7 +105,7 @@ internal sealed class ProviderFrontendCoordinator
 
         try
         {
-            await _ownedServices.RefreshProviderBackendsAsync(cancellationToken);
+            await _ownedServices.RefreshModelProvidersAsync(cancellationToken);
             _dispatchToUi(
                 () =>
                 {
@@ -150,14 +150,14 @@ internal sealed class ProviderFrontendCoordinator
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".alta");
         var modelCatalog = _ownedServices?.ModelsDevCatalogService;
 
-        if (!TryCreateBackend(definition, homeRoot, modelCatalog, out var backend))
+        if (!TryCreateRuntime(definition, homeRoot, modelCatalog, out var runtime))
         {
             return new ProviderTestResult(false, "Enter valid provider settings before testing.", 0);
         }
 
-        await using var _ = backend;
-        await backend.StartAsync(cancellationToken);
-        var models = await backend.ListModelsAsync(cancellationToken);
+        await using var _ = runtime;
+        var probe = await runtime.ProbeAsync(cancellationToken);
+        var models = probe.Models;
         return new ProviderTestResult(true, $"Connected successfully · {models.Count} model(s) discovered.", models.Count);
     }
 
@@ -176,14 +176,14 @@ internal sealed class ProviderFrontendCoordinator
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".alta");
         var modelCatalog = _ownedServices?.ModelsDevCatalogService;
 
-        if (!TryCreateBackend(definition, homeRoot, modelCatalog, out var backend))
+        if (!TryCreateRuntime(definition, homeRoot, modelCatalog, out var runtime))
         {
             return new ProviderModelListResult(false, "Enter valid provider settings before listing models.", []);
         }
 
-        await using var _ = backend;
-        await backend.StartAsync(cancellationToken);
-        var models = await backend.ListModelsAsync(cancellationToken);
+        await using var _ = runtime;
+        var probe = await runtime.ProbeAsync(cancellationToken);
+        var models = probe.Models;
         return new ProviderModelListResult(true, $"Model listing completed · {models.Count} model(s) available.", models);
     }
 
@@ -497,22 +497,22 @@ internal sealed class ProviderFrontendCoordinator
         return true;
     }
 
-    private bool TryCreateBackend(
+    private bool TryCreateRuntime(
         CodeAltaProviderDocument definition,
         string stateRootPath,
         ModelsDevCatalogService? modelCatalog,
-        out IAgentBackend backend)
+        out IModelProviderRuntime runtime)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentException.ThrowIfNullOrWhiteSpace(stateRootPath);
 
-        if (!ConfiguredModelProviderRegistryBuilder.TryCreateProviderRegistration(definition, stateRootPath, modelCatalog, out _, out var createBackend, out _))
+        if (!ConfiguredModelProviderRegistryBuilder.TryCreateProviderRegistration(definition, stateRootPath, modelCatalog, out _, out var createRuntime))
         {
-            backend = null!;
+            runtime = null!;
             return false;
         }
 
-        backend = createBackend();
+        runtime = createRuntime();
         return true;
     }
 

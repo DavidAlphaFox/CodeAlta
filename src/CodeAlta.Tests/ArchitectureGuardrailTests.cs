@@ -1123,6 +1123,7 @@ public sealed class ArchitectureGuardrailTests
                     "App/ChatBackendInitializationCoordinator.cs" and
                     not "App/CodeAltaOwnedServices.cs" and
                     not "App/CodeAltaShellController.cs" and
+                    not "App/ConfiguredModelProviderRegistryBuilder.cs" and
                     not "App/KnownProjectImporter.cs" and
                     not "App/RuntimeEventPump.cs" and
                     not "App/ShellCatalogStateCoordinator.cs" and
@@ -1658,10 +1659,19 @@ public sealed class ArchitectureGuardrailTests
     {
         var coordinatorSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ProviderFrontendCoordinator.cs"));
 
-        Assert.IsTrue(coordinatorSource.Contains("await using var _ = backend;", StringComparison.Ordinal));
-        Assert.IsTrue(coordinatorSource.Contains("await backend.StartAsync(cancellationToken);", StringComparison.Ordinal));
-        Assert.IsTrue(coordinatorSource.Contains("var models = await backend.ListModelsAsync(cancellationToken);", StringComparison.Ordinal));
-        Assert.IsFalse(coordinatorSource.Contains("await backend.StopAsync(cancellationToken);", StringComparison.Ordinal));
+        Assert.IsTrue(coordinatorSource.Contains("await using var _ = runtime;", StringComparison.Ordinal));
+        Assert.IsTrue(coordinatorSource.Contains("var probe = await runtime.ProbeAsync(cancellationToken);", StringComparison.Ordinal));
+        Assert.IsTrue(coordinatorSource.Contains("var models = probe.Models;", StringComparison.Ordinal));
+        Assert.IsFalse(coordinatorSource.Contains("await runtime.StopAsync(cancellationToken);", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void ProductionModelProviderRegistry_DoesNotExposeBackendRuntimeBridge()
+    {
+        var source = File.ReadAllText(Path.Combine(GetSourceRoot(), "CodeAlta.Agent", "ModelProviderRegistry.cs"));
+
+        Assert.IsFalse(source.Contains("RegisterOrReplaceBackendRuntime", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("AgentBackendModelProviderRuntime", StringComparison.Ordinal));
     }
 
     [TestMethod]
