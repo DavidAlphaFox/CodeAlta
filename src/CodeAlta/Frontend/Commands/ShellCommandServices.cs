@@ -33,31 +33,31 @@ internal sealed class DelegatingShellPromptInputService : IShellPromptInputServi
     public bool IsCurrentPromptEmpty() => _isCurrentPromptEmpty();
 }
 
-internal interface IShellThreadCommandService
+internal interface IShellSessionCommandService
 {
-    SessionViewDescriptor? GetSelectedThread();
+    SessionViewDescriptor? GetSelectedSession();
 
-    OpenThreadState EnsureThreadTab(SessionViewDescriptor thread);
+    OpenSessionState EnsureSessionTab(SessionViewDescriptor session);
 }
 
-internal sealed class DelegatingShellThreadCommandService : IShellThreadCommandService
+internal sealed class DelegatingShellSessionCommandService : IShellSessionCommandService
 {
-    private readonly Func<SessionViewDescriptor?> _getSelectedThread;
-    private readonly Func<SessionViewDescriptor, OpenThreadState> _ensureThreadTab;
+    private readonly Func<SessionViewDescriptor?> _getSelectedSession;
+    private readonly Func<SessionViewDescriptor, OpenSessionState> _ensureSessionTab;
 
-    public DelegatingShellThreadCommandService(
-        Func<SessionViewDescriptor?> getSelectedThread,
-        Func<SessionViewDescriptor, OpenThreadState> ensureThreadTab)
+    public DelegatingShellSessionCommandService(
+        Func<SessionViewDescriptor?> getSelectedSession,
+        Func<SessionViewDescriptor, OpenSessionState> ensureSessionTab)
     {
-        ArgumentNullException.ThrowIfNull(getSelectedThread);
-        ArgumentNullException.ThrowIfNull(ensureThreadTab);
-        _getSelectedThread = getSelectedThread;
-        _ensureThreadTab = ensureThreadTab;
+        ArgumentNullException.ThrowIfNull(getSelectedSession);
+        ArgumentNullException.ThrowIfNull(ensureSessionTab);
+        _getSelectedSession = getSelectedSession;
+        _ensureSessionTab = ensureSessionTab;
     }
 
-    public SessionViewDescriptor? GetSelectedThread() => _getSelectedThread();
+    public SessionViewDescriptor? GetSelectedSession() => _getSelectedSession();
 
-    public OpenThreadState EnsureThreadTab(SessionViewDescriptor thread) => _ensureThreadTab(thread);
+    public OpenSessionState EnsureSessionTab(SessionViewDescriptor session) => _ensureSessionTab(session);
 }
 
 internal interface IShellNavigationCommandService
@@ -70,7 +70,7 @@ internal interface IShellNavigationCommandService
 
     Task SelectRelativeTabAsync(int offset);
 
-    Task ScrollSelectedThreadMessageAsync(ThreadMessageScrollTarget target);
+    Task ScrollSelectedSessionMessageAsync(SessionMessageScrollTarget target);
 }
 
 internal sealed class DelegatingShellNavigationCommandService : IShellNavigationCommandService
@@ -124,14 +124,14 @@ internal sealed class DelegatingShellNavigationCommandService : IShellNavigation
 
     public Task SelectRelativeTabAsync(int offset) => offset < 0 ? _selectTabLeftAsync() : _selectTabRightAsync();
 
-    public Task ScrollSelectedThreadMessageAsync(ThreadMessageScrollTarget target)
+    public Task ScrollSelectedSessionMessageAsync(SessionMessageScrollTarget target)
     {
         return target switch
         {
-            ThreadMessageScrollTarget.Previous => _scrollToPreviousMessageAsync(),
-            ThreadMessageScrollTarget.Next => _scrollToNextMessageAsync(),
-            ThreadMessageScrollTarget.First => _scrollToFirstMessageAsync(),
-            ThreadMessageScrollTarget.Last => _scrollToLastMessageAsync(),
+            SessionMessageScrollTarget.Previous => _scrollToPreviousMessageAsync(),
+            SessionMessageScrollTarget.Next => _scrollToNextMessageAsync(),
+            SessionMessageScrollTarget.First => _scrollToFirstMessageAsync(),
+            SessionMessageScrollTarget.Last => _scrollToLastMessageAsync(),
             _ => throw new ArgumentOutOfRangeException(nameof(target), target, "Unknown session message scroll target."),
         };
     }
@@ -165,7 +165,7 @@ internal interface IShellDialogCommandService
 
     void OpenSessionUsage();
 
-    void OpenThreadInfo();
+    void OpenSessionInfo();
 
     void OpenExpandedPromptEditor();
 
@@ -189,7 +189,7 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
     private readonly Func<Task> _openPluginsAsync;
     private readonly Action _openWorkspaceSettings;
     private readonly Action _openSessionUsage;
-    private readonly Action _openThreadInfo;
+    private readonly Action _openSessionInfo;
     private readonly Action _openExpandedPromptEditor;
     private readonly Action _toggleCommandBarMultiLine;
 
@@ -207,7 +207,7 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
         Func<Task> openPluginsAsync,
         Action openWorkspaceSettings,
         Action openSessionUsage,
-        Action openThreadInfo,
+        Action openSessionInfo,
         Action openExpandedPromptEditor,
         Action toggleCommandBarMultiLine)
     {
@@ -224,7 +224,7 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
         ArgumentNullException.ThrowIfNull(openPluginsAsync);
         ArgumentNullException.ThrowIfNull(openWorkspaceSettings);
         ArgumentNullException.ThrowIfNull(openSessionUsage);
-        ArgumentNullException.ThrowIfNull(openThreadInfo);
+        ArgumentNullException.ThrowIfNull(openSessionInfo);
         ArgumentNullException.ThrowIfNull(openExpandedPromptEditor);
         ArgumentNullException.ThrowIfNull(toggleCommandBarMultiLine);
         _getDialogBounds = getDialogBounds;
@@ -240,7 +240,7 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
         _openPluginsAsync = openPluginsAsync;
         _openWorkspaceSettings = openWorkspaceSettings;
         _openSessionUsage = openSessionUsage;
-        _openThreadInfo = openThreadInfo;
+        _openSessionInfo = openSessionInfo;
         _openExpandedPromptEditor = openExpandedPromptEditor;
         _toggleCommandBarMultiLine = toggleCommandBarMultiLine;
     }
@@ -271,7 +271,7 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
 
     public void OpenSessionUsage() => _openSessionUsage();
 
-    public void OpenThreadInfo() => _openThreadInfo();
+    public void OpenSessionInfo() => _openSessionInfo();
 
     public void OpenExpandedPromptEditor() => _openExpandedPromptEditor();
 

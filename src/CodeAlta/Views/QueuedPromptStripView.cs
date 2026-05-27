@@ -8,7 +8,7 @@ namespace CodeAlta.Views;
 internal sealed class QueuedPromptStripView
 {
     public QueuedPromptStripView(
-        ThreadWorkspaceViewModel workspaceViewModel,
+        SessionWorkspaceViewModel workspaceViewModel,
         QueuedPromptStripController controller)
     {
         ArgumentNullException.ThrowIfNull(workspaceViewModel);

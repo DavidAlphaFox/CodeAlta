@@ -13,8 +13,8 @@ internal sealed class ModelCatalogCoordinator
 {
     private readonly IReadOnlyDictionary<string, ModelProviderState> _modelProviderStates;
     private readonly ModelProviderSelectorCoordinator _modelProviderSelectorCoordinator;
-    private readonly Func<SessionViewDescriptor?> _getSelectedThread;
-    private readonly Func<string, OpenThreadState?> _findOpenThread;
+    private readonly Func<SessionViewDescriptor?> _getSelectedSession;
+    private readonly Func<string, OpenSessionState?> _findOpenSession;
     private readonly Func<ModelProviderId> _getPreferredModelProviderId;
     private readonly Func<Rectangle?> _getDialogBounds;
     private readonly Func<Visual?> _getFocusTarget;
@@ -25,8 +25,8 @@ internal sealed class ModelCatalogCoordinator
     public ModelCatalogCoordinator(
         IReadOnlyDictionary<string, ModelProviderState> modelProviderStates,
         ModelProviderSelectorCoordinator modelProviderSelectorCoordinator,
-        Func<SessionViewDescriptor?> getSelectedThread,
-        Func<string, OpenThreadState?> findOpenThread,
+        Func<SessionViewDescriptor?> getSelectedSession,
+        Func<string, OpenSessionState?> findOpenSession,
         Func<ModelProviderId> getPreferredModelProviderId,
         Func<Rectangle?> getDialogBounds,
         Func<Visual?> getFocusTarget,
@@ -36,8 +36,8 @@ internal sealed class ModelCatalogCoordinator
     {
         ArgumentNullException.ThrowIfNull(modelProviderStates);
         ArgumentNullException.ThrowIfNull(modelProviderSelectorCoordinator);
-        ArgumentNullException.ThrowIfNull(getSelectedThread);
-        ArgumentNullException.ThrowIfNull(findOpenThread);
+        ArgumentNullException.ThrowIfNull(getSelectedSession);
+        ArgumentNullException.ThrowIfNull(findOpenSession);
         ArgumentNullException.ThrowIfNull(getPreferredModelProviderId);
         ArgumentNullException.ThrowIfNull(getDialogBounds);
         ArgumentNullException.ThrowIfNull(getFocusTarget);
@@ -47,8 +47,8 @@ internal sealed class ModelCatalogCoordinator
 
         _modelProviderStates = modelProviderStates;
         _modelProviderSelectorCoordinator = modelProviderSelectorCoordinator;
-        _getSelectedThread = getSelectedThread;
-        _findOpenThread = findOpenThread;
+        _getSelectedSession = getSelectedSession;
+        _findOpenSession = findOpenSession;
         _getPreferredModelProviderId = getPreferredModelProviderId;
         _getDialogBounds = getDialogBounds;
         _getFocusTarget = getFocusTarget;
@@ -88,7 +88,7 @@ internal sealed class ModelCatalogCoordinator
 
     private (string? ProviderKey, string? ModelId) ResolveCurrentModelSelection()
     {
-        if (_getSelectedThread() is { } selectedThread && _findOpenThread(selectedThread.ThreadId) is { } tab)
+        if (_getSelectedSession() is { } selectedSession && _findOpenSession(selectedSession.SessionId) is { } tab)
         {
             var tabProviderKey = tab.ProviderId.Value;
             var tabModelId = tab.ModelId;

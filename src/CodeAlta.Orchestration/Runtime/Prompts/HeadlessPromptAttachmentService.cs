@@ -6,7 +6,7 @@ using CodeAlta.Plugins.Abstractions;
 namespace CodeAlta.Orchestration.Runtime.Prompts;
 
 /// <summary>
-/// Materializes headless work-thread prompt text and attachments into backend and plugin input shapes.
+/// Materializes headless session-view prompt text and attachments into backend and plugin input shapes.
 /// </summary>
 public sealed class HeadlessPromptAttachmentService
 {
@@ -33,7 +33,7 @@ public sealed class HeadlessPromptAttachmentService
     /// <exception cref="ArgumentException">Thrown when an attachment cannot be materialized from its supplied metadata.</exception>
     public HeadlessPromptMaterializationResult Materialize(
         string prompt,
-        IReadOnlyList<WorkThreadPromptAttachment> attachments)
+        IReadOnlyList<SessionPromptAttachment> attachments)
     {
         ArgumentNullException.ThrowIfNull(prompt);
         ArgumentNullException.ThrowIfNull(attachments);
@@ -72,23 +72,23 @@ public sealed class HeadlessPromptAttachmentService
             pluginAttachments);
     }
 
-    private static AgentInputItem? CreateInputItem(WorkThreadPromptAttachment attachment, WorkThreadPromptAttachmentKind kind)
+    private static AgentInputItem? CreateInputItem(SessionPromptAttachment attachment, SessionPromptAttachmentKind kind)
         => kind switch
         {
-            WorkThreadPromptAttachmentKind.Text => new AgentInputItem.Text(RequireTextContent(attachment)),
-            WorkThreadPromptAttachmentKind.File => new AgentInputItem.File(RequirePath(attachment), attachment.DisplayName, attachment.LineRange),
-            WorkThreadPromptAttachmentKind.Directory => new AgentInputItem.Directory(RequirePath(attachment), attachment.DisplayName, attachment.LineRange),
-            WorkThreadPromptAttachmentKind.Image => CreateImageInputItem(attachment),
-            WorkThreadPromptAttachmentKind.Selection => new AgentInputItem.Selection(
+            SessionPromptAttachmentKind.Text => new AgentInputItem.Text(RequireTextContent(attachment)),
+            SessionPromptAttachmentKind.File => new AgentInputItem.File(RequirePath(attachment), attachment.DisplayName, attachment.LineRange),
+            SessionPromptAttachmentKind.Directory => new AgentInputItem.Directory(RequirePath(attachment), attachment.DisplayName, attachment.LineRange),
+            SessionPromptAttachmentKind.Image => CreateImageInputItem(attachment),
+            SessionPromptAttachmentKind.Selection => new AgentInputItem.Selection(
                 RequirePath(attachment),
                 attachment.DisplayName ?? Path.GetFileName(RequirePath(attachment)),
                 RequireTextContent(attachment),
                 attachment.SelectionRange ?? throw new ArgumentException("Selection attachments require a selection range.", nameof(attachment))),
-            WorkThreadPromptAttachmentKind.Metadata => null,
+            SessionPromptAttachmentKind.Metadata => null,
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported prompt attachment kind."),
         };
 
-    private static AgentInputItem CreateImageInputItem(WorkThreadPromptAttachment attachment)
+    private static AgentInputItem CreateImageInputItem(SessionPromptAttachment attachment)
     {
         var path = RequirePath(attachment);
         return Uri.TryCreate(path, UriKind.Absolute, out var uri) &&
@@ -97,7 +97,7 @@ public sealed class HeadlessPromptAttachmentService
             : new AgentInputItem.LocalImage(path, attachment.DisplayName, attachment.ContentType);
     }
 
-    private static IReadOnlyDictionary<string, string> CreateMetadata(WorkThreadPromptAttachment attachment)
+    private static IReadOnlyDictionary<string, string> CreateMetadata(SessionPromptAttachment attachment)
     {
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -121,51 +121,51 @@ public sealed class HeadlessPromptAttachmentService
         return metadata;
     }
 
-    private static WorkThreadPromptAttachmentKind ResolveKind(WorkThreadPromptAttachment attachment)
+    private static SessionPromptAttachmentKind ResolveKind(SessionPromptAttachment attachment)
     {
-        if (attachment.Kind != WorkThreadPromptAttachmentKind.Auto)
+        if (attachment.Kind != SessionPromptAttachmentKind.Auto)
         {
             return attachment.Kind;
         }
 
         if (attachment.SelectionRange is not null)
         {
-            return WorkThreadPromptAttachmentKind.Selection;
+            return SessionPromptAttachmentKind.Selection;
         }
 
         if (attachment.Text is not null || (attachment.Content.Length > 0 && string.IsNullOrWhiteSpace(attachment.Path)))
         {
-            return WorkThreadPromptAttachmentKind.Text;
+            return SessionPromptAttachmentKind.Text;
         }
 
         if (!string.IsNullOrWhiteSpace(attachment.Path))
         {
             if (Directory.Exists(attachment.Path))
             {
-                return WorkThreadPromptAttachmentKind.Directory;
+                return SessionPromptAttachmentKind.Directory;
             }
 
             return IsImage(attachment.Path, attachment.ContentType)
-                ? WorkThreadPromptAttachmentKind.Image
-                : WorkThreadPromptAttachmentKind.File;
+                ? SessionPromptAttachmentKind.Image
+                : SessionPromptAttachmentKind.File;
         }
 
-        return WorkThreadPromptAttachmentKind.Metadata;
+        return SessionPromptAttachmentKind.Metadata;
     }
 
-    private static PluginPromptAttachmentKind ToPluginKind(WorkThreadPromptAttachmentKind kind)
+    private static PluginPromptAttachmentKind ToPluginKind(SessionPromptAttachmentKind kind)
         => kind switch
         {
-            WorkThreadPromptAttachmentKind.Text => PluginPromptAttachmentKind.Text,
-            WorkThreadPromptAttachmentKind.File => PluginPromptAttachmentKind.File,
-            WorkThreadPromptAttachmentKind.Directory => PluginPromptAttachmentKind.Directory,
-            WorkThreadPromptAttachmentKind.Image => PluginPromptAttachmentKind.Image,
-            WorkThreadPromptAttachmentKind.Selection => PluginPromptAttachmentKind.Selection,
-            WorkThreadPromptAttachmentKind.Metadata => PluginPromptAttachmentKind.Metadata,
+            SessionPromptAttachmentKind.Text => PluginPromptAttachmentKind.Text,
+            SessionPromptAttachmentKind.File => PluginPromptAttachmentKind.File,
+            SessionPromptAttachmentKind.Directory => PluginPromptAttachmentKind.Directory,
+            SessionPromptAttachmentKind.Image => PluginPromptAttachmentKind.Image,
+            SessionPromptAttachmentKind.Selection => PluginPromptAttachmentKind.Selection,
+            SessionPromptAttachmentKind.Metadata => PluginPromptAttachmentKind.Metadata,
             _ => PluginPromptAttachmentKind.Metadata,
         };
 
-    private static string? GetTextContentOrNull(WorkThreadPromptAttachment attachment)
+    private static string? GetTextContentOrNull(SessionPromptAttachment attachment)
     {
         if (attachment.Text is not null)
         {
@@ -175,15 +175,15 @@ public sealed class HeadlessPromptAttachmentService
         return attachment.Content.Length == 0 ? null : Encoding.UTF8.GetString(attachment.Content.Span);
     }
 
-    private static string RequireTextContent(WorkThreadPromptAttachment attachment)
+    private static string RequireTextContent(SessionPromptAttachment attachment)
         => GetTextContentOrNull(attachment) ?? throw new ArgumentException("Text or selection attachments require text content.", nameof(attachment));
 
-    private static string RequirePath(WorkThreadPromptAttachment attachment)
+    private static string RequirePath(SessionPromptAttachment attachment)
         => string.IsNullOrWhiteSpace(attachment.Path)
             ? throw new ArgumentException("File, directory, image, and selection attachments require a path.", nameof(attachment))
             : attachment.Path;
 
-    private static void ValidateAttachmentId(WorkThreadPromptAttachment attachment)
+    private static void ValidateAttachmentId(SessionPromptAttachment attachment)
     {
         if (string.IsNullOrWhiteSpace(attachment.AttachmentId))
         {

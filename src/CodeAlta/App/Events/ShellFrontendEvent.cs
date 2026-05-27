@@ -18,7 +18,7 @@ internal sealed record HeaderChangedEvent : ShellFrontendEvent;
 
 internal sealed record ShellChromeChangedEvent : ShellFrontendEvent;
 
-internal sealed record ThreadStatusChangedEvent(string ThreadId) : ShellFrontendEvent;
+internal sealed record SessionStatusChangedEvent(string SessionId) : ShellFrontendEvent;
 
 internal sealed record PromptDraftChangedEvent(string PromptSessionId) : ShellFrontendEvent;
 
@@ -28,12 +28,12 @@ internal sealed record PromptAvailabilityChangedEvent : ShellFrontendEvent;
 
 internal sealed record PromptFocusRequestedEvent : ShellFrontendEvent;
 
-internal sealed record QueuedPromptListChangedEvent(string ThreadId) : ShellFrontendEvent;
+internal sealed record QueuedPromptListChangedEvent(string SessionId) : ShellFrontendEvent;
 
-internal sealed record SessionUsageChangedEvent(string ThreadId) : ShellFrontendEvent;
+internal sealed record SessionUsageChangedEvent(string SessionId) : ShellFrontendEvent;
 
 internal sealed record ModelProviderStateChangedEvent(string ModelProviderId) : ShellFrontendEvent;
 
 internal sealed record ModelProviderCatalogChangedEvent : ShellFrontendEvent;
 
-internal sealed record RuntimeTimelineChangedEvent(string ThreadId) : ShellFrontendEvent;
+internal sealed record RuntimeTimelineChangedEvent(string SessionId) : ShellFrontendEvent;

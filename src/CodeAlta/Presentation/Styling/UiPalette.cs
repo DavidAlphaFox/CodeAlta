@@ -9,8 +9,8 @@ namespace CodeAlta.Presentation.Styling
     {
         Global,
         Projects,
-        ProjectThread,
-        InternalThread,
+        ProjectSession,
+        InternalSession,
         Fallback,
     }
 
@@ -136,8 +136,8 @@ namespace CodeAlta.Presentation.Styling
             {
                 SidebarAccent.Global => "warning",
                 SidebarAccent.Projects => "primary",
-                SidebarAccent.ProjectThread => "success",
-                SidebarAccent.InternalThread => "accent",
+                SidebarAccent.ProjectSession => "success",
+                SidebarAccent.InternalSession => "accent",
                 _ => "muted",
             };
         }
@@ -278,8 +278,8 @@ namespace CodeAlta.Presentation.Styling
             {
                 SidebarAccent.Global => ConsoleColor.DarkYellow,
                 SidebarAccent.Projects => ConsoleColor.Blue,
-                SidebarAccent.ProjectThread => ConsoleColor.Green,
-                SidebarAccent.InternalThread => ConsoleColor.Magenta,
+                SidebarAccent.ProjectSession => ConsoleColor.Green,
+                SidebarAccent.InternalSession => ConsoleColor.Magenta,
                 _ => ConsoleColor.DarkGray,
             };
         }

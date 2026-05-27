@@ -11,11 +11,11 @@ namespace CodeAlta.Orchestration.Tests;
 public sealed class HeadlessPluginIntegrationFixtureTests
 {
     [TestMethod]
-    public async Task HeadlessPlugin_UsesRuntimeHooksToolsEventsAndThreadOrchestration()
+    public async Task HeadlessPlugin_UsesRuntimeHooksToolsEventsAndSessionOrchestration()
     {
         HeadlessFixturePlugin.Reset();
-        var orchestrator = new RecordingWorkThreadOrchestrator();
-        HeadlessFixturePlugin.Threads = new PluginThreadOrchestrationService(orchestrator);
+        var orchestrator = new RecordingSessionOrchestrator();
+        HeadlessFixturePlugin.Sessions = new PluginSessionOrchestrationService(orchestrator);
         var registry = new PluginContributionRegistry();
         var activator = new PluginRuntimeActivator(registry);
         var activation = await activator.ActivateAsync(
@@ -31,7 +31,7 @@ public sealed class HeadlessPluginIntegrationFixtureTests
         {
             ProjectId = "project-1",
             ProjectPath = Environment.CurrentDirectory,
-            ThreadId = "thread-1",
+            SessionId = "session-1",
             ProviderId = "provider-1",
             Model = "model-1",
         };
@@ -53,7 +53,7 @@ public sealed class HeadlessPluginIntegrationFixtureTests
         Assert.AreEqual(0, eventDiagnostics.Count, string.Join(Environment.NewLine, eventDiagnostics.Select(static diagnostic => diagnostic.Message)));
         Assert.AreEqual(1, HeadlessFixturePlugin.AgentEventsObserved);
         Assert.AreEqual("before-run prompt", orchestrator.SubmitRequest?.Prompt);
-        Assert.AreEqual("thread-1", orchestrator.SubmitRequest?.Context.ThreadId);
+        Assert.AreEqual("session-1", orchestrator.SubmitRequest?.Context.SessionId);
         Assert.IsTrue(active.RuntimeContext.Host.IsHeadless);
         Assert.IsFalse(active.RuntimeContext.Host.HasInteractiveUi);
 
@@ -108,13 +108,13 @@ public sealed class HeadlessPluginIntegrationFixtureTests
 
     public sealed class HeadlessFixturePlugin : PluginBase
     {
-        public static IPluginThreadOrchestrationService? Threads { get; set; }
+        public static IPluginSessionOrchestrationService? Sessions { get; set; }
 
         public static int AgentEventsObserved { get; private set; }
 
         public static void Reset()
         {
-            Threads = null;
+            Sessions = null;
             AgentEventsObserved = 0;
         }
 
@@ -141,19 +141,19 @@ public sealed class HeadlessPluginIntegrationFixtureTests
 
         public override async ValueTask<PluginBeforeAgentRunResult?> OnBeforeAgentRunAsync(PluginBeforeAgentRunContext context, CancellationToken cancellationToken = default)
         {
-            if (Threads is null)
+            if (Sessions is null)
             {
-                throw new InvalidOperationException("Thread orchestration service was not configured for the fixture plugin.");
+                throw new InvalidOperationException("Session orchestration service was not configured for the fixture plugin.");
             }
 
-            await Threads.SubmitPromptAsync(
-                new SubmitWorkThreadPromptRequest
+            await Sessions.SubmitPromptAsync(
+                new SubmitSessionPromptRequest
                 {
-                    Context = new WorkThreadCommandContext
+                    Context = new SessionCommandContext
                     {
                         ProjectId = context.ProjectId ?? "project-1",
                         ProjectPath = context.ProjectPath ?? Environment.CurrentDirectory,
-                        ThreadId = context.ThreadId ?? "thread-1",
+                        SessionId = context.SessionId ?? "session-1",
                         PromptSessionId = "prompt-session-1",
                         ModelProviderId = context.ProviderId ?? "provider-1",
                     },
@@ -175,41 +175,41 @@ public sealed class HeadlessPluginIntegrationFixtureTests
         }
     }
 
-    private sealed class RecordingWorkThreadOrchestrator : IWorkThreadOrchestrator
+    private sealed class RecordingSessionOrchestrator : ISessionOrchestrator
     {
-        public SubmitWorkThreadPromptRequest? SubmitRequest { get; private set; }
+        public SubmitSessionPromptRequest? SubmitRequest { get; private set; }
 
-        public ValueTask<WorkThreadCommandResult> CreateDraftAsync(CreateWorkThreadDraftRequest request, CancellationToken cancellationToken = default)
-            => new(new WorkThreadCommandResult { Outcome = WorkThreadCommandOutcomeKind.Completed });
+        public ValueTask<SessionCommandResult> CreateDraftAsync(CreateSessionDraftRequest request, CancellationToken cancellationToken = default)
+            => new(new SessionCommandResult { Outcome = SessionCommandOutcomeKind.Completed });
 
-        public ValueTask<WorkThreadCommandResult> LaunchThreadAsync(LaunchWorkThreadRequest request, CancellationToken cancellationToken = default)
-            => new(new WorkThreadCommandResult { Outcome = WorkThreadCommandOutcomeKind.Completed });
+        public ValueTask<SessionCommandResult> LaunchSessionAsync(LaunchSessionRequest request, CancellationToken cancellationToken = default)
+            => new(new SessionCommandResult { Outcome = SessionCommandOutcomeKind.Completed });
 
-        public ValueTask<WorkThreadCommandResult> SubmitPromptAsync(SubmitWorkThreadPromptRequest request, CancellationToken cancellationToken = default)
+        public ValueTask<SessionCommandResult> SubmitPromptAsync(SubmitSessionPromptRequest request, CancellationToken cancellationToken = default)
         {
             SubmitRequest = request;
-            return new(new WorkThreadCommandResult { Outcome = WorkThreadCommandOutcomeKind.Submitted });
+            return new(new SessionCommandResult { Outcome = SessionCommandOutcomeKind.Submitted });
         }
 
-        public ValueTask<WorkThreadCommandResult> SteerAsync(SteerWorkThreadRequest request, CancellationToken cancellationToken = default)
-            => new(new WorkThreadCommandResult { Outcome = WorkThreadCommandOutcomeKind.Steered });
+        public ValueTask<SessionCommandResult> SteerAsync(SteerSessionRequest request, CancellationToken cancellationToken = default)
+            => new(new SessionCommandResult { Outcome = SessionCommandOutcomeKind.Steered });
 
-        public ValueTask<WorkThreadCommandResult> AbortAsync(AbortWorkThreadRequest request, CancellationToken cancellationToken = default)
-            => new(new WorkThreadCommandResult { Outcome = WorkThreadCommandOutcomeKind.Completed });
+        public ValueTask<SessionCommandResult> AbortAsync(AbortSessionRequest request, CancellationToken cancellationToken = default)
+            => new(new SessionCommandResult { Outcome = SessionCommandOutcomeKind.Completed });
 
-        public ValueTask<WorkThreadCommandResult> CompactAsync(CompactWorkThreadRequest request, CancellationToken cancellationToken = default)
-            => new(new WorkThreadCommandResult { Outcome = WorkThreadCommandOutcomeKind.Completed });
+        public ValueTask<SessionCommandResult> CompactAsync(CompactSessionRequest request, CancellationToken cancellationToken = default)
+            => new(new SessionCommandResult { Outcome = SessionCommandOutcomeKind.Completed });
 
-        public ValueTask<WorkThreadCommandResult> ActivateSkillAsync(ActivateSkillRequest request, CancellationToken cancellationToken = default)
-            => new(new WorkThreadCommandResult { Outcome = WorkThreadCommandOutcomeKind.Completed });
+        public ValueTask<SessionCommandResult> ActivateSkillAsync(ActivateSkillRequest request, CancellationToken cancellationToken = default)
+            => new(new SessionCommandResult { Outcome = SessionCommandOutcomeKind.Completed });
 
-        public ValueTask<WorkThreadCommandResult> QueuePromptAsync(QueueWorkThreadPromptRequest request, CancellationToken cancellationToken = default)
-            => new(new WorkThreadCommandResult { Outcome = WorkThreadCommandOutcomeKind.Queued });
+        public ValueTask<SessionCommandResult> QueuePromptAsync(QueueSessionPromptRequest request, CancellationToken cancellationToken = default)
+            => new(new SessionCommandResult { Outcome = SessionCommandOutcomeKind.Queued });
 
-        public ValueTask<WorkThreadSnapshot?> GetThreadSnapshotAsync(string threadId, CancellationToken cancellationToken = default)
-            => new((WorkThreadSnapshot?)null);
+        public ValueTask<SessionSnapshot?> GetSessionSnapshotAsync(string sessionId, CancellationToken cancellationToken = default)
+            => new((SessionSnapshot?)null);
 
-        public async IAsyncEnumerable<WorkThreadOrchestratorEvent> StreamEventsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<SessionOrchestratorEvent> StreamEventsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             await Task.CompletedTask;
             yield break;

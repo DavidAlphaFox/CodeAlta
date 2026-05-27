@@ -18,9 +18,9 @@ internal readonly record struct PromptSessionId
     public override string ToString() => Value;
 }
 
-internal readonly record struct ThreadDraftId
+internal readonly record struct SessionDraftId
 {
-    public ThreadDraftId(string value)
+    public SessionDraftId(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         Value = value;
@@ -33,36 +33,36 @@ internal readonly record struct ThreadDraftId
     public override string ToString() => Value;
 }
 
-internal abstract record ShellThreadRef
+internal abstract record ShellSessionRef
 {
-    private ShellThreadRef()
+    private ShellSessionRef()
     {
     }
 
-    public sealed record Draft : ShellThreadRef
+    public sealed record Draft : ShellSessionRef
     {
-        public Draft(ThreadDraftId draftId)
+        public Draft(SessionDraftId draftId)
         {
             if (draftId.IsEmpty)
             {
-                throw new ArgumentException("Thread draft id cannot be empty.", nameof(draftId));
+                throw new ArgumentException("Session draft id cannot be empty.", nameof(draftId));
             }
 
             DraftId = draftId;
         }
 
-        public ThreadDraftId DraftId { get; init; }
+        public SessionDraftId DraftId { get; init; }
     }
 
-    public sealed record Running : ShellThreadRef
+    public sealed record Running : ShellSessionRef
     {
-        public Running(string threadId)
+        public Running(string sessionId)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
-            ThreadId = threadId;
+            ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+            SessionId = sessionId;
         }
 
-        public string ThreadId { get; init; }
+        public string SessionId { get; init; }
     }
 }
 
@@ -71,7 +71,7 @@ internal sealed record PromptSessionBinding
     public PromptSessionBinding(
         PromptSessionId promptSessionId,
         ProjectId projectId,
-        ShellThreadRef thread,
+        ShellSessionRef session,
         ModelProviderId modelProviderId,
         string? modelId = null,
         AgentReasoningEffort? reasoningEffort = null)
@@ -86,7 +86,7 @@ internal sealed record PromptSessionBinding
             throw new ArgumentException("Project id cannot be empty.", nameof(projectId));
         }
 
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
 
         if (modelProviderId.IsEmpty)
         {
@@ -95,7 +95,7 @@ internal sealed record PromptSessionBinding
 
         PromptSessionId = promptSessionId;
         ProjectId = projectId;
-        Thread = thread;
+        Session = session;
         ModelProviderId = modelProviderId;
         ModelId = string.IsNullOrWhiteSpace(modelId) ? null : modelId;
         ReasoningEffort = reasoningEffort;
@@ -105,7 +105,7 @@ internal sealed record PromptSessionBinding
 
     public ProjectId ProjectId { get; init; }
 
-    public ShellThreadRef Thread { get; init; }
+    public ShellSessionRef Session { get; init; }
 
     public ModelProviderId ModelProviderId { get; init; }
 

@@ -8,7 +8,7 @@ The runtime turns shell, plugin, and live-tool requests into CodeAlta-owned sess
 flowchart TD
     Request[Create/send/queue/steer/abort/compact request]
     Service[SessionRuntimeService]
-    Actor[Per-session WorkThreadActor mailbox]
+    Actor[Per-session SessionActor mailbox]
     Hub[AgentHub]
     Registry[ModelProviderRegistry]
     Provider[Model provider runtime adapter]
@@ -17,7 +17,7 @@ flowchart TD
     Store[IAgentSessionStore]
     Tools[Host tools]
     Journal[Session JSONL journal]
-    RuntimeEvents[WorkThreadRuntimeEvent]
+    RuntimeEvents[SessionRuntimeEvent]
 
     Request --> Service
     Service --> Actor
@@ -35,7 +35,7 @@ flowchart TD
     Service --> RuntimeEvents
 ```
 
-`SessionRuntimeService` is the public runtime service used by the TUI, `alta` commands, and plugin orchestration adapters. It owns session-view creation, coordinator-session setup, prompt queueing, prompt sending, steering fallback, abort, manual compaction, skill activation, runtime event publication, and legacy work-thread/session-view metadata journaling.
+`SessionRuntimeService` is the public runtime service used by the TUI, `alta` commands, and plugin orchestration adapters. It owns session-view creation, coordinator-session setup, prompt queueing, prompt sending, steering fallback, abort, manual compaction, skill activation, runtime event publication, and legacy session-view/session-view metadata journaling.
 
 `AgentHub` is the active CodeAlta agent/session facade. It starts or resumes runnable sessions by resolving the selected `ModelProviderId`/provider key through `IModelProviderRegistry`, then coordinates run/abort/steer/compact operations through per-session handles. It does not list persisted sessions and does not probe providers for models.
 
@@ -88,7 +88,7 @@ A normal prompt follows this path:
 3. System/developer instructions, runtime context, project context, skills metadata, and tool definitions are composed.
 4. `AgentHub` starts or resumes the CodeAlta session using the selected provider runtime.
 5. The prompt is sent through `IAgentSession.SendAsync`.
-6. Normalized `AgentEvent` values are observed, persisted when applicable, and converted into `WorkThreadRuntimeEvent` values.
+6. Normalized `AgentEvent` values are observed, persisted when applicable, and converted into `SessionRuntimeEvent` values.
 7. The runtime marks the session idle, updates usage/state, and drains at most one queued prompt for that session.
 
 Busy-session sends are queued when requested by UI or live-tool options. Queue items keep caller attribution and are durable enough for runtime recovery paths that read session state. Steering requests are sent only when a run is active and the provider/runtime supports `SteerAsync`; otherwise CodeAlta falls back to normal send or re-queues according to the caller path.
@@ -174,13 +174,13 @@ Local-runtime session journals contain replayable normalized history plus raw st
 - `local.sessionSummary` for session summary metadata;
 - `local.sessionState` for local runtime replay state;
 - `local.compactionCheckpoint` for compaction outcomes;
-- `codealta.threadHeader` and `codealta.threadState` for legacy session-view/work-thread metadata.
+- `codealta.sessionHeader` and `codealta.sessionState` for legacy session-view/session-view metadata.
 
 The runtime reads journals to restore recoverable sessions, session history, usage, modified-file summaries, activated-skill state, parent/sub-session lineage, and provider/model selections. The frontend stores only view/prompt state outside the journal.
 
 ## Runtime events and plugins
 
-`WorkThreadRuntimeEvent` is the current orchestration-to-host event stream name. It is a transitional legacy type name; events describe session-view/runtime changes, not operating-system threads. The frontend projects it into sidebars, timelines, status lines, usage indicators, and dialogs. Plugins can observe normalized agent events and contribute transient derived timeline cards through the plugin orchestration bridge.
+`SessionRuntimeEvent` is the current orchestration-to-host event stream name. It is a transitional legacy type name; events describe session-view/runtime changes, not operating-system sessions. The frontend projects it into sidebars, timelines, status lines, usage indicators, and dialogs. Plugins can observe normalized agent events and contribute transient derived timeline cards through the plugin orchestration bridge.
 
 Derived plugin events are not canonical transcript entries. They are replayed from stored normalized events and can be recalculated after restart.
 

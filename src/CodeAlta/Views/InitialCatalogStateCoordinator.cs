@@ -5,17 +5,17 @@ namespace CodeAlta.Views;
 
 internal sealed class InitialCatalogStateCoordinator
 {
-    private readonly Func<CancellationToken, Task<ShellThreadStateCoordinator.InitialCatalogState>> _loadInitialCatalogStateAsync;
-    private readonly Action<ShellThreadStateCoordinator.InitialCatalogState> _applyInitialCatalogState;
+    private readonly Func<CancellationToken, Task<ShellSessionStateCoordinator.InitialCatalogState>> _loadInitialCatalogStateAsync;
+    private readonly Action<ShellSessionStateCoordinator.InitialCatalogState> _applyInitialCatalogState;
     private readonly Action _publishStartupCatalogProjectionReady;
     private readonly Action _focusPromptEditor;
     private readonly Action<string, bool, StatusTone> _setStatus;
-    private Task<ShellThreadStateCoordinator.InitialCatalogState>? _initialCatalogStateTask;
+    private Task<ShellSessionStateCoordinator.InitialCatalogState>? _initialCatalogStateTask;
     private bool _initialCatalogStateResolved;
 
     public InitialCatalogStateCoordinator(
-        Func<CancellationToken, Task<ShellThreadStateCoordinator.InitialCatalogState>> loadInitialCatalogStateAsync,
-        Action<ShellThreadStateCoordinator.InitialCatalogState> applyInitialCatalogState,
+        Func<CancellationToken, Task<ShellSessionStateCoordinator.InitialCatalogState>> loadInitialCatalogStateAsync,
+        Action<ShellSessionStateCoordinator.InitialCatalogState> applyInitialCatalogState,
         Action publishStartupCatalogProjectionReady,
         Action focusPromptEditor,
         Action<string, bool, StatusTone> setStatus)

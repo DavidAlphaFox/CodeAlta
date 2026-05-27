@@ -63,8 +63,8 @@ internal sealed class PluginHostBridge
         => _frontend.RenderAsync(region, target, payload, cancellationToken);
 
     public async Task<PromptSubmission?> ProcessPromptSubmittingAsync(
-        SessionViewDescriptor thread,
-        OpenThreadState tab,
+        SessionViewDescriptor session,
+        OpenSessionState tab,
         PromptSubmission prompt,
         bool isCodeAltaManagedBackend,
         CancellationToken cancellationToken)
@@ -79,10 +79,10 @@ internal sealed class PluginHostBridge
                     DisplayName = image.Title,
                     MediaType = image.MediaType,
                 }).ToArray(),
-                CreateOptions(thread, tab, isCodeAltaManagedBackend),
+                CreateOptions(session, tab, isCodeAltaManagedBackend),
                 cancellationToken);
 
-        _promptContributionScope.Add(CreatePromptContributionScopeKey(thread, tab), result.Result.TemporaryPromptContributions);
+        _promptContributionScope.Add(CreatePromptContributionScopeKey(session, tab), result.Result.TemporaryPromptContributions);
 
         if (result.Result.Disposition is PluginPromptDisposition.Cancel or PluginPromptDisposition.Handled)
         {
@@ -169,8 +169,8 @@ internal sealed class PluginHostBridge
     }
 
     public async Task<PluginAgentRunAugmentation> BuildAgentRunAugmentationAsync(
-        SessionViewDescriptor thread,
-        OpenThreadState tab,
+        SessionViewDescriptor session,
+        OpenSessionState tab,
         SessionExecutionOptions executionOptions,
         AgentInput input,
         CancellationToken cancellationToken)
@@ -182,7 +182,7 @@ internal sealed class PluginHostBridge
         }
 
         var isManaged = IsCodeAltaManagedProvider(executionOptions.ProviderId);
-        var options = CreateOptions(thread, tab, isManaged);
+        var options = CreateOptions(session, tab, isManaged);
         var activeTools = MergeTools(executionOptions.Tools, options);
         var seed = activePlugins[0];
         var beforeTemplate = new PluginBeforeAgentRunContext
@@ -202,7 +202,7 @@ internal sealed class PluginHostBridge
             };
         }
 
-        var promptTemporaryContributions = _promptContributionScope.Take(CreatePromptContributionScopeKey(thread, tab));
+        var promptTemporaryContributions = _promptContributionScope.Take(CreatePromptContributionScopeKey(session, tab));
         var temporaryPromptContributions = promptTemporaryContributions.Concat(before.Result.TemporaryPromptContributions).ToArray();
         var systemParts = await _runtime.Adapter.BuildSystemPromptPartsAsync(_runtime.ActivePlugins, PluginPromptChannel.System, supportsDirectInjection: isManaged, options, cancellationToken);
         var developerParts = await _runtime.Adapter.BuildSystemPromptPartsAsync(_runtime.ActivePlugins, PluginPromptChannel.Developer, supportsDirectInjection: isManaged, options, cancellationToken);
@@ -255,13 +255,13 @@ internal sealed class PluginHostBridge
         return await _frontend.ExecuteCommandAsync(name, arguments, cancellationToken);
     }
 
-    public async Task ObserveAgentEventAsync(SessionViewDescriptor thread, AgentEvent @event, CancellationToken cancellationToken = default)
+    public async Task ObserveAgentEventAsync(SessionViewDescriptor session, AgentEvent @event, CancellationToken cancellationToken = default)
     {
         var options = new PluginAdapterOperationOptions
         {
-            ProjectId = thread.ProjectRef,
-            ProjectPath = ResolveProjectPath(thread),
-            ThreadId = thread.ThreadId,
+            ProjectId = session.ProjectRef,
+            ProjectPath = ResolveProjectPath(session),
+            SessionId = session.SessionId,
             RunId = @event.RunId?.Value,
             ProviderId = @event.ProviderId.Value,
             IsCodeAltaManagedBackend = IsCodeAltaManagedProvider(new ModelProviderId(@event.ProviderId.Value)),
@@ -276,34 +276,34 @@ internal sealed class PluginHostBridge
         await _runtime.Adapter.ObserveAgentEventAsync(activePlugins, new PluginAgentEventContext { Plugin = seed.Descriptor, Services = seed.RuntimeContext.Services, Event = @event }, options, cancellationToken);
     }
 
-    public async Task<WorkThreadPluginDerivedEventProjectionResult> ProjectThreadEventsAsync(
-        SessionViewDescriptor thread,
-        OpenThreadState tab,
+    public async Task<SessionViewPluginDerivedEventProjectionResult> ProjectSessionEventsAsync(
+        SessionViewDescriptor session,
+        OpenSessionState tab,
         IReadOnlyList<AgentEvent> events,
         bool isReplay,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentNullException.ThrowIfNull(events);
 
         if (_runtime.ActivePlugins.Count == 0 || events.Count == 0)
         {
-            return new WorkThreadPluginDerivedEventProjectionResult([], []);
+            return new SessionViewPluginDerivedEventProjectionResult([], []);
         }
 
-        var projectPath = ResolveProjectPath(thread) ?? _getCurrentProject()?.ProjectPath ?? Environment.CurrentDirectory;
-        var projector = new WorkThreadPluginDerivedEventProjector(
-            options => _runtime.Adapter.GetContributions<PluginThreadEventProjectionContribution>(PluginPoint.ThreadEventProjection, options));
+        var projectPath = ResolveProjectPath(session) ?? _getCurrentProject()?.ProjectPath ?? Environment.CurrentDirectory;
+        var projector = new SessionPluginDerivedEventProjector(
+            options => _runtime.Adapter.GetContributions<PluginSessionEventProjectionContribution>(PluginPoint.SessionEventProjection, options));
         return await projector.ProjectAsync(
-            new WorkThreadCommandContext
+            new SessionCommandContext
             {
-                ProjectId = thread.ProjectRef ?? _getCurrentProject()?.Id ?? "current",
+                ProjectId = session.ProjectRef ?? _getCurrentProject()?.Id ?? "current",
                 ProjectPath = projectPath,
-                PromptSessionId = tab.ActiveRunId?.Value ?? thread.ThreadId,
+                PromptSessionId = tab.ActiveRunId?.Value ?? session.SessionId,
                 ModelProviderId = tab.ProviderId.Value,
                 ModelId = tab.ModelId,
-                ThreadId = thread.ThreadId,
+                SessionId = session.SessionId,
             },
             events,
             isReplay,
@@ -311,8 +311,8 @@ internal sealed class PluginHostBridge
     }
 
     public async Task<PluginCompactionAugmentation> BeforeCompactionAsync(
-        SessionViewDescriptor thread,
-        OpenThreadState tab,
+        SessionViewDescriptor session,
+        OpenSessionState tab,
         CancellationToken cancellationToken = default)
     {
         var activePlugins = _runtime.ActivePlugins;
@@ -321,12 +321,12 @@ internal sealed class PluginHostBridge
             return new PluginCompactionAugmentation();
         }
 
-        var options = CreateOptions(thread, tab, IsCodeAltaManagedProvider(new ModelProviderId(thread.ResolvedProviderKey)));
+        var options = CreateOptions(session, tab, IsCodeAltaManagedProvider(new ModelProviderId(session.ResolvedProviderKey)));
         var seed = activePlugins[0];
         var metadata = new Dictionary<string, string>
         {
-            ["ThreadTitle"] = thread.Title,
-            ["ProviderId"] = thread.ResolvedProviderKey,
+            ["SessionTitle"] = session.Title,
+            ["ProviderId"] = session.ResolvedProviderKey,
         };
         var before = new PluginBeforeCompactionContext
         {
@@ -337,14 +337,14 @@ internal sealed class PluginHostBridge
             ScopeProjectPath = seed.RuntimeContext.ScopeProjectPath,
             ProjectId = options.ProjectId,
             ProjectPath = options.ProjectPath,
-            ThreadId = options.ThreadId,
+            SessionId = options.SessionId,
             RunId = options.RunId,
             ProviderId = options.ProviderId,
             Model = options.Model,
             CancellationToken = cancellationToken,
             CompactionId = tab.ActiveRunId?.Value,
             Metadata = metadata,
-            PlanSummary = $"Manual compaction requested for '{thread.Title}'.",
+            PlanSummary = $"Manual compaction requested for '{session.Title}'.",
         };
         var instructions = new PluginCompactionInstructionContext
         {
@@ -355,7 +355,7 @@ internal sealed class PluginHostBridge
             ScopeProjectPath = seed.RuntimeContext.ScopeProjectPath,
             ProjectId = options.ProjectId,
             ProjectPath = options.ProjectPath,
-            ThreadId = options.ThreadId,
+            SessionId = options.SessionId,
             RunId = options.RunId,
             ProviderId = options.ProviderId,
             Model = options.Model,
@@ -373,7 +373,7 @@ internal sealed class PluginHostBridge
             ScopeProjectPath = seed.RuntimeContext.ScopeProjectPath,
             ProjectId = options.ProjectId,
             ProjectPath = options.ProjectPath,
-            ThreadId = options.ThreadId,
+            SessionId = options.SessionId,
             RunId = options.RunId,
             ProviderId = options.ProviderId,
             Model = options.Model,
@@ -401,8 +401,8 @@ internal sealed class PluginHostBridge
     }
 
     public async Task AfterCompactionAsync(
-        SessionViewDescriptor thread,
-        OpenThreadState tab,
+        SessionViewDescriptor session,
+        OpenSessionState tab,
         bool succeeded,
         string? summary,
         CancellationToken cancellationToken = default)
@@ -413,7 +413,7 @@ internal sealed class PluginHostBridge
             return;
         }
 
-        var options = CreateOptions(thread, tab, IsCodeAltaManagedProvider(new ModelProviderId(thread.ResolvedProviderKey)));
+        var options = CreateOptions(session, tab, IsCodeAltaManagedProvider(new ModelProviderId(session.ResolvedProviderKey)));
         var seed = activePlugins[0];
         var after = new PluginAfterCompactionContext
         {
@@ -424,7 +424,7 @@ internal sealed class PluginHostBridge
             ScopeProjectPath = seed.RuntimeContext.ScopeProjectPath,
             ProjectId = options.ProjectId,
             ProjectPath = options.ProjectPath,
-            ThreadId = options.ThreadId,
+            SessionId = options.SessionId,
             RunId = options.RunId,
             ProviderId = options.ProviderId,
             Model = options.Model,
@@ -432,8 +432,8 @@ internal sealed class PluginHostBridge
             CompactionId = tab.ActiveRunId?.Value,
             Metadata = new Dictionary<string, string>
             {
-                ["ThreadTitle"] = thread.Title,
-                ["ProviderId"] = thread.ResolvedProviderKey,
+                ["SessionTitle"] = session.Title,
+                ["ProviderId"] = session.ResolvedProviderKey,
             },
             Succeeded = succeeded,
             Summary = summary,
@@ -472,33 +472,33 @@ internal sealed class PluginHostBridge
         };
     }
 
-    private PluginAdapterOperationOptions CreateOptions(SessionViewDescriptor? thread, OpenThreadState? tab, bool isCodeAltaManagedBackend = false)
+    private PluginAdapterOperationOptions CreateOptions(SessionViewDescriptor? session, OpenSessionState? tab, bool isCodeAltaManagedBackend = false)
         => new()
         {
-            ProjectId = thread?.ProjectRef ?? _getCurrentProject()?.Id,
-            ProjectPath = ResolveProjectPath(thread) ?? _getCurrentProject()?.ProjectPath,
-            ThreadId = thread?.ThreadId,
+            ProjectId = session?.ProjectRef ?? _getCurrentProject()?.Id,
+            ProjectPath = ResolveProjectPath(session) ?? _getCurrentProject()?.ProjectPath,
+            SessionId = session?.SessionId,
             RunId = tab?.ActiveRunId?.Value,
-            ProviderId = tab?.ProviderId.Value ?? thread?.ResolvedProviderKey,
+            ProviderId = tab?.ProviderId.Value ?? session?.ResolvedProviderKey,
             Model = tab?.ModelId,
             IsCodeAltaManagedBackend = isCodeAltaManagedBackend,
             HasInteractiveUi = true,
         };
 
-    private string? ResolveProjectPath(SessionViewDescriptor? thread)
+    private string? ResolveProjectPath(SessionViewDescriptor? session)
     {
-        if (thread is null)
+        if (session is null)
         {
             return null;
         }
 
         var project = _getCurrentProject();
-        if (project is not null && string.Equals(project.Id, thread.ProjectRef, StringComparison.OrdinalIgnoreCase))
+        if (project is not null && string.Equals(project.Id, session.ProjectRef, StringComparison.OrdinalIgnoreCase))
         {
             return project.ProjectPath;
         }
 
-        return thread.WorkingDirectory;
+        return session.WorkingDirectory;
     }
 
     private static bool IsCodeAltaManagedProvider(ModelProviderId providerId)
@@ -529,8 +529,8 @@ internal sealed class PluginHostBridge
         return new AgentInput(items);
     }
 
-    private static PluginPromptContributionScopeKey CreatePromptContributionScopeKey(SessionViewDescriptor thread, OpenThreadState tab)
-        => new(thread.ThreadId, tab.ActiveRunId?.Value);
+    private static PluginPromptContributionScopeKey CreatePromptContributionScopeKey(SessionViewDescriptor session, OpenSessionState tab)
+        => new(session.SessionId, tab.ActiveRunId?.Value);
 
     private static async Task<string?> BuildPromptTextAsync(
         IEnumerable<PluginPromptPart> parts,
@@ -590,7 +590,7 @@ internal sealed class PluginHostBridge
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options.ProjectId,
             ProjectPath = options.ProjectPath,
-            ThreadId = options.ThreadId,
+            SessionId = options.SessionId,
             RunId = options.RunId,
             ProviderId = options.ProviderId,
             Model = options.Model,

@@ -14,7 +14,7 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
     private const string ProjectDraftScopeKeyPrefix = "__draft__:project:";
 
     private readonly PromptDraftCoordinator _promptDrafts;
-    private readonly ThreadPromptDraftPersistenceCoordinator _promptDraftPersistence;
+    private readonly SessionPromptDraftPersistenceCoordinator _promptDraftPersistence;
     private readonly Func<ShellSelection> _getSelection;
     private readonly FrontendEventPublisher _frontendEvents;
     private readonly Action _onPromptImageAttachmentsChanged;
@@ -34,7 +34,7 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(frontendEvents);
 
         _promptDrafts = promptDrafts;
-        _promptDraftPersistence = new ThreadPromptDraftPersistenceCoordinator(catalogOptions);
+        _promptDraftPersistence = new SessionPromptDraftPersistenceCoordinator(catalogOptions);
         _getSelection = getSelection;
         _frontendEvents = frontendEvents;
         _onPromptImageAttachmentsChanged = onPromptImageAttachmentsChanged ?? (static () => { });
@@ -48,7 +48,7 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
         set => GetActivePromptState().ViewModel.PromptText = value ?? string.Empty;
     }
 
-    public Binding<string?> GetPromptTextBinding(string promptSessionId, ThreadSessionState? session)
+    public Binding<string?> GetPromptTextBinding(string promptSessionId, SessionState? session)
         => GetOrCreatePromptState(promptSessionId, session).ViewModel.Bind.PromptText;
 
     public bool HasCurrentPromptDraft
@@ -56,16 +56,16 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
         get
         {
             var state = GetActivePromptState();
-            if (state.ThreadSession is not null)
+            if (state.BoundSession is not null)
             {
-                return !string.IsNullOrWhiteSpace(state.ThreadSession.PromptDraftText) || state.ThreadSession.PromptImageAttachments.Count > 0;
+                return !string.IsNullOrWhiteSpace(state.BoundSession.PromptDraftText) || state.BoundSession.PromptImageAttachments.Count > 0;
             }
 
             return HasDraftPrompt(ResolveCurrentDraftScopeKey()) || state.DraftPromptImages.Count > 0;
         }
     }
 
-    public void SyncPromptText(ThreadSessionState? session)
+    public void SyncPromptText(SessionState? session)
     {
         var previousImageList = GetCurrentImageList(GetActivePromptState());
         _activePromptSessionId = session is null ? DraftPromptSessionId : ResolveCurrentPromptSessionId();
@@ -103,31 +103,31 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
 
     public bool HasCurrentPromptImages => GetCurrentImageList(GetActivePromptState()).Count > 0;
 
-    public IReadOnlyList<PromptImageAttachment> GetPromptImages(string promptSessionId, ThreadSessionState? session)
+    public IReadOnlyList<PromptImageAttachment> GetPromptImages(string promptSessionId, SessionState? session)
         => GetCurrentImageList(GetOrCreatePromptState(promptSessionId, session));
 
     public string GetNextImageTitle()
         => GetNextImageTitle(GetActivePromptState());
 
-    public string GetNextImageTitle(string promptSessionId, ThreadSessionState? session)
+    public string GetNextImageTitle(string promptSessionId, SessionState? session)
         => GetNextImageTitle(GetOrCreatePromptState(promptSessionId, session));
 
     public void AddPromptImage(PromptImageAttachment image)
         => AddPromptImage(GetActivePromptState(), image);
 
-    public void AddPromptImage(string promptSessionId, ThreadSessionState? session, PromptImageAttachment image)
+    public void AddPromptImage(string promptSessionId, SessionState? session, PromptImageAttachment image)
         => AddPromptImage(GetOrCreatePromptState(promptSessionId, session), image);
 
     public bool RenamePromptImage(string imageId, string title)
         => RenamePromptImage(GetActivePromptState(), imageId, title);
 
-    public bool RenamePromptImage(string promptSessionId, ThreadSessionState? session, string imageId, string title)
+    public bool RenamePromptImage(string promptSessionId, SessionState? session, string imageId, string title)
         => RenamePromptImage(GetOrCreatePromptState(promptSessionId, session), imageId, title);
 
     public bool DeletePromptImage(string imageId)
         => DeletePromptImage(GetActivePromptState(), imageId);
 
-    public bool DeletePromptImage(string promptSessionId, ThreadSessionState? session, string imageId)
+    public bool DeletePromptImage(string promptSessionId, SessionState? session, string imageId)
         => DeletePromptImage(GetOrCreatePromptState(promptSessionId, session), imageId);
 
     public IReadOnlyList<PromptImageAttachment> SnapshotPromptImages()
@@ -139,11 +139,11 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
     public void ClearPromptImages()
         => ClearPromptImages(GetActivePromptState());
 
-    public string? LoadPromptDraft(string threadId)
-        => _promptDraftPersistence.LoadPromptDraft(threadId);
+    public string? LoadPromptDraft(string sessionId)
+        => _promptDraftPersistence.LoadPromptDraft(sessionId);
 
-    public bool HasPersistedPromptDraft(string threadId)
-        => _promptDraftPersistence.HasPromptDraft(threadId);
+    public bool HasPersistedPromptDraft(string sessionId)
+        => _promptDraftPersistence.HasPromptDraft(sessionId);
 
     public bool HasDraftPrompt(string? projectId, bool isGlobal)
         => HasDraftPrompt(ResolveDraftScopeKey(projectId, isGlobal));
@@ -154,8 +154,8 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
         return _promptDrafts.HasDraftPrompt(draftScopeKey) || _promptDraftPersistence.HasPromptDraft(draftScopeKey);
     }
 
-    public void DeletePersistedPromptDraft(string threadId)
-        => _promptDraftPersistence.DeletePromptDraft(threadId);
+    public void DeletePersistedPromptDraft(string sessionId)
+        => _promptDraftPersistence.DeletePromptDraft(sessionId);
 
     public ValueTask DisposeAsync()
         => _promptDraftPersistence.DisposeAsync();
@@ -165,9 +165,9 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
             _activePromptSessionId,
             string.Equals(_activePromptSessionId, DraftPromptSessionId, StringComparison.OrdinalIgnoreCase)
                 ? null
-                : ResolveActiveThreadSession());
+                : ResolveActiveBoundSession());
 
-    private PromptDraftSessionState GetOrCreatePromptState(string promptSessionId, ThreadSessionState? session)
+    private PromptDraftSessionState GetOrCreatePromptState(string promptSessionId, SessionState? session)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(promptSessionId);
 
@@ -178,9 +178,9 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
             _promptSessions.Add(promptSessionId, state);
         }
 
-        if (session is not null && !ReferenceEquals(state.ThreadSession, session))
+        if (session is not null && !ReferenceEquals(state.BoundSession, session))
         {
-            state.ThreadSession = session;
+            state.BoundSession = session;
         }
 
         if (session is null && string.Equals(promptSessionId, DraftPromptSessionId, StringComparison.OrdinalIgnoreCase) &&
@@ -193,24 +193,24 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
         return state;
     }
 
-    private ThreadSessionState? ResolveActiveThreadSession()
+    private SessionState? ResolveActiveBoundSession()
     {
-        if (_getSelection().Target is not WorkspaceTarget.Thread { ThreadId: { Length: > 0 } selectedThreadId })
+        if (_getSelection().Target is not WorkspaceTarget.Session { SessionId: { Length: > 0 } selectedSessionId })
         {
             return null;
         }
 
-        if (!_promptSessions.TryGetValue(selectedThreadId, out var state))
+        if (!_promptSessions.TryGetValue(selectedSessionId, out var state))
         {
             return null;
         }
 
-        return state.ThreadSession;
+        return state.BoundSession;
     }
 
     private string ResolveCurrentPromptSessionId()
-        => _getSelection().Target is WorkspaceTarget.Thread { ThreadId: { Length: > 0 } selectedThreadId }
-            ? selectedThreadId
+        => _getSelection().Target is WorkspaceTarget.Session { SessionId: { Length: > 0 } selectedSessionId }
+            ? selectedSessionId
             : DraftPromptSessionId;
 
     private string ResolveCurrentDraftScopeKey()
@@ -239,9 +239,9 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
 
     private void SyncPromptTextFromSession(PromptDraftSessionState state)
     {
-        var promptText = state.ThreadSession is null
+        var promptText = state.BoundSession is null
             ? GetDraftPrompt(state.DraftScopeKey)
-            : _promptDrafts.GetPrompt(state.ThreadSession);
+            : _promptDrafts.GetPrompt(state.BoundSession);
         if (string.Equals(state.ViewModel.PromptText, promptText, StringComparison.Ordinal))
         {
             return;
@@ -259,7 +259,7 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
     }
 
     private List<PromptImageAttachment> GetCurrentImageList(PromptDraftSessionState state)
-        => state.ThreadSession?.PromptImageAttachments ?? state.DraftPromptImages;
+        => state.BoundSession?.PromptImageAttachments ?? state.DraftPromptImages;
 
     private string GetNextImageTitle(PromptDraftSessionState state)
     {
@@ -361,13 +361,13 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
     private void NotifyPromptImagesChanged(PromptDraftSessionState state, bool editedStateChanged)
     {
         _onPromptImageAttachmentsChanged();
-        if (state.ThreadSession is not null && editedStateChanged)
+        if (state.BoundSession is not null && editedStateChanged)
         {
-            PublishThreadPromptEditedStateChanged(state.PromptSessionId);
+            PublishSessionPromptEditedStateChanged(state.PromptSessionId);
         }
-        else if (state.ThreadSession is null && editedStateChanged)
+        else if (state.BoundSession is null && editedStateChanged)
         {
-            PublishThreadPromptEditedStateChanged(state.DraftScopeKey);
+            PublishSessionPromptEditedStateChanged(state.DraftScopeKey);
         }
     }
 
@@ -378,14 +378,14 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
             return;
         }
 
-        var draftScopeKey = state.ThreadSession is null ? state.DraftScopeKey : null;
-        var change = _promptDrafts.RememberPrompt(state.ThreadSession, value, draftScopeKey);
-        if (state.ThreadSession is not null)
+        var draftScopeKey = state.BoundSession is null ? state.DraftScopeKey : null;
+        var change = _promptDrafts.RememberPrompt(state.BoundSession, value, draftScopeKey);
+        if (state.BoundSession is not null)
         {
-            _promptDraftPersistence.ObservePromptDraft(state.PromptSessionId, state.ThreadSession.PromptDraftText);
+            _promptDraftPersistence.ObservePromptDraft(state.PromptSessionId, state.BoundSession.PromptDraftText);
             if (change.EditedStateChanged)
             {
-                PublishThreadPromptEditedStateChanged(state.PromptSessionId);
+                PublishSessionPromptEditedStateChanged(state.PromptSessionId);
             }
 
             return;
@@ -394,7 +394,7 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
         _promptDraftPersistence.ObservePromptDraft(draftScopeKey!, _promptDrafts.GetPrompt(null, draftScopeKey));
         if (change.EditedStateChanged)
         {
-            PublishThreadPromptEditedStateChanged(draftScopeKey!);
+            PublishSessionPromptEditedStateChanged(draftScopeKey!);
         }
     }
 
@@ -410,11 +410,11 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
         return promptText;
     }
 
-    private void PublishThreadPromptEditedStateChanged(string threadId)
+    private void PublishSessionPromptEditedStateChanged(string sessionId)
     {
-        if (!string.IsNullOrWhiteSpace(threadId))
+        if (!string.IsNullOrWhiteSpace(sessionId))
         {
-            _frontendEvents.Publish(new PromptDraftChangedEvent(threadId));
+            _frontendEvents.Publish(new PromptDraftChangedEvent(sessionId));
         }
     }
 
@@ -429,7 +429,7 @@ internal sealed class PromptDraftUiCoordinator : IAsyncDisposable
 
         public PromptDraftViewModel ViewModel { get; set; } = null!;
 
-        public ThreadSessionState? ThreadSession { get; set; }
+        public SessionState? BoundSession { get; set; }
 
         public List<PromptImageAttachment> DraftPromptImages { get; } = [];
 

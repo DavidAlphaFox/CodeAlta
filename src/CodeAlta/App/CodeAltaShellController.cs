@@ -10,7 +10,7 @@ using XenoAtom.Logging;
 
 namespace CodeAlta.App;
 
-internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IAsyncDisposable
+internal sealed class CodeAltaShellController : ISessionRuntimeEventProjector, IAsyncDisposable
 {
     private readonly ICodeAltaShell _shell;
     private readonly IKnownProjectImporter _knownProjectImporter;
@@ -19,7 +19,7 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
     private readonly SessionLoadCoordinator _sessionLoadCoordinator;
     private readonly ISessionDeleter _sessionDeleter;
     private readonly CancellationTokenSource _disposeCts = new();
-    private readonly ConcurrentQueue<WorkThreadRuntimeEvent> _pendingRuntimeEvents = new();
+    private readonly ConcurrentQueue<SessionRuntimeEvent> _pendingRuntimeEvents = new();
     private IUiDispatcher? _uiDispatcher;
     private int _runtimeEventDrainScheduled;
     private CancellationTokenSource? _initializationCts;
@@ -103,14 +103,14 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         }
     }
 
-    public Task ApplyRuntimeEventAsync(WorkThreadRuntimeEvent runtimeEvent, CancellationToken cancellationToken)
+    public Task ApplyRuntimeEventAsync(SessionRuntimeEvent runtimeEvent, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(runtimeEvent);
         cancellationToken.ThrowIfCancellationRequested();
         return UiDispatcher.InvokeAsync(() => _shell.HandleRuntimeEvent(runtimeEvent));
     }
 
-    public void QueueRuntimeEvent(WorkThreadRuntimeEvent runtimeEvent, CancellationToken cancellationToken)
+    public void QueueRuntimeEvent(SessionRuntimeEvent runtimeEvent, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(runtimeEvent);
         cancellationToken.ThrowIfCancellationRequested();
@@ -123,7 +123,7 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxEvents);
 
         var drainedEvents = 0;
-        WorkThreadRuntimeEvent? pendingEvent = null;
+        SessionRuntimeEvent? pendingEvent = null;
         while (drainedEvents < maxEvents && _pendingRuntimeEvents.TryDequeue(out var runtimeEvent))
         {
             drainedEvents++;
@@ -164,14 +164,14 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         return UiDispatcher.InvokeAsync(() => _shell.SelectProjectScope(projectId));
     }
 
-    public Task OpenThreadAsync(string threadId, CancellationToken cancellationToken)
+    public Task OpenSessionAsync(string sessionId, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
         cancellationToken.ThrowIfCancellationRequested();
         return UiDispatcher.InvokeAsync(
             () =>
             {
-                _shell.OpenThread(threadId);
+                _shell.OpenSession(sessionId);
                 _shell.FocusPromptEditor();
             });
     }
@@ -203,22 +203,22 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         return project;
     }
 
-    public async Task<IReadOnlyList<SessionViewDescriptor>> LoadProjectThreadsAsync(
+    public async Task<IReadOnlyList<SessionViewDescriptor>> LoadProjectSessionsAsync(
         string projectId,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var threads = await CollectRecoverableSessionsAsync(
+        var sessions = await CollectRecoverableSessionsAsync(
                 _recoverableSessionSource.ListRecoverableSessionsAsync(cancellationToken),
                 cancellationToken)
             .ConfigureAwait(false);
-        return threads
-            .Where(thread =>
-                string.Equals(thread.ProjectRef, projectId, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(static thread => thread.LastActiveAt)
-            .ThenBy(static thread => thread.Title, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static thread => thread.ThreadId, StringComparer.OrdinalIgnoreCase)
+        return sessions
+            .Where(session =>
+                string.Equals(session.ProjectRef, projectId, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(static session => session.LastActiveAt)
+            .ThenBy(static session => session.Title, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static session => session.SessionId, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -236,48 +236,48 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         await ReloadCatalogAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<DeleteSessionResult> DeleteSessionAsync(string threadId, CancellationToken cancellationToken)
+    public async Task<DeleteSessionResult> DeleteSessionAsync(string sessionId, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
-        var threads = await CollectRecoverableSessionsAsync(
+        var sessions = await CollectRecoverableSessionsAsync(
                 _recoverableSessionSource.ListRecoverableSessionsAsync(cancellationToken),
                 cancellationToken)
             .ConfigureAwait(false);
-        return await DeleteSessionAsync(threadId, threads, cancellationToken).ConfigureAwait(false);
+        return await DeleteSessionAsync(sessionId, sessions, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<DeleteSessionResult> DeleteSessionAsync(
-        string threadId,
-        IReadOnlyList<SessionViewDescriptor> knownThreads,
+        string sessionId,
+        IReadOnlyList<SessionViewDescriptor> knownSessions,
         CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
-        ArgumentNullException.ThrowIfNull(knownThreads);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        ArgumentNullException.ThrowIfNull(knownSessions);
 
-        var thread = knownThreads.FirstOrDefault(candidate => string.Equals(candidate.ThreadId, threadId, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException($"Session '{threadId}' was not found.");
-        return await DeleteSessionAsync(thread, knownThreads, cancellationToken).ConfigureAwait(false);
+        var session = knownSessions.FirstOrDefault(candidate => string.Equals(candidate.SessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Session '{sessionId}' was not found.");
+        return await DeleteSessionAsync(session, knownSessions, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<DeleteSessionResult> DeleteSessionAsync(
-        SessionViewDescriptor thread,
-        IReadOnlyList<SessionViewDescriptor> knownThreads,
+        SessionViewDescriptor session,
+        IReadOnlyList<SessionViewDescriptor> knownSessions,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(thread);
-        ArgumentNullException.ThrowIfNull(knownThreads);
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(knownSessions);
 
-        var threadsToDelete = CollectThreadSubtree(thread, knownThreads);
+        var sessionsToDelete = CollectSessionSubtree(session, knownSessions);
         var deletedByBackend = false;
-        foreach (var candidate in threadsToDelete)
+        foreach (var candidate in sessionsToDelete)
         {
             deletedByBackend |= await _sessionDeleter.DeleteSessionAsync(candidate, cancellationToken).ConfigureAwait(false);
         }
 
-        var deletedThreadIds = threadsToDelete.Select(static candidate => candidate.ThreadId).ToArray();
+        var deletedSessionIds = sessionsToDelete.Select(static candidate => candidate.SessionId).ToArray();
         return new DeleteSessionResult(
-            deletedThreadIds,
+            deletedSessionIds,
             deletedByBackend);
     }
 
@@ -287,27 +287,27 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
 
         var project = await _projectCatalog.GetByIdAsync(projectId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"Project '{projectId}' was not found.");
-        var threads = await LoadProjectThreadsAsync(projectId, cancellationToken).ConfigureAwait(false);
-        return await DeleteProjectAsync(project, threads, cancellationToken).ConfigureAwait(false);
+        var sessions = await LoadProjectSessionsAsync(projectId, cancellationToken).ConfigureAwait(false);
+        return await DeleteProjectAsync(project, sessions, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<DeleteProjectResult> DeleteProjectAsync(
         ProjectDescriptor project,
-        IReadOnlyList<SessionViewDescriptor> threads,
+        IReadOnlyList<SessionViewDescriptor> sessions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
-        ArgumentNullException.ThrowIfNull(threads);
+        ArgumentNullException.ThrowIfNull(sessions);
 
-        foreach (var thread in threads)
+        foreach (var session in sessions)
         {
-            await _sessionDeleter.DeleteSessionAsync(thread, cancellationToken).ConfigureAwait(false);
+            await _sessionDeleter.DeleteSessionAsync(session, cancellationToken).ConfigureAwait(false);
         }
 
         project.Archived = true;
         await _projectCatalog.SaveAsync(project, cancellationToken).ConfigureAwait(false);
-        var deletedThreadIds = threads.Select(static thread => thread.ThreadId).ToArray();
-        return new DeleteProjectResult(project.Id, deletedThreadIds);
+        var deletedSessionIds = sessions.Select(static session => session.SessionId).ToArray();
+        return new DeleteProjectResult(project.Id, deletedSessionIds);
     }
 
     public async ValueTask DisposeAsync()
@@ -333,13 +333,13 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
     private IUiDispatcher UiDispatcher
         => _uiDispatcher ?? throw new InvalidOperationException("The UI dispatcher must be attached before shell operations begin.");
 
-    private static IReadOnlyList<SessionViewDescriptor> CollectThreadSubtree(
+    private static IReadOnlyList<SessionViewDescriptor> CollectSessionSubtree(
         SessionViewDescriptor root,
-        IReadOnlyList<SessionViewDescriptor> threads)
+        IReadOnlyList<SessionViewDescriptor> sessions)
     {
-        var byParentId = threads
-            .Where(static thread => !string.IsNullOrWhiteSpace(thread.ParentThreadId))
-            .GroupBy(static thread => thread.ParentThreadId!, StringComparer.OrdinalIgnoreCase)
+        var byParentId = sessions
+            .Where(static session => !string.IsNullOrWhiteSpace(session.ParentSessionId))
+            .GroupBy(static session => session.ParentSessionId!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var result = new List<SessionViewDescriptor>();
@@ -347,15 +347,15 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         result.Reverse();
         return result;
 
-        void Collect(SessionViewDescriptor thread)
+        void Collect(SessionViewDescriptor session)
         {
-            if (!visited.Add(thread.ThreadId))
+            if (!visited.Add(session.SessionId))
             {
                 return;
             }
 
-            result.Add(thread);
-            if (!byParentId.TryGetValue(thread.ThreadId, out var children))
+            result.Add(session);
+            if (!byParentId.TryGetValue(session.SessionId, out var children))
             {
                 return;
             }
@@ -429,7 +429,7 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         var initializedForInteraction = false;
         try
         {
-            // These startup calls are background I/O and must not assume UI-thread affinity.
+            // These startup calls are background I/O and must not assume UI-session affinity.
             var startupProviderLoadTask = Task.Run(
                 () => InitializeStartupTracksAsync(cancellationToken),
                 CancellationToken.None);
@@ -501,7 +501,7 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
                 _shell.PublishStartupCatalogProjectionReady();
                 _shell.SetReadyStatusForCurrentSelection();
                 _shell.SetInitialized(true);
-                _shell.TrySchedulePendingStartupThreadRestore(CancellationToken.None);
+                _shell.TrySchedulePendingStartupSessionRestore(CancellationToken.None);
             });
     }
 
@@ -520,16 +520,16 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
     }
 
     internal static bool TryMergeRuntimeEvents(
-        WorkThreadRuntimeEvent first,
-        WorkThreadRuntimeEvent second,
-        out WorkThreadRuntimeEvent? merged)
+        SessionRuntimeEvent first,
+        SessionRuntimeEvent second,
+        out SessionRuntimeEvent? merged)
     {
         ArgumentNullException.ThrowIfNull(first);
         ArgumentNullException.ThrowIfNull(second);
 
-        if (first is WorkThreadAgentEvent { Event: AgentContentDeltaEvent firstDelta } firstAgent &&
-            second is WorkThreadAgentEvent { Event: AgentContentDeltaEvent secondDelta } secondAgent &&
-            string.Equals(firstAgent.ThreadId, secondAgent.ThreadId, StringComparison.Ordinal) &&
+        if (first is SessionAgentEvent { Event: AgentContentDeltaEvent firstDelta } firstAgent &&
+            second is SessionAgentEvent { Event: AgentContentDeltaEvent secondDelta } secondAgent &&
+            string.Equals(firstAgent.SessionId, secondAgent.SessionId, StringComparison.Ordinal) &&
             firstDelta.Kind == secondDelta.Kind &&
             string.Equals(firstDelta.ContentId, secondDelta.ContentId, StringComparison.Ordinal) &&
             string.Equals(firstDelta.ParentActivityId, secondDelta.ParentActivityId, StringComparison.Ordinal) &&
@@ -537,8 +537,8 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
             firstDelta.ProviderId == secondDelta.ProviderId &&
             firstDelta.RunId == secondDelta.RunId)
         {
-            merged = new WorkThreadAgentEvent(
-                firstAgent.ThreadId,
+            merged = new SessionAgentEvent(
+                firstAgent.SessionId,
                 new AgentContentDeltaEvent(
                     firstDelta.ProviderId,
                     firstDelta.SessionId,

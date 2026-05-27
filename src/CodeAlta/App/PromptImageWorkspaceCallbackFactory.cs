@@ -28,7 +28,7 @@ internal static class PromptImageWorkspaceCallbackFactory
     public static PromptImageWorkspaceCallbacks Create(
         PromptDraftUiCoordinator promptDrafts,
         string promptSessionId,
-        ThreadSessionState? session,
+        SessionState? session,
         PromptImageCapabilityContext capabilities,
         Action<string, StatusTone> setStatus)
     {

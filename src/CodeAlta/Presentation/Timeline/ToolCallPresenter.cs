@@ -306,7 +306,7 @@ internal sealed class ToolCallPresenter
                 return;
             }
 
-            var metadata = new MarkdownControl(string.Empty) { HorizontalAlignment = Align.Stretch, VerticalAlignment = Align.Start, Options = ChatTimelineVisualFactory.CreateThreadMarkdownOptions(5, _localFileRootPath) };
+            var metadata = new MarkdownControl(string.Empty) { HorizontalAlignment = Align.Stretch, VerticalAlignment = Align.Start, Options = ChatTimelineVisualFactory.CreateSessionMarkdownOptions(5, _localFileRootPath) };
             var wrapText = new State<bool>(true);
             var log = new LogControl { MaxCapacity = ToolCallDialogLogCapacity, HorizontalAlignment = Align.Stretch, VerticalAlignment = Align.Stretch }.WrapText(wrapText);
             var statsText = new Markup(string.Empty);

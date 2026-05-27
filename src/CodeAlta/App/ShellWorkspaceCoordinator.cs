@@ -22,24 +22,24 @@ internal sealed class ShellWorkspaceCoordinator : IWorkspaceProjectionController
 
     public ShellWorkspaceCoordinator(
         CodeAltaShellViewModel shellViewModel,
-        ThreadWorkspaceViewModel threadWorkspaceViewModel,
+        SessionWorkspaceViewModel sessionWorkspaceViewModel,
         SessionUsageViewModel sessionUsageViewModel,
         Dictionary<string, ModelProviderState> modelProviderStates,
-        ThreadSelectionContext threadSelection,
+        SessionSelectionContext sessionSelection,
         ShellWorkspaceContext workspaceContext)
     {
         ArgumentNullException.ThrowIfNull(shellViewModel);
-        ArgumentNullException.ThrowIfNull(threadWorkspaceViewModel);
+        ArgumentNullException.ThrowIfNull(sessionWorkspaceViewModel);
         ArgumentNullException.ThrowIfNull(sessionUsageViewModel);
         ArgumentNullException.ThrowIfNull(modelProviderStates);
-        ArgumentNullException.ThrowIfNull(threadSelection);
+        ArgumentNullException.ThrowIfNull(sessionSelection);
         ArgumentNullException.ThrowIfNull(workspaceContext);
 
         _shellViewModel = shellViewModel;
         _workspaceContext = workspaceContext;
-        _statusProjection = new ShellStatusProjectionController(shellViewModel, threadSelection, workspaceContext, _viewRefreshState);
-        _sessionUsageProjection = new SessionUsageProjectionController(sessionUsageViewModel, modelProviderStates, threadSelection, workspaceContext, _usageRefreshState);
-        _workspaceProjection = new WorkspaceProjectionController(threadWorkspaceViewModel, threadSelection, workspaceContext, _viewRefreshState, _statusProjection, _sessionUsageProjection);
+        _statusProjection = new ShellStatusProjectionController(shellViewModel, sessionSelection, workspaceContext, _viewRefreshState);
+        _sessionUsageProjection = new SessionUsageProjectionController(sessionUsageViewModel, modelProviderStates, sessionSelection, workspaceContext, _usageRefreshState);
+        _workspaceProjection = new WorkspaceProjectionController(sessionWorkspaceViewModel, sessionSelection, workspaceContext, _viewRefreshState, _statusProjection, _sessionUsageProjection);
     }
 
     public ComputedVisual CreateComputedVisual(Func<Visual> build)
@@ -75,25 +75,25 @@ internal sealed class ShellWorkspaceCoordinator : IWorkspaceProjectionController
     public void SetStatus(string message, bool showSpinner, StatusTone tone, string? iconMarkup)
         => _statusProjection.SetStatus(message, showSpinner, tone, iconMarkup);
 
-    public void SetThreadStatus(
-        OpenThreadState tab,
+    public void SetSessionStatus(
+        OpenSessionState tab,
         string message,
         bool showSpinner = false,
         StatusTone tone = StatusTone.Info,
         bool hasCustomStatus = true)
-        => _statusProjection.SetThreadStatus(tab, message, showSpinner, tone, hasCustomStatus);
+        => _statusProjection.SetSessionStatus(tab, message, showSpinner, tone, hasCustomStatus);
 
-    public void ClearThreadStatus(OpenThreadState tab)
-        => _statusProjection.ClearThreadStatus(tab);
+    public void ClearSessionStatus(OpenSessionState tab)
+        => _statusProjection.ClearSessionStatus(tab);
 
     public void ApplySessionUsageProjection()
         => _sessionUsageProjection.ApplySessionUsageProjection();
 
-    public void ApplyThreadChromeProjection()
-        => _workspaceProjection.ApplyThreadChromeProjection();
+    public void ApplySessionChromeProjection()
+        => _workspaceProjection.ApplySessionChromeProjection();
 
-    public void ApplyThreadStatusProjection()
-        => _workspaceProjection.ApplyThreadStatusProjection();
+    public void ApplySessionStatusProjection()
+        => _workspaceProjection.ApplySessionStatusProjection();
 
     public void ApplyPromptDraftProjection()
         => _workspaceProjection.ApplyPromptDraftProjection();

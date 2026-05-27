@@ -12,6 +12,16 @@ namespace CodeAlta.Catalog.Tests;
 public sealed class CatalogInfrastructureTests
 {
     [TestMethod]
+    public void CatalogOptions_InternalSessionsRoot_KeepsLegacyPersistedDirectory()
+    {
+        var options = new CatalogOptions { GlobalRoot = Path.Combine("tmp", "alta-home") };
+
+        // Compatibility: internal session linkage was persisted below threads/internal before the
+        // in-memory terminology moved to Session/SessionView, so the wire path must not change.
+        Assert.AreEqual(Path.Combine(options.GlobalRoot, "threads", "internal"), options.InternalSessionsRoot);
+    }
+
+    [TestMethod]
     public async Task ProjectCatalog_UpsertFromPathAsync_CreatesAndReloadsProject()
     {
         using var root = TempDirectory.Create();
@@ -112,11 +122,11 @@ public sealed class CatalogInfrastructureTests
         var catalogRoot = Path.Combine(root.Path, ".alta");
         var projectA = Path.Combine(root.Path, "Tomlyn");
         var projectB = Path.Combine(root.Path, "XenoAtom.Terminal");
-        var internalThreadRoot = Path.Combine(catalogRoot, "threads", "internal", "child-1");
+        var internalSessionRoot = Path.Combine(catalogRoot, "sessions", "internal", "child-1");
         Directory.CreateDirectory(catalogRoot);
         Directory.CreateDirectory(projectA);
         Directory.CreateDirectory(projectB);
-        Directory.CreateDirectory(internalThreadRoot);
+        Directory.CreateDirectory(internalSessionRoot);
 
         var catalog = new ProjectCatalog(new CatalogOptions { GlobalRoot = catalogRoot });
         var imported = await catalog.ImportWorkingDirectoriesAsync(
@@ -125,7 +135,7 @@ public sealed class CatalogInfrastructureTests
                 projectB,
                 projectA,
                 catalogRoot,
-                internalThreadRoot,
+                internalSessionRoot,
                 Path.Combine(catalogRoot, "missing"),
             ]).ConfigureAwait(false);
 
@@ -348,15 +358,15 @@ public sealed class CatalogInfrastructureTests
     }
 
     [TestMethod]
-    public void WorkThreadYamlSerializer_MarkdownRoundTrip_Works()
+    public void SessionViewYamlSerializer_MarkdownRoundTrip_Works()
     {
-        var serializer = new WorkThreadYamlSerializer();
-        var descriptor = CreateInternalThreadDescriptor();
+        var serializer = new SessionViewYamlSerializer();
+        var descriptor = CreateInternalSessionDescriptor();
         descriptor.MessageCount = 7;
         descriptor.CreatedBy = new AltaActorProvenance
         {
             Kind = "plugin",
-            SourceThreadId = "parent",
+            SourceSessionId = "parent",
             SourceProjectId = descriptor.ProjectRef,
             SourceAgentId = "agent:parent",
             PluginRuntimeKey = "sample-plugin",
@@ -365,83 +375,83 @@ public sealed class CatalogInfrastructureTests
         };
         descriptor.MarkdownBody = "# Review sqlitevec integration";
 
-        var markdown = serializer.SerializeThreadMarkdown(descriptor);
-        var reloaded = serializer.DeserializeThreadMarkdown(markdown);
+        var markdown = serializer.SerializeSessionMarkdown(descriptor);
+        var reloaded = serializer.DeserializeSessionMarkdown(markdown);
         reloaded.Validate();
 
-        Assert.AreEqual(descriptor.ThreadId, reloaded.ThreadId);
+        Assert.AreEqual(descriptor.SessionId, reloaded.SessionId);
         Assert.AreEqual(descriptor.Kind, reloaded.Kind);
         Assert.AreEqual(descriptor.ProjectRef, reloaded.ProjectRef);
-        Assert.AreEqual(descriptor.ParentThreadId, reloaded.ParentThreadId);
+        Assert.AreEqual(descriptor.ParentSessionId, reloaded.ParentSessionId);
         Assert.AreEqual(descriptor.ProviderId, reloaded.ProviderId);
         Assert.AreEqual(descriptor.ResolvedProviderKey, reloaded.ResolvedProviderKey);
-        Assert.AreEqual(descriptor.ThreadId, reloaded.ThreadId);
+        Assert.AreEqual(descriptor.SessionId, reloaded.SessionId);
         Assert.AreEqual(descriptor.StartedAt, reloaded.StartedAt);
         Assert.IsNotNull(reloaded.CreatedBy);
         Assert.AreEqual("plugin", reloaded.CreatedBy.Kind);
-        Assert.AreEqual("parent", reloaded.CreatedBy.SourceThreadId);
+        Assert.AreEqual("parent", reloaded.CreatedBy.SourceSessionId);
         Assert.AreEqual("sample-plugin", reloaded.CreatedBy.PluginRuntimeKey);
         Assert.AreEqual(descriptor.CreatedBy.CreatedAt, reloaded.CreatedBy.CreatedAt);
         Assert.AreEqual(7, reloaded.MessageCount);
     }
 
     [TestMethod]
-    public void WorkThreadYamlSerializer_DeserializeThreadMarkdown_MigratesLegacySessionId()
+    public void SessionViewYamlSerializer_DeserializeSessionMarkdown_MigratesLegacySessionId()
     {
-        var serializer = new WorkThreadYamlSerializer();
+        var serializer = new SessionViewYamlSerializer();
         var legacyKey = "backend_" + "session_id";
 
-        var reloaded = serializer.DeserializeThreadMarkdown($"""
+        var reloaded = serializer.DeserializeSessionMarkdown($"""
             ---
-            thread_id: codex:thread-one
-            kind: internal_thread
+            session_id: codex:session-one
+            kind: internal_session
             backend_id: codex
             provider_key: codex
-            {legacyKey}: thread-one
+            {legacyKey}: session-one
             title: Legacy
             ---
 
             # Legacy
             """);
 
-        Assert.AreEqual("thread-one", reloaded.ThreadId);
+        Assert.AreEqual("session-one", reloaded.SessionId);
     }
 
     [TestMethod]
-    public void WorkThreadYamlSerializer_DeserializeThreadMarkdown_KeepsMatchingLegacySessionId()
+    public void SessionViewYamlSerializer_DeserializeSessionMarkdown_KeepsMatchingLegacySessionId()
     {
-        var serializer = new WorkThreadYamlSerializer();
+        var serializer = new SessionViewYamlSerializer();
         var legacyKey = "backend_" + "session_id";
 
-        var reloaded = serializer.DeserializeThreadMarkdown($"""
+        var reloaded = serializer.DeserializeSessionMarkdown($"""
             ---
-            thread_id: thread-one
-            kind: internal_thread
+            session_id: session-one
+            kind: internal_session
             backend_id: codex
             provider_key: codex
-            {legacyKey}: thread-one
+            {legacyKey}: session-one
             title: Legacy
             ---
 
             # Legacy
             """);
 
-        Assert.AreEqual("thread-one", reloaded.ThreadId);
+        Assert.AreEqual("session-one", reloaded.SessionId);
     }
 
     [TestMethod]
-    public void WorkThreadYamlSerializer_DeserializeThreadMarkdown_RejectsConflictingLegacyIds()
+    public void SessionViewYamlSerializer_DeserializeSessionMarkdown_RejectsConflictingLegacyIds()
     {
-        var serializer = new WorkThreadYamlSerializer();
+        var serializer = new SessionViewYamlSerializer();
         var legacyKey = "backend_" + "session_id";
 
-        Assert.ThrowsExactly<InvalidDataException>(() => serializer.DeserializeThreadMarkdown($"""
+        Assert.ThrowsExactly<InvalidDataException>(() => serializer.DeserializeSessionMarkdown($"""
             ---
-            thread_id: thread-one
-            kind: internal_thread
+            session_id: session-one
+            kind: internal_session
             backend_id: codex
             provider_key: codex
-            {legacyKey}: other-thread
+            {legacyKey}: other-session
             title: Legacy
             ---
 
@@ -450,11 +460,11 @@ public sealed class CatalogInfrastructureTests
     }
 
     [TestMethod]
-    public async Task WorkThreadCatalog_SaveInternalAsync_PersistsInternalThreads()
+    public async Task SessionViewCatalog_SaveInternalAsync_PersistsInternalSessions()
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var catalog = new WorkThreadCatalog(options);
+        var catalog = new SessionViewCatalog(options);
         var project = new ProjectDescriptor
         {
             Id = Guid.CreateVersion7().ToString(),
@@ -465,16 +475,16 @@ public sealed class CatalogInfrastructureTests
             MarkdownBody = "# Main Repo"
         };
         var timestamp = new DateTimeOffset(2026, 03, 10, 12, 0, 0, TimeSpan.Zero);
-        var internalThread = new SessionViewDescriptor
+        var internalSession = new SessionViewDescriptor
         {
-            ThreadId = "019cc85b",
-            Kind = WorkThreadKind.InternalThread,
+            SessionId = "019cc85b",
+            Kind = SessionViewKind.InternalSession,
             ProviderId = "codex",
             ProjectRef = project.Id,
-            ParentThreadId = "019cc700",
-            WorkingDirectory = Path.Combine(root.Path, "threads", "internal", "codex-019cc85b"),
+            ParentSessionId = "019cc700",
+            WorkingDirectory = Path.Combine(root.Path, "sessions", "internal", "codex-019cc85b"),
             Title = "Review sqlitevec integration",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = timestamp,
             UpdatedAt = timestamp,
             LastActiveAt = timestamp,
@@ -482,30 +492,30 @@ public sealed class CatalogInfrastructureTests
             MarkdownBody = "# Review sqlitevec integration",
         };
 
-        await catalog.SaveInternalAsync(internalThread).ConfigureAwait(false);
+        await catalog.SaveInternalAsync(internalSession).ConfigureAwait(false);
 
         var loaded = await catalog.LoadInternalAsync().ConfigureAwait(false);
         Assert.AreEqual(1, loaded.Count);
-        Assert.AreEqual(WorkThreadKind.InternalThread, loaded[0].Kind);
+        Assert.AreEqual(SessionViewKind.InternalSession, loaded[0].Kind);
         Assert.AreEqual(project.Id, loaded[0].ProjectRef);
-        Assert.IsNotNull(internalThread.SourcePath);
-        Assert.IsTrue(File.Exists(internalThread.SourcePath));
+        Assert.IsNotNull(internalSession.SourcePath);
+        Assert.IsTrue(File.Exists(internalSession.SourcePath));
     }
 
     [TestMethod]
-    public async Task WorkThreadCatalog_SaveInternalAsync_RejectsNonInternalThread()
+    public async Task SessionViewCatalog_SaveInternalAsync_RejectsNonInternalSession()
     {
         using var root = TempDirectory.Create();
-        var catalog = new WorkThreadCatalog(new CatalogOptions { GlobalRoot = root.Path });
+        var catalog = new SessionViewCatalog(new CatalogOptions { GlobalRoot = root.Path });
         var descriptor = new SessionViewDescriptor
         {
-            ThreadId = "019cc700",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "019cc700",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = "copilot",
             ProjectRef = Guid.CreateVersion7().ToString(),
             WorkingDirectory = @"C:\code\repo-main",
-            Title = "Project thread",
-            Status = WorkThreadStatus.Active,
+            Title = "Project session",
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,
@@ -515,23 +525,23 @@ public sealed class CatalogInfrastructureTests
     }
 
     [TestMethod]
-    public async Task WorkThreadJournalStore_ImmutableHeaderOmitsDerivedStateFields()
+    public async Task SessionViewJournalStore_ImmutableHeaderOmitsDerivedStateFields()
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var catalog = new WorkThreadCatalog(options);
+        var catalog = new SessionViewCatalog(options);
         var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = "thread-header-test",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "session-header-test",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = "codex",
             ProviderKey = "codex",
             ProjectRef = Guid.CreateVersion7().ToString(),
-            ParentThreadId = "thread-parent",
+            ParentSessionId = "session-parent",
             WorkingDirectory = @"C:\code\repo-main",
             Title = "Header test",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = createdAt,
             UpdatedAt = createdAt.AddMinutes(5),
             LastActiveAt = createdAt.AddMinutes(10),
@@ -539,13 +549,13 @@ public sealed class CatalogInfrastructureTests
             MessageCount = 42,
         };
 
-        await catalog.JournalStore.EnsureHeaderAsync(thread).ConfigureAwait(false);
-        await catalog.JournalStore.AppendStateAsync(thread, new WorkThreadLocalState { MessageCount = 42 }).ConfigureAwait(false);
+        await catalog.JournalStore.EnsureHeaderAsync(session).ConfigureAwait(false);
+        await catalog.JournalStore.AppendStateAsync(session, new SessionViewLocalState { MessageCount = 42 }).ConfigureAwait(false);
 
-        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(thread.ThreadId, thread.CreatedAt);
+        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(session.SessionId, session.CreatedAt);
         var firstLine = File.ReadLines(path).First();
         using var document = JsonDocument.Parse(firstLine);
-        Assert.AreEqual(WorkThreadJournalStore.ThreadHeaderEventType, document.RootElement.GetProperty("backendEventType").GetString());
+        Assert.AreEqual(SessionViewJournalStore.SessionHeaderEventType, document.RootElement.GetProperty("backendEventType").GetString());
         var raw = document.RootElement.GetProperty("raw");
         Assert.IsFalse(raw.TryGetProperty("updated_at", out _));
         Assert.IsFalse(raw.TryGetProperty("last_active_at", out _));
@@ -554,26 +564,26 @@ public sealed class CatalogInfrastructureTests
         Assert.IsFalse(raw.TryGetProperty("model_id", out _));
         Assert.IsFalse(raw.TryGetProperty("reasoning_effort", out _));
         Assert.AreEqual("Header test", raw.GetProperty("title").GetString());
-        Assert.AreEqual("thread-parent", raw.GetProperty("parent_thread_id").GetString());
+        Assert.AreEqual("session-parent", raw.GetProperty("parent_session_id").GetString());
     }
 
     [TestMethod]
-    public async Task WorkThreadJournalStore_ConcurrentBackendAndCatalogWrites_DoNotThrow()
+    public async Task SessionViewJournalStore_ConcurrentBackendAndCatalogWrites_DoNotThrow()
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var catalog = new WorkThreadCatalog(options);
+        var catalog = new SessionViewCatalog(options);
         var sessionStore = catalog.JournalStore.CreateSessionStore();
         var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = "thread-concurrent-log-test",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "session-concurrent-log-test",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = "codex",
             ProviderKey = "codex",
             WorkingDirectory = @"C:\code\repo-main",
             Title = "Concurrent log test",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = createdAt,
             UpdatedAt = createdAt,
             LastActiveAt = createdAt,
@@ -584,55 +594,55 @@ public sealed class CatalogInfrastructureTests
                 ? sessionStore.UpsertSessionAsync(
                     new LocalAgentSessionSummary
                     {
-                        SessionId = thread.ThreadId,
-                        ProviderId = new ModelProviderId(thread.ProviderId),
+                        SessionId = session.SessionId,
+                        ProviderId = new ModelProviderId(session.ProviderId),
                         ProtocolFamily = "local",
                         ProviderKey = "codex",
                         CreatedAt = createdAt,
                         UpdatedAt = createdAt.AddSeconds(index),
                     })
-                : catalog.JournalStore.AppendStateAsync(thread, new WorkThreadLocalState { MessageCount = index }))
+                : catalog.JournalStore.AppendStateAsync(session, new SessionViewLocalState { MessageCount = index }))
             .ToArray();
 
         await Task.WhenAll(writes).ConfigureAwait(false);
 
-        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(thread.ThreadId, thread.CreatedAt);
+        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(session.SessionId, session.CreatedAt);
         var lines = File.ReadLines(path).ToArray();
         Assert.AreEqual(41, lines.Length);
         using var firstLine = JsonDocument.Parse(lines[0]);
-        Assert.AreEqual(WorkThreadJournalStore.ThreadHeaderEventType, firstLine.RootElement.GetProperty("backendEventType").GetString());
+        Assert.AreEqual(SessionViewJournalStore.SessionHeaderEventType, firstLine.RootElement.GetProperty("backendEventType").GetString());
         Assert.AreEqual(0, Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.lock").Count());
     }
 
     [TestMethod]
-    public async Task WorkThreadJournalStore_AppendStateWaitsForExclusiveFileHandleWithoutDiskLock()
+    public async Task SessionViewJournalStore_AppendStateWaitsForExclusiveFileHandleWithoutDiskLock()
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var catalog = new WorkThreadCatalog(options);
+        var catalog = new SessionViewCatalog(options);
         var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = "thread-exclusive-file-test",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "session-exclusive-file-test",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = "codex",
             ProviderKey = "codex",
             WorkingDirectory = @"C:\code\repo-main",
             Title = "Exclusive file test",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = createdAt,
             UpdatedAt = createdAt,
             LastActiveAt = createdAt,
         };
 
-        await catalog.JournalStore.EnsureHeaderAsync(thread).ConfigureAwait(false);
-        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(thread.ThreadId, thread.CreatedAt);
+        await catalog.JournalStore.EnsureHeaderAsync(session).ConfigureAwait(false);
+        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(session.SessionId, session.CreatedAt);
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await using var exclusiveHandle = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
 
         var appendTask = catalog.JournalStore.AppendStateAsync(
-            thread,
-            new WorkThreadLocalState { MessageCount = 7 },
+            session,
+            new SessionViewLocalState { MessageCount = 7 },
             cancellation.Token);
         await Task.Delay(100, cancellation.Token).ConfigureAwait(false);
 
@@ -646,22 +656,22 @@ public sealed class CatalogInfrastructureTests
     }
 
     [TestMethod]
-    public async Task WorkThreadJournalStore_PrependsHeaderWhenBackendCreatedJournalFirst()
+    public async Task SessionViewJournalStore_PrependsHeaderWhenBackendCreatedJournalFirst()
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var catalog = new WorkThreadCatalog(options);
+        var catalog = new SessionViewCatalog(options);
         var sessionStore = catalog.JournalStore.CreateSessionStore();
         var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = "thread-backend-first-test",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "session-backend-first-test",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = "codex",
             ProviderKey = "codex",
             WorkingDirectory = @"C:\code\repo-main",
             Title = "Backend first test",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = createdAt,
             UpdatedAt = createdAt,
             LastActiveAt = createdAt,
@@ -670,8 +680,8 @@ public sealed class CatalogInfrastructureTests
         await sessionStore.UpsertSessionAsync(
                 new LocalAgentSessionSummary
                 {
-                    SessionId = thread.ThreadId,
-                    ProviderId = new ModelProviderId(thread.ProviderId),
+                    SessionId = session.SessionId,
+                    ProviderId = new ModelProviderId(session.ProviderId),
                     ProtocolFamily = "local",
                     ProviderKey = "codex",
                     CreatedAt = createdAt,
@@ -679,65 +689,65 @@ public sealed class CatalogInfrastructureTests
                 })
             .ConfigureAwait(false);
 
-        await catalog.JournalStore.AppendStateAsync(thread, new WorkThreadLocalState { MessageCount = 7 }).ConfigureAwait(false);
+        await catalog.JournalStore.AppendStateAsync(session, new SessionViewLocalState { MessageCount = 7 }).ConfigureAwait(false);
 
-        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(thread.ThreadId, thread.CreatedAt);
+        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(session.SessionId, session.CreatedAt);
         var lines = File.ReadLines(path).ToArray();
         Assert.AreEqual(3, lines.Length);
         using var firstLine = JsonDocument.Parse(lines[0]);
-        Assert.AreEqual(WorkThreadJournalStore.ThreadHeaderEventType, firstLine.RootElement.GetProperty("backendEventType").GetString());
-        var latestState = await catalog.JournalStore.ReadLatestStateAsync(thread.ThreadId, thread.CreatedAt).ConfigureAwait(false);
+        Assert.AreEqual(SessionViewJournalStore.SessionHeaderEventType, firstLine.RootElement.GetProperty("backendEventType").GetString());
+        var latestState = await catalog.JournalStore.ReadLatestStateAsync(session.SessionId, session.CreatedAt).ConfigureAwait(false);
         Assert.IsNotNull(latestState);
         Assert.AreEqual(7, latestState.MessageCount);
     }
 
     [TestMethod]
-    public async Task WorkThreadJournalStore_ReadLatestStateFindsStateBeyondInitialTailProbe()
+    public async Task SessionViewJournalStore_ReadLatestStateFindsStateBeyondInitialTailProbe()
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var catalog = new WorkThreadCatalog(options);
+        var catalog = new SessionViewCatalog(options);
         var createdAt = new DateTimeOffset(2026, 05, 12, 10, 00, 00, TimeSpan.Zero);
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = "thread-tail-probe-test",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "session-tail-probe-test",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = "codex",
             ProviderKey = "codex",
             WorkingDirectory = @"C:\code\repo-main",
             Title = "Tail probe test",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = createdAt,
             UpdatedAt = createdAt,
             LastActiveAt = createdAt,
         };
 
-        await catalog.JournalStore.AppendStateAsync(thread, new WorkThreadLocalState { MessageCount = 99 }).ConfigureAwait(false);
-        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(thread.ThreadId, thread.CreatedAt);
+        await catalog.JournalStore.AppendStateAsync(session, new SessionViewLocalState { MessageCount = 99 }).ConfigureAwait(false);
+        var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(session.SessionId, session.CreatedAt);
         var padding = new string('x', 70 * 1024);
-        await File.AppendAllTextAsync(path, $"{{\"$type\":\"raw\",\"ProviderId\":\"codex\",\"sessionId\":\"{thread.ThreadId}\",\"timestamp\":\"{createdAt:O}\",\"backendEventType\":\"padding\",\"raw\":{{\"value\":\"{padding}\"}}}}{Environment.NewLine}").ConfigureAwait(false);
+        await File.AppendAllTextAsync(path, $"{{\"$type\":\"raw\",\"ProviderId\":\"codex\",\"sessionId\":\"{session.SessionId}\",\"timestamp\":\"{createdAt:O}\",\"backendEventType\":\"padding\",\"raw\":{{\"value\":\"{padding}\"}}}}{Environment.NewLine}").ConfigureAwait(false);
 
-        var latestState = await catalog.JournalStore.ReadLatestStateAsync(thread.ThreadId, thread.CreatedAt).ConfigureAwait(false);
+        var latestState = await catalog.JournalStore.ReadLatestStateAsync(session.SessionId, session.CreatedAt).ConfigureAwait(false);
 
         Assert.IsNotNull(latestState);
         Assert.AreEqual(99, latestState.MessageCount);
     }
 
     [TestMethod]
-    public async Task WorkThreadCatalog_ViewStateRoundTrip_Works()
+    public async Task SessionViewCatalog_ViewStateRoundTrip_Works()
     {
         using var root = TempDirectory.Create();
-        var threadCatalog = new WorkThreadCatalog(new CatalogOptions { GlobalRoot = root.Path });
+        var sessionCatalog = new SessionViewCatalog(new CatalogOptions { GlobalRoot = root.Path });
 
-        var viewState = new WorkThreadViewState
+        var viewState = new SessionViewViewState
         {
-            OpenThreadIds = ["global", "platform-search-review"],
-            Selection = WorkThreadSelectionState.Thread("platform-search-review", "project-1"),
-            SelectedThreadId = "platform-search-review",
+            OpenSessionIds = ["global", "platform-search-review"],
+            Selection = SessionViewSelectionState.Session("platform-search-review", "project-1"),
+            SelectedSessionId = "platform-search-review",
             UpdatedAt = new DateTimeOffset(2026, 03, 10, 13, 0, 0, TimeSpan.Zero),
-            ProjectPreferences = new Dictionary<string, WorkThreadPreference>(StringComparer.OrdinalIgnoreCase)
+            ProjectPreferences = new Dictionary<string, SessionViewPreference>(StringComparer.OrdinalIgnoreCase)
             {
-                ["project-1"] = new WorkThreadPreference
+                ["project-1"] = new SessionViewPreference
                 {
                     ProviderKey = "zai",
                     ModelId = "gpt-5.4",
@@ -747,20 +757,20 @@ public sealed class CatalogInfrastructureTests
             Navigator = new NavigatorSettings
             {
                 SortMode = NavigatorProjectSortMode.Date,
-                RecentThreadsPerProject = 8,
+                RecentSessionsPerProject = 8,
                 ThemeSchemeName = "Elderberry Dark Soft",
             },
-            ThreadStates = new Dictionary<string, WorkThreadLocalState>(StringComparer.OrdinalIgnoreCase)
+            SessionStates = new Dictionary<string, SessionViewLocalState>(StringComparer.OrdinalIgnoreCase)
             {
-                ["platform-search-review"] = new WorkThreadLocalState
+                ["platform-search-review"] = new SessionViewLocalState
                 {
                     Archived = true,
                     MessageCount = 42,
-                    ParentThreadId = "codex:parent",
+                    ParentSessionId = "codex:parent",
                     CreatedBy = new AltaActorProvenance
                     {
                         Kind = "agent",
-                        SourceThreadId = "codex:parent",
+                        SourceSessionId = "codex:parent",
                         SourceProjectId = "project-1",
                         SourceAgentId = "agent:parent",
                         CorrelationId = "correlation-viewstate",
@@ -770,41 +780,41 @@ public sealed class CatalogInfrastructureTests
             },
         };
 
-        await threadCatalog.SaveViewStateAsync(viewState).ConfigureAwait(false);
-        var reloaded = await threadCatalog.LoadViewStateAsync().ConfigureAwait(false);
+        await sessionCatalog.SaveViewStateAsync(viewState).ConfigureAwait(false);
+        var reloaded = await sessionCatalog.LoadViewStateAsync().ConfigureAwait(false);
 
-        CollectionAssert.AreEqual(viewState.OpenThreadIds, reloaded.OpenThreadIds);
-        Assert.AreEqual(WorkThreadSelectionSurface.Thread, reloaded.Selection.Surface);
-        Assert.AreEqual("platform-search-review", reloaded.Selection.ThreadId);
+        CollectionAssert.AreEqual(viewState.OpenSessionIds, reloaded.OpenSessionIds);
+        Assert.AreEqual(SessionViewSelectionSurface.Session, reloaded.Selection.Surface);
+        Assert.AreEqual("platform-search-review", reloaded.Selection.SessionId);
         Assert.AreEqual("project-1", reloaded.Selection.ProjectId);
-        Assert.AreEqual(viewState.SelectedThreadId, reloaded.SelectedThreadId);
+        Assert.AreEqual(viewState.SelectedSessionId, reloaded.SelectedSessionId);
         Assert.AreEqual("zai", reloaded.ProjectPreferences["project-1"].ProviderKey);
         Assert.AreEqual("gpt-5.4", reloaded.ProjectPreferences["project-1"].ModelId);
         Assert.AreEqual(AgentReasoningEffort.High, reloaded.ProjectPreferences["project-1"].ReasoningEffort);
         Assert.AreEqual(NavigatorProjectSortMode.Date, reloaded.Navigator.SortMode);
-        Assert.AreEqual(8, reloaded.Navigator.RecentThreadsPerProject);
+        Assert.AreEqual(8, reloaded.Navigator.RecentSessionsPerProject);
         Assert.AreEqual("Elderberry Dark Soft", reloaded.Navigator.ThemeSchemeName);
-        Assert.AreEqual(0, reloaded.ThreadPreferences.Count);
-        Assert.AreEqual(0, reloaded.ThreadStates.Count);
+        Assert.AreEqual(0, reloaded.SessionPreferences.Count);
+        Assert.AreEqual(0, reloaded.SessionStates.Count);
     }
 
     [TestMethod]
-    public void WorkThreadYamlSerializer_DeserializeViewState_MigratesLegacyThreadSelection()
+    public void SessionViewYamlSerializer_DeserializeViewState_MigratesLegacySessionSelection()
     {
-        var serializer = new WorkThreadYamlSerializer();
+        var serializer = new SessionViewYamlSerializer();
         var yaml =
             """
-            open_thread_ids:
+            open_session_ids:
               - global
               - platform-search-review
-            selected_thread_id: platform-search-review
+            selected_session_id: platform-search-review
             """;
 
         var reloaded = serializer.DeserializeViewState(yaml);
 
-        Assert.AreEqual(WorkThreadSelectionSurface.Thread, reloaded.Selection.Surface);
-        Assert.AreEqual("platform-search-review", reloaded.Selection.ThreadId);
-        Assert.AreEqual("platform-search-review", reloaded.SelectedThreadId);
+        Assert.AreEqual(SessionViewSelectionSurface.Session, reloaded.Selection.Surface);
+        Assert.AreEqual("platform-search-review", reloaded.Selection.SessionId);
+        Assert.AreEqual("platform-search-review", reloaded.SelectedSessionId);
     }
 
     [TestMethod]
@@ -1149,19 +1159,19 @@ public sealed class CatalogInfrastructureTests
         };
     }
 
-    private static SessionViewDescriptor CreateInternalThreadDescriptor()
+    private static SessionViewDescriptor CreateInternalSessionDescriptor()
     {
         var timestamp = new DateTimeOffset(2026, 03, 10, 12, 0, 0, TimeSpan.Zero);
         return new SessionViewDescriptor
         {
-            ThreadId = "platform-search-review",
-            Kind = WorkThreadKind.InternalThread,
+            SessionId = "platform-search-review",
+            Kind = SessionViewKind.InternalSession,
             ProviderId = "codex",
             ProjectRef = Guid.CreateVersion7().ToString(),
-            ParentThreadId = "global-thread",
-            WorkingDirectory = @"C:\Users\alexa\.alta\threads\internal\platform-search-review",
+            ParentSessionId = "global-session",
+            WorkingDirectory = @"C:\Users\alexa\.alta\sessions\internal\platform-search-review",
             Title = "Review sqlitevec integration",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = timestamp,
             UpdatedAt = timestamp,
             LastActiveAt = timestamp,

@@ -18,7 +18,7 @@ public sealed class WorkspaceRefreshContextTests
             new[]
             {
                 new WorkspaceRefreshRequest(WorkspaceRefreshReason.SelectedSessionUsageInvalidated),
-                new WorkspaceRefreshRequest(WorkspaceRefreshReason.HeaderAndThreadWorkspace),
+                new WorkspaceRefreshRequest(WorkspaceRefreshReason.HeaderAndSessionWorkspace),
             },
             requests);
     }

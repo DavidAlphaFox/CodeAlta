@@ -14,7 +14,7 @@ internal interface IWorkspaceProjectionController
 
     void ApplyTabProjection();
 
-    void ApplyThreadStatusProjection();
+    void ApplySessionStatusProjection();
 
     void ApplyPromptDraftProjection();
 
@@ -84,8 +84,8 @@ internal sealed class ShellProjectionCoordinator : IDisposable
             case RuntimeTimelineChangedEvent:
                 _workspaceProjections.ApplyRuntimeTimelineProjection();
                 break;
-            case ThreadStatusChangedEvent:
-                _workspaceProjections.ApplyThreadStatusProjection();
+            case SessionStatusChangedEvent:
+                _workspaceProjections.ApplySessionStatusProjection();
                 _promptAvailabilityProjection.ApplyPromptAvailabilityProjection();
                 break;
             case PromptDraftChangedEvent:

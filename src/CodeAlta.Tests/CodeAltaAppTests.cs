@@ -16,7 +16,7 @@ using CodeAlta.Presentation.Prompting;
 using CodeAlta.Presentation.Shell;
 using CodeAlta.Presentation.Sidebar;
 using CodeAlta.Presentation.Styling;
-using CodeAlta.Presentation.Threads;
+using CodeAlta.Presentation.Sessions;
 using CodeAlta.Presentation.Timeline;
 using CodeAlta.Presentation.Usage;
 using CodeAlta.Views;
@@ -176,7 +176,7 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public async Task CreatePendingChatMessage_CanBeCreatedFromWorkerThread()
+    public async Task CreatePendingChatMessage_CanBeCreatedFromWorkerSession()
     {
         var pending = await Task.Run(() => ChatTimelineVisualFactory.CreatePendingChatMessage("hello"));
 
@@ -339,7 +339,7 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public async Task BuildUserPromptTimelineItems_CanBeCalledFromWorkerThread()
+    public async Task BuildUserPromptTimelineItems_CanBeCalledFromWorkerSession()
     {
         var pending = ChatTimelineVisualFactory.CreatePendingChatMessage("hello");
 
@@ -659,7 +659,7 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void CreateInitialThreadHistoryLoadPlan_StartsAtLastUserPrompt()
+    public void CreateInitialSessionHistoryLoadPlan_StartsAtLastUserPrompt()
     {
         var timestamp = DateTimeOffset.UtcNow;
         AgentEvent[] history =
@@ -680,7 +680,7 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void CreateInitialThreadHistoryLoadPlan_PinsLatestAuditEventsBeforeLastUserPrompt()
+    public void CreateInitialSessionHistoryLoadPlan_PinsLatestAuditEventsBeforeLastUserPrompt()
     {
         var timestamp = DateTimeOffset.UtcNow;
         var systemPrompt = CreateSystemPromptEvent(timestamp.AddSeconds(3), "sha256:latest");
@@ -898,7 +898,7 @@ public sealed class CodeAltaAppTests
         var timestamp = DateTimeOffset.UtcNow;
 
         Assert.IsTrue(
-            ThreadRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
+            SessionRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
                 new AgentContentDeltaEvent(
                     ModelProviderIds.Copilot,
                     "session-1",
@@ -910,7 +910,7 @@ public sealed class CodeAltaAppTests
                     "Inspecting reconnect state...")));
 
         Assert.IsTrue(
-            ThreadRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
+            SessionRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
                 new AgentActivityEvent(
                     ModelProviderIds.Copilot,
                     "session-1",
@@ -924,7 +924,7 @@ public sealed class CodeAltaAppTests
                     "Searching...")));
 
         Assert.IsFalse(
-            ThreadRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
+            SessionRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
                 new AgentSessionUpdateEvent(
                     ModelProviderIds.Copilot,
                     "session-1",
@@ -934,7 +934,7 @@ public sealed class CodeAltaAppTests
                     "Idle")));
 
         Assert.IsFalse(
-            ThreadRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
+            SessionRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
                 new AgentErrorEvent(
                     ModelProviderIds.Copilot,
                     "session-1",
@@ -946,8 +946,8 @@ public sealed class CodeAltaAppTests
     [TestMethod]
     public void ShouldApplyShellChromeProjectionAfterRuntimeEvent_SkipsUsageOnlySessionUpdates()
     {
-        var runtimeEvent = new WorkThreadAgentEvent(
-            "thread-1",
+        var runtimeEvent = new SessionAgentEvent(
+            "session-1",
             new AgentSessionUpdateEvent(
                 ModelProviderIds.Codex,
                 "session-1",
@@ -956,14 +956,14 @@ public sealed class CodeAltaAppTests
                 AgentSessionUpdateKind.UsageUpdated,
                 "usage updated"));
 
-        Assert.IsFalse(ThreadRuntimeEventCoordinator.ShouldApplyShellChromeProjectionAfterRuntimeEvent(runtimeEvent));
+        Assert.IsFalse(SessionRuntimeEventCoordinator.ShouldApplyShellChromeProjectionAfterRuntimeEvent(runtimeEvent));
     }
 
     [TestMethod]
     public void ShouldApplyShellChromeProjectionAfterRuntimeEvent_KeepsShellRefreshForNonUsageEvents()
     {
-        var runtimeEvent = new WorkThreadAgentEvent(
-            "thread-1",
+        var runtimeEvent = new SessionAgentEvent(
+            "session-1",
             new AgentSessionUpdateEvent(
                 ModelProviderIds.Codex,
                 "session-1",
@@ -972,7 +972,7 @@ public sealed class CodeAltaAppTests
                 AgentSessionUpdateKind.Warning,
                 "warning"));
 
-        Assert.IsTrue(ThreadRuntimeEventCoordinator.ShouldApplyShellChromeProjectionAfterRuntimeEvent(runtimeEvent));
+        Assert.IsTrue(SessionRuntimeEventCoordinator.ShouldApplyShellChromeProjectionAfterRuntimeEvent(runtimeEvent));
     }
 
     [TestMethod]
@@ -986,15 +986,15 @@ public sealed class CodeAltaAppTests
             ProjectPath = @"C:\code\CodeAlta",
         };
 
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = "thread-1",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "session-1",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Review startup",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,
@@ -1002,21 +1002,21 @@ public sealed class CodeAltaAppTests
 
         Assert.AreEqual("Prompt ready", ShellTextFormatter.BuildReadyStatusText(null, null, globalScopeSelected: true));
         Assert.AreEqual("Prompt ready", ShellTextFormatter.BuildReadyStatusText(null, project, globalScopeSelected: false));
-        Assert.AreEqual("Prompt ready", ShellTextFormatter.BuildReadyStatusText(thread, project, globalScopeSelected: false));
+        Assert.AreEqual("Prompt ready", ShellTextFormatter.BuildReadyStatusText(session, project, globalScopeSelected: false));
     }
 
     [TestMethod]
     public void BuildPromptUnavailablePlaceholder_UsesProviderStateAndSelection()
     {
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = "thread-1",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "session-1",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Review startup",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,
@@ -1024,7 +1024,7 @@ public sealed class CodeAltaAppTests
 
         Assert.AreEqual(
             "Waiting for Codex to reconnect...",
-            PromptComposerProjectionBuilder.BuildPromptUnavailablePlaceholder(thread, "Codex", ModelProviderAvailability.Probing, anyBackendReady: false));
+            PromptComposerProjectionBuilder.BuildPromptUnavailablePlaceholder(session, "Codex", ModelProviderAvailability.Probing, anyBackendReady: false));
         Assert.AreEqual(
             "Configure model providers (Ctrl+G Ctrl+R) to start a session...",
             PromptComposerProjectionBuilder.BuildPromptUnavailablePlaceholder(null, "Codex", ModelProviderAvailability.Unsupported, anyBackendReady: false));
@@ -1033,15 +1033,15 @@ public sealed class CodeAltaAppTests
     [TestMethod]
     public void BuildPromptUnavailableStatusText_DescribesConnectingAndMissingProviders()
     {
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = "thread-1",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "session-1",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Review startup",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,
@@ -1049,7 +1049,7 @@ public sealed class CodeAltaAppTests
 
         Assert.AreEqual(
             "Reconnecting session 'Review startup' to Codex. Prompt sending is temporarily unavailable.",
-            PromptComposerProjectionBuilder.BuildPromptUnavailableStatusText(thread, "Codex", ModelProviderAvailability.Probing, anyBackendReady: false));
+            PromptComposerProjectionBuilder.BuildPromptUnavailableStatusText(session, "Codex", ModelProviderAvailability.Probing, anyBackendReady: false));
         Assert.AreEqual(
             "No model provider is ready. Open Model Providers (Ctrl+G Ctrl+R) to configure one.",
             PromptComposerProjectionBuilder.BuildPromptUnavailableStatusText(null, "Codex", ModelProviderAvailability.Unsupported, anyBackendReady: false));
@@ -1078,24 +1078,24 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void CanLoadThreadHistory_AllowsRecoveredActiveSessionsWithoutStartedAt()
+    public void CanLoadSessionHistory_AllowsRecoveredActiveSessionsWithoutStartedAt()
     {
-        var recoverableThread = new SessionViewDescriptor
+        var recoverableSession = new SessionViewDescriptor
         {
-            ThreadId = "copilot:session-1",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "copilot:session-1",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = ModelProviderIds.Copilot.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Recovered Session",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,
             StartedAt = null,
         };
 
-        Assert.IsTrue(SessionHistoryCoordinator.CanLoadThreadHistory(recoverableThread));
+        Assert.IsTrue(SessionHistoryCoordinator.CanLoadSessionHistory(recoverableSession));
     }
 
     [TestMethod]
@@ -1422,7 +1422,7 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public async Task ApplyChatCardTimestamp_CanBeCalledFromWorkerThread()
+    public async Task ApplyChatCardTimestamp_CanBeCalledFromWorkerSession()
     {
         var timestamp = new DateTimeOffset(2026, 03, 12, 14, 5, 6, TimeSpan.FromHours(1));
         var expected = $"[dim]{timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}[/]";
@@ -1434,27 +1434,27 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void ShouldRunInlineOnCurrentThread_AllowsBootstrapThreadBeforeTerminalStarts()
+    public void ShouldRunInlineOnCurrentSession_AllowsBootstrapSessionBeforeTerminalStarts()
     {
-        Assert.IsTrue(CodeAltaApp.ShouldRunInlineOnCurrentThread(
+        Assert.IsTrue(CodeAltaApp.ShouldRunInlineOnCurrentSession(
             dispatcherHasAccess: false,
             terminalLoopStarted: false));
 
-        Assert.IsTrue(CodeAltaApp.ShouldRunInlineOnCurrentThread(
+        Assert.IsTrue(CodeAltaApp.ShouldRunInlineOnCurrentSession(
             dispatcherHasAccess: true,
             terminalLoopStarted: false));
 
-        Assert.IsTrue(CodeAltaApp.ShouldRunInlineOnCurrentThread(
+        Assert.IsTrue(CodeAltaApp.ShouldRunInlineOnCurrentSession(
             dispatcherHasAccess: true,
             terminalLoopStarted: true));
 
-        Assert.IsFalse(CodeAltaApp.ShouldRunInlineOnCurrentThread(
+        Assert.IsFalse(CodeAltaApp.ShouldRunInlineOnCurrentSession(
             dispatcherHasAccess: false,
             terminalLoopStarted: true));
     }
 
     [TestMethod]
-    public void CanAccessBindableState_RequiresUiThreadAfterTerminalStarts()
+    public void CanAccessBindableState_RequiresUiSessionAfterTerminalStarts()
     {
         Assert.IsTrue(CodeAltaApp.CanAccessBindableState(
             dispatcherHasAccess: false,
@@ -1471,64 +1471,64 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void ShouldRunDeferredUiActionInlineOnCurrentThread_OnlyAllowsBootstrapThread()
+    public void ShouldRunDeferredUiActionInlineOnCurrentSession_OnlyAllowsBootstrapSession()
     {
-        Assert.IsFalse(CodeAltaApp.ShouldRunDeferredUiActionInlineOnCurrentThread(
+        Assert.IsFalse(CodeAltaApp.ShouldRunDeferredUiActionInlineOnCurrentSession(
             dispatcherHasAccess: false,
             terminalLoopStarted: false));
 
-        Assert.IsTrue(CodeAltaApp.ShouldRunDeferredUiActionInlineOnCurrentThread(
+        Assert.IsTrue(CodeAltaApp.ShouldRunDeferredUiActionInlineOnCurrentSession(
             dispatcherHasAccess: true,
             terminalLoopStarted: false));
 
-        Assert.IsFalse(CodeAltaApp.ShouldRunDeferredUiActionInlineOnCurrentThread(
+        Assert.IsFalse(CodeAltaApp.ShouldRunDeferredUiActionInlineOnCurrentSession(
             dispatcherHasAccess: true,
             terminalLoopStarted: true));
 
-        Assert.IsFalse(CodeAltaApp.ShouldRunDeferredUiActionInlineOnCurrentThread(
+        Assert.IsFalse(CodeAltaApp.ShouldRunDeferredUiActionInlineOnCurrentSession(
             dispatcherHasAccess: false,
             terminalLoopStarted: true));
     }
 
     [TestMethod]
-    public void SidebarThreadTitle_PreservesFullTitle()
+    public void SidebarSessionTitle_PreservesFullTitle()
     {
         const string title = "  The lunet-build action in this repository is used like this:  ";
 
-        var row = new SidebarNodeViewModel("thread:test", SidebarNodeKind.Thread, selectionTarget: null);
+        var row = new SidebarNodeViewModel("session:test", SidebarNodeKind.Session, selectionTarget: null);
         row.UpdateTitle(title);
 
         Assert.AreEqual(title, row.Title);
     }
 
     [TestMethod]
-    public void ResolveInitialSelection_DefersSelectedThreadRestoreUntilUiLoopStarts()
+    public void ResolveInitialSelection_DefersSelectedSessionRestoreUntilUiLoopStarts()
     {
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = "thread-1",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "session-1",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Investigate startup",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,
         };
 
-        var selection = InitialThreadSelectionResolver.Resolve(
-            new WorkThreadViewState
+        var selection = InitialSessionSelectionResolver.Resolve(
+            new SessionViewViewState
             {
-                OpenThreadIds = ["thread-1"],
-                Selection = WorkThreadSelectionState.Thread("thread-1", "project-1"),
-                SelectedThreadId = "thread-1",
+                OpenSessionIds = ["session-1"],
+                Selection = SessionViewSelectionState.Session("session-1", "project-1"),
+                SelectedSessionId = "session-1",
             },
-            [thread]);
+            [session]);
 
-        Assert.AreEqual("thread-1", selection.SelectedThreadId);
-        Assert.AreEqual("thread-1", selection.StartupThreadRestoreId);
+        Assert.AreEqual("session-1", selection.SelectedSessionId);
+        Assert.AreEqual("session-1", selection.StartupSessionRestoreId);
     }
 
     [TestMethod]
@@ -2215,7 +2215,7 @@ public sealed class CodeAltaAppTests
     {
         var completed = new AgentContentCompletedEvent(
             ModelProviderIds.Codex,
-            "thread-1",
+            "session-1",
             DateTimeOffset.Parse("2026-03-14T14:02:50+00:00"),
             new AgentRunId("turn-1"),
             AgentContentKind.Reasoning,
@@ -2231,7 +2231,7 @@ public sealed class CodeAltaAppTests
     {
         var completed = new AgentContentCompletedEvent(
             ModelProviderIds.Codex,
-            "thread-1",
+            "session-1",
             DateTimeOffset.Parse("2026-03-14T14:02:50+00:00"),
             new AgentRunId("turn-1"),
             AgentContentKind.CommandOutput,
@@ -2247,7 +2247,7 @@ public sealed class CodeAltaAppTests
     {
         var delta = new AgentContentDeltaEvent(
             ModelProviderIds.Codex,
-            "thread-1",
+            "session-1",
             DateTimeOffset.Parse("2026-03-14T14:02:50+00:00"),
             new AgentRunId("turn-1"),
             AgentContentKind.CommandOutput,
@@ -2429,7 +2429,7 @@ public sealed class CodeAltaAppTests
         var usage = new AgentSessionUsage(
             Window: new AgentWindowUsageSnapshot(40473, 258400, null, "Active context window"),
             Scope: AgentUsageScope.CurrentWindow,
-            Source: AgentUsageSource.CodexThreadTokenUsageUpdated,
+            Source: AgentUsageSource.CodexSessionTokenUsageUpdated,
             UpdatedAt: DateTimeOffset.Parse("2026-03-18T21:48:22+00:00"),
             Details: new CodexSessionUsageDetails(
                 LastTurnUsage: new CodexTokenUsage(40064, 40283, 190, 33, 40473),
@@ -2455,7 +2455,7 @@ public sealed class CodeAltaAppTests
                 ReasoningTokens: 14,
                 Label: "Last turn"),
             Scope: AgentUsageScope.CurrentWindow,
-            Source: AgentUsageSource.CodexThreadTokenUsageUpdated,
+            Source: AgentUsageSource.CodexSessionTokenUsageUpdated,
             UpdatedAt: DateTimeOffset.Parse("2026-03-19T05:59:24+00:00"),
             Details: new CodexSessionUsageDetails(
                 LastTurnUsage: new CodexTokenUsage(199424, 200435, 86, 14, 200535),
@@ -2524,9 +2524,9 @@ public sealed class CodeAltaAppTests
     public void MergeSessionUsage_MergesTypedBackendDetails()
     {
         var current = new AgentSessionUsage(
-            Window: new AgentWindowUsageSnapshot(4096, 128000, 8, "Active thread window"),
+            Window: new AgentWindowUsageSnapshot(4096, 128000, 8, "Active session window"),
             Scope: AgentUsageScope.CurrentWindow,
-            Source: AgentUsageSource.CodexThreadTokenUsageUpdated,
+            Source: AgentUsageSource.CodexSessionTokenUsageUpdated,
             UpdatedAt: DateTimeOffset.Parse("2026-03-18T20:00:00+00:00"),
             Details: new CodexSessionUsageDetails(
                 LastTurnUsage: new CodexTokenUsage(10, 100, 20, 5, 125)));
@@ -2768,77 +2768,77 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void FilterThreadsForProject_FiltersProjectThreadsAndCanIncludeInternal()
+    public void FilterSessionsForProject_FiltersProjectSessionsAndCanIncludeInternal()
     {
         var timestamp = DateTimeOffset.UtcNow;
         var project1 = ProjectId.NewVersion7().ToString();
         var project2 = ProjectId.NewVersion7().ToString();
 
-        SessionViewDescriptor[] threads =
+        SessionViewDescriptor[] sessions =
         [
             new SessionViewDescriptor
             {
-                ThreadId = "global",
-                Kind = WorkThreadKind.GlobalThread,
+                SessionId = "global",
+                Kind = SessionViewKind.GlobalSession,
                 ProviderId = "codex",
                 WorkingDirectory = @"C:\Users\alexa\.alta",
                 Title = "Global",
-                Status = WorkThreadStatus.Active,
+                Status = SessionViewStatus.Active,
                 CreatedAt = timestamp,
                 UpdatedAt = timestamp,
                 LastActiveAt = timestamp,
             },
             new SessionViewDescriptor
             {
-                ThreadId = "thread-a",
-                Kind = WorkThreadKind.ProjectThread,
+                SessionId = "session-a",
+                Kind = SessionViewKind.ProjectSession,
                 ProviderId = "codex",
                 ProjectRef = project1,
                 WorkingDirectory = @"C:\code\project1",
                 Title = "Project 1",
-                Status = WorkThreadStatus.Active,
+                Status = SessionViewStatus.Active,
                 CreatedAt = timestamp,
                 UpdatedAt = timestamp,
                 LastActiveAt = timestamp.AddMinutes(1),
             },
             new SessionViewDescriptor
             {
-                ThreadId = "thread-b",
-                Kind = WorkThreadKind.InternalThread,
+                SessionId = "session-b",
+                Kind = SessionViewKind.InternalSession,
                 ProviderId = "codex",
                 ProjectRef = project1,
-                ParentThreadId = "thread-a",
-                WorkingDirectory = @"C:\Users\alexa\.alta\threads\internal\child",
+                ParentSessionId = "session-a",
+                WorkingDirectory = @"C:\Users\alexa\.alta\sessions\internal\child",
                 Title = "Internal child",
-                Status = WorkThreadStatus.Active,
+                Status = SessionViewStatus.Active,
                 CreatedAt = timestamp,
                 UpdatedAt = timestamp,
                 LastActiveAt = timestamp.AddMinutes(2),
             },
             new SessionViewDescriptor
             {
-                ThreadId = "thread-c",
-                Kind = WorkThreadKind.ProjectThread,
+                SessionId = "session-c",
+                Kind = SessionViewKind.ProjectSession,
                 ProviderId = "copilot",
                 ProjectRef = project2,
                 WorkingDirectory = @"C:\code\project2",
                 Title = "Project 2",
-                Status = WorkThreadStatus.Active,
+                Status = SessionViewStatus.Active,
                 CreatedAt = timestamp,
                 UpdatedAt = timestamp,
                 LastActiveAt = timestamp.AddMinutes(3),
             },
         ];
 
-        var filteredWithoutInternal = ThreadScopePresentation.FilterThreadsForProject(threads, project1, includeInternal: false);
-        var filteredWithInternal = ThreadScopePresentation.FilterThreadsForProject(threads, project1, includeInternal: true);
+        var filteredWithoutInternal = SessionScopePresentation.FilterSessionsForProject(sessions, project1, includeInternal: false);
+        var filteredWithInternal = SessionScopePresentation.FilterSessionsForProject(sessions, project1, includeInternal: true);
 
-        CollectionAssert.AreEqual(new[] { "thread-a" }, filteredWithoutInternal.Select(static thread => thread.ThreadId).ToArray());
-        CollectionAssert.AreEqual(new[] { "thread-b", "thread-a" }, filteredWithInternal.Select(static thread => thread.ThreadId).ToArray());
+        CollectionAssert.AreEqual(new[] { "session-a" }, filteredWithoutInternal.Select(static session => session.SessionId).ToArray());
+        CollectionAssert.AreEqual(new[] { "session-b", "session-a" }, filteredWithInternal.Select(static session => session.SessionId).ToArray());
     }
 
     [TestMethod]
-    public void BuildThreadScopeSummary_UsesProjectDisplayNameAndKind()
+    public void BuildSessionScopeSummary_UsesProjectDisplayNameAndKind()
     {
         var projectId = ProjectId.NewVersion7().ToString();
         ProjectDescriptor[] projects =
@@ -2852,15 +2852,15 @@ public sealed class CodeAltaAppTests
             },
         ];
 
-        var globalSummary = ThreadScopePresentation.BuildScopeSummary(
+        var globalSummary = SessionScopePresentation.BuildScopeSummary(
             new SessionViewDescriptor
             {
-                ThreadId = "global",
-                Kind = WorkThreadKind.GlobalThread,
+                SessionId = "global",
+                Kind = SessionViewKind.GlobalSession,
                 ProviderId = "codex",
                 WorkingDirectory = @"C:\Users\alexa\.alta",
                 Title = "Global",
-                Status = WorkThreadStatus.Active,
+                Status = SessionViewStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow,
                 LastActiveAt = DateTimeOffset.UtcNow,
@@ -2868,16 +2868,16 @@ public sealed class CodeAltaAppTests
             projects,
             @"C:\Users\alexa\.alta");
 
-        var projectSummary = ThreadScopePresentation.BuildScopeSummary(
+        var projectSummary = SessionScopePresentation.BuildScopeSummary(
             new SessionViewDescriptor
             {
-                ThreadId = "project",
-                Kind = WorkThreadKind.ProjectThread,
+                SessionId = "project",
+                Kind = SessionViewKind.ProjectSession,
                 ProviderId = "codex",
                 ProjectRef = projectId,
                 WorkingDirectory = @"C:\code\CodeAlta",
                 Title = "Project",
-                Status = WorkThreadStatus.Active,
+                Status = SessionViewStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow,
                 LastActiveAt = DateTimeOffset.UtcNow,
@@ -2885,16 +2885,16 @@ public sealed class CodeAltaAppTests
             projects,
             @"C:\Users\alexa\.alta");
 
-        var internalSummary = ThreadScopePresentation.BuildScopeSummary(
+        var internalSummary = SessionScopePresentation.BuildScopeSummary(
             new SessionViewDescriptor
             {
-                ThreadId = "internal",
-                Kind = WorkThreadKind.InternalThread,
+                SessionId = "internal",
+                Kind = SessionViewKind.InternalSession,
                 ProviderId = "codex",
                 ProjectRef = projectId,
-                WorkingDirectory = @"C:\Users\alexa\.alta\threads\internal",
+                WorkingDirectory = @"C:\Users\alexa\.alta\sessions\internal",
                 Title = "Internal",
-                Status = WorkThreadStatus.Active,
+                Status = SessionViewStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow,
                 LastActiveAt = DateTimeOffset.UtcNow,
@@ -2908,27 +2908,27 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void ResolveSidebarThreadAccent_UsesKindAccentForCopilotThreads()
+    public void ResolveSidebarSessionAccent_UsesKindAccentForCopilotSessions()
     {
-        var accent = SidebarThreadPresentation.ResolveThreadAccent(ModelProviderIds.Copilot.Value, WorkThreadKind.ProjectThread);
+        var accent = SidebarSessionPresentation.ResolveSessionAccent(ModelProviderIds.Copilot.Value, SessionViewKind.ProjectSession);
 
-        Assert.AreEqual(SidebarAccent.ProjectThread, accent);
+        Assert.AreEqual(SidebarAccent.ProjectSession, accent);
     }
 
     [TestMethod]
-    public void ResolveSidebarThreadAccent_UsesKindAccentForCodexThreads()
+    public void ResolveSidebarSessionAccent_UsesKindAccentForCodexSessions()
     {
-        var accent = SidebarThreadPresentation.ResolveThreadAccent(ModelProviderIds.Codex.Value, WorkThreadKind.ProjectThread);
+        var accent = SidebarSessionPresentation.ResolveSessionAccent(ModelProviderIds.Codex.Value, SessionViewKind.ProjectSession);
 
-        Assert.AreEqual(SidebarAccent.ProjectThread, accent);
+        Assert.AreEqual(SidebarAccent.ProjectSession, accent);
     }
 
     [TestMethod]
-    public void BuildSidebarThreadProviderMarkup_UsesSidebarAccentAndProviderLabel()
+    public void BuildSidebarSessionProviderMarkup_UsesSidebarAccentAndProviderLabel()
     {
-        var markup = SidebarThreadPresentation.BuildProviderMarkup(ModelProviderIds.Copilot.Value, displayName: null, WorkThreadKind.ProjectThread);
+        var markup = SidebarSessionPresentation.BuildProviderMarkup(ModelProviderIds.Copilot.Value, displayName: null, SessionViewKind.ProjectSession);
 
-        StringAssert.Contains(markup, UiPalette.GetSidebarAccentMarkup(SidebarAccent.ProjectThread));
+        StringAssert.Contains(markup, UiPalette.GetSidebarAccentMarkup(SidebarAccent.ProjectSession));
         StringAssert.Contains(markup, "Copilot");
         StringAssert.Contains(markup, NerdFont.MdCircleSmall.ToString());
     }
@@ -2936,25 +2936,25 @@ public sealed class CodeAltaAppTests
     [TestMethod]
     public void ResolveProviderDisplayName_PrefersConfiguredDisplayName()
     {
-        var displayName = SidebarThreadPresentation.ResolveProviderDisplayName("myresponses", "OpenAI (Responses)");
+        var displayName = SidebarSessionPresentation.ResolveProviderDisplayName("myresponses", "OpenAI (Responses)");
 
         Assert.AreEqual("OpenAI (Responses)", displayName);
     }
 
     [TestMethod]
-    public void ResolvePreferredExpandedProjectId_OnlyExpandsSelectedThreadProject()
+    public void ResolvePreferredExpandedProjectId_OnlyExpandsSelectedSessionProject()
     {
-        Assert.IsNull(SidebarSelectionResolver.ResolvePreferredExpandedProjectId(selectedThreadProjectId: null));
+        Assert.IsNull(SidebarSelectionResolver.ResolvePreferredExpandedProjectId(selectedSessionProjectId: null));
         Assert.IsNull(SidebarSelectionResolver.ResolvePreferredExpandedProjectId(string.Empty));
         Assert.AreEqual("project-1", SidebarSelectionResolver.ResolvePreferredExpandedProjectId("project-1"));
     }
 
     [TestMethod]
-    public void PromptDraftCoordinator_PreservesSeparateDraftsPerThread()
+    public void PromptDraftCoordinator_PreservesSeparateDraftsPerSession()
     {
         var coordinator = new PromptDraftCoordinator();
-        var first = new ThreadSessionState();
-        var second = new ThreadSessionState();
+        var first = new SessionState();
+        var second = new SessionState();
 
         coordinator.RememberPrompt(first, "first prompt");
         coordinator.RememberPrompt(second, "second prompt");
@@ -2970,20 +2970,20 @@ public sealed class CodeAltaAppTests
     {
         var root = Path.Combine(Path.GetTempPath(), $"CodeAlta.Tests.{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
-        var selectedThreadId = "thread-1";
+        var selectedSessionId = "session-1";
         var coordinator = new PromptDraftUiCoordinator(
             new PromptDraftCoordinator(),
             new CatalogOptions { GlobalRoot = root },
-            () => ShellSelection.Thread(selectedThreadId, "project-1"),
+            () => ShellSelection.Session(selectedSessionId, "project-1"),
             new FrontendEventPublisher(new InlineUiDispatcher()));
         try
         {
-            var first = new ThreadSessionState();
-            var second = new ThreadSessionState();
+            var first = new SessionState();
+            var second = new SessionState();
 
             coordinator.SyncPromptText(first);
             coordinator.PromptText = "first prompt";
-            selectedThreadId = "thread-2";
+            selectedSessionId = "session-2";
             coordinator.SyncPromptText(second);
             Assert.AreEqual(string.Empty, coordinator.PromptText);
 
@@ -2992,11 +2992,11 @@ public sealed class CodeAltaAppTests
             Assert.AreEqual(string.Empty, coordinator.PromptText);
 
             coordinator.PromptText = "draft prompt";
-            selectedThreadId = "thread-1";
+            selectedSessionId = "session-1";
             coordinator.SyncPromptText(first);
             Assert.AreEqual("first prompt", coordinator.PromptText);
 
-            selectedThreadId = "thread-2";
+            selectedSessionId = "session-2";
             coordinator.SyncPromptText(second);
             Assert.AreEqual("second prompt", coordinator.PromptText);
 
@@ -3090,7 +3090,7 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public async Task PromptDraftUiCoordinator_ClearDraftPromptTextClearsProjectDraftAfterThreadSelection()
+    public async Task PromptDraftUiCoordinator_ClearDraftPromptTextClearsProjectDraftAfterSessionSelection()
     {
         var root = Path.Combine(Path.GetTempPath(), $"CodeAlta.Tests.{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -3106,7 +3106,7 @@ public sealed class CodeAltaAppTests
 
             coordinator.SyncPromptText(session: null);
             coordinator.PromptText = "used project draft";
-            selection = ShellSelection.Thread("thread-1", "project-1");
+            selection = ShellSelection.Session("session-1", "project-1");
 
             coordinator.ClearDraftPromptText();
 
@@ -3134,7 +3134,7 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void PromptDraftUiCoordinator_FirstThreadPromptCharacterPublishesPromptDraftEvent()
+    public void PromptDraftUiCoordinator_FirstSessionPromptCharacterPublishesPromptDraftEvent()
     {
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
         var events = new List<ShellFrontendEvent>();
@@ -3142,20 +3142,20 @@ public sealed class CodeAltaAppTests
         var coordinator = new PromptDraftUiCoordinator(
             new PromptDraftCoordinator(),
             new CatalogOptions { GlobalRoot = Path.GetTempPath() },
-            static () => ShellSelection.Thread("thread-1", "project-1"),
+            static () => ShellSelection.Session("session-1", "project-1"),
             publisher);
 
-        coordinator.SyncPromptText(new ThreadSessionState());
+        coordinator.SyncPromptText(new SessionState());
         coordinator.PromptText = "a";
 
         Assert.IsFalse(events.OfType<CatalogChangedEvent>().Any());
-        Assert.IsTrue(events.OfType<PromptDraftChangedEvent>().Any(e => e.PromptSessionId == "thread-1"));
+        Assert.IsTrue(events.OfType<PromptDraftChangedEvent>().Any(e => e.PromptSessionId == "session-1"));
     }
 
     [TestMethod]
     public void CreateStyledPromptEditor_PreservesMarkdownHighlighting()
     {
-        var editor = ThreadWorkspaceView.CreateStyledPromptEditor(_ => { }, onOpenHelp: null, onOpenCommandPalette: null, placeholder: "Prompt");
+        var editor = SessionWorkspaceView.CreateStyledPromptEditor(_ => { }, onOpenHelp: null, onOpenCommandPalette: null, placeholder: "Prompt");
         var style = editor.GetStyle<PromptEditorStyle>();
 
         Assert.IsFalse(editor.Highlighter.IsEmpty);

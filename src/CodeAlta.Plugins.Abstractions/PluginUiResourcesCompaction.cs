@@ -20,10 +20,10 @@ public enum PluginUiRegion
 {
     /// <summary>Command bar controls.</summary>
     CommandBar,
-    /// <summary>Thread footer area above the command bar.</summary>
-    ThreadFooter,
-    /// <summary>Thread status line.</summary>
-    ThreadStatus,
+    /// <summary>Session footer area above the command bar.</summary>
+    SessionFooter,
+    /// <summary>Session status line.</summary>
+    SessionStatus,
 }
 
 /// <summary>Describes a visual UI contribution.</summary>

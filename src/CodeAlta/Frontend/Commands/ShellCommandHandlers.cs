@@ -6,12 +6,12 @@ namespace CodeAlta.Frontend.Commands;
 
 internal static class PromptCommandHandlers
 {
-    public static void Register(ShellCommandRegistry registry, ThreadCommandCoordinator threadCommands)
+    public static void Register(ShellCommandRegistry registry, SessionCommandCoordinator sessionCommands)
     {
         ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(threadCommands);
+        ArgumentNullException.ThrowIfNull(sessionCommands);
 
-        registry.Register<SubmitPromptCommand>((command, cancellationToken) => ToValueTask(threadCommands.SendPromptAsync(command.Text, command.Steer, cancellationToken)));
+        registry.Register<SubmitPromptCommand>((command, cancellationToken) => ToValueTask(sessionCommands.SendPromptAsync(command.Text, command.Steer, cancellationToken)));
     }
 
     private static ValueTask ToValueTask(Task task)
@@ -21,18 +21,18 @@ internal static class PromptCommandHandlers
     }
 }
 
-internal static class ThreadCommandHandlers
+internal static class SessionCommandHandlers
 {
     public static void Register(
         ShellCommandRegistry registry,
-        ThreadCommandCoordinator threadCommands)
+        SessionCommandCoordinator sessionCommands)
     {
         ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(threadCommands);
+        ArgumentNullException.ThrowIfNull(sessionCommands);
 
-        registry.Register<AbortSelectedThreadCommand>((_, _) => ToValueTask(threadCommands.AbortSelectedThreadAsync()));
-        registry.Register<CompactSelectedThreadCommand>((_, _) => ToValueTask(threadCommands.CompactSelectedThreadAsync()));
-        registry.Register<ClearSelectedThreadQueueCommand>((_, _) => ToValueTask(threadCommands.ClearSelectedThreadQueueAsync()));
+        registry.Register<AbortSelectedSessionCommand>((_, _) => ToValueTask(sessionCommands.AbortSelectedSessionAsync()));
+        registry.Register<CompactSelectedSessionCommand>((_, _) => ToValueTask(sessionCommands.CompactSelectedSessionAsync()));
+        registry.Register<ClearSelectedSessionQueueCommand>((_, _) => ToValueTask(sessionCommands.ClearSelectedSessionQueueAsync()));
     }
 
     private static ValueTask ToValueTask(Task task)
@@ -67,7 +67,7 @@ internal static class NavigationCommandHandlers
             return ValueTask.CompletedTask;
         });
         registry.Register<SelectRelativeTabCommand>((command, _) => ToValueTask(navigationCommandService.SelectRelativeTabAsync(command.Offset)));
-        registry.Register<ScrollSelectedThreadMessageCommand>((command, _) => ToValueTask(navigationCommandService.ScrollSelectedThreadMessageAsync(command.Target)));
+        registry.Register<ScrollSelectedSessionMessageCommand>((command, _) => ToValueTask(navigationCommandService.ScrollSelectedSessionMessageAsync(command.Target)));
     }
 
     private static ValueTask ToValueTask(Task task)
@@ -142,9 +142,9 @@ internal static class DialogCommandHandlers
             dialogCommandService.OpenSessionUsage();
             return ValueTask.CompletedTask;
         });
-        registry.Register<OpenThreadInfoCommand>((_, _) =>
+        registry.Register<OpenSessionInfoCommand>((_, _) =>
         {
-            dialogCommandService.OpenThreadInfo();
+            dialogCommandService.OpenSessionInfo();
             return ValueTask.CompletedTask;
         });
         registry.Register<OpenExpandedPromptCommand>((_, _) =>
@@ -183,17 +183,17 @@ internal static class PluginCommandHandlers
     public static void Register(
         ShellCommandRegistry registry,
         IPluginCommandService pluginCommandService,
-        ThreadCommandCoordinator threadCommands,
+        SessionCommandCoordinator sessionCommands,
         IShellStatusService statusService)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(pluginCommandService);
-        ArgumentNullException.ThrowIfNull(threadCommands);
+        ArgumentNullException.ThrowIfNull(sessionCommands);
         ArgumentNullException.ThrowIfNull(statusService);
 
         registry.Register<ExecutePluginTextCommand>((command, cancellationToken) => ToValueTask(ExecutePluginTextCommandAsync(
             pluginCommandService,
-            threadCommands,
+            sessionCommands,
             statusService,
             command.CommandName,
             command.Arguments,
@@ -202,7 +202,7 @@ internal static class PluginCommandHandlers
 
     private static async Task ExecutePluginTextCommandAsync(
         IPluginCommandService pluginCommandService,
-        ThreadCommandCoordinator threadCommands,
+        SessionCommandCoordinator sessionCommands,
         IShellStatusService statusService,
         string name,
         string? arguments,
@@ -218,7 +218,7 @@ internal static class PluginCommandHandlers
 
             if (!string.IsNullOrWhiteSpace(result.PromptText))
             {
-                await threadCommands.SendPromptAsync(result.PromptText, steer: false, cancellationToken);
+                await sessionCommands.SendPromptAsync(result.PromptText, steer: false, cancellationToken);
             }
 
             return;

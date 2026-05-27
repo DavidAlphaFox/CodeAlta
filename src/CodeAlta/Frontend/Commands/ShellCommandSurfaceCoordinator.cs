@@ -32,7 +32,7 @@ internal sealed class ShellCommandSurfaceCoordinator
             _shellCommandDispatcher);
     }
 
-    public IReadOnlyList<ThreadWorkspaceCommandBinding> BuildWorkspaceCommandBindings()
+    public IReadOnlyList<SessionWorkspaceCommandBinding> BuildWorkspaceCommandBindings()
         => _bindingProjector.BuildWorkspaceCommandBindings();
 
     public Task HandleAcceptedPromptAsync(string? rawInput, CancellationToken cancellationToken = default)
@@ -41,11 +41,11 @@ internal sealed class ShellCommandSurfaceCoordinator
     public Task SubmitCurrentPromptAsync(bool steer, CancellationToken cancellationToken = default)
         => _shellInputCoordinator.SubmitCurrentPromptAsync(steer, cancellationToken);
 
-    public Task AbortSelectedThreadAsync(CancellationToken cancellationToken = default)
-        => _shellInputCoordinator.AbortSelectedThreadAsync(cancellationToken);
+    public Task AbortSelectedSessionAsync(CancellationToken cancellationToken = default)
+        => _shellInputCoordinator.AbortSelectedSessionAsync(cancellationToken);
 
-    public Task CompactSelectedThreadAsync(CancellationToken cancellationToken = default)
-        => _shellInputCoordinator.CompactSelectedThreadAsync(cancellationToken);
+    public Task CompactSelectedSessionAsync(CancellationToken cancellationToken = default)
+        => _shellInputCoordinator.CompactSelectedSessionAsync(cancellationToken);
 
     public Task CloseCurrentTabAsync(CancellationToken cancellationToken = default)
         => _shellInputCoordinator.CloseCurrentTabAsync(cancellationToken);

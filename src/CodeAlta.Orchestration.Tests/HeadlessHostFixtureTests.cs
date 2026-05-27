@@ -14,7 +14,7 @@ namespace CodeAlta.Orchestration.Tests;
 public sealed class HeadlessHostFixtureTests
 {
     [TestMethod]
-    public async Task HeadlessHost_CreatesThreadSubmitsPromptStreamsEventsAndShutsDown()
+    public async Task HeadlessHost_CreatesSessionSubmitsPromptStreamsEventsAndShutsDown()
     {
         using var temp = TempDirectory.Create();
         var ProviderId = new ModelProviderId("fake-headless");
@@ -37,7 +37,7 @@ public sealed class HeadlessHostFixtureTests
             ProjectRoots = [temp.ProjectRoot],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.Deny)),
         };
-        var streamedEvents = new List<WorkThreadRuntimeEvent>();
+        var streamedEvents = new List<SessionRuntimeEvent>();
         using var streamCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var receivedAssistantContent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var streamTask = Task.Run(async () =>
@@ -45,7 +45,7 @@ public sealed class HeadlessHostFixtureTests
             await foreach (var runtimeEvent in host.RuntimeService.StreamEventsAsync(streamCts.Token))
             {
                 streamedEvents.Add(runtimeEvent);
-                if (runtimeEvent is WorkThreadAgentEvent { Event: AgentContentCompletedEvent completed } &&
+                if (runtimeEvent is SessionAgentEvent { Event: AgentContentCompletedEvent completed } &&
                     string.Equals(completed.Content, "fake response", StringComparison.Ordinal))
                 {
                     receivedAssistantContent.TrySetResult();
@@ -54,14 +54,14 @@ public sealed class HeadlessHostFixtureTests
             }
         });
 
-        var thread = await host.RuntimeService.CreateProjectThreadAsync(
+        var session = await host.RuntimeService.CreateProjectSessionAsync(
             host.CurrentProject,
             executionOptions,
             title: "Headless sample",
             CancellationToken.None);
 
         var runId = await host.RuntimeService.SendAsync(
-            thread,
+            session,
             executionOptions,
             new AgentSendOptions { Input = AgentInput.Text("hello from headless") },
             CancellationToken.None);
@@ -71,9 +71,9 @@ public sealed class HeadlessHostFixtureTests
         await streamTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
         Assert.IsFalse(string.IsNullOrWhiteSpace(runId.Value));
-        Assert.IsTrue(streamedEvents.OfType<WorkThreadLifecycleRuntimeEvent>().Any(static runtimeEvent =>
-            runtimeEvent.Event.Kind == WorkThreadLifecycleEventKind.SessionStarted));
-        Assert.IsTrue(streamedEvents.OfType<WorkThreadAgentEvent>().Any(static runtimeEvent =>
+        Assert.IsTrue(streamedEvents.OfType<SessionLifecycleRuntimeEvent>().Any(static runtimeEvent =>
+            runtimeEvent.Event.Kind == SessionLifecycleEventKind.SessionStarted));
+        Assert.IsTrue(streamedEvents.OfType<SessionAgentEvent>().Any(static runtimeEvent =>
             runtimeEvent.Event is AgentContentCompletedEvent { Content: "fake response" }));
     }
 
@@ -158,18 +158,18 @@ public sealed class HeadlessHostFixtureTests
             ProjectRoots = [temp.ProjectRoot],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.Deny)),
         };
-        var thread = await host.RuntimeService.CreateProjectThreadAsync(
+        var session = await host.RuntimeService.CreateProjectSessionAsync(
             host.CurrentProject,
             executionOptions,
             title: "Race sample",
             CancellationToken.None);
 
         var runId = await host.RuntimeService.SendAsync(
-            thread,
+            session,
             executionOptions,
             new AgentSendOptions { Input = AgentInput.Text("complete before returning") },
             CancellationToken.None);
-        var hasActiveRun = await host.RuntimeService.HasActiveRunAsync(thread, CancellationToken.None);
+        var hasActiveRun = await host.RuntimeService.HasActiveRunAsync(session, CancellationToken.None);
 
         Assert.IsFalse(string.IsNullOrWhiteSpace(runId.Value));
         Assert.IsFalse(hasActiveRun);

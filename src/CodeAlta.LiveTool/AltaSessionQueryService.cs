@@ -18,44 +18,44 @@ internal sealed class AltaSessionQueryService : IAltaSessionQueryService
         cancellationToken = cancellationToken == default ? context.CancellationToken : cancellationToken;
 
         var runtime = context.Services.Get<SessionRuntimeService>();
-        var threadCatalog = context.Services.Get<WorkThreadCatalog>();
-        if (runtime is null && threadCatalog is null)
+        var sessionCatalog = context.Services.Get<SessionViewCatalog>();
+        if (runtime is null && sessionCatalog is null)
         {
             AltaJsonlWriter.WriteError(
                 context.Stderr,
                 context.CorrelationId,
                 "service.unavailable",
                 AltaExitCodes.ServiceUnavailable,
-                $"Required in-process service '{nameof(SessionRuntimeService)}' or '{nameof(WorkThreadCatalog)}' is unavailable.");
+                $"Required in-process service '{nameof(SessionRuntimeService)}' or '{nameof(SessionViewCatalog)}' is unavailable.");
             yield break;
         }
 
-        WorkThreadViewState? viewState = null;
-        if (threadCatalog is not null)
+        SessionViewViewState? viewState = null;
+        if (sessionCatalog is not null)
         {
             try
             {
-                viewState = await threadCatalog.LoadViewStateAsync(cancellationToken).ConfigureAwait(false);
+                viewState = await sessionCatalog.LoadViewStateAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
             {
-                AltaJsonlWriter.WriteWarning(context.Stderr, context.CorrelationId, "thread.viewStateUnavailable", ex.Message);
+                AltaJsonlWriter.WriteWarning(context.Stderr, context.CorrelationId, "session.viewStateUnavailable", ex.Message);
             }
         }
 
         if (runtime is not null)
         {
-            await foreach (var thread in runtime.ListRecoverableSessionsAsync(cancellationToken: cancellationToken).ConfigureAwait(false))
+            await foreach (var session in runtime.ListRecoverableSessionsAsync(cancellationToken: cancellationToken).ConfigureAwait(false))
             {
-                yield return await BuildSessionInfoAsync(runtime, threadCatalog, viewState, thread, cancellationToken).ConfigureAwait(false);
+                yield return await BuildSessionInfoAsync(runtime, sessionCatalog, viewState, session, cancellationToken).ConfigureAwait(false);
             }
 
             yield break;
         }
 
-        foreach (var thread in await threadCatalog!.LoadInternalAsync(cancellationToken).ConfigureAwait(false))
+        foreach (var session in await sessionCatalog!.LoadInternalAsync(cancellationToken).ConfigureAwait(false))
         {
-            yield return await BuildSessionInfoAsync(runtime, threadCatalog, viewState, thread, cancellationToken).ConfigureAwait(false);
+            yield return await BuildSessionInfoAsync(runtime, sessionCatalog, viewState, session, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -64,65 +64,65 @@ internal sealed class AltaSessionQueryService : IAltaSessionQueryService
 
     private static async Task<AltaSessionInfo> BuildSessionInfoAsync(
         SessionRuntimeService? runtime,
-        WorkThreadCatalog? threadCatalog,
-        WorkThreadViewState? viewState,
-        SessionViewDescriptor thread,
+        SessionViewCatalog? sessionCatalog,
+        SessionViewViewState? viewState,
+        SessionViewDescriptor session,
         CancellationToken cancellationToken)
     {
-        var localState = await TryGetLocalStateAsync(threadCatalog, viewState, thread, cancellationToken).ConfigureAwait(false);
-        var preference = TryGetPreference(viewState, thread.ThreadId);
-        var isRunning = runtime is not null && await runtime.HasActiveRunAsync(thread, cancellationToken).ConfigureAwait(false);
-        var hasActiveSession = isRunning || (runtime is not null && await runtime.HasActiveCoordinatorSessionAsync(thread.ThreadId, cancellationToken).ConfigureAwait(false));
+        var localState = await TryGetLocalStateAsync(sessionCatalog, viewState, session, cancellationToken).ConfigureAwait(false);
+        var preference = TryGetPreference(viewState, session.SessionId);
+        var isRunning = runtime is not null && await runtime.HasActiveRunAsync(session, cancellationToken).ConfigureAwait(false);
+        var hasActiveSession = isRunning || (runtime is not null && await runtime.HasActiveCoordinatorSessionAsync(session.SessionId, cancellationToken).ConfigureAwait(false));
         if (localState?.Archived == true)
         {
-            thread.Status = WorkThreadStatus.Archived;
+            session.Status = SessionViewStatus.Archived;
         }
 
         if (localState?.MessageCount is not null)
         {
-            thread.MessageCount = localState.MessageCount;
+            session.MessageCount = localState.MessageCount;
         }
 
-        if (!string.IsNullOrWhiteSpace(localState?.ParentThreadId))
+        if (!string.IsNullOrWhiteSpace(localState?.ParentSessionId))
         {
-            thread.ParentThreadId = localState.ParentThreadId;
+            session.ParentSessionId = localState.ParentSessionId;
         }
 
         if (localState?.CreatedBy is not null)
         {
-            thread.CreatedBy = localState.CreatedBy;
+            session.CreatedBy = localState.CreatedBy;
         }
 
         if (!string.IsNullOrWhiteSpace(localState?.ProviderKey))
         {
-            thread.ProviderKey = localState.ProviderKey;
+            session.ProviderKey = localState.ProviderKey;
         }
 
         if (!string.IsNullOrWhiteSpace(localState?.ModelId))
         {
-            thread.ModelId = localState.ModelId;
+            session.ModelId = localState.ModelId;
         }
 
         if (localState?.ReasoningEffort is not null)
         {
-            thread.ReasoningEffort = localState.ReasoningEffort;
+            session.ReasoningEffort = localState.ReasoningEffort;
         }
 
-        return new AltaSessionInfo(thread, localState, preference, isRunning, hasActiveSession, ResolveState(thread, isRunning, hasActiveSession));
+        return new AltaSessionInfo(session, localState, preference, isRunning, hasActiveSession, ResolveState(session, isRunning, hasActiveSession));
     }
 
-    private static async Task<WorkThreadLocalState?> TryGetLocalStateAsync(
-        WorkThreadCatalog? threadCatalog,
-        WorkThreadViewState? viewState,
-        SessionViewDescriptor thread,
+    private static async Task<SessionViewLocalState?> TryGetLocalStateAsync(
+        SessionViewCatalog? sessionCatalog,
+        SessionViewViewState? viewState,
+        SessionViewDescriptor session,
         CancellationToken cancellationToken)
     {
-        if (threadCatalog is not null)
+        if (sessionCatalog is not null)
         {
             try
             {
-                var journalState = await threadCatalog.JournalStore
-                    .ReadLatestStateAsync(thread.ThreadId, thread.CreatedAt, cancellationToken)
+                var journalState = await sessionCatalog.JournalStore
+                    .ReadLatestStateAsync(session.SessionId, session.CreatedAt, cancellationToken)
                     .ConfigureAwait(false);
                 if (journalState is not null)
                 {
@@ -134,15 +134,15 @@ internal sealed class AltaSessionQueryService : IAltaSessionQueryService
             }
         }
 
-        return viewState is not null && viewState.ThreadStates.TryGetValue(thread.ThreadId, out var state) ? state : null;
+        return viewState is not null && viewState.SessionStates.TryGetValue(session.SessionId, out var state) ? state : null;
     }
 
-    private static WorkThreadPreference? TryGetPreference(WorkThreadViewState? viewState, string threadId)
-        => viewState is not null && viewState.ThreadPreferences.TryGetValue(threadId, out var preference) ? preference : null;
+    private static SessionViewPreference? TryGetPreference(SessionViewViewState? viewState, string sessionId)
+        => viewState is not null && viewState.SessionPreferences.TryGetValue(sessionId, out var preference) ? preference : null;
 
-    private static string ResolveState(SessionViewDescriptor thread, bool isRunning, bool hasActiveSession)
+    private static string ResolveState(SessionViewDescriptor session, bool isRunning, bool hasActiveSession)
     {
-        if (thread.Status == WorkThreadStatus.Archived)
+        if (session.Status == SessionViewStatus.Archived)
         {
             return "archived";
         }
@@ -157,9 +157,9 @@ internal sealed class AltaSessionQueryService : IAltaSessionQueryService
 }
 
 internal sealed record AltaSessionInfo(
-    SessionViewDescriptor Thread,
-    WorkThreadLocalState? LocalState,
-    WorkThreadPreference? Preference,
+    SessionViewDescriptor Session,
+    SessionViewLocalState? LocalState,
+    SessionViewPreference? Preference,
     bool IsRunning,
     bool HasActiveSession,
     string State);

@@ -25,15 +25,15 @@ internal interface IShellWorkspaceProjectionPort
 
     void RefreshModelProviderSelectorsForDraftScope();
 
-    void RefreshModelProviderSelectorsForThread(OpenThreadState tab);
+    void RefreshModelProviderSelectorsForSession(OpenSessionState tab);
 
-    void SyncPromptDraftText(ThreadSessionState? session);
+    void SyncPromptDraftText(SessionState? session);
 
     void ApplyPromptAvailabilityProjection();
 
     void SyncActivePromptPanelProjection();
 
-    void SyncThreadTabControl();
+    void SyncSessionTabControl();
 }
 
 internal sealed class DelegatingShellPromptAvailabilityPort : IShellPromptAvailabilityPort
@@ -72,11 +72,11 @@ internal sealed class DelegatingShellWorkspaceProjectionPort : IShellWorkspacePr
     private readonly Action _syncSidebarSelectionToCurrentState;
     private readonly Action _refreshQueuedPromptList;
     private readonly Action _refreshModelProviderSelectorsForDraftScope;
-    private readonly Action<OpenThreadState> _refreshModelProviderSelectorsForThread;
-    private readonly Action<ThreadSessionState?> _syncPromptDraftText;
+    private readonly Action<OpenSessionState> _refreshModelProviderSelectorsForSession;
+    private readonly Action<SessionState?> _syncPromptDraftText;
     private readonly Action _updatePromptAvailabilityUi;
     private readonly Action _syncActivePromptPanelProjection;
-    private readonly Action _syncThreadTabControl;
+    private readonly Action _syncSessionTabControl;
 
     public DelegatingShellWorkspaceProjectionPort(
         Action ensureSelectionDefaults,
@@ -84,33 +84,33 @@ internal sealed class DelegatingShellWorkspaceProjectionPort : IShellWorkspacePr
         Action syncSidebarSelectionToCurrentState,
         Action refreshQueuedPromptList,
         Action refreshModelProviderSelectorsForDraftScope,
-        Action<OpenThreadState> refreshModelProviderSelectorsForThread,
-        Action<ThreadSessionState?> syncPromptDraftText,
+        Action<OpenSessionState> refreshModelProviderSelectorsForSession,
+        Action<SessionState?> syncPromptDraftText,
         Action updatePromptAvailabilityUi,
         Action syncActivePromptPanelProjection,
-        Action syncThreadTabControl)
+        Action syncSessionTabControl)
     {
         ArgumentNullException.ThrowIfNull(ensureSelectionDefaults);
         ArgumentNullException.ThrowIfNull(refreshSidebarProjection);
         ArgumentNullException.ThrowIfNull(syncSidebarSelectionToCurrentState);
         ArgumentNullException.ThrowIfNull(refreshQueuedPromptList);
         ArgumentNullException.ThrowIfNull(refreshModelProviderSelectorsForDraftScope);
-        ArgumentNullException.ThrowIfNull(refreshModelProviderSelectorsForThread);
+        ArgumentNullException.ThrowIfNull(refreshModelProviderSelectorsForSession);
         ArgumentNullException.ThrowIfNull(syncPromptDraftText);
         ArgumentNullException.ThrowIfNull(updatePromptAvailabilityUi);
         ArgumentNullException.ThrowIfNull(syncActivePromptPanelProjection);
-        ArgumentNullException.ThrowIfNull(syncThreadTabControl);
+        ArgumentNullException.ThrowIfNull(syncSessionTabControl);
 
         _ensureSelectionDefaults = ensureSelectionDefaults;
         _refreshSidebarProjection = refreshSidebarProjection;
         _syncSidebarSelectionToCurrentState = syncSidebarSelectionToCurrentState;
         _refreshQueuedPromptList = refreshQueuedPromptList;
         _refreshModelProviderSelectorsForDraftScope = refreshModelProviderSelectorsForDraftScope;
-        _refreshModelProviderSelectorsForThread = refreshModelProviderSelectorsForThread;
+        _refreshModelProviderSelectorsForSession = refreshModelProviderSelectorsForSession;
         _syncPromptDraftText = syncPromptDraftText;
         _updatePromptAvailabilityUi = updatePromptAvailabilityUi;
         _syncActivePromptPanelProjection = syncActivePromptPanelProjection;
-        _syncThreadTabControl = syncThreadTabControl;
+        _syncSessionTabControl = syncSessionTabControl;
     }
 
     public void EnsureSelectionDefaults()
@@ -134,14 +134,14 @@ internal sealed class DelegatingShellWorkspaceProjectionPort : IShellWorkspacePr
         _syncActivePromptPanelProjection();
     }
 
-    public void RefreshModelProviderSelectorsForThread(OpenThreadState tab)
+    public void RefreshModelProviderSelectorsForSession(OpenSessionState tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        _refreshModelProviderSelectorsForThread(tab);
+        _refreshModelProviderSelectorsForSession(tab);
         _syncActivePromptPanelProjection();
     }
 
-    public void SyncPromptDraftText(ThreadSessionState? session)
+    public void SyncPromptDraftText(SessionState? session)
         => _syncPromptDraftText(session);
 
     public void ApplyPromptAvailabilityProjection()
@@ -153,6 +153,6 @@ internal sealed class DelegatingShellWorkspaceProjectionPort : IShellWorkspacePr
     public void SyncActivePromptPanelProjection()
         => _syncActivePromptPanelProjection();
 
-    public void SyncThreadTabControl()
-        => _syncThreadTabControl();
+    public void SyncSessionTabControl()
+        => _syncSessionTabControl();
 }

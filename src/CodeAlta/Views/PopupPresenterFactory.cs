@@ -1,5 +1,5 @@
 using CodeAlta.App;
-using CodeAlta.Presentation.Threads;
+using CodeAlta.Presentation.Sessions;
 using CodeAlta.Presentation.Usage;
 using CodeAlta.ViewModels;
 using XenoAtom.Terminal.UI;
@@ -26,22 +26,22 @@ internal static class PopupPresenterFactory
             () => getApp()?.Focus(getPromptEditor()));
     }
 
-    public static ThreadInfoPresenter CreateThreadInfoPresenter(
+    public static SessionInfoPresenter CreateSessionInfoPresenter(
         Func<TerminalApp?> getApp,
         Func<Visual?> getPromptEditor,
-        ThreadInfoService threadInfoService,
+        SessionInfoService sessionInfoService,
         Action<Action> dispatchToUi,
         Func<Func<Visual>, Visual> createComputedVisual)
     {
         ArgumentNullException.ThrowIfNull(getApp);
         ArgumentNullException.ThrowIfNull(getPromptEditor);
-        ArgumentNullException.ThrowIfNull(threadInfoService);
+        ArgumentNullException.ThrowIfNull(sessionInfoService);
         ArgumentNullException.ThrowIfNull(dispatchToUi);
         ArgumentNullException.ThrowIfNull(createComputedVisual);
 
-        return new ThreadInfoPresenter(
+        return new SessionInfoPresenter(
             markdown => getApp()?.Terminal.Clipboard.TrySetText(markdown),
-            cancellationToken => threadInfoService.LoadSelectedThreadReportAsync(cancellationToken),
+            cancellationToken => sessionInfoService.LoadSelectedSessionReportAsync(cancellationToken),
             dispatchToUi,
             createComputedVisual,
             () => getApp()?.Focus(getPromptEditor()));

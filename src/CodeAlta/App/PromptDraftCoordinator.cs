@@ -8,7 +8,7 @@ internal sealed class PromptDraftCoordinator
 
     private readonly Dictionary<string, string> _draftPromptTextByScope = new(StringComparer.OrdinalIgnoreCase);
 
-    public PromptDraftChange RememberPrompt(ThreadSessionState? session, string? text, string? draftScopeKey = null)
+    public PromptDraftChange RememberPrompt(SessionState? session, string? text, string? draftScopeKey = null)
     {
         var normalized = text ?? string.Empty;
         var previous = session?.PromptDraftText ?? GetDraftPrompt(NormalizeDraftScopeKey(draftScopeKey));
@@ -25,7 +25,7 @@ internal sealed class PromptDraftCoordinator
         return new PromptDraftChange(textChanged, editedStateChanged);
     }
 
-    public string GetPrompt(ThreadSessionState? session, string? draftScopeKey = null)
+    public string GetPrompt(SessionState? session, string? draftScopeKey = null)
         => session?.PromptDraftText ?? GetDraftPrompt(NormalizeDraftScopeKey(draftScopeKey));
 
     public bool TryGetDraftPrompt(string? draftScopeKey, out string prompt)

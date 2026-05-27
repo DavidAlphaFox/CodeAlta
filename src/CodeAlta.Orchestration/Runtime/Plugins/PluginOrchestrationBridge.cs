@@ -69,12 +69,12 @@ public sealed class PluginOrchestrationBridge
         => _adapter.GetAgentTools(MarkHeadless(options));
 
     /// <summary>
-    /// Gets plugin-contributed transient thread event projectors applicable to an orchestration scope.
+    /// Gets plugin-contributed transient session event projectors applicable to an orchestration scope.
     /// </summary>
     /// <param name="options">Operation scope options.</param>
-    /// <returns>Applicable transient thread event projection contributions.</returns>
-    public IReadOnlyList<PluginContributionRegistration> GetThreadEventProjectors(PluginAdapterOperationOptions? options = null)
-        => _adapter.GetContributions<PluginThreadEventProjectionContribution>(PluginPoint.ThreadEventProjection, MarkHeadless(options));
+    /// <returns>Applicable transient session event projection contributions.</returns>
+    public IReadOnlyList<PluginContributionRegistration> GetSessionEventProjectors(PluginAdapterOperationOptions? options = null)
+        => _adapter.GetContributions<PluginSessionEventProjectionContribution>(PluginPoint.SessionEventProjection, MarkHeadless(options));
 
     /// <summary>
     /// Broadcasts an agent event to headless orchestration plugin hooks.

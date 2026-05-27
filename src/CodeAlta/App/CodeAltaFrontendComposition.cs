@@ -22,17 +22,17 @@ internal sealed class CodeAltaFrontendComposition
     public required RuntimeEventPump RuntimeEventPump { get; init; }
     public required TerminalLoopCoordinator TerminalLoopCoordinator { get; init; }
     public required ModelProviderInitializationCoordinator ModelProviderInitializationCoordinator { get; init; }
-    public required ShellThreadStateCoordinator ThreadStateCoordinator { get; init; }
+    public required ShellSessionStateCoordinator SessionStateCoordinator { get; init; }
     public required DraftTabReplacementPort DraftTabReplacement { get; init; }
     public required ShellWorkspaceCoordinator WorkspaceCoordinator { get; init; }
-    public required ThreadRuntimeEventCoordinator ThreadRuntimeEventCoordinator { get; init; }
-    public required ThreadPromptQueueCoordinator ThreadPromptQueueCoordinator { get; init; }
-    public required ThreadCommandCoordinator ThreadCommandCoordinator { get; init; }
-    public required ThreadCreationCoordinator ThreadCreationCoordinator { get; init; }
+    public required SessionRuntimeEventCoordinator SessionRuntimeEventCoordinator { get; init; }
+    public required SessionPromptQueueCoordinator SessionPromptQueueCoordinator { get; init; }
+    public required SessionCommandCoordinator SessionCommandCoordinator { get; init; }
+    public required SessionCreationCoordinator SessionCreationCoordinator { get; init; }
     public required PromptDraftUiCoordinator PromptDraftUiCoordinator { get; init; }
     public required CodeAltaShellViewModel ShellViewModel { get; init; }
     public required SidebarViewModel SidebarViewModel { get; init; }
-    public required ThreadWorkspaceViewModel ThreadWorkspaceViewModel { get; init; }
+    public required SessionWorkspaceViewModel SessionWorkspaceViewModel { get; init; }
     public required PromptComposerViewModel PromptComposerViewModel { get; init; }
     public required SessionUsageViewModel SessionUsageViewModel { get; init; }
     public required Dictionary<string, ModelProviderState> ModelProviderStates { get; init; }
@@ -45,13 +45,13 @@ internal sealed class CodeAltaFrontendComposition
     public required ShellStateStore ShellStateStore { get; init; }
     public required FrontendEventPublisher FrontendEvents { get; init; }
     public required ShellWorkspaceContext ShellWorkspaceContext { get; init; }
-    public required ThreadSelectionContext ThreadSelectionContext { get; init; }
+    public required SessionSelectionContext SessionSelectionContext { get; init; }
     public required WorkspaceRefreshContext WorkspaceRefreshContext { get; init; }
 
     public static CodeAltaFrontendComposition Create(
         IReadOnlyList<ModelProviderDescriptor> providerDescriptors,
         ProjectCatalog projectCatalog,
-        WorkThreadCatalog threadCatalog,
+        SessionViewCatalog sessionCatalog,
         SessionRuntimeService runtimeService,
         CatalogOptions catalogOptions,
         AgentHub agentHub,
@@ -64,7 +64,7 @@ internal sealed class CodeAltaFrontendComposition
         IModelProviderInitializationService? modelProviderInitializationService = null)
     {
         ArgumentNullException.ThrowIfNull(projectCatalog);
-        ArgumentNullException.ThrowIfNull(threadCatalog);
+        ArgumentNullException.ThrowIfNull(sessionCatalog);
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(agentHub);
@@ -76,7 +76,7 @@ internal sealed class CodeAltaFrontendComposition
 
         var shellViewModel = new CodeAltaShellViewModel();
         var sidebarViewModel = new SidebarViewModel();
-        var threadWorkspaceViewModel = new ThreadWorkspaceViewModel();
+        var sessionWorkspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         var sessionUsageViewModel = new SessionUsageViewModel();
         var modelProviderStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
@@ -104,7 +104,7 @@ internal sealed class CodeAltaFrontendComposition
         var altaServices = new AltaServiceCollection()
             .Add(catalogOptions)
             .Add(projectCatalog)
-            .Add(threadCatalog)
+            .Add(sessionCatalog)
             .Add(runtimeService)
             .Add(runtimeService.SkillCatalog)
             .Add(agentHub)
@@ -131,8 +131,8 @@ internal sealed class CodeAltaFrontendComposition
             catalogOptions.GlobalRoot,
             AltaHelpText.RenderRootHelp(altaRegistry, altaServices));
 
-        var threadPromptDraftService = new ThreadPromptDraftService(frontend.LoadPromptDraft, frontend.DeletePromptDraft);
-        var threadModelProviderPreferenceService = new ThreadModelProviderPreferenceService(frontend.ApplyThreadPreference, frontend.RememberThreadPreference);
+        var sessionPromptDraftService = new SessionPromptDraftService(frontend.LoadPromptDraft, frontend.DeletePromptDraft);
+        var sessionModelProviderPreferenceService = new SessionModelProviderPreferenceService(frontend.ApplySessionPreference, frontend.RememberSessionPreference);
         var shellController = new CodeAltaShellController(
             shell,
             knownProjectImporter,
@@ -146,41 +146,41 @@ internal sealed class CodeAltaFrontendComposition
             runtimeEventPump,
             uiDispatcher,
             frontend.ApplyPendingSidebarSelection);
-        var threadStateCoordinator = new ShellThreadStateCoordinator(
+        var sessionStateCoordinator = new ShellSessionStateCoordinator(
             projectCatalog,
-            threadCatalog,
+            sessionCatalog,
             uiDispatcher,
             shellStateStore,
-            new ThreadTimelineSurface(() => frontend.ThreadPaneLayout?.GetAbsoluteBounds()),
-            threadPromptDraftService,
-            threadModelProviderPreferenceService,
-            new ThreadModelProviderReadinessService(thread => frontend.IsModelProviderReady(new ModelProviderId(thread.ProviderId))),
-            new ThreadHistoryLoaderService(frontend.EnsureThreadHistoryLoadedAsync),
-            new ThreadStateTabLifecycleService(
+            new SessionTimelineSurface(() => frontend.SessionPaneLayout?.GetAbsoluteBounds()),
+            sessionPromptDraftService,
+            sessionModelProviderPreferenceService,
+            new SessionModelProviderReadinessService(session => frontend.IsModelProviderReady(new ModelProviderId(session.ProviderId))),
+            new SessionHistoryLoaderService(frontend.EnsureSessionHistoryLoadedAsync),
+            new SessionStateTabLifecycleService(
                 () => frontend.GetShellTabs()
-                    .Where(static tab => tab.Kind == ShellTabKind.Thread)
+                    .Where(static tab => tab.Kind == ShellTabKind.Session)
                     .Select(static tab => tab.TabId.Value)
                     .ToArray(),
-                frontend.ResetPendingThreadTabSelection,
-                draftTabReplacement.ReplaceDraftTabWithThread,
-                frontend.RemoveThreadTabPage),
+                frontend.ResetPendingSessionTabSelection,
+                draftTabReplacement.ReplaceDraftTabWithSession,
+                frontend.RemoveSessionTabPage),
             frontendEvents);
-        var threadSelectionContext = new ThreadSelectionContext(
-            threadStateCoordinator,
-            frontend.EnsureThreadHistoryLoadedAsync,
-            frontend.IsSelectedThread);
+        var sessionSelectionContext = new SessionSelectionContext(
+            sessionStateCoordinator,
+            frontend.EnsureSessionHistoryLoadedAsync,
+            frontend.IsSelectedSession);
         var promptDraftUiCoordinator = new PromptDraftUiCoordinator(
             new PromptDraftCoordinator(),
             catalogOptions,
-            () => threadStateCoordinator.Selection,
+            () => sessionStateCoordinator.Selection,
             frontendEvents,
             frontend.UpdatePromptImageAttachmentsUi);
-        var modelProviderSelectorStateContext = new ModelProviderSelectorStateStore(threadWorkspaceViewModel, uiDispatcher);
+        var modelProviderSelectorStateContext = new ModelProviderSelectorStateStore(sessionWorkspaceViewModel, uiDispatcher);
         var modelProviderPreferencePort = new FrontendModelProviderPreferencePort(
             frontend.ApplyDraftModelProviderPreference,
-            frontend.ApplyThreadPreference,
+            frontend.ApplySessionPreference,
             frontend.RememberGlobalModelProviderPreference,
-            frontend.RememberThreadPreference);
+            frontend.RememberSessionPreference);
         var workspaceRefreshContext = new WorkspaceRefreshContext(request =>
         {
             switch (request.Reason)
@@ -188,7 +188,7 @@ internal sealed class CodeAltaFrontendComposition
                 case WorkspaceRefreshReason.SelectedSessionUsageInvalidated:
                     frontend.ApplySessionUsageProjection();
                     break;
-                case WorkspaceRefreshReason.HeaderAndThreadWorkspace:
+                case WorkspaceRefreshReason.HeaderAndSessionWorkspace:
                     frontendEvents.Publish(new HeaderChangedEvent());
                     break;
                 default:
@@ -200,61 +200,61 @@ internal sealed class CodeAltaFrontendComposition
             sidebarViewModel,
             catalogOptions,
             shellController,
-            threadStateCoordinator,
+            sessionStateCoordinator,
             resolveProviderDisplayName,
-            () => frontend.ThreadInput,
+            () => frontend.SessionInput,
             () => frontendEvents.Publish(new CatalogChangedEvent()),
             frontend.SetStatus,
             frontend.SetReadyStatusForCurrentSelection);
-        var threadProviderSwitchCoordinator = new SessionProviderSwitchCoordinator(
+        var sessionProviderSwitchCoordinator = new SessionProviderSwitchCoordinator(
             configStore,
             modelProviderStates,
             tab =>
             {
-                frontend.ApplyThreadPreference(tab);
+                frontend.ApplySessionPreference(tab);
                 return Task.CompletedTask;
             },
-            threadId => runtimeService.DetachThreadSessionAsync(threadId),
-            threadStateCoordinator.UpsertRuntimeThread,
+            sessionId => runtimeService.DetachRuntimeSessionAsync(sessionId),
+            sessionStateCoordinator.UpsertRuntimeSession,
             frontend.PersistViewStateAsync);
         var modelProviderSelectorCoordinator = new ModelProviderSelectorCoordinator(
             providerDescriptors,
-            threadWorkspaceViewModel,
+            sessionWorkspaceViewModel,
             promptComposerViewModel,
             modelProviderStates,
             modelProviderSelectorStateContext,
-            threadSelectionContext,
+            sessionSelectionContext,
             modelProviderPreferencePort,
             workspaceRefreshContext,
             configStore.GetEffectiveDefaultProvider,
             frontend.SyncModelProviderSelectorItems,
-            threadProviderSwitchCoordinator.CanSelectThreadProvider,
-            (thread, tab, targetProviderId) => threadProviderSwitchCoordinator.SwitchThreadProviderAsync(thread, tab, targetProviderId),
+            sessionProviderSwitchCoordinator.CanSelectSessionProvider,
+            (session, tab, targetProviderId) => sessionProviderSwitchCoordinator.SwitchSessionProviderAsync(session, tab, targetProviderId),
             () => frontendEvents.Publish(new SelectionChangedEvent()),
             () => configStore.LoadGlobalProviderDefinitions(includeDisabled: true)
                 .Where(static definition => definition.Enabled != false)
                 .Select(static definition => definition.ProviderKey)
                 .ToArray(),
             () => modelProviderPreferences.GetDraftModelProviderPreference(
-                threadStateCoordinator.ViewState,
-                threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true }
+                sessionStateCoordinator.ViewState,
+                sessionStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true }
                     ? null
-                    : threadStateCoordinator.GetSelectedProject()?.Id),
+                    : sessionStateCoordinator.GetSelectedProject()?.Id),
             pluginHostBridge is null ? null : pluginHostBridge.GetPromptPlaceholderContributions);
         var modelCatalogCoordinator = new ModelCatalogCoordinator(
             modelProviderStates,
             modelProviderSelectorCoordinator,
-            threadStateCoordinator.GetSelectedThread,
-            threadStateCoordinator.FindOpenThread,
+            sessionStateCoordinator.GetSelectedSession,
+            sessionStateCoordinator.FindOpenSession,
             modelProviderSelectorCoordinator.GetPreferredModelProviderId,
-            () => DialogBoundsResolver.ResolveAppBounds(frontend.ThreadInput),
-            () => frontend.ThreadInput,
+            () => DialogBoundsResolver.ResolveAppBounds(frontend.SessionInput),
+            () => frontend.SessionInput,
             frontend.FocusPromptEditor,
             frontend.FocusReasoningSelector,
             (message, tone) => frontend.SetStatus(message, tone: tone));
 
-        ThreadPromptQueueCoordinator? threadPromptQueueCoordinator = null;
-        ThreadCommandCoordinator? threadCommandCoordinator = null;
+        SessionPromptQueueCoordinator? sessionPromptQueueCoordinator = null;
+        SessionCommandCoordinator? sessionCommandCoordinator = null;
 
         var shellWorkspaceContext = new ShellWorkspaceContext(
             new DelegatingShellPromptAvailabilityPort(
@@ -267,8 +267,8 @@ internal sealed class CodeAltaFrontendComposition
                 frontend.HasCurrentPromptDraft),
             new ShellWorkspaceSurfacePort(
                 frontend.HasWorkspaceSurface,
-                () => frontend.ThreadPaneLayout?.GetAbsoluteBounds(),
-                () => frontend.ThreadInput,
+                () => frontend.SessionPaneLayout?.GetAbsoluteBounds(),
+                () => frontend.SessionInput,
                 _ => { },
                 frontend.FocusPromptTarget,
                 _ => frontendEvents.Publish(new CatalogChangedEvent()),
@@ -277,28 +277,28 @@ internal sealed class CodeAltaFrontendComposition
                 frontend.EnsureSelectionDefaults,
                 frontend.RefreshSidebarProjection,
                 frontend.SyncSidebarSelectionToCurrentState,
-                () => threadPromptQueueCoordinator!.RefreshSelectedThreadQueueUi(),
+                () => sessionPromptQueueCoordinator!.RefreshSelectedSessionQueueUi(),
                 () => frontend.RefreshModelProviderSelectorsForDraftScope(),
-                frontend.RefreshModelProviderSelectorsForThread,
+                frontend.RefreshModelProviderSelectorsForSession,
                 frontend.SyncPromptText,
                 frontend.ApplyPromptAvailabilityProjection,
                 frontend.SyncActivePromptPanelProjection,
-                frontend.SyncThreadTabControl),
+                frontend.SyncSessionTabControl),
             uiDispatcher);
         var workspaceCoordinator = new ShellWorkspaceCoordinator(
             shellViewModel,
-            threadWorkspaceViewModel,
+            sessionWorkspaceViewModel,
             sessionUsageViewModel,
             modelProviderStates,
-            threadSelectionContext,
+            sessionSelectionContext,
             shellWorkspaceContext);
-        threadPromptQueueCoordinator = new ThreadPromptQueueCoordinator(
-            threadWorkspaceViewModel,
-            threadSelectionContext,
+        sessionPromptQueueCoordinator = new SessionPromptQueueCoordinator(
+            sessionWorkspaceViewModel,
+            sessionSelectionContext,
             frontend.DispatchToUi,
             frontend.VerifyBindableAccess,
-            (tab, prompt, cancellationToken) => threadCommandCoordinator!.DispatchQueuedPromptAsync(tab, prompt, steer: false, cancellationToken),
-            (tab, prompt, cancellationToken) => threadCommandCoordinator!.DispatchQueuedPromptAsync(tab, prompt, steer: true, cancellationToken));
+            (tab, prompt, cancellationToken) => sessionCommandCoordinator!.DispatchQueuedPromptAsync(tab, prompt, steer: false, cancellationToken),
+            (tab, prompt, cancellationToken) => sessionCommandCoordinator!.DispatchQueuedPromptAsync(tab, prompt, steer: true, cancellationToken));
         var modelProviderInitializationCoordinator = new ModelProviderInitializationCoordinator(
             modelProviderInitializationService,
             providerDescriptors,
@@ -309,46 +309,46 @@ internal sealed class CodeAltaFrontendComposition
         var shellStatusPort = new ShellStatusPort(
             uiDispatcher,
             frontend.SetStatus,
-            (thread, message, showSpinner, tone) => frontend.SetThreadStatus(thread, message, showSpinner, tone),
-            frontend.ClearThreadStatus,
+            (session, message, showSpinner, tone) => frontend.SetSessionStatus(session, message, showSpinner, tone),
+            frontend.ClearSessionStatus,
             frontend.SetProviderSessionLoadStatus);
-        var threadRuntimeEventCoordinator = new ThreadRuntimeEventCoordinator(
+        var sessionRuntimeEventCoordinator = new SessionRuntimeEventCoordinator(
             shellStateStore,
-            threadId => threadStateCoordinator.FindOpenThread(threadId),
+            sessionId => sessionStateCoordinator.FindOpenSession(sessionId),
             static () => true,
-            frontend.IsSelectedThread,
+            frontend.IsSelectedSession,
             shellStatusPort,
-            (tab, cancellationToken) => threadCommandCoordinator!.DrainQueuedPromptAsync(tab, cancellationToken),
+            (tab, cancellationToken) => sessionCommandCoordinator!.DrainQueuedPromptAsync(tab, cancellationToken),
             projectFileSearchService,
-            threadStateCoordinator.UpsertRuntimeThread,
+            sessionStateCoordinator.UpsertRuntimeSession,
             new PluginAgentEventObserver(pluginHostBridge),
             frontendEvents);
-        var threadCreationCoordinator = new ThreadCreationCoordinator(
+        var sessionCreationCoordinator = new SessionCreationCoordinator(
             runtimeService,
             catalogOptions,
             modelProviderSelectorCoordinator.GetPreferredModelProviderId,
-            threadSelectionContext.GetSelectedProject,
-            () => threadSelectionContext.Selection,
+            sessionSelectionContext.GetSelectedProject,
+            () => sessionSelectionContext.Selection,
             static () => null,
-            (providerId, workingDirectory, projectRoots, sourceThreadIdProvider) => threadCommandCoordinator!.BuildPreferredExecutionOptions(providerId, workingDirectory, projectRoots, sourceThreadIdProvider),
-            frontend.RememberThreadPreference,
-            frontend.RegisterCreatedThreadAsync,
+            (providerId, workingDirectory, projectRoots, sourceSessionIdProvider) => sessionCommandCoordinator!.BuildPreferredExecutionOptions(providerId, workingDirectory, projectRoots, sourceSessionIdProvider),
+            frontend.RememberSessionPreference,
+            frontend.RegisterCreatedSessionAsync,
             static () => { },
             frontend.SetStatus);
-        threadCommandCoordinator = new ThreadCommandCoordinator(
+        sessionCommandCoordinator = new SessionCommandCoordinator(
             runtimeService,
             catalogOptions,
             providerDescriptors,
             modelProviderStates,
-            threadSelectionContext,
+            sessionSelectionContext,
             modelProviderSelectorStateContext,
-            new ThreadCommandContext(
-                new DelegatingThreadLifecycleCommandPort(
-                    title => threadCreationCoordinator.CreateGlobalThreadAsync(title),
-                    title => threadCreationCoordinator.CreateProjectThreadAsync(title),
+            new ShellSessionCommandContext(
+                new DelegatingSessionLifecycleCommandPort(
+                    title => sessionCreationCoordinator.CreateGlobalSessionAsync(title),
+                    title => sessionCreationCoordinator.CreateProjectSessionAsync(title),
                     frontend.PersistViewStateAsync,
-                    frontend.RekeyThreadIdentity),
-                new ThreadCommandUiPort(
+                    frontend.RekeySessionIdentity),
+                new SessionCommandUiPort(
                     uiDispatcher,
                     frontend.TrySetPromptUnavailableStatus,
                     static () => true,
@@ -356,11 +356,11 @@ internal sealed class CodeAltaFrontendComposition
                     frontend.SetReadyStatusForCurrentSelection,
                     () => frontendEvents.Publish(new HeaderChangedEvent()),
                     () => frontendEvents.Publish(new CatalogChangedEvent()),
-                    threadRuntimeEventCoordinator.TryRenderInteraction),
+                    sessionRuntimeEventCoordinator.TryRenderInteraction),
                 promptSessionPort,
                 () => legacyPromptSessionId,
                 shellStatusPort),
-            threadPromptQueueCoordinator,
+            sessionPromptQueueCoordinator,
             promptComposerViewModel,
             projectFileSearchService,
             pluginHostBridge,
@@ -375,17 +375,17 @@ internal sealed class CodeAltaFrontendComposition
             RuntimeEventPump = runtimeEventPump,
             TerminalLoopCoordinator = terminalLoopCoordinator,
             ModelProviderInitializationCoordinator = modelProviderInitializationCoordinator,
-            ThreadStateCoordinator = threadStateCoordinator,
+            SessionStateCoordinator = sessionStateCoordinator,
             DraftTabReplacement = draftTabReplacement,
             WorkspaceCoordinator = workspaceCoordinator,
-            ThreadRuntimeEventCoordinator = threadRuntimeEventCoordinator,
-            ThreadPromptQueueCoordinator = threadPromptQueueCoordinator,
-            ThreadCommandCoordinator = threadCommandCoordinator,
-            ThreadCreationCoordinator = threadCreationCoordinator,
+            SessionRuntimeEventCoordinator = sessionRuntimeEventCoordinator,
+            SessionPromptQueueCoordinator = sessionPromptQueueCoordinator,
+            SessionCommandCoordinator = sessionCommandCoordinator,
+            SessionCreationCoordinator = sessionCreationCoordinator,
             PromptDraftUiCoordinator = promptDraftUiCoordinator,
             ShellViewModel = shellViewModel,
             SidebarViewModel = sidebarViewModel,
-            ThreadWorkspaceViewModel = threadWorkspaceViewModel,
+            SessionWorkspaceViewModel = sessionWorkspaceViewModel,
             PromptComposerViewModel = promptComposerViewModel,
             SessionUsageViewModel = sessionUsageViewModel,
             ModelProviderStates = modelProviderStates,
@@ -398,7 +398,7 @@ internal sealed class CodeAltaFrontendComposition
             ShellStateStore = shellStateStore,
             FrontendEvents = frontendEvents,
             ShellWorkspaceContext = shellWorkspaceContext,
-            ThreadSelectionContext = threadSelectionContext,
+            SessionSelectionContext = sessionSelectionContext,
             WorkspaceRefreshContext = workspaceRefreshContext,
         };
 
@@ -469,7 +469,7 @@ internal sealed class CodeAltaFrontendComposition
                 return displayName;
             }
 
-            return Presentation.Sidebar.SidebarThreadPresentation.ResolveProviderDisplayName(providerKey);
+            return Presentation.Sidebar.SidebarSessionPresentation.ResolveProviderDisplayName(providerKey);
         };
     }
 }

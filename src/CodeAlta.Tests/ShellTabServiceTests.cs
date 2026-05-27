@@ -163,7 +163,7 @@ public sealed class ShellTabServiceTests
     public void Associations_ValidateRequiredIds()
     {
         Assert.ThrowsExactly<ArgumentException>(() => new ShellTabId(""));
-        Assert.ThrowsExactly<ArgumentException>(() => new ShellTabAssociation.Thread(
+        Assert.ThrowsExactly<ArgumentException>(() => new ShellTabAssociation.Session(
             "",
             new PromptSessionId("prompt-1"),
             ProjectId.NewVersion7(),
@@ -231,9 +231,9 @@ public sealed class ShellTabServiceTests
         return new ShellTabDescriptor
         {
             TabId = new ShellTabId(tabId),
-            Kind = ShellTabKind.Thread,
-            Association = new ShellTabAssociation.Thread(
-                "thread-1",
+            Kind = ShellTabKind.Session,
+            Association = new ShellTabAssociation.Session(
+                "session-1",
                 new PromptSessionId("prompt-1"),
                 projectId,
                 new ModelProviderId("provider-1")),

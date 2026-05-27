@@ -8,7 +8,7 @@ public sealed class UiStatusPlugin : PluginBase
     {
         yield return new PluginStatusContribution
         {
-            Region = PluginUiRegion.ThreadStatus,
+            Region = PluginUiRegion.SessionStatus,
             Name = "sample-status",
             GetStatus = static _ => new PluginStatusItem
             {
@@ -17,6 +17,6 @@ public sealed class UiStatusPlugin : PluginBase
                 Tone = PluginStatusTone.Success,
             },
         };
-        yield return PluginUi.Visual(PluginUiRegion.ThreadFooter, static _ => new Markup("[dim]sample plugin footer active[/]"), "sample-footer");
+        yield return PluginUi.Visual(PluginUiRegion.SessionFooter, static _ => new Markup("[dim]sample plugin footer active[/]"), "sample-footer");
     }
 }

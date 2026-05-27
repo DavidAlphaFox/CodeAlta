@@ -6,9 +6,9 @@ namespace CodeAlta.Agent;
 public class AgentSessionCreateOptions
 {
     /// <summary>
-    /// Gets or initializes the canonical CodeAlta thread identifier requested for this session.
+    /// Gets or initializes the canonical CodeAlta session identifier requested for this session.
     /// </summary>
-    public string? ThreadId { get; init; }
+    public string? SessionId { get; init; }
 
     /// <summary>
     /// Gets or initializes the optional durable parent session identifier used for lineage and coordination metadata only.

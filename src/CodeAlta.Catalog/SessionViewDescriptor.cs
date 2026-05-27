@@ -3,49 +3,49 @@ using System.Text.Json.Serialization;
 namespace CodeAlta.Catalog;
 
 /// <summary>
-/// Describes a durable work thread.
+/// Describes a durable session view.
 /// </summary>
 public sealed class SessionViewDescriptor
 {
     /// <summary>
-    /// Gets or sets the stable thread identifier.
+    /// Gets or sets the stable session identifier.
     /// </summary>
-    [JsonPropertyName("thread_id")]
-    public string ThreadId { get; set; } = string.Empty;
+    [JsonPropertyName("session_id")]
+    public string SessionId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the thread kind.
+    /// Gets or sets the session kind.
     /// </summary>
     [JsonPropertyName("kind")]
-    public WorkThreadKind Kind { get; set; }
+    public SessionViewKind Kind { get; set; }
 
     /// <summary>
-    /// Gets or sets the model provider identifier for the thread.
-    /// Serialized as <c>backend_id</c> so existing work-thread front matter remains readable.
+    /// Gets or sets the model provider identifier for the session.
+    /// Serialized as <c>backend_id</c> so existing session-view front matter remains readable.
     /// </summary>
     [JsonPropertyName("backend_id")]
     public string ProviderId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the provider key selected for the thread.
+    /// Gets or sets the provider key selected for the session.
     /// </summary>
     [JsonPropertyName("provider_key")]
     public string? ProviderKey { get; set; }
 
     /// <summary>
-    /// Gets or sets the owning project identifier for project threads.
+    /// Gets or sets the owning project identifier for project sessions.
     /// </summary>
     [JsonPropertyName("project_ref")]
     public string? ProjectRef { get; set; }
 
     /// <summary>
-    /// Gets or sets the legacy parent thread identifier for internal thread metadata.
+    /// Gets or sets the legacy parent session identifier for internal session metadata.
     /// </summary>
-    [JsonPropertyName("parent_thread_id")]
-    public string? ParentThreadId { get; set; }
+    [JsonPropertyName("parent_session_id")]
+    public string? ParentSessionId { get; set; }
 
     /// <summary>
-    /// Gets or sets durable attribution for the actor that created this thread.
+    /// Gets or sets durable attribution for the actor that created this session.
     /// </summary>
     [JsonPropertyName("created_by")]
     public AltaActorProvenance? CreatedBy { get; set; }
@@ -57,7 +57,7 @@ public sealed class SessionViewDescriptor
     public string WorkingDirectory { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the thread title.
+    /// Gets or sets the session title.
     /// </summary>
     [JsonPropertyName("title")]
     public string Title { get; set; } = string.Empty;
@@ -66,7 +66,7 @@ public sealed class SessionViewDescriptor
     /// Gets or sets the durable status.
     /// </summary>
     [JsonPropertyName("status")]
-    public WorkThreadStatus Status { get; set; } = WorkThreadStatus.Draft;
+    public SessionViewStatus Status { get; set; } = SessionViewStatus.Draft;
 
     /// <summary>
     /// Gets or sets the creation time.
@@ -99,13 +99,13 @@ public sealed class SessionViewDescriptor
     public string? LatestSummary { get; set; }
 
     /// <summary>
-    /// Gets or sets the thread model identifier when known.
+    /// Gets or sets the session model identifier when known.
     /// </summary>
     [JsonPropertyName("model_id")]
     public string? ModelId { get; set; }
 
     /// <summary>
-    /// Gets or sets the thread reasoning effort when known.
+    /// Gets or sets the session reasoning effort when known.
     /// </summary>
     [JsonPropertyName("reasoning_effort")]
     public CodeAlta.Agent.AgentReasoningEffort? ReasoningEffort { get; set; }
@@ -127,7 +127,7 @@ public sealed class SessionViewDescriptor
     public string? MarkdownBody { get; set; }
 
     /// <summary>
-    /// Gets a value indicating whether the thread can no longer change backends.
+    /// Gets a value indicating whether the session can no longer change backends.
     /// </summary>
     public bool IsBackendLocked => StartedAt is not null;
 
@@ -138,7 +138,7 @@ public sealed class SessionViewDescriptor
     public string ResolvedProviderKey => string.IsNullOrWhiteSpace(ProviderKey) ? ProviderId : ProviderKey;
 
     /// <summary>
-    /// Marks the thread as started.
+    /// Marks the session as started.
     /// </summary>
     /// <param name="timestamp">The timestamp to record.</param>
     public void MarkStarted(DateTimeOffset timestamp)
@@ -150,9 +150,9 @@ public sealed class SessionViewDescriptor
 
         UpdatedAt = timestamp;
         LastActiveAt = timestamp;
-        if (Status == WorkThreadStatus.Draft)
+        if (Status == SessionViewStatus.Draft)
         {
-            Status = WorkThreadStatus.Active;
+            Status = SessionViewStatus.Active;
         }
     }
 
@@ -162,14 +162,14 @@ public sealed class SessionViewDescriptor
     /// <exception cref="ArgumentException">Thrown when required values are missing or invalid.</exception>
     public void Validate()
     {
-        if (string.IsNullOrWhiteSpace(ThreadId))
+        if (string.IsNullOrWhiteSpace(SessionId))
         {
-            throw new ArgumentException("Thread id is required.", nameof(ThreadId));
+            throw new ArgumentException("Session id is required.", nameof(SessionId));
         }
 
         if (string.IsNullOrWhiteSpace(Title))
         {
-            throw new ArgumentException("Thread title is required.", nameof(Title));
+            throw new ArgumentException("Session title is required.", nameof(Title));
         }
 
         if (CreatedAt == default)
@@ -204,23 +204,23 @@ public sealed class SessionViewDescriptor
 
         switch (Kind)
         {
-            case WorkThreadKind.GlobalThread:
+            case SessionViewKind.GlobalSession:
                 if (!string.IsNullOrWhiteSpace(ProjectRef))
                 {
-                    throw new ArgumentException("Global threads cannot declare a project.", nameof(ProjectRef));
+                    throw new ArgumentException("Global sessions cannot declare a project.", nameof(ProjectRef));
                 }
 
                 break;
 
-            case WorkThreadKind.ProjectThread:
+            case SessionViewKind.ProjectSession:
                 if (!ProjectId.TryParse(ProjectRef, out _))
                 {
-                    throw new ArgumentException("Project threads require a valid project_ref.", nameof(ProjectRef));
+                    throw new ArgumentException("Project sessions require a valid project_ref.", nameof(ProjectRef));
                 }
 
                 break;
 
-            case WorkThreadKind.InternalThread:
+            case SessionViewKind.InternalSession:
                 break;
         }
     }

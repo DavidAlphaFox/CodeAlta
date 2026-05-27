@@ -28,7 +28,7 @@ internal sealed class NavigatorSettingsDialog
         _viewModel = new NavigatorSettingsDialogViewModel
         {
             SortMode = settings.SortMode,
-            RecentThreadsPerProject = settings.RecentThreadsPerProject,
+            RecentSessionsPerProject = settings.RecentSessionsPerProject,
             ThemeSchemeName = settings.ThemeSchemeName ?? string.Empty,
         };
         _dialogService = dialogService;
@@ -66,15 +66,15 @@ internal sealed class NavigatorSettingsDialog
                 _dialogService.PreviewNavigatorTheme(themeOptions[e.NewIndex].SchemeName);
             });
 
-        var recentThreadsBox = new NumberBox<int>()
-            .Value(_viewModel.Bind.RecentThreadsPerProject)
+        var recentSessionsBox = new NumberBox<int>()
+            .Value(_viewModel.Bind.RecentSessionsPerProject)
             .ValueValidator(static value => value is >= 1 and <= 50 ? null : "Use a value from 1 to 50.")
             .MinWidth(6)
             .MaxWidth(8);
-        recentThreadsBox.ShowValidationMessage = false;
-        recentThreadsBox.InvalidNumberMessage = "Enter a whole number.";
-        var recentThreadsField = recentThreadsBox.Validate(
-            _viewModel.Bind.RecentThreadsPerProject,
+        recentSessionsBox.ShowValidationMessage = false;
+        recentSessionsBox.InvalidNumberMessage = "Enter a whole number.";
+        var recentSessionsField = recentSessionsBox.Validate(
+            _viewModel.Bind.RecentSessionsPerProject,
             static value => value is >= 1 and <= 50
                 ? null
                 : new ValidationMessage(ValidationSeverity.Error, "Use a value from 1 to 50."));
@@ -96,7 +96,7 @@ internal sealed class NavigatorSettingsDialog
         form.Cell(new TextBlock("Theme") { VerticalAlignment = Align.Center }, 1, 0);
         form.Cell(themeSelect, 1, 1);
         form.Cell(new TextBlock("Recent sessions") { VerticalAlignment = Align.Center }, 2, 0);
-        form.Cell(recentThreadsField, 2, 1);
+        form.Cell(recentSessionsField, 2, 1);
 
         var cancelButton = new Button("Cancel")
         {
@@ -154,7 +154,7 @@ internal sealed class NavigatorSettingsDialog
         var settings = new NavigatorSettings
         {
             SortMode = _viewModel.SortMode,
-            RecentThreadsPerProject = _viewModel.RecentThreadsPerProject,
+            RecentSessionsPerProject = _viewModel.RecentSessionsPerProject,
             ThemeSchemeName = NormalizeThemeSchemeName(_viewModel.ThemeSchemeName),
         };
 

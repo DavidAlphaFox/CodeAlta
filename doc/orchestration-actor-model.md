@@ -1,11 +1,11 @@
 # Lightweight orchestration actor model
 
-CodeAlta orchestration uses small internal mailbox actors rather than a general actor framework. The goal is single-writer per-session mutation, bounded event flow, and testable shutdown/error behavior without exposing actor concepts through public APIs. Some internal type names still use `WorkThread` as legacy session-view terminology.
+CodeAlta orchestration uses small internal mailbox actors rather than a general actor framework. The goal is single-writer per-session mutation, bounded event flow, and testable shutdown/error behavior without exposing actor concepts through public APIs. Some internal type names still use `SessionView` as legacy session-view terminology.
 
 ## Ownership boundaries
 
 - Public callers use runtime request records, session ids, snapshots, handles, and events.
-- `WorkThreadActor`, `WorkThreadActorRegistry`, and `OrchestrationMailboxActor` are internal implementation details with legacy names.
+- `SessionActor`, `SessionActorRegistry`, and `OrchestrationMailboxActor` are internal implementation details with legacy names.
 - A session actor owns same-session command ordering, lifecycle cancellation, supervisor decisions, and mailbox cleanup.
 - Different session actors may run independently; commands for one session are serialized.
 - Frontend and plugin code must not mutate actor-owned state directly. Async completions and observer results are converted into commands/events first.

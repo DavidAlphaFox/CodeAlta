@@ -8,24 +8,24 @@ namespace CodeAlta.App;
 
 internal sealed class PromptImageCapabilityContext
 {
-    private readonly Func<SessionViewDescriptor?> _getSelectedThread;
-    private readonly Func<string, OpenThreadState?> _findOpenThread;
+    private readonly Func<SessionViewDescriptor?> _getSelectedSession;
+    private readonly Func<string, OpenSessionState?> _findOpenSession;
     private readonly Func<ModelProviderId> _getPreferredProviderId;
     private readonly IReadOnlyDictionary<string, ModelProviderState> _modelProviderStates;
 
     public PromptImageCapabilityContext(
-        Func<SessionViewDescriptor?> getSelectedThread,
-        Func<string, OpenThreadState?> findOpenThread,
+        Func<SessionViewDescriptor?> getSelectedSession,
+        Func<string, OpenSessionState?> findOpenSession,
         Func<ModelProviderId> getPreferredProviderId,
         IReadOnlyDictionary<string, ModelProviderState> modelProviderStates)
     {
-        ArgumentNullException.ThrowIfNull(getSelectedThread);
-        ArgumentNullException.ThrowIfNull(findOpenThread);
+        ArgumentNullException.ThrowIfNull(getSelectedSession);
+        ArgumentNullException.ThrowIfNull(findOpenSession);
         ArgumentNullException.ThrowIfNull(getPreferredProviderId);
         ArgumentNullException.ThrowIfNull(modelProviderStates);
 
-        _getSelectedThread = getSelectedThread;
-        _findOpenThread = findOpenThread;
+        _getSelectedSession = getSelectedSession;
+        _findOpenSession = findOpenSession;
         _getPreferredProviderId = getPreferredProviderId;
         _modelProviderStates = modelProviderStates;
     }
@@ -45,10 +45,10 @@ internal sealed class PromptImageCapabilityContext
 
     private (ModelProviderId ProviderId, AgentModelInfo? Model) ResolveCurrentPromptModel()
     {
-        var selectedThread = _getSelectedThread();
-        var selectedTab = selectedThread is null ? null : _findOpenThread(selectedThread.ThreadId);
-        var providerId = selectedTab?.ProviderId ?? (selectedThread is { } thread
-            ? new ModelProviderId(thread.ResolvedProviderKey)
+        var selectedSession = _getSelectedSession();
+        var selectedTab = selectedSession is null ? null : _findOpenSession(selectedSession.SessionId);
+        var providerId = selectedTab?.ProviderId ?? (selectedSession is { } session
+            ? new ModelProviderId(session.ResolvedProviderKey)
             : _getPreferredProviderId());
         if (!_modelProviderStates.TryGetValue(providerId.Value, out var backendState))
         {

@@ -181,8 +181,8 @@ public abstract class PluginOperationContext
     /// <summary>Gets the project path, when known.</summary>
     public string? ProjectPath { get; init; }
 
-    /// <summary>Gets the thread identifier, when known.</summary>
-    public string? ThreadId { get; init; }
+    /// <summary>Gets the session identifier, when known.</summary>
+    public string? SessionId { get; init; }
 
     /// <summary>Gets the run identifier, when known.</summary>
     public string? RunId { get; init; }
@@ -261,8 +261,8 @@ public sealed class PluginCommandContext : PluginOperationContext
     /// <summary>Gets UI services.</summary>
     public IPluginUiService Ui => Services.Ui;
 
-    /// <summary>Gets thread services.</summary>
-    public IPluginThreadService Threads => Services.Threads;
+    /// <summary>Gets session services.</summary>
+    public IPluginSessionService Sessions => Services.Sessions;
 
     /// <summary>Gets prompt services.</summary>
     public IPluginPromptService Prompts => Services.Prompts;

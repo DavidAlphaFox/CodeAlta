@@ -16,12 +16,12 @@ public sealed class ShellStateStoreTests
         var first = store.Snapshot;
 
         var updated = store.Mutate(snapshot => snapshot
-            .UpsertTab(new ShellFrontendTabSnapshot("thread-1", "Thread", "thread"))
+            .UpsertTab(new ShellFrontendTabSnapshot("session-1", "Session", "session"))
             .SetStatus("Ready"));
 
         Assert.AreEqual(0, first.Tabs.Count);
         Assert.AreEqual(1, updated.Tabs.Count);
-        Assert.AreEqual("thread-1", updated.ActiveTabId);
+        Assert.AreEqual("session-1", updated.ActiveTabId);
         Assert.AreEqual("Ready", updated.StatusText);
         Assert.AreSame(updated, store.Snapshot);
     }
@@ -30,14 +30,14 @@ public sealed class ShellStateStoreTests
     public void RemoveTab_SelectsRemainingTabWhenActiveTabIsRemoved()
     {
         var snapshot = ShellFrontendStateSnapshot.Empty
-            .UpsertTab(new ShellFrontendTabSnapshot("thread-1", "Thread 1", "thread"))
-            .UpsertTab(new ShellFrontendTabSnapshot("thread-2", "Thread 2", "thread"))
-            .SelectTab("thread-2");
+            .UpsertTab(new ShellFrontendTabSnapshot("session-1", "Session 1", "session"))
+            .UpsertTab(new ShellFrontendTabSnapshot("session-2", "Session 2", "session"))
+            .SelectTab("session-2");
 
-        var updated = snapshot.RemoveTab("thread-2");
+        var updated = snapshot.RemoveTab("session-2");
 
         Assert.AreEqual(1, updated.Tabs.Count);
-        Assert.AreEqual("thread-1", updated.ActiveTabId);
+        Assert.AreEqual("session-1", updated.ActiveTabId);
     }
 
     [TestMethod]
@@ -49,7 +49,7 @@ public sealed class ShellStateStoreTests
     }
 
     [TestMethod]
-    public void Snapshot_RejectsAccessFromNonOwnerThread()
+    public void Snapshot_RejectsAccessFromNonOwnerSession()
     {
         var store = new ShellStateStore();
         var ownerThreadId = Environment.CurrentManagedThreadId;
@@ -79,32 +79,32 @@ public sealed class ShellStateStoreTests
     public void SetCatalogAndSelection_CapturesFrontendStateSnapshots()
     {
         var project = new ProjectDescriptor { Id = "project-1", Name = "Project", ProjectPath = "C:\\repo" };
-        var thread = new SessionViewDescriptor { ThreadId = "thread-1", ProjectRef = "project-1", Title = "Thread" };
+        var session = new SessionViewDescriptor { SessionId = "session-1", ProjectRef = "project-1", Title = "Session" };
         var navigatorSettings = new NavigatorSettings
         {
             SortMode = NavigatorProjectSortMode.Date,
-            RecentThreadsPerProject = 7,
+            RecentSessionsPerProject = 7,
             ThemeSchemeName = "Elderberry Dark Soft",
         };
 
         var updated = ShellFrontendStateSnapshot.Empty
-            .SetCatalog([project], [thread])
-            .SetSelection(ShellSelection.Thread("thread-1", "project-1"), ["thread-1", "thread-1"], navigatorSettings);
+            .SetCatalog([project], [session])
+            .SetSelection(ShellSelection.Session("session-1", "project-1"), ["session-1", "session-1"], navigatorSettings);
 
         Assert.AreEqual(1, updated.Projects.Count);
-        Assert.AreEqual(1, updated.Threads.Count);
-        Assert.AreEqual("thread-1", updated.Selection.SelectedThreadId);
-        Assert.AreEqual(1, updated.OpenThreadIds.Count);
+        Assert.AreEqual(1, updated.Sessions.Count);
+        Assert.AreEqual("session-1", updated.Selection.SelectedSessionId);
+        Assert.AreEqual(1, updated.OpenSessionIds.Count);
         Assert.AreEqual(NavigatorProjectSortMode.Date, updated.NavigatorSettings.SortMode);
         Assert.AreEqual("Elderberry Dark Soft", updated.NavigatorSettings.ThemeSchemeName);
         Assert.AreNotSame(navigatorSettings, updated.NavigatorSettings);
     }
 
     [TestMethod]
-    public void ModelProviderSelectorStateStore_RejectsAccessOffUiThread()
+    public void ModelProviderSelectorStateStore_RejectsAccessOffUiSession()
     {
         var store = new ModelProviderSelectorStateStore(
-            new ThreadWorkspaceViewModel(),
+            new SessionWorkspaceViewModel(),
             new NonOwnerUiDispatcher());
 
         Assert.ThrowsExactly<InvalidOperationException>(store.VerifyBindableAccess);

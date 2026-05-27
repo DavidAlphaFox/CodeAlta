@@ -23,7 +23,7 @@ internal static class ShellTextFormatter
 
         return selectedProject is null
             ? "Project draft"
-            : $"{ThreadTabVisualFactory.CompactTitle(selectedProject.DisplayName)} draft";
+            : $"{SessionTabVisualFactory.CompactTitle(selectedProject.DisplayName)} draft";
     }
 
     public static string BuildDraftTabBodyText(

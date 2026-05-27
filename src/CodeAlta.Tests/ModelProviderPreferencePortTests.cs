@@ -9,24 +9,24 @@ namespace CodeAlta.Tests;
 public sealed class ModelProviderPreferencePortTests
 {
     [TestMethod]
-    public void RememberThreadPreference_NormalizesBlankModelAndForwardsPersistFlag()
+    public void RememberSessionPreference_NormalizesBlankModelAndForwardsPersistFlag()
     {
-        string? capturedThreadId = null;
+        string? capturedSessionId = null;
         ModelProviderPreference? capturedPreference = null;
         bool? capturedPersist = null;
-        var port = CreatePort(rememberThreadPreference: (threadId, preference, persist) =>
+        var port = CreatePort(rememberSessionPreference: (sessionId, preference, persist) =>
         {
-            capturedThreadId = threadId;
+            capturedSessionId = sessionId;
             capturedPreference = preference;
             capturedPersist = persist;
         });
 
-        port.RememberThreadPreference(
-            "thread-1",
+        port.RememberSessionPreference(
+            "session-1",
             new ModelProviderPreference(new ModelProviderId("provider-1"), "   ", AgentReasoningEffort.Medium),
             persistNow: true);
 
-        Assert.AreEqual("thread-1", capturedThreadId);
+        Assert.AreEqual("session-1", capturedSessionId);
         Assert.IsNotNull(capturedPreference);
         Assert.AreEqual("provider-1", capturedPreference.ModelProviderId.Value);
         Assert.IsNull(capturedPreference.ModelId);
@@ -65,7 +65,7 @@ public sealed class ModelProviderPreferencePortTests
         var binding = new PromptSessionBinding(
             new PromptSessionId("prompt-1"),
             ProjectId.NewVersion7(),
-            new ShellThreadRef.Draft(new ThreadDraftId("draft-1")),
+            new ShellSessionRef.Draft(new SessionDraftId("draft-1")),
             new ModelProviderId("provider-1"));
 
         Assert.ThrowsExactly<ArgumentException>(() => port.ApplyDraftPreference(binding, new ModelProviderPreference(default)));
@@ -75,14 +75,14 @@ public sealed class ModelProviderPreferencePortTests
         Func<ProjectId, ModelProviderId>? getPreferredModelProviderId = null,
         Func<ModelProviderId, bool>? isModelProviderReady = null,
         Action<PromptSessionBinding, ModelProviderPreference>? applyDraftPreference = null,
-        Action<string, ModelProviderPreference>? applyThreadPreference = null,
+        Action<string, ModelProviderPreference>? applySessionPreference = null,
         Action<ProjectId, ModelProviderPreference>? rememberProjectPreference = null,
-        Action<string, ModelProviderPreference, bool>? rememberThreadPreference = null)
+        Action<string, ModelProviderPreference, bool>? rememberSessionPreference = null)
         => new(
             getPreferredModelProviderId ?? (_ => new ModelProviderId("provider-1")),
             isModelProviderReady ?? (_ => false),
             applyDraftPreference ?? ((_, _) => { }),
-            applyThreadPreference ?? ((_, _) => { }),
+            applySessionPreference ?? ((_, _) => { }),
             rememberProjectPreference ?? ((_, _) => { }),
-            rememberThreadPreference ?? ((_, _, _) => { }));
+            rememberSessionPreference ?? ((_, _, _) => { }));
 }

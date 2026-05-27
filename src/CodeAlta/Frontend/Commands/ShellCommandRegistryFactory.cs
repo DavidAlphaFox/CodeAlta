@@ -13,7 +13,7 @@ internal interface IShellCommandSurfacePresenter
 
 internal sealed class ShellCommandRegistryFactory
 {
-    private readonly ThreadCommandCoordinator _threadCommands;
+    private readonly SessionCommandCoordinator _sessionCommands;
     private readonly IShellDialogCommandService _dialogCommandService;
     private readonly IShellNavigationCommandService _navigationCommandService;
     private readonly IShellTabCommandService _tabCommandService;
@@ -21,20 +21,20 @@ internal sealed class ShellCommandRegistryFactory
     private readonly IPluginCommandService _pluginCommandService;
 
     public ShellCommandRegistryFactory(
-        ThreadCommandCoordinator threadCommands,
+        SessionCommandCoordinator sessionCommands,
         IShellDialogCommandService dialogCommandService,
         IShellNavigationCommandService navigationCommandService,
         IShellTabCommandService tabCommandService,
         IShellStatusService statusService,
         IPluginCommandService pluginCommandService)
     {
-        ArgumentNullException.ThrowIfNull(threadCommands);
+        ArgumentNullException.ThrowIfNull(sessionCommands);
         ArgumentNullException.ThrowIfNull(dialogCommandService);
         ArgumentNullException.ThrowIfNull(navigationCommandService);
         ArgumentNullException.ThrowIfNull(tabCommandService);
         ArgumentNullException.ThrowIfNull(statusService);
         ArgumentNullException.ThrowIfNull(pluginCommandService);
-        _threadCommands = threadCommands;
+        _sessionCommands = sessionCommands;
         _dialogCommandService = dialogCommandService;
         _navigationCommandService = navigationCommandService;
         _tabCommandService = tabCommandService;
@@ -58,24 +58,24 @@ internal sealed class ShellCommandRegistryFactory
         registry.RegisterFactory("CodeAlta.Skills.Manage", static () => new OpenSkillsCommand());
         registry.RegisterFactory("CodeAlta.Plugins.Manage", static () => new OpenPluginsCommand());
         registry.RegisterFactory("CodeAlta.Workspace.Settings", static () => new OpenWorkspaceSettingsCommand());
-        registry.RegisterFactory("CodeAlta.Thread.SessionUsage", static () => new OpenSessionUsageCommand());
-        registry.RegisterFactory("CodeAlta.Thread.Info", static () => new OpenThreadInfoCommand());
-        registry.RegisterFactory("CodeAlta.Thread.ExpandPrompt", static () => new OpenExpandedPromptCommand());
-        registry.RegisterFactory("CodeAlta.Thread.Send", static () => new SubmitPromptCommand(null, Steer: false));
-        registry.RegisterFactory("CodeAlta.Thread.Steer", static () => new SubmitPromptCommand(null, Steer: true));
-        registry.RegisterFactory("CodeAlta.Thread.Abort", static () => new AbortSelectedThreadCommand());
-        registry.RegisterFactory("CodeAlta.Thread.ClearQueue", static () => new ClearSelectedThreadQueueCommand());
-        registry.RegisterFactory("CodeAlta.Thread.Compact", static () => new CompactSelectedThreadCommand());
-        registry.RegisterFactory("CodeAlta.Thread.CloseTab", static () => new CloseCurrentTabCommand());
-        registry.RegisterFactory("CodeAlta.Thread.TabLeft", static () => new SelectRelativeTabCommand(-1));
-        registry.RegisterFactory("CodeAlta.Thread.TabRight", static () => new SelectRelativeTabCommand(1));
-        registry.RegisterFactory("CodeAlta.Thread.MessagePrevious", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Previous));
-        registry.RegisterFactory("CodeAlta.Thread.MessageNext", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Next));
-        registry.RegisterFactory("CodeAlta.Thread.MessageFirst", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.First));
-        registry.RegisterFactory("CodeAlta.Thread.MessageLast", static () => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Last));
+        registry.RegisterFactory("CodeAlta.Session.SessionUsage", static () => new OpenSessionUsageCommand());
+        registry.RegisterFactory("CodeAlta.Session.Info", static () => new OpenSessionInfoCommand());
+        registry.RegisterFactory("CodeAlta.Session.ExpandPrompt", static () => new OpenExpandedPromptCommand());
+        registry.RegisterFactory("CodeAlta.Session.Send", static () => new SubmitPromptCommand(null, Steer: false));
+        registry.RegisterFactory("CodeAlta.Session.Steer", static () => new SubmitPromptCommand(null, Steer: true));
+        registry.RegisterFactory("CodeAlta.Session.Abort", static () => new AbortSelectedSessionCommand());
+        registry.RegisterFactory("CodeAlta.Session.ClearQueue", static () => new ClearSelectedSessionQueueCommand());
+        registry.RegisterFactory("CodeAlta.Session.Compact", static () => new CompactSelectedSessionCommand());
+        registry.RegisterFactory("CodeAlta.Session.CloseTab", static () => new CloseCurrentTabCommand());
+        registry.RegisterFactory("CodeAlta.Session.TabLeft", static () => new SelectRelativeTabCommand(-1));
+        registry.RegisterFactory("CodeAlta.Session.TabRight", static () => new SelectRelativeTabCommand(1));
+        registry.RegisterFactory("CodeAlta.Session.MessagePrevious", static () => new ScrollSelectedSessionMessageCommand(SessionMessageScrollTarget.Previous));
+        registry.RegisterFactory("CodeAlta.Session.MessageNext", static () => new ScrollSelectedSessionMessageCommand(SessionMessageScrollTarget.Next));
+        registry.RegisterFactory("CodeAlta.Session.MessageFirst", static () => new ScrollSelectedSessionMessageCommand(SessionMessageScrollTarget.First));
+        registry.RegisterFactory("CodeAlta.Session.MessageLast", static () => new ScrollSelectedSessionMessageCommand(SessionMessageScrollTarget.Last));
 
-        PromptCommandHandlers.Register(registry, _threadCommands);
-        ThreadCommandHandlers.Register(registry, _threadCommands);
+        PromptCommandHandlers.Register(registry, _sessionCommands);
+        SessionCommandHandlers.Register(registry, _sessionCommands);
         NavigationCommandHandlers.Register(registry, _navigationCommandService);
         DialogCommandHandlers.Register(
             registry,
@@ -84,7 +84,7 @@ internal sealed class ShellCommandRegistryFactory
             presenter.ShowOpenFolderDialog,
             _dialogCommandService);
         TabCommandHandlers.Register(registry, _tabCommandService);
-        PluginCommandHandlers.Register(registry, _pluginCommandService, _threadCommands, _statusService);
+        PluginCommandHandlers.Register(registry, _pluginCommandService, _sessionCommands, _statusService);
         return registry;
     }
 }

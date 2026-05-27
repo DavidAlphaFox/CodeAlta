@@ -5,7 +5,7 @@ namespace CodeAlta.App;
 
 internal static class PromptComposerSessionBindingFactory
 {
-    public static Func<string, ThreadSessionState?, PromptComposerSessionBinding> Create(
+    public static Func<string, SessionState?, PromptComposerSessionBinding> Create(
         PromptDraftUiCoordinator promptDrafts,
         PromptImageCapabilityContext imageCapabilities,
         Action<string, StatusTone> setStatus)

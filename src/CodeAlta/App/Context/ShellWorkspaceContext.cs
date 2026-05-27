@@ -57,13 +57,13 @@ internal sealed class ShellWorkspaceContext
     public void RefreshModelProviderSelectorsForDraftScope()
         => _projection.RefreshModelProviderSelectorsForDraftScope();
 
-    public void RefreshModelProviderSelectorsForThread(OpenThreadState tab)
+    public void RefreshModelProviderSelectorsForSession(OpenSessionState tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        _projection.RefreshModelProviderSelectorsForThread(tab);
+        _projection.RefreshModelProviderSelectorsForSession(tab);
     }
 
-    public void SyncPromptDraftText(ThreadSessionState? session)
+    public void SyncPromptDraftText(SessionState? session)
         => _projection.SyncPromptDraftText(session);
 
     public void ApplyPromptAvailabilityProjection()
@@ -72,8 +72,8 @@ internal sealed class ShellWorkspaceContext
     public void SyncActivePromptPanelProjection()
         => _projection.SyncActivePromptPanelProjection();
 
-    public void SyncThreadTabControl()
-        => _projection.SyncThreadTabControl();
+    public void SyncSessionTabControl()
+        => _projection.SyncSessionTabControl();
 
     public void DispatchToUi(Action action)
     {

@@ -28,7 +28,7 @@ public sealed class CodeAltaHostTests
         Assert.AreEqual(Path.GetFullPath(options.GlobalRoot), host.CatalogOptions.GlobalRoot);
         Assert.AreEqual(projectRoot, host.CurrentProject.ProjectPath);
         Assert.IsNotNull(host.ProjectCatalog);
-        Assert.IsNotNull(host.ThreadCatalog);
+        Assert.IsNotNull(host.SessionViewCatalog);
         Assert.IsNotNull(host.SkillCatalog);
         Assert.IsNotNull(host.AgentHub);
         Assert.IsNotNull(host.RuntimeService);

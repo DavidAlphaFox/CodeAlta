@@ -68,18 +68,18 @@ internal sealed class SidebarCoordinator
 
     public void RefreshProjection(
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads,
+        IReadOnlyList<SessionViewDescriptor> sessions,
         string? preferredExpandedProjectId,
         SidebarSelectionTarget currentTarget,
         NavigatorSettings settings,
-        Func<string, ThreadVisualState> getThreadVisualState,
+        Func<string, SessionVisualState> getSessionVisualState,
         Func<string?, bool, bool> hasDraftPrompt,
         Action verifyBindableAccess)
     {
         ArgumentNullException.ThrowIfNull(projects);
-        ArgumentNullException.ThrowIfNull(threads);
+        ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(settings);
-        ArgumentNullException.ThrowIfNull(getThreadVisualState);
+        ArgumentNullException.ThrowIfNull(getSessionVisualState);
         ArgumentNullException.ThrowIfNull(hasDraftPrompt);
         ArgumentNullException.ThrowIfNull(verifyBindableAccess);
 
@@ -95,11 +95,11 @@ internal sealed class SidebarCoordinator
 
         var projection = SidebarTreeProjectionBuilder.Build(
             projects,
-            threads,
+            sessions,
             _catalogOptions.GlobalRoot,
             expandedProjectIds,
             settings,
-            getThreadVisualState,
+            getSessionVisualState,
             hasDraftPrompt,
             GetOrCreateRow,
             nowUtc);
@@ -285,8 +285,8 @@ internal sealed class SidebarCoordinator
             case SidebarSelectionKind.ProjectScope when currentTarget.ProjectId is not null:
                 _ = _shellController.SelectProjectScopeAsync(currentTarget.ProjectId, CancellationToken.None);
                 break;
-            case SidebarSelectionKind.Thread when currentTarget.ThreadId is not null:
-                _ = _shellController.OpenThreadAsync(currentTarget.ThreadId, CancellationToken.None);
+            case SidebarSelectionKind.Session when currentTarget.SessionId is not null:
+                _ = _shellController.OpenSessionAsync(currentTarget.SessionId, CancellationToken.None);
                 break;
         }
     }

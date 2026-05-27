@@ -8,7 +8,7 @@ internal sealed class ShellSelectionCoordinator
 {
     private readonly ShellSelectionState _state = new();
 
-    public WorkThreadViewState ViewState
+    public SessionViewViewState ViewState
     {
         get => _state.ViewState;
         set => _state.ViewState = value;
@@ -23,14 +23,14 @@ internal sealed class ShellSelectionCoordinator
 
             _state.Selection = value;
             ViewState.Selection = ToPersistedSelection(value);
-            ViewState.SelectedThreadId = value.SelectedThreadId;
+            ViewState.SelectedSessionId = value.SelectedSessionId;
         }
     }
 
-    public string? PendingStartupThreadRestoreId
+    public string? PendingStartupSessionRestoreId
     {
-        get => _state.PendingStartupThreadRestoreId;
-        set => _state.PendingStartupThreadRestoreId = value;
+        get => _state.PendingStartupSessionRestoreId;
+        set => _state.PendingStartupSessionRestoreId = value;
     }
 
     public bool DraftTabOpen
@@ -77,17 +77,17 @@ internal sealed class ShellSelectionCoordinator
                 { Target: WorkspaceTarget.Draft draft } => new ShellSelection(
                     ShellSurface.DraftWorkspace,
                     new WorkspaceTarget.Draft(value, draft.IsGlobal)),
-                { Target: WorkspaceTarget.Thread thread } => thread.ThreadId is { Length: > 0 } threadId
-                    ? ShellSelection.Thread(threadId, value)
+                { Target: WorkspaceTarget.Session session } => session.SessionId is { Length: > 0 } sessionId
+                    ? ShellSelection.Session(sessionId, value)
                     : Selection,
                 _ => Selection,
             };
         }
     }
 
-    public string? SelectedThreadId
+    public string? SelectedSessionId
     {
-        get => Selection.SelectedThreadId;
+        get => Selection.SelectedSessionId;
         set
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -100,35 +100,35 @@ internal sealed class ShellSelectionCoordinator
                 return;
             }
 
-            Selection = ShellSelection.Thread(value, Selection.SelectedProjectId);
+            Selection = ShellSelection.Session(value, Selection.SelectedProjectId);
         }
     }
 
     public void ApplyInitialSelection(
-        WorkThreadViewState viewState,
+        SessionViewViewState viewState,
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads)
+        IReadOnlyList<SessionViewDescriptor> sessions)
     {
         ArgumentNullException.ThrowIfNull(viewState);
         ArgumentNullException.ThrowIfNull(projects);
-        ArgumentNullException.ThrowIfNull(threads);
+        ArgumentNullException.ThrowIfNull(sessions);
 
         ViewState = viewState;
-        var persistedSelection = NormalizePersistedSelection(ViewState.Selection, ViewState.SelectedThreadId, ViewState.OpenThreadIds);
-        PendingStartupThreadRestoreId = persistedSelection.Surface == WorkThreadSelectionSurface.Thread
-            ? persistedSelection.ThreadId
+        var persistedSelection = NormalizePersistedSelection(ViewState.Selection, ViewState.SelectedSessionId, ViewState.OpenSessionIds);
+        PendingStartupSessionRestoreId = persistedSelection.Surface == SessionViewSelectionSurface.Session
+            ? persistedSelection.SessionId
             : null;
 
-        if (persistedSelection.Surface == WorkThreadSelectionSurface.Thread &&
-            persistedSelection.ThreadId is { Length: > 0 } desiredThreadId &&
-            FindThread(threads, desiredThreadId) is { } thread)
+        if (persistedSelection.Surface == SessionViewSelectionSurface.Session &&
+            persistedSelection.SessionId is { Length: > 0 } desiredSessionId &&
+            FindSession(sessions, desiredSessionId) is { } session)
         {
-            Selection = ShellSelection.Thread(thread.ThreadId, thread.ProjectRef);
+            Selection = ShellSelection.Session(session.SessionId, session.ProjectRef);
             return;
         }
 
         var preferredProjectId = NormalizeProjectId(projects, persistedSelection.ProjectId);
-        Selection = persistedSelection.DraftScope == WorkThreadDraftScope.Global
+        Selection = persistedSelection.DraftScope == SessionViewDraftScope.Global
             ? ShellSelection.GlobalDraft(preferredProjectId)
             : (preferredProjectId ?? GetDefaultProjectId(projects)) is { } projectId
                 ? ShellSelection.ProjectDraft(projectId)
@@ -137,22 +137,22 @@ internal sealed class ShellSelectionCoordinator
 
     public void EnsureSelectionDefaults(
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads)
+        IReadOnlyList<SessionViewDescriptor> sessions)
     {
         ArgumentNullException.ThrowIfNull(projects);
-        ArgumentNullException.ThrowIfNull(threads);
+        ArgumentNullException.ThrowIfNull(sessions);
 
-        if (Selection.SelectedThreadId is { } selectedThreadId &&
-            FindThread(threads, selectedThreadId) is not { } thread)
+        if (Selection.SelectedSessionId is { } selectedSessionId &&
+            FindSession(sessions, selectedSessionId) is not { } session)
         {
             Selection = BuildDraftFallback(projects, Selection.SelectedProjectId);
             return;
         }
 
-        if (Selection.Target is WorkspaceTarget.Thread currentThread &&
-            FindThread(threads, currentThread.ThreadId) is { } selectedThread)
+        if (Selection.Target is WorkspaceTarget.Session currentSession &&
+            FindSession(sessions, currentSession.SessionId) is { } selectedSession)
         {
-            Selection = ShellSelection.Thread(selectedThread.ThreadId, NormalizeProjectId(projects, selectedThread.ProjectRef));
+            Selection = ShellSelection.Session(selectedSession.SessionId, NormalizeProjectId(projects, selectedSession.ProjectRef));
             return;
         }
 
@@ -179,25 +179,25 @@ internal sealed class ShellSelectionCoordinator
             : ShellSelection.GlobalDraft();
     }
 
-    public void SelectThread(SessionViewDescriptor thread)
+    public void SelectSession(SessionViewDescriptor session)
     {
-        ArgumentNullException.ThrowIfNull(thread);
-        Selection = ShellSelection.Thread(thread.ThreadId, thread.ProjectRef);
+        ArgumentNullException.ThrowIfNull(session);
+        Selection = ShellSelection.Session(session.SessionId, session.ProjectRef);
     }
 
-    public void ApplyThreadRemovalFallback(
-        string? nextSelectedThreadId,
+    public void ApplySessionRemovalFallback(
+        string? nextSelectedSessionId,
         string? fallbackProjectId,
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads)
+        IReadOnlyList<SessionViewDescriptor> sessions)
     {
         ArgumentNullException.ThrowIfNull(projects);
-        ArgumentNullException.ThrowIfNull(threads);
+        ArgumentNullException.ThrowIfNull(sessions);
 
-        if (!string.IsNullOrWhiteSpace(nextSelectedThreadId) &&
-            FindThread(threads, nextSelectedThreadId) is { } nextThread)
+        if (!string.IsNullOrWhiteSpace(nextSelectedSessionId) &&
+            FindSession(sessions, nextSelectedSessionId) is { } nextSession)
         {
-            Selection = ShellSelection.Thread(nextThread.ThreadId, nextThread.ProjectRef);
+            Selection = ShellSelection.Session(nextSession.SessionId, nextSession.ProjectRef);
             return;
         }
 
@@ -233,49 +233,49 @@ internal sealed class ShellSelectionCoordinator
         return projects.FirstOrDefault()?.Id;
     }
 
-    private static SessionViewDescriptor? FindThread(IReadOnlyList<SessionViewDescriptor> threads, string threadId)
+    private static SessionViewDescriptor? FindSession(IReadOnlyList<SessionViewDescriptor> sessions, string sessionId)
     {
-        ArgumentNullException.ThrowIfNull(threads);
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
-        return threads.FirstOrDefault(thread => string.Equals(thread.ThreadId, threadId, StringComparison.OrdinalIgnoreCase));
+        return sessions.FirstOrDefault(session => string.Equals(session.SessionId, sessionId, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static WorkThreadSelectionState NormalizePersistedSelection(
-        WorkThreadSelectionState? selection,
-        string? legacySelectedThreadId,
-        IReadOnlyList<string> openThreadIds)
+    private static SessionViewSelectionState NormalizePersistedSelection(
+        SessionViewSelectionState? selection,
+        string? legacySelectedSessionId,
+        IReadOnlyList<string> openSessionIds)
     {
         if (selection is not null)
         {
             return selection;
         }
 
-        if (!string.IsNullOrWhiteSpace(legacySelectedThreadId))
+        if (!string.IsNullOrWhiteSpace(legacySelectedSessionId))
         {
-            return WorkThreadSelectionState.Thread(legacySelectedThreadId, projectId: null);
+            return SessionViewSelectionState.Session(legacySelectedSessionId, projectId: null);
         }
 
-        if (openThreadIds.FirstOrDefault(static threadId => !string.IsNullOrWhiteSpace(threadId)) is { } firstOpenThreadId)
+        if (openSessionIds.FirstOrDefault(static sessionId => !string.IsNullOrWhiteSpace(sessionId)) is { } firstOpenSessionId)
         {
-            return WorkThreadSelectionState.Thread(firstOpenThreadId, projectId: null);
+            return SessionViewSelectionState.Session(firstOpenSessionId, projectId: null);
         }
 
-        return WorkThreadSelectionState.GlobalDraft();
+        return SessionViewSelectionState.GlobalDraft();
     }
 
-    private static WorkThreadSelectionState ToPersistedSelection(ShellSelection selection)
+    private static SessionViewSelectionState ToPersistedSelection(ShellSelection selection)
     {
         ArgumentNullException.ThrowIfNull(selection);
 
         return selection.Target switch
         {
-            WorkspaceTarget.Draft { IsGlobal: true } draft => WorkThreadSelectionState.GlobalDraft(draft.ProjectId),
+            WorkspaceTarget.Draft { IsGlobal: true } draft => SessionViewSelectionState.GlobalDraft(draft.ProjectId),
             WorkspaceTarget.Draft draft => draft.ProjectId is { Length: > 0 } projectId
-                ? WorkThreadSelectionState.ProjectDraft(projectId)
-                : WorkThreadSelectionState.GlobalDraft(),
-            WorkspaceTarget.Thread thread => WorkThreadSelectionState.Thread(thread.ThreadId, thread.ProjectId),
-            _ => WorkThreadSelectionState.GlobalDraft(selection.SelectedProjectId),
+                ? SessionViewSelectionState.ProjectDraft(projectId)
+                : SessionViewSelectionState.GlobalDraft(),
+            WorkspaceTarget.Session session => SessionViewSelectionState.Session(session.SessionId, session.ProjectId),
+            _ => SessionViewSelectionState.GlobalDraft(selection.SelectedProjectId),
         };
     }
 }

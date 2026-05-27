@@ -5,7 +5,7 @@ namespace CodeAlta.Views;
 internal static class PromptReferenceProjectRootResolver
 {
     public static string? Resolve(
-        SessionViewDescriptor? selectedThread,
+        SessionViewDescriptor? selectedSession,
         Func<string?, ProjectDescriptor?> getProjectById,
         Func<ProjectDescriptor?> getSelectedProject,
         string? globalRoot = null)
@@ -13,17 +13,17 @@ internal static class PromptReferenceProjectRootResolver
         ArgumentNullException.ThrowIfNull(getProjectById);
         ArgumentNullException.ThrowIfNull(getSelectedProject);
 
-        if (selectedThread is null)
+        if (selectedSession is null)
         {
             return getSelectedProject()?.ProjectPath ?? NormalizeOptionalRoot(globalRoot);
         }
 
-        if (selectedThread.Kind == WorkThreadKind.GlobalThread)
+        if (selectedSession.Kind == SessionViewKind.GlobalSession)
         {
-            return NormalizeOptionalRoot(selectedThread.WorkingDirectory) ?? NormalizeOptionalRoot(globalRoot);
+            return NormalizeOptionalRoot(selectedSession.WorkingDirectory) ?? NormalizeOptionalRoot(globalRoot);
         }
 
-        return getProjectById(selectedThread.ProjectRef)?.ProjectPath ?? selectedThread.WorkingDirectory;
+        return getProjectById(selectedSession.ProjectRef)?.ProjectPath ?? selectedSession.WorkingDirectory;
     }
 
     private static string? NormalizeOptionalRoot(string? path)

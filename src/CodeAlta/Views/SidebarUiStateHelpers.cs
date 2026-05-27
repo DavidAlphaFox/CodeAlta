@@ -3,14 +3,14 @@ using CodeAlta.App.State;
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Sidebar;
-using CodeAlta.Presentation.Threads;
+using CodeAlta.Presentation.Sessions;
 
 namespace CodeAlta.Views;
 
 internal static class SidebarUiStateHelpers
 {
-    public static string? GetExpandedProjectId(SessionViewDescriptor? selectedThread)
-        => SidebarSelectionResolver.ResolvePreferredExpandedProjectId(selectedThread?.ProjectRef);
+    public static string? GetExpandedProjectId(SessionViewDescriptor? selectedSession)
+        => SidebarSelectionResolver.ResolvePreferredExpandedProjectId(selectedSession?.ProjectRef);
 
     public static void ToggleNavigator(SidebarView sidebarView, Action focusPromptTarget)
     {
@@ -26,39 +26,39 @@ internal static class SidebarUiStateHelpers
         }
     }
 
-    public static SidebarSelectionTarget ResolveCurrentTarget(ShellThreadStateCoordinator threadStateCoordinator)
+    public static SidebarSelectionTarget ResolveCurrentTarget(ShellSessionStateCoordinator sessionStateCoordinator)
     {
-        ArgumentNullException.ThrowIfNull(threadStateCoordinator);
+        ArgumentNullException.ThrowIfNull(sessionStateCoordinator);
         return SidebarSelectionResolver.ResolveCurrentTarget(
-            threadStateCoordinator.Selection.SelectedThreadId,
-            threadStateCoordinator.Selection.SelectedProjectId,
-            threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true });
+            sessionStateCoordinator.Selection.SelectedSessionId,
+            sessionStateCoordinator.Selection.SelectedProjectId,
+            sessionStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true });
     }
 
     public static void RefreshProjection(
         SidebarCoordinator sidebarCoordinator,
-        ShellThreadStateCoordinator threadStateCoordinator,
+        ShellSessionStateCoordinator sessionStateCoordinator,
         PromptDraftUiCoordinator promptDraftUiCoordinator,
-        Func<string, OpenThreadState?> findOpenThread,
-        Func<string, bool> isRuntimeThreadRunning,
+        Func<string, OpenSessionState?> findOpenSession,
+        Func<string, bool> isRuntimeSessionRunning,
         Action verifyBindableAccess)
     {
         ArgumentNullException.ThrowIfNull(sidebarCoordinator);
-        ArgumentNullException.ThrowIfNull(threadStateCoordinator);
+        ArgumentNullException.ThrowIfNull(sessionStateCoordinator);
         ArgumentNullException.ThrowIfNull(promptDraftUiCoordinator);
-        ArgumentNullException.ThrowIfNull(findOpenThread);
-        ArgumentNullException.ThrowIfNull(isRuntimeThreadRunning);
+        ArgumentNullException.ThrowIfNull(findOpenSession);
+        ArgumentNullException.ThrowIfNull(isRuntimeSessionRunning);
         ArgumentNullException.ThrowIfNull(verifyBindableAccess);
 
         sidebarCoordinator.RefreshProjection(
-            threadStateCoordinator.Projects,
-            threadStateCoordinator.Threads,
-            GetExpandedProjectId(threadStateCoordinator.GetSelectedThread()),
-            ResolveCurrentTarget(threadStateCoordinator),
-            threadStateCoordinator.NavigatorSettings,
-            threadId => findOpenThread(threadId) is { } tab
-                ? new ThreadVisualState(tab.StatusBusy || isRuntimeThreadRunning(threadId), tab.HasPromptDraft)
-                : new ThreadVisualState(isRuntimeThreadRunning(threadId), promptDraftUiCoordinator.HasPersistedPromptDraft(threadId)),
+            sessionStateCoordinator.Projects,
+            sessionStateCoordinator.Sessions,
+            GetExpandedProjectId(sessionStateCoordinator.GetSelectedSession()),
+            ResolveCurrentTarget(sessionStateCoordinator),
+            sessionStateCoordinator.NavigatorSettings,
+            sessionId => findOpenSession(sessionId) is { } tab
+                ? new SessionVisualState(tab.StatusBusy || isRuntimeSessionRunning(sessionId), tab.HasPromptDraft)
+                : new SessionVisualState(isRuntimeSessionRunning(sessionId), promptDraftUiCoordinator.HasPersistedPromptDraft(sessionId)),
             promptDraftUiCoordinator.HasDraftPrompt,
             verifyBindableAccess);
     }

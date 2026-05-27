@@ -16,19 +16,19 @@ namespace CodeAlta.Tests;
 public sealed class ShellWorkspaceCoordinatorTests
 {
     [TestMethod]
-    public void ApplySelectionProjection_FocusesPromptWhenDisplayingThread()
+    public void ApplySelectionProjection_FocusesPromptWhenDisplayingSession()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
-        var thread = CreateThread("thread-1", "project-1");
-        var threadStateCoordinator = CreateThreadStateCoordinator(options);
-        threadStateCoordinator.ApplyRecoveredCatalogState([CreateProject("project-1", "CodeAlta")], [thread]);
-        threadStateCoordinator.OpenThread(thread.ThreadId);
+        var session = CreateSession("session-1", "project-1");
+        var sessionStateCoordinator = CreateSessionStateCoordinator(options);
+        sessionStateCoordinator.ApplyRecoveredCatalogState([CreateProject("project-1", "CodeAlta")], [session]);
+        sessionStateCoordinator.OpenSession(session.SessionId);
 
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
-            threadId => string.Equals(threadId, threadStateCoordinator.SelectedThreadId, StringComparison.OrdinalIgnoreCase));
+            sessionId => string.Equals(sessionId, sessionStateCoordinator.SelectedSessionId, StringComparison.OrdinalIgnoreCase));
         var deferredActions = new Queue<Action>();
         var focusedPromptCount = 0;
         Visual? paneContent = null;
@@ -46,7 +46,7 @@ public sealed class ShellWorkspaceCoordinatorTests
                 static _ => { },
                 static _ => { }),
             new DelegatingShellWorkspaceProjectionPort(
-                threadStateCoordinator.EnsureSelectionDefaults,
+                sessionStateCoordinator.EnsureSelectionDefaults,
                 static () => { },
                 static () => { },
                 static () => { },
@@ -59,15 +59,15 @@ public sealed class ShellWorkspaceCoordinatorTests
             uiDispatcher);
         var workspace = new ShellWorkspaceCoordinator(
             new CodeAltaShellViewModel(),
-            new ThreadWorkspaceViewModel(),
+            new SessionWorkspaceViewModel(),
             new SessionUsageViewModel(),
             CreateModelProviderStates(),
-            threadSelection,
+            sessionSelection,
             workspaceContext);
 
         workspace.ApplySelectionProjection();
 
-        var tab = threadStateCoordinator.FindOpenThread(thread.ThreadId);
+        var tab = sessionStateCoordinator.FindOpenSession(session.SessionId);
         Assert.IsNotNull(tab);
         Assert.IsNull(paneContent);
         Assert.AreEqual(0, focusedPromptCount);
@@ -81,19 +81,19 @@ public sealed class ShellWorkspaceCoordinatorTests
     }
 
     [TestMethod]
-    public async Task ApplySelectionProjection_FocusesPromptWhenClosingThreadFallsBackToDraft()
+    public async Task ApplySelectionProjection_FocusesPromptWhenClosingSessionFallsBackToDraft()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
-        var thread = CreateThread("thread-1", "project-1");
-        var threadStateCoordinator = CreateThreadStateCoordinator(options);
-        threadStateCoordinator.ApplyRecoveredCatalogState([CreateProject("project-1", "CodeAlta")], [thread]);
-        threadStateCoordinator.OpenThread(thread.ThreadId);
+        var session = CreateSession("session-1", "project-1");
+        var sessionStateCoordinator = CreateSessionStateCoordinator(options);
+        sessionStateCoordinator.ApplyRecoveredCatalogState([CreateProject("project-1", "CodeAlta")], [session]);
+        sessionStateCoordinator.OpenSession(session.SessionId);
 
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
-            threadId => string.Equals(threadId, threadStateCoordinator.SelectedThreadId, StringComparison.OrdinalIgnoreCase));
+            sessionId => string.Equals(sessionId, sessionStateCoordinator.SelectedSessionId, StringComparison.OrdinalIgnoreCase));
         var deferredActions = new Queue<Action>();
         var focusedPromptCount = 0;
         var uiDispatcher = new QueueingUiDispatcher(deferredActions);
@@ -110,7 +110,7 @@ public sealed class ShellWorkspaceCoordinatorTests
                 static _ => { },
                 static _ => { }),
             new DelegatingShellWorkspaceProjectionPort(
-                threadStateCoordinator.EnsureSelectionDefaults,
+                sessionStateCoordinator.EnsureSelectionDefaults,
                 static () => { },
                 static () => { },
                 static () => { },
@@ -123,20 +123,20 @@ public sealed class ShellWorkspaceCoordinatorTests
             uiDispatcher);
         var workspace = new ShellWorkspaceCoordinator(
             new CodeAltaShellViewModel(),
-            new ThreadWorkspaceViewModel(),
+            new SessionWorkspaceViewModel(),
             new SessionUsageViewModel(),
             CreateModelProviderStates(),
-            threadSelection,
+            sessionSelection,
             workspaceContext);
 
         workspace.ApplySelectionProjection();
         Drain(deferredActions);
         Assert.AreEqual(1, focusedPromptCount);
 
-        await threadStateCoordinator.CloseThreadTabAsync(thread.ThreadId);
+        await sessionStateCoordinator.CloseSessionTabAsync(session.SessionId);
         workspace.ApplySelectionProjection();
 
-        Assert.IsInstanceOfType(threadStateCoordinator.Selection.Target, typeof(WorkspaceTarget.Draft));
+        Assert.IsInstanceOfType(sessionStateCoordinator.Selection.Target, typeof(WorkspaceTarget.Draft));
         Assert.AreEqual(1, focusedPromptCount);
 
         Drain(deferredActions);
@@ -149,17 +149,17 @@ public sealed class ShellWorkspaceCoordinatorTests
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
-        var threadStateCoordinator = CreateThreadStateCoordinator(options);
-        threadStateCoordinator.ApplyRecoveredCatalogState([], []);
+        var sessionStateCoordinator = CreateSessionStateCoordinator(options);
+        sessionStateCoordinator.ApplyRecoveredCatalogState([], []);
 
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
-            threadId => string.Equals(threadId, threadStateCoordinator.SelectedThreadId, StringComparison.OrdinalIgnoreCase));
+            sessionId => string.Equals(sessionId, sessionStateCoordinator.SelectedSessionId, StringComparison.OrdinalIgnoreCase));
 
         var (workspace, sessionUsage) = CreateWorkspaceCoordinator(
-            threadStateCoordinator,
-            threadSelection,
+            sessionStateCoordinator,
+            sessionSelection,
             new Dictionary<string, ModelProviderState>(StringComparer.OrdinalIgnoreCase),
             static () => ModelProviderIds.Codex);
 
@@ -171,22 +171,22 @@ public sealed class ShellWorkspaceCoordinatorTests
     }
 
     [TestMethod]
-    public void ApplySelectionProjection_SelectedThreadWithMissingProvider_DoesNotThrow()
+    public void ApplySelectionProjection_SelectedSessionWithMissingProvider_DoesNotThrow()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
-        var thread = CreateThread("thread-1", "project-1");
-        var threadStateCoordinator = CreateThreadStateCoordinator(options);
-        threadStateCoordinator.ApplyRecoveredCatalogState([CreateProject("project-1", "CodeAlta")], [thread]);
-        threadStateCoordinator.OpenThread(thread.ThreadId);
+        var session = CreateSession("session-1", "project-1");
+        var sessionStateCoordinator = CreateSessionStateCoordinator(options);
+        sessionStateCoordinator.ApplyRecoveredCatalogState([CreateProject("project-1", "CodeAlta")], [session]);
+        sessionStateCoordinator.OpenSession(session.SessionId);
 
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
-            threadId => string.Equals(threadId, threadStateCoordinator.SelectedThreadId, StringComparison.OrdinalIgnoreCase));
+            sessionId => string.Equals(sessionId, sessionStateCoordinator.SelectedSessionId, StringComparison.OrdinalIgnoreCase));
         var (workspace, sessionUsage) = CreateWorkspaceCoordinator(
-            threadStateCoordinator,
-            threadSelection,
+            sessionStateCoordinator,
+            sessionSelection,
             new Dictionary<string, ModelProviderState>(StringComparer.OrdinalIgnoreCase),
             static () => ModelProviderIds.Codex);
 
@@ -228,11 +228,11 @@ public sealed class ShellWorkspaceCoordinatorTests
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
-        var thread = CreateThread("thread-1", "project-1");
-        var threadStateCoordinator = CreateThreadStateCoordinator(options);
-        threadStateCoordinator.ApplyRecoveredCatalogState([CreateProject("project-1", "CodeAlta")], [thread]);
-        threadStateCoordinator.OpenThread("thread-1");
-        var tab = threadStateCoordinator.FindOpenThread("thread-1");
+        var session = CreateSession("session-1", "project-1");
+        var sessionStateCoordinator = CreateSessionStateCoordinator(options);
+        sessionStateCoordinator.ApplyRecoveredCatalogState([CreateProject("project-1", "CodeAlta")], [session]);
+        sessionStateCoordinator.OpenSession("session-1");
+        var tab = sessionStateCoordinator.FindOpenSession("session-1");
         Assert.IsNotNull(tab);
         tab.HasCustomStatus = true;
         tab.StatusBusy = true;
@@ -254,7 +254,7 @@ public sealed class ShellWorkspaceCoordinatorTests
                 static _ => { },
                 static _ => { }),
             new DelegatingShellWorkspaceProjectionPort(
-                threadStateCoordinator.EnsureSelectionDefaults,
+                sessionStateCoordinator.EnsureSelectionDefaults,
                 static () => { },
                 static () => { },
                 static () => { },
@@ -268,10 +268,10 @@ public sealed class ShellWorkspaceCoordinatorTests
         var shellViewModel = new CodeAltaShellViewModel();
         var controller = new ShellStatusProjectionController(
             shellViewModel,
-            new ThreadSelectionContext(
-                threadStateCoordinator,
+            new SessionSelectionContext(
+                sessionStateCoordinator,
                 static (_, _) => Task.CompletedTask,
-                threadId => string.Equals(threadId, threadStateCoordinator.SelectedThreadId, StringComparison.OrdinalIgnoreCase)),
+                sessionId => string.Equals(sessionId, sessionStateCoordinator.SelectedSessionId, StringComparison.OrdinalIgnoreCase)),
             workspaceContext,
             new State<int>(0));
 
@@ -284,8 +284,8 @@ public sealed class ShellWorkspaceCoordinatorTests
     }
 
     private static (ShellWorkspaceCoordinator Workspace, SessionUsageViewModel SessionUsage) CreateWorkspaceCoordinator(
-        ShellThreadStateCoordinator threadStateCoordinator,
-        ThreadSelectionContext threadSelection,
+        ShellSessionStateCoordinator sessionStateCoordinator,
+        SessionSelectionContext sessionSelection,
         Dictionary<string, ModelProviderState> modelProviderStates,
         Func<ModelProviderId> getPreferredProviderId)
     {
@@ -302,7 +302,7 @@ public sealed class ShellWorkspaceCoordinatorTests
                 static _ => { },
                 static _ => { }),
             new DelegatingShellWorkspaceProjectionPort(
-                threadStateCoordinator.EnsureSelectionDefaults,
+                sessionStateCoordinator.EnsureSelectionDefaults,
                 static () => { },
                 static () => { },
                 static () => { },
@@ -316,10 +316,10 @@ public sealed class ShellWorkspaceCoordinatorTests
         var sessionUsage = new SessionUsageViewModel();
         var workspace = new ShellWorkspaceCoordinator(
             new CodeAltaShellViewModel(),
-            new ThreadWorkspaceViewModel(),
+            new SessionWorkspaceViewModel(),
             sessionUsage,
             modelProviderStates,
-            threadSelection,
+            sessionSelection,
             workspaceContext);
 
         return (workspace, sessionUsage);
@@ -359,10 +359,10 @@ public sealed class ShellWorkspaceCoordinatorTests
                 static () => { }),
             uiDispatcher);
 
-    private static ShellThreadStateCoordinator CreateThreadStateCoordinator(CatalogOptions options)
-        => TestThreadStateServices.CreateCoordinator(
+    private static ShellSessionStateCoordinator CreateSessionStateCoordinator(CatalogOptions options)
+        => TestSessionStateServices.CreateCoordinator(
             new ProjectCatalog(options),
-            new WorkThreadCatalog(options),
+            new SessionViewCatalog(options),
             new InlineUiDispatcher(),
             new ShellStateStore(new InlineUiDispatcher()));
 
@@ -375,18 +375,18 @@ public sealed class ShellWorkspaceCoordinatorTests
             },
         };
 
-    private static SessionViewDescriptor CreateThread(string threadId, string projectId)
+    private static SessionViewDescriptor CreateSession(string sessionId, string projectId)
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00");
         return new SessionViewDescriptor
         {
-            ThreadId = threadId,
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = sessionId,
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = projectId,
             WorkingDirectory = @"C:\repo",
-            Title = "Test thread",
-            Status = WorkThreadStatus.Active,
+            Title = "Test session",
+            Status = SessionViewStatus.Active,
             CreatedAt = timestamp,
             UpdatedAt = timestamp,
             LastActiveAt = timestamp,

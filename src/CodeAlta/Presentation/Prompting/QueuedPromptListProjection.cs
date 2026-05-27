@@ -25,7 +25,7 @@ internal readonly record struct QueuedPromptListProjection(
 
 internal static class QueuedPromptListProjectionBuilder
 {
-    public static QueuedPromptListProjection Build(OpenThreadState? tab)
+    public static QueuedPromptListProjection Build(OpenSessionState? tab)
     {
         if (tab is null)
         {

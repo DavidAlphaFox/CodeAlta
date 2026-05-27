@@ -35,7 +35,7 @@ internal sealed class PromptComposerView
 
     public PromptComposerView(
         PromptComposerViewModel viewModel,
-        IReadOnlyList<ThreadWorkspaceCommandBinding> commandBindings,
+        IReadOnlyList<SessionWorkspaceCommandBinding> commandBindings,
         IProjectFileSearchService projectFileSearchService,
         Func<string?> getPromptReferenceProjectRoot,
         IReadOnlyList<PluginPromptEditorContribution> promptEditorContributions,
@@ -67,7 +67,7 @@ internal sealed class PromptComposerView
             .IsEnabled(viewModel.Bind.IsEnabled);
         _promptImageAttachmentStripView.ConfigurePromptImagePasteHandler(Editor);
         EditorView = Editor.Scrollable().IsTabStop(false);
-        SendButton = CreatePromptActionButton(viewModel, controller.SendPrompt, controller.AbortThread);
+        SendButton = CreatePromptActionButton(viewModel, controller.SendPrompt, controller.AbortSession);
         ExpandButton = CreateIconButton(
             $"{NerdFont.MdSquareEditOutline}",
             "Open the current prompt in a large editor window (F6).",
@@ -96,8 +96,8 @@ internal sealed class PromptComposerView
             .MinHeight(12)
             .IsEnabled(_viewModel.Bind.IsEnabled);
         _promptImageAttachmentStripView.ConfigurePromptImagePasteHandler(editor);
-        editor.AddCommand(CreateExpandedPromptDialogCloseCommand("CodeAlta.Thread.ExpandPrompt.Close", new KeyGesture(TerminalKey.Escape)));
-        editor.AddCommand(CreateExpandedPromptDialogCloseCommand("CodeAlta.Thread.ExpandPrompt.CloseWithCtrlEnter", new KeyGesture(TerminalKey.Enter, TerminalModifiers.Ctrl), CommandPresentation.None));
+        editor.AddCommand(CreateExpandedPromptDialogCloseCommand("CodeAlta.Session.ExpandPrompt.Close", new KeyGesture(TerminalKey.Escape)));
+        editor.AddCommand(CreateExpandedPromptDialogCloseCommand("CodeAlta.Session.ExpandPrompt.CloseWithCtrlEnter", new KeyGesture(TerminalKey.Enter, TerminalModifiers.Ctrl), CommandPresentation.None));
 
         var closeButton = new Button(new TextBlock($"{NerdFont.MdClose} Close"))
         {
@@ -115,8 +115,8 @@ internal sealed class PromptComposerView
             .Padding(1)
             .Content(editor.Scrollable().IsTabStop(false));
         ResponsiveDialogSize.Apply(dialog, _getDialogBounds(), minWidth: 60, minHeight: 18);
-        dialog.AddCommand(CreateExpandedPromptDialogCloseCommand("CodeAlta.Thread.ExpandPrompt.Close", new KeyGesture(TerminalKey.Escape)));
-        dialog.AddCommand(CreateExpandedPromptDialogCloseCommand("CodeAlta.Thread.ExpandPrompt.CloseWithCtrlEnter", new KeyGesture(TerminalKey.Enter, TerminalModifiers.Ctrl), CommandPresentation.None));
+        dialog.AddCommand(CreateExpandedPromptDialogCloseCommand("CodeAlta.Session.ExpandPrompt.Close", new KeyGesture(TerminalKey.Escape)));
+        dialog.AddCommand(CreateExpandedPromptDialogCloseCommand("CodeAlta.Session.ExpandPrompt.CloseWithCtrlEnter", new KeyGesture(TerminalKey.Enter, TerminalModifiers.Ctrl), CommandPresentation.None));
 
         _expandedPromptDialog = dialog;
         dialog.Show();
@@ -152,7 +152,7 @@ internal sealed class PromptComposerView
         Func<string?> getPromptReferenceProjectRoot,
         IReadOnlyList<PluginPromptEditorContribution> promptEditorContributions,
         Action<string> acceptPrompt,
-        IReadOnlyList<ThreadWorkspaceCommandBinding> commandBindings,
+        IReadOnlyList<SessionWorkspaceCommandBinding> commandBindings,
         Binding<string?> promptText)
     {
         var editor = CreateStyledPromptEditor(acceptPrompt, openHelp, openCommandPalette, projectFileSearchService, getPromptReferenceProjectRoot, promptEditorContributions, placeholder: null)
@@ -266,14 +266,14 @@ internal sealed class PromptComposerView
     private static Visual CreatePromptActionButton(
         PromptComposerViewModel promptComposerViewModel,
         Action sendPrompt,
-        Action abortThread)
+        Action abortSession)
     {
         return new ComputedVisual(() =>
         {
             var isAbort = promptComposerViewModel.CanAbort;
             var icon = isAbort ? $"{NerdFont.MdSquare}" : $"{NerdFont.MdSend}";
             var tooltipText = isAbort ? "Abort the selected session run." : "Send the current prompt.";
-            var action = isAbort ? abortThread : sendPrompt;
+            var action = isAbort ? abortSession : sendPrompt;
             var tone = isAbort ? ControlTone.Error : ControlTone.Success;
             var isEnabled = isAbort ? promptComposerViewModel.CanAbort : promptComposerViewModel.CanSend;
 
@@ -297,7 +297,7 @@ internal sealed class PromptComposerView
         return button.Tooltip(new TextBlock(tooltipText));
     }
 
-    private static Command BuildCommand(ThreadWorkspaceCommandBinding binding)
+    private static Command BuildCommand(SessionWorkspaceCommandBinding binding)
     {
         var metadata = binding.Metadata;
         return new Command

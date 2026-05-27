@@ -19,8 +19,8 @@ public sealed class ShellCommandBindingProjectorTests
 
         var projector = new ShellCommandBindingProjector(
             new PromptComposerViewModel(),
-            new ThreadWorkspaceViewModel(),
-            new DelegatingShellThreadCommandService(static () => null, static _ => throw new NotSupportedException()),
+            new SessionWorkspaceViewModel(),
+            new DelegatingShellSessionCommandService(static () => null, static _ => throw new NotSupportedException()),
             new DelegatingShellStatusService(static (_, _, _) => { }),
             registry,
             new ShellCommandDispatcher(registry),

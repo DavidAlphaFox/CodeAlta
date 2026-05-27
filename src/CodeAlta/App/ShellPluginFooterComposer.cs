@@ -8,27 +8,27 @@ namespace CodeAlta.App;
 
 internal static class ShellPluginFooterComposer
 {
-    public static Visual Compose(Visual threadCommandBar, PluginHostBridge? pluginHostBridge)
+    public static Visual Compose(Visual sessionCommandBar, PluginHostBridge? pluginHostBridge)
     {
-        ArgumentNullException.ThrowIfNull(threadCommandBar);
+        ArgumentNullException.ThrowIfNull(sessionCommandBar);
         if (pluginHostBridge is null)
         {
-            return threadCommandBar;
+            return sessionCommandBar;
         }
 
-        var footerStatus = ComposeStatusItems(pluginHostBridge, PluginUiRegion.ThreadFooter);
+        var footerStatus = ComposeStatusItems(pluginHostBridge, PluginUiRegion.SessionFooter);
         var visuals = new[] { footerStatus }
             .Where(static visual => visual is not null)
             .Cast<Visual>()
             .Concat(pluginHostBridge.CreateVisuals(PluginUiRegion.CommandBar))
-            .Concat(pluginHostBridge.CreateVisuals(PluginUiRegion.ThreadFooter))
+            .Concat(pluginHostBridge.CreateVisuals(PluginUiRegion.SessionFooter))
             .ToArray();
         if (visuals.Length == 0)
         {
-            return threadCommandBar;
+            return sessionCommandBar;
         }
 
-        return new VStack(visuals.Append(threadCommandBar).ToArray())
+        return new VStack(visuals.Append(sessionCommandBar).ToArray())
         {
             HorizontalAlignment = Align.Stretch,
         };

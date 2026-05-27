@@ -7,7 +7,7 @@ namespace CodeAlta.Views;
 
 internal static class UiTheme
 {
-    public static CodeAltaShellView Set(CodeAltaShellView shellView, ShellThreadStateCoordinator stateCoordinator)
+    public static CodeAltaShellView Set(CodeAltaShellView shellView, ShellSessionStateCoordinator stateCoordinator)
     {
         ArgumentNullException.ThrowIfNull(shellView);
         ArgumentNullException.ThrowIfNull(stateCoordinator);

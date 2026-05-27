@@ -20,7 +20,7 @@ public sealed class NoopPluginServices : IPluginServices
         Ui = new NoopPluginUiService();
         State = new NoopPluginStateStore();
         Workspace = new NoopPluginWorkspaceService();
-        Threads = new NoopPluginThreadService();
+        Sessions = new NoopPluginSessionService();
         Prompts = new NoopPluginPromptService();
         Agents = new NoopPluginAgentService();
         Tasks = new NoopPluginTaskService();
@@ -40,7 +40,7 @@ public sealed class NoopPluginServices : IPluginServices
     public IPluginWorkspaceService Workspace { get; }
 
     /// <inheritdoc />
-    public IPluginThreadService Threads { get; }
+    public IPluginSessionService Sessions { get; }
 
     /// <inheritdoc />
     public IPluginPromptService Prompts { get; }
@@ -222,15 +222,15 @@ public sealed class NoopPluginWorkspaceService : IPluginWorkspaceService
 }
 
 /// <summary>
-/// No-op implementation of <see cref="IPluginThreadService"/>.
+/// No-op implementation of <see cref="IPluginSessionService"/>.
 /// </summary>
-public sealed class NoopPluginThreadService : IPluginThreadService
+public sealed class NoopPluginSessionService : IPluginSessionService
 {
     /// <inheritdoc />
-    public string? SelectedThreadId => null;
+    public string? SelectedSessionId => null;
 
     /// <inheritdoc />
-    public bool IsSelectedThreadBusy => false;
+    public bool IsSelectedSessionBusy => false;
 
     /// <inheritdoc />
     public ValueTask SendPromptAsync(string text, CancellationToken cancellationToken = default)

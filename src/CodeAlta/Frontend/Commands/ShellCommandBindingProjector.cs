@@ -8,8 +8,8 @@ namespace CodeAlta.Frontend.Commands;
 internal sealed class ShellCommandBindingProjector
 {
     private readonly PromptComposerViewModel _promptComposerViewModel;
-    private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel;
-    private readonly IShellThreadCommandService _threadCommandService;
+    private readonly SessionWorkspaceViewModel _sessionWorkspaceViewModel;
+    private readonly IShellSessionCommandService _sessionCommandService;
     private readonly IShellStatusService _statusService;
     private readonly ShellCommandRegistry _shellCommandRegistry;
     private readonly IShellCommandDispatcher _shellCommandDispatcher;
@@ -17,31 +17,31 @@ internal sealed class ShellCommandBindingProjector
 
     public ShellCommandBindingProjector(
         PromptComposerViewModel promptComposerViewModel,
-        ThreadWorkspaceViewModel threadWorkspaceViewModel,
-        IShellThreadCommandService threadCommandService,
+        SessionWorkspaceViewModel sessionWorkspaceViewModel,
+        IShellSessionCommandService sessionCommandService,
         IShellStatusService statusService,
         ShellCommandRegistry shellCommandRegistry,
         IShellCommandDispatcher shellCommandDispatcher,
         IPluginCommandService pluginCommandService)
     {
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
-        ArgumentNullException.ThrowIfNull(threadWorkspaceViewModel);
-        ArgumentNullException.ThrowIfNull(threadCommandService);
+        ArgumentNullException.ThrowIfNull(sessionWorkspaceViewModel);
+        ArgumentNullException.ThrowIfNull(sessionCommandService);
         ArgumentNullException.ThrowIfNull(statusService);
         ArgumentNullException.ThrowIfNull(shellCommandRegistry);
         ArgumentNullException.ThrowIfNull(shellCommandDispatcher);
         ArgumentNullException.ThrowIfNull(pluginCommandService);
 
         _promptComposerViewModel = promptComposerViewModel;
-        _threadWorkspaceViewModel = threadWorkspaceViewModel;
-        _threadCommandService = threadCommandService;
+        _sessionWorkspaceViewModel = sessionWorkspaceViewModel;
+        _sessionCommandService = sessionCommandService;
         _statusService = statusService;
         _shellCommandRegistry = shellCommandRegistry;
         _shellCommandDispatcher = shellCommandDispatcher;
         _pluginCommandService = pluginCommandService;
     }
 
-    public IReadOnlyList<ThreadWorkspaceCommandBinding> BuildWorkspaceCommandBindings()
+    public IReadOnlyList<SessionWorkspaceCommandBinding> BuildWorkspaceCommandBindings()
     {
         var bindings = ShellCommandCatalog.Commands
             .Where(static metadata => metadata.Scope != ShellCommandScope.AnyShell || metadata.Id == "CodeAlta.Shell.Help")
@@ -52,19 +52,19 @@ internal sealed class ShellCommandBindingProjector
         return bindings;
     }
 
-    private ThreadWorkspaceCommandBinding CreateCommandBinding(string commandId, ShellCommand command)
+    private SessionWorkspaceCommandBinding CreateCommandBinding(string commandId, ShellCommand command)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commandId);
         ArgumentNullException.ThrowIfNull(command);
 
         var metadata = ShellCommandCatalog.Get(commandId);
-        return new ThreadWorkspaceCommandBinding(
+        return new SessionWorkspaceCommandBinding(
             metadata,
             () => ObserveUiTask(() => DispatchShellCommandAsync(command), $"run command {commandId}"),
             () => CanExecuteShellCommand(metadata.Availability));
     }
 
-    private ThreadWorkspaceCommandBinding CreateRegisteredCommandBinding(string commandId)
+    private SessionWorkspaceCommandBinding CreateRegisteredCommandBinding(string commandId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commandId);
         if (!_shellCommandRegistry.TryCreateCommand(commandId, out var command))
@@ -75,12 +75,12 @@ internal sealed class ShellCommandBindingProjector
         return CreateCommandBinding(commandId, command);
     }
 
-    private void AddPluginCommandBindings(List<ThreadWorkspaceCommandBinding> bindings)
+    private void AddPluginCommandBindings(List<SessionWorkspaceCommandBinding> bindings)
     {
         foreach (var contribution in _pluginCommandService.GetCommandContributions())
         {
             var metadata = CreatePluginCommandMetadata(contribution);
-            bindings.Add(new ThreadWorkspaceCommandBinding(
+            bindings.Add(new SessionWorkspaceCommandBinding(
                 metadata,
                 () => ObserveUiTask(() => DispatchShellCommandAsync(new ExecutePluginTextCommand(contribution.Name, null)), $"run plugin command {contribution.Name}"),
                 () => CanExecutePluginCommand(contribution.Availability)));
@@ -96,7 +96,7 @@ internal sealed class ShellCommandBindingProjector
             contribution.Label ?? contribution.Name,
             contribution.Description ?? $"Run plugin command '{contribution.Name}'.",
             ShellCommandHelpCategory.General,
-            contribution.Kind == PluginCommandKind.Thread ? ShellCommandScope.ThreadOnly : ShellCommandScope.AnyShell,
+            contribution.Kind == PluginCommandKind.Session ? ShellCommandScope.SessionOnly : ShellCommandScope.AnyShell,
             ShellCommandAvailability.Always,
             keyBinding?.Gesture,
             keyBinding?.Sequence,
@@ -110,38 +110,38 @@ internal sealed class ShellCommandBindingProjector
 
     private bool CanExecutePluginCommand(PluginCommandAvailability availability)
     {
-        if (availability.RequiresProject && _threadCommandService.GetSelectedThread()?.ProjectRef is null)
+        if (availability.RequiresProject && _sessionCommandService.GetSelectedSession()?.ProjectRef is null)
         {
             return false;
         }
 
-        if (availability.RequiresThread && _threadCommandService.GetSelectedThread() is null)
+        if (availability.RequiresSession && _sessionCommandService.GetSelectedSession() is null)
         {
             return false;
         }
 
-        if (availability.RequiresIdleThread && (_threadCommandService.GetSelectedThread() is not { } idleThread || _threadCommandService.EnsureThreadTab(idleThread).StatusBusy))
+        if (availability.RequiresIdleSession && (_sessionCommandService.GetSelectedSession() is not { } idleSession || _sessionCommandService.EnsureSessionTab(idleSession).StatusBusy))
         {
             return false;
         }
 
-        if (availability.RequiresBusyThread && (_threadCommandService.GetSelectedThread() is not { } busyThread || !_threadCommandService.EnsureThreadTab(busyThread).StatusBusy))
+        if (availability.RequiresBusySession && (_sessionCommandService.GetSelectedSession() is not { } busySession || !_sessionCommandService.EnsureSessionTab(busySession).StatusBusy))
         {
             return false;
         }
 
-        var backendThread = _threadCommandService.GetSelectedThread();
-        if ((availability.RequiresCodeAltaManagedBackend || availability.BackendFamilies.Count > 0) && backendThread is null)
+        var backendSession = _sessionCommandService.GetSelectedSession();
+        if ((availability.RequiresCodeAltaManagedBackend || availability.BackendFamilies.Count > 0) && backendSession is null)
         {
             return false;
         }
 
-        if (availability.RequiresCodeAltaManagedBackend && !IsCodeAltaManagedBackend(backendThread!.ProviderId))
+        if (availability.RequiresCodeAltaManagedBackend && !IsCodeAltaManagedBackend(backendSession!.ProviderId))
         {
             return false;
         }
 
-        if (availability.BackendFamilies.Count > 0 && !availability.BackendFamilies.Contains(backendThread!.ProviderId, StringComparer.OrdinalIgnoreCase))
+        if (availability.BackendFamilies.Count > 0 && !availability.BackendFamilies.Contains(backendSession!.ProviderId, StringComparer.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -165,7 +165,7 @@ internal sealed class ShellCommandBindingProjector
             ShellCommandAvailability.CanClearQueue => _promptComposerViewModel.CanClearQueue,
             ShellCommandAvailability.CanCompact => _promptComposerViewModel.CanCompact,
             ShellCommandAvailability.CanCloseTab => _promptComposerViewModel.CanCloseTab,
-            ShellCommandAvailability.CanShowThreadInfo => _threadWorkspaceViewModel.CanShowThreadInfo,
+            ShellCommandAvailability.CanShowSessionInfo => _sessionWorkspaceViewModel.CanShowSessionInfo,
             _ => false,
         };
     }

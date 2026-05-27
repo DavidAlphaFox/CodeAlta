@@ -15,7 +15,7 @@ public sealed class SessionRuntimeServiceTests
         var registry = new ModelProviderRegistry();
         await using var hub = new AgentHub(registry, temp.Path);
         await using var runtime = CreateRuntime(temp.Path, hub);
-        var store = new WorkThreadCatalog(new CatalogOptions { GlobalRoot = temp.Path }).JournalStore.CreateSessionStore();
+        var store = new SessionViewCatalog(new CatalogOptions { GlobalRoot = temp.Path }).JournalStore.CreateSessionStore();
         var createdAt = DateTimeOffset.Parse("2026-05-16T12:00:00+00:00");
         await store.UpsertSessionAsync(
             new LocalAgentSessionSummary
@@ -30,12 +30,12 @@ public sealed class SessionRuntimeServiceTests
                 UpdatedAt = createdAt.AddMinutes(1),
             }).ConfigureAwait(false);
 
-        var threads = await CollectAsync(runtime.ListRecoverableSessionsAsync()).ConfigureAwait(false);
+        var sessions = await CollectAsync(runtime.ListRecoverableSessionsAsync()).ConfigureAwait(false);
 
-        Assert.AreEqual(1, threads.Count);
-        Assert.AreEqual("session-1", threads[0].ThreadId);
-        Assert.AreEqual("old-provider", threads[0].ProviderId);
-        Assert.AreEqual("old-provider", threads[0].ProviderKey);
+        Assert.AreEqual(1, sessions.Count);
+        Assert.AreEqual("session-1", sessions[0].SessionId);
+        Assert.AreEqual("old-provider", sessions[0].ProviderId);
+        Assert.AreEqual("old-provider", sessions[0].ProviderKey);
     }
 
     [TestMethod]
@@ -48,7 +48,7 @@ public sealed class SessionRuntimeServiceTests
         registry.RegisterOrReplace(new ModelProviderDescriptor(new ModelProviderId(ProviderId.Value), "Throwing Provider"), () => provider);
         await using var hub = new AgentHub(registry, temp.Path);
         await using var runtime = CreateRuntime(temp.Path, hub);
-        var store = new WorkThreadCatalog(new CatalogOptions { GlobalRoot = temp.Path }).JournalStore.CreateSessionStore();
+        var store = new SessionViewCatalog(new CatalogOptions { GlobalRoot = temp.Path }).JournalStore.CreateSessionStore();
         var createdAt = DateTimeOffset.Parse("2026-05-16T12:00:00+00:00");
         await store.UpsertSessionAsync(
             new LocalAgentSessionSummary
@@ -63,9 +63,9 @@ public sealed class SessionRuntimeServiceTests
                 UpdatedAt = createdAt.AddMinutes(1),
             }).ConfigureAwait(false);
 
-        var threads = await CollectAsync(runtime.ListRecoverableSessionsAsync()).ConfigureAwait(false);
+        var sessions = await CollectAsync(runtime.ListRecoverableSessionsAsync()).ConfigureAwait(false);
 
-        Assert.AreEqual(1, threads.Count);
+        Assert.AreEqual(1, sessions.Count);
         Assert.AreEqual(0, provider.StartAttempts);
     }
 
@@ -80,13 +80,13 @@ public sealed class SessionRuntimeServiceTests
             () => new MinimalProviderRuntime(ProviderId));
         await using var hub = new AgentHub(registry, temp.Path);
         await using var runtime = CreateRuntime(temp.Path, hub);
-        var thread = CreateThread("thread-1", ProviderId, temp.Path);
+        var session = CreateSession("session-1", ProviderId, temp.Path);
 
-        var agentId = await runtime.EnsureCoordinatorSessionAsync(thread, CreateOptions(ProviderId, temp.Path)).ConfigureAwait(false);
-        var history = await runtime.GetHistoryAsync(thread.ThreadId).ConfigureAwait(false);
+        var agentId = await runtime.EnsureCoordinatorSessionAsync(session, CreateOptions(ProviderId, temp.Path)).ConfigureAwait(false);
+        var history = await runtime.GetHistoryAsync(session.SessionId).ConfigureAwait(false);
 
         Assert.AreNotEqual(Guid.Empty, agentId.Value);
-        Assert.AreEqual("thread-1", thread.ThreadId);
+        Assert.AreEqual("session-1", session.SessionId);
         Assert.AreEqual(0, history.Count);
     }
 
@@ -105,26 +105,26 @@ public sealed class SessionRuntimeServiceTests
     private static SessionRuntimeService CreateRuntime(string root, AgentHub hub)
     {
         var options = new CatalogOptions { GlobalRoot = root };
-        var threadCatalog = new WorkThreadCatalog(options);
-        var sessionCatalog = new AgentSessionCatalog(threadCatalog.JournalStore.CreateSessionStore());
+        var sessionViewCatalog = new SessionViewCatalog(options);
+        var agentSessionCatalog = new AgentSessionCatalog(sessionViewCatalog.JournalStore.CreateSessionStore());
         return new SessionRuntimeService(
             hub,
-            sessionCatalog,
+            agentSessionCatalog,
             new ProjectCatalog(options),
-            threadCatalog,
+            sessionViewCatalog,
             new AgentInstructionTemplateProvider(catalogOptions: options),
             options);
     }
 
-    private static SessionViewDescriptor CreateThread(string threadId, ModelProviderId ProviderId, string root)
+    private static SessionViewDescriptor CreateSession(string sessionId, ModelProviderId ProviderId, string root)
         => new()
         {
-            ThreadId = threadId,
+            SessionId = sessionId,
             ProviderId = ProviderId.Value,
             ProviderKey = ProviderId.Value,
-            Kind = WorkThreadKind.GlobalThread,
-            Status = WorkThreadStatus.Active,
-            Title = threadId,
+            Kind = SessionViewKind.GlobalSession,
+            Status = SessionViewStatus.Active,
+            Title = sessionId,
             WorkingDirectory = root,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,

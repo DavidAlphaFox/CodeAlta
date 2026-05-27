@@ -38,16 +38,16 @@ public static class Command
     public static PluginCommandContribution Shell(string name, string description, PluginCommandHandler handler, IReadOnlyList<string>? aliases = null)
         => Create(name, description, PluginCommandKind.Shell, handler, aliases);
 
-    /// <summary>Creates a thread command.</summary>
+    /// <summary>Creates a session command.</summary>
     /// <param name="name">The command name.</param>
     /// <param name="description">The command description.</param>
     /// <param name="handler">The command handler.</param>
     /// <param name="aliases">Optional aliases.</param>
     /// <returns>The command contribution.</returns>
-    public static PluginCommandContribution Thread(string name, string description, PluginCommandHandler handler, IReadOnlyList<string>? aliases = null)
-        => Create(name, description, PluginCommandKind.Thread, handler, aliases) with
+    public static PluginCommandContribution Session(string name, string description, PluginCommandHandler handler, IReadOnlyList<string>? aliases = null)
+        => Create(name, description, PluginCommandKind.Session, handler, aliases) with
         {
-            Availability = PluginCommandAvailability.ThreadSelected,
+            Availability = PluginCommandAvailability.SessionSelected,
         };
 
     private static PluginCommandContribution Create(
@@ -227,7 +227,7 @@ public static class PluginUi
         ArgumentNullException.ThrowIfNull(getText);
         return new PluginStatusContribution
         {
-            Region = PluginUiRegion.ThreadStatus,
+            Region = PluginUiRegion.SessionStatus,
             Name = label,
             Order = order,
             GetStatus = context => getText(context) is { } text ? new PluginStatusItem { Label = label, Text = text } : null,

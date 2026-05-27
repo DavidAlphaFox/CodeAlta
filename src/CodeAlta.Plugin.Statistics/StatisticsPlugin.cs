@@ -26,9 +26,9 @@ public sealed class StatisticsPlugin : PluginBase
     private readonly ConcurrentDictionary<string, AsyncTurnStatisticsProjection> _turnProjections = new(StringComparer.Ordinal);
 
     /// <inheritdoc />
-    public override IEnumerable<PluginThreadEventProjectionContribution> GetThreadEventProjections()
+    public override IEnumerable<PluginSessionEventProjectionContribution> GetSessionEventProjections()
     {
-        yield return new PluginThreadEventProjectionContribution
+        yield return new PluginSessionEventProjectionContribution
         {
             Name = ProjectionName,
             ProjectAsync = ProjectAsync,
@@ -91,8 +91,8 @@ public sealed class StatisticsPlugin : PluginBase
         return command;
     }
 
-    private ValueTask<IReadOnlyList<PluginDerivedThreadEvent>> ProjectAsync(
-        PluginThreadEventProjectionContext context,
+    private ValueTask<IReadOnlyList<PluginDerivedSessionEvent>> ProjectAsync(
+        PluginSessionEventProjectionContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -100,22 +100,22 @@ public sealed class StatisticsPlugin : PluginBase
 
         if (context.Events.Count == 0)
         {
-            return ValueTask.FromResult<IReadOnlyList<PluginDerivedThreadEvent>>([]);
+            return ValueTask.FromResult<IReadOnlyList<PluginDerivedSessionEvent>>([]);
         }
 
         var turns = PendingTurnBuilder.BuildTurns(context.Events).ToArray();
         if (turns.Length == 0)
         {
-            return ValueTask.FromResult<IReadOnlyList<PluginDerivedThreadEvent>>([]);
+            return ValueTask.FromResult<IReadOnlyList<PluginDerivedSessionEvent>>([]);
         }
 
-        var projected = new List<PluginDerivedThreadEvent>(turns.Length);
+        var projected = new List<PluginDerivedSessionEvent>(turns.Length);
         foreach (var turn in turns.Where(static item => item.IsComplete))
         {
-            var state = GetOrCreateProjectionState(context.ThreadId, turn);
-            projected.Add(new PluginDerivedThreadEvent
+            var state = GetOrCreateProjectionState(context.SessionId, turn);
+            projected.Add(new PluginDerivedSessionEvent
             {
-                EventId = $"statistics:{EscapeEventId(context.ThreadId)}:{EscapeEventId(turn.Key)}",
+                EventId = $"statistics:{EscapeEventId(context.SessionId)}:{EscapeEventId(turn.Key)}",
                 Timestamp = turn.Timestamp,
                 Markdown = state.Markdown,
                 DetailSections = state.DetailSections,
@@ -125,12 +125,12 @@ public sealed class StatisticsPlugin : PluginBase
             });
         }
 
-        return ValueTask.FromResult<IReadOnlyList<PluginDerivedThreadEvent>>(projected);
+        return ValueTask.FromResult<IReadOnlyList<PluginDerivedSessionEvent>>(projected);
     }
 
-    private AsyncTurnStatisticsProjection GetOrCreateProjectionState(string threadId, PendingTurn turn)
+    private AsyncTurnStatisticsProjection GetOrCreateProjectionState(string sessionId, PendingTurn turn)
     {
-        var cacheKey = FormattableString.Invariant($"{threadId}:{turn.Key}:{turn.Fingerprint}");
+        var cacheKey = FormattableString.Invariant($"{sessionId}:{turn.Key}:{turn.Fingerprint}");
         return _turnProjections.GetOrAdd(cacheKey, _ =>
         {
             var state = new AsyncTurnStatisticsProjection(turn);
@@ -485,13 +485,13 @@ public sealed class StatisticsPlugin : PluginBase
         string Fingerprint,
         IReadOnlyList<AgentEvent> Events);
 
-    private sealed class AsyncTurnStatisticsProjection : PluginDynamicDerivedThreadEventContent
+    private sealed class AsyncTurnStatisticsProjection : PluginDynamicDerivedSessionEventContent
     {
         private readonly object _gate = new();
         private readonly PendingTurn _turn;
         private string _markdown;
-        private IReadOnlyList<PluginDerivedThreadEventDetailSection> _detailSections = [];
-        private PluginThreadEventVisualFactory? _visualFactory;
+        private IReadOnlyList<PluginDerivedSessionEventDetailSection> _detailSections = [];
+        private PluginSessionEventVisualFactory? _visualFactory;
         private object? _payload;
         private bool _started;
 
@@ -508,7 +508,7 @@ public sealed class StatisticsPlugin : PluginBase
             };
             _detailSections =
             [
-                new PluginDerivedThreadEventDetailSection
+                new PluginDerivedSessionEventDetailSection
                 {
                     Header = "Detailed statistics",
                     Markdown = "Computing detailed statistics...",
@@ -528,7 +528,7 @@ public sealed class StatisticsPlugin : PluginBase
             }
         }
 
-        public override IReadOnlyList<PluginDerivedThreadEventDetailSection> DetailSections
+        public override IReadOnlyList<PluginDerivedSessionEventDetailSection> DetailSections
         {
             get
             {
@@ -539,7 +539,7 @@ public sealed class StatisticsPlugin : PluginBase
             }
         }
 
-        public override PluginThreadEventVisualFactory? VisualFactory
+        public override PluginSessionEventVisualFactory? VisualFactory
         {
             get
             {
@@ -596,7 +596,7 @@ public sealed class StatisticsPlugin : PluginBase
                 _markdown = StatisticsMarkdownRenderer.RenderTurnSummary(turn);
                 _detailSections =
                 [
-                    new PluginDerivedThreadEventDetailSection
+                    new PluginDerivedSessionEventDetailSection
                     {
                         Header = "Detailed statistics",
                         Markdown = StatisticsMarkdownRenderer.RenderTurnDetails(turn),

@@ -52,13 +52,13 @@ public sealed class ShellInputRouterTests
         Assert.IsInstanceOfType<OpenApplicationLogsIntent>(_router.Route("/logs", steerRequested: false));
         Assert.IsInstanceOfType<OpenAboutIntent>(_router.Route("/about", steerRequested: false));
         Assert.IsInstanceOfType<OpenSessionUsageIntent>(_router.Route("/context_usage", steerRequested: false));
-        Assert.IsInstanceOfType<OpenThreadInfoIntent>(_router.Route("/thread_info", steerRequested: false));
+        Assert.IsInstanceOfType<OpenSessionInfoIntent>(_router.Route("/session_info", steerRequested: false));
         Assert.IsInstanceOfType<OpenExpandedPromptIntent>(_router.Route("/full_prompt", steerRequested: false));
         Assert.IsInstanceOfType<ExitAppIntent>(_router.Route("/exit", steerRequested: false));
         Assert.IsInstanceOfType<SendPromptIntent>(_router.Route("/send investigate the regression", steerRequested: false));
-        Assert.IsInstanceOfType<AbortThreadIntent>(_router.Route("/abort", steerRequested: false));
+        Assert.IsInstanceOfType<AbortSessionIntent>(_router.Route("/abort", steerRequested: false));
         Assert.IsInstanceOfType<ClearQueueIntent>(_router.Route("/clear_queue", steerRequested: false));
-        Assert.IsInstanceOfType<CompactThreadIntent>(_router.Route("/compact", steerRequested: false));
+        Assert.IsInstanceOfType<CompactSessionIntent>(_router.Route("/compact", steerRequested: false));
         Assert.IsInstanceOfType<CloseTabIntent>(_router.Route("/close", steerRequested: false));
         Assert.IsInstanceOfType<TabLeftIntent>(_router.Route("/tab_left", steerRequested: false));
         Assert.IsInstanceOfType<TabRightIntent>(_router.Route("/tab_right", steerRequested: false));

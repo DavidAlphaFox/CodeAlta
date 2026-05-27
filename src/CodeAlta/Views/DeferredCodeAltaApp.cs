@@ -40,7 +40,7 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
         });
 
         // Build a synchronous placeholder shell first so Program can enter Terminal.RunAsync
-        // without awaiting startup work before the UI claims the main thread.
+        // without awaiting startup work before the UI claims the main session.
         _sidebarHost = CreateStretchHost(BuildMessage("Loading sidebar..."));
         _workspaceHost = CreateStretchHost(BuildWorkspacePlaceholder("Starting CodeAlta..."));
         _commandBarHost = CreateStretchHost(new Placeholder { IsVisible = false });
@@ -122,7 +122,7 @@ internal sealed class DeferredCodeAltaApp : IAsyncDisposable
         if (!_ownedServicesTask.IsCompleted)
         {
             // Keep async service startup behind the terminal loop so the real app is attached
-            // only after the UI is already running on the main thread.
+            // only after the UI is already running on the main session.
             return TerminalLoopResult.Continue;
         }
 

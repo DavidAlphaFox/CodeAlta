@@ -127,7 +127,7 @@ public static class AltaSessionToolFactory
         var caller = new AltaCallerIdentity
         {
             Kind = "agent",
-            SourceThreadId = options.SourceThreadIdProvider?.Invoke() ?? options.SourceThreadId,
+            SourceSessionId = options.SourceSessionIdProvider?.Invoke() ?? options.SourceSessionId,
             SourceAgentId = options.SourceAgentId,
             SourceProjectId = options.SourceProjectIdProvider?.Invoke() ?? options.SourceProjectId,
             PluginRuntimeKey = options.PluginRuntimeKey,
@@ -322,11 +322,11 @@ public static class AltaSessionToolFactory
 /// </summary>
 public sealed record AltaSessionToolOptions
 {
-    /// <summary>Gets the source CodeAlta thread id, when known.</summary>
-    public string? SourceThreadId { get; init; }
+    /// <summary>Gets the source CodeAlta session id, when known.</summary>
+    public string? SourceSessionId { get; init; }
 
-    /// <summary>Gets a provider that returns the current source CodeAlta thread id, when it can change after tool creation.</summary>
-    public Func<string?>? SourceThreadIdProvider { get; init; }
+    /// <summary>Gets a provider that returns the current source CodeAlta session id, when it can change after tool creation.</summary>
+    public Func<string?>? SourceSessionIdProvider { get; init; }
 
     /// <summary>Gets the source agent/session id, when known.</summary>
     public string? SourceAgentId { get; init; }

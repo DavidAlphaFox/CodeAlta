@@ -13,13 +13,13 @@ internal sealed class CodeAltaShellSurfaceOptions
 {
     public required CodeAltaShellViewModel ShellViewModel { get; init; }
 
-    public required ThreadWorkspaceViewModel WorkspaceViewModel { get; init; }
+    public required SessionWorkspaceViewModel WorkspaceViewModel { get; init; }
 
     public required PromptComposerViewModel PromptComposerViewModel { get; init; }
 
-    public required IReadOnlyList<ThreadWorkspaceCommandBinding> WorkspaceCommandBindings { get; init; }
+    public required IReadOnlyList<SessionWorkspaceCommandBinding> WorkspaceCommandBindings { get; init; }
 
-    public required ThreadWorkspaceChromeController WorkspaceChromeController { get; init; }
+    public required SessionWorkspaceChromeController WorkspaceChromeController { get; init; }
 
     public required PromptComposerViewController PromptComposerController { get; init; }
 
@@ -27,7 +27,7 @@ internal sealed class CodeAltaShellSurfaceOptions
 
     public required ModelProviderSelectorController ModelProviderSelectorController { get; init; }
 
-    public required ThreadTabHostController ThreadTabHostController { get; init; }
+    public required SessionTabHostController SessionTabHostController { get; init; }
 
     public required IProjectFileSearchService ProjectFileSearchService { get; init; }
 
@@ -35,7 +35,7 @@ internal sealed class CodeAltaShellSurfaceOptions
 
     public IReadOnlyList<PluginPromptEditorContribution> PromptEditorContributions { get; init; } = [];
 
-    public required Func<string, ThreadSessionState?, PromptComposerSessionBinding> GetPromptComposerSession { get; init; }
+    public required Func<string, SessionState?, PromptComposerSessionBinding> GetPromptComposerSession { get; init; }
 
     public required State<float> ThinkingAnimationPhase01 { get; init; }
 

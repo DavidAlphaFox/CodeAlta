@@ -15,13 +15,13 @@ internal sealed class CodeAltaShellView
 
     public CodeAltaShellView(
         Visual sidebar,
-        Visual threadWorkspace,
-        Visual threadCommandBar,
+        Visual sessionWorkspace,
+        Visual sessionCommandBar,
         Action<TerminalApp> configureApp)
     {
         ArgumentNullException.ThrowIfNull(sidebar);
-        ArgumentNullException.ThrowIfNull(threadWorkspace);
-        ArgumentNullException.ThrowIfNull(threadCommandBar);
+        ArgumentNullException.ThrowIfNull(sessionWorkspace);
+        ArgumentNullException.ThrowIfNull(sessionCommandBar);
         ArgumentNullException.ThrowIfNull(configureApp);
 
         var mainLayout = new Grid
@@ -35,14 +35,14 @@ internal sealed class CodeAltaShellView
             .Columns(
                 new ColumnDefinition { Width = GridLength.Star(1) });
 
-        _sidebarSplitter = new HSplitter(sidebar, threadWorkspace)
+        _sidebarSplitter = new HSplitter(sidebar, sessionWorkspace)
         {
             Ratio = DefaultSidebarRatio,
             MinFirst = ExpandedSidebarMinWidth,
             MinSecond = 40,
         };
         mainLayout.Cell(_sidebarSplitter, 0, 0);
-        mainLayout.Cell(threadCommandBar, 1, 0);
+        mainLayout.Cell(sessionCommandBar, 1, 0);
 
         Root = new CodeAltaRootView(mainLayout, configureApp)
         {

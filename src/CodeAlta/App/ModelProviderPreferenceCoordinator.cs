@@ -26,7 +26,7 @@ internal sealed class ModelProviderPreferenceCoordinator
 
     public void ApplyDraftModelProviderPreference(
         ModelProviderState backendState,
-        WorkThreadViewState viewState,
+        SessionViewViewState viewState,
         string? draftProjectRoot,
         string? draftProjectId)
     {
@@ -70,7 +70,7 @@ internal sealed class ModelProviderPreferenceCoordinator
     }
 
     public ModelProviderPreference? GetDraftModelProviderPreference(
-        WorkThreadViewState viewState,
+        SessionViewViewState viewState,
         string? draftProjectId)
     {
         ArgumentNullException.ThrowIfNull(viewState);
@@ -84,22 +84,22 @@ internal sealed class ModelProviderPreferenceCoordinator
                 : null;
     }
 
-    public void ApplyThreadPreference(
-        OpenThreadState tab,
-        WorkThreadViewState viewState,
-        string? threadProjectRoot,
+    public void ApplySessionPreference(
+        OpenSessionState tab,
+        SessionViewViewState viewState,
+        string? sessionProjectRoot,
         IReadOnlyDictionary<string, ModelProviderState> modelProviderStates)
     {
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentNullException.ThrowIfNull(viewState);
         ArgumentNullException.ThrowIfNull(modelProviderStates);
 
-        viewState.ThreadPreferences.TryGetValue(tab.Thread.ThreadId, out var persistedPreference);
-        var defaults = _configStore.GetEffectiveProviderPreference(tab.ProviderId.Value, threadProjectRoot);
+        viewState.SessionPreferences.TryGetValue(tab.SessionView.SessionId, out var persistedPreference);
+        var defaults = _configStore.GetEffectiveProviderPreference(tab.ProviderId.Value, sessionProjectRoot);
         modelProviderStates.TryGetValue(tab.ProviderId.Value, out var backendState);
-        var preferredModelId = tab.ModelId ?? tab.Thread.ModelId ?? persistedPreference?.ModelId ?? defaults.Model;
+        var preferredModelId = tab.ModelId ?? tab.Session.ModelId ?? persistedPreference?.ModelId ?? defaults.Model;
         tab.ModelId = ResolveModelSelection(backendState?.Models ?? [], preferredModelId);
-        tab.ReasoningEffort ??= tab.Thread.ReasoningEffort ?? persistedPreference?.ReasoningEffort ?? defaults.ReasoningEffort;
+        tab.ReasoningEffort ??= tab.Session.ReasoningEffort ?? persistedPreference?.ReasoningEffort ?? defaults.ReasoningEffort;
 
         if (backendState is null)
         {
@@ -113,7 +113,7 @@ internal sealed class ModelProviderPreferenceCoordinator
     }
 
     public void RememberGlobalModelProviderPreference(
-        WorkThreadViewState viewState,
+        SessionViewViewState viewState,
         ModelProviderId providerId,
         string? modelId,
         AgentReasoningEffort? reasoningEffort,
@@ -134,7 +134,7 @@ internal sealed class ModelProviderPreferenceCoordinator
 
         if (rememberProjectPreference)
         {
-            viewState.ProjectPreferences[BuildProjectPreferenceKey(draftProjectId)] = new WorkThreadPreference
+            viewState.ProjectPreferences[BuildProjectPreferenceKey(draftProjectId)] = new SessionViewPreference
             {
                 ProviderKey = providerId.Value,
                 ModelId = normalizedModelId,
@@ -144,23 +144,23 @@ internal sealed class ModelProviderPreferenceCoordinator
         }
     }
 
-    public void RememberThreadPreference(
-        WorkThreadViewState viewState,
-        string threadId,
+    public void RememberSessionPreference(
+        SessionViewViewState viewState,
+        string sessionId,
         string? modelId,
         AgentReasoningEffort? reasoningEffort)
     {
         ArgumentNullException.ThrowIfNull(viewState);
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
         var normalizedModel = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
         if (normalizedModel is null && reasoningEffort is null)
         {
-            viewState.ThreadPreferences.Remove(threadId);
+            viewState.SessionPreferences.Remove(sessionId);
         }
         else
         {
-            viewState.ThreadPreferences[threadId] = new WorkThreadPreference
+            viewState.SessionPreferences[sessionId] = new SessionViewPreference
             {
                 ModelId = normalizedModel,
                 ReasoningEffort = reasoningEffort,

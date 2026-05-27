@@ -18,14 +18,14 @@ internal sealed class SidebarRowCommandDispatcher : ISidebarRowCommandDispatcher
 
         switch (command)
         {
-            case SidebarRowCommand.DeleteThread deleteThread:
-                _navigatorActions.ConfirmDeleteThread(deleteThread.ThreadId);
+            case SidebarRowCommand.DeleteSession deleteSession:
+                _navigatorActions.ConfirmDeleteSession(deleteSession.SessionId);
                 break;
             case SidebarRowCommand.DeleteProject deleteProject:
                 _navigatorActions.ConfirmDeleteProject(deleteProject.ProjectId);
                 break;
-            case SidebarRowCommand.OpenProjectThreads openProjectThreads:
-                _navigatorActions.OpenProjectThreads(openProjectThreads.ProjectId);
+            case SidebarRowCommand.OpenProjectSessions openProjectSessions:
+                _navigatorActions.OpenProjectSessions(openProjectSessions.ProjectId);
                 break;
             case SidebarRowCommand.OpenProjectDetails openProjectDetails:
                 _navigatorActions.OpenProjectDetails(openProjectDetails.ProjectId);

@@ -8,8 +8,8 @@ public sealed record AltaActorProvenance
     /// <summary>Gets the actor kind, such as <c>user</c>, <c>agent</c>, <c>host</c>, or <c>plugin</c>.</summary>
     public required string Kind { get; init; }
 
-    /// <summary>Gets the source CodeAlta thread identifier, when the actor is associated with a thread.</summary>
-    public string? SourceThreadId { get; init; }
+    /// <summary>Gets the source CodeAlta session identifier, when the actor is associated with a session.</summary>
+    public string? SourceSessionId { get; init; }
 
     /// <summary>Gets the source project identifier, when known.</summary>
     public string? SourceProjectId { get; init; }

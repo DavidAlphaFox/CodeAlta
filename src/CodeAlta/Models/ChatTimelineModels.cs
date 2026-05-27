@@ -169,7 +169,7 @@ namespace CodeAlta.Models
         public bool CanLoad { get; set; } = true;
     }
 
-    internal sealed record ThreadHistoryLoadPlan(IReadOnlyList<AgentEvent> EventsToRender, int OmittedMessageCount);
+    internal sealed record SessionHistoryLoadPlan(IReadOnlyList<AgentEvent> EventsToRender, int OmittedMessageCount);
 
     internal enum ToolCallDisplayStatus
     {

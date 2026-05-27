@@ -3345,7 +3345,7 @@ public sealed class OpenAIRawApiModelProviderRuntimeTests
         => new(
             "The operation was canceled.",
             new IOException(
-                "Unable to read data from the transport connection: The I/O operation has been aborted because of either a thread exit or an application request.",
+                "Unable to read data from the transport connection: The I/O operation has been aborted because of either a session exit or an application request.",
                 new SocketException((int)SocketError.OperationAborted)));
 
     private static TException WithZeroRetryAfter<TException>(TException exception)

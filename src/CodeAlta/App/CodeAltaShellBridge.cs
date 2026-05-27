@@ -30,9 +30,9 @@ internal sealed class CodeAltaShellBridge : ICodeAltaShell
 
     public void ApplyRecoveredCatalogState(
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads,
-        bool pruneMissingThreads = true)
-        => _app.ApplyRecoveredCatalogState(projects, threads, pruneMissingThreads);
+        IReadOnlyList<SessionViewDescriptor> sessions,
+        bool pruneMissingSessions = true)
+        => _app.ApplyRecoveredCatalogState(projects, sessions, pruneMissingSessions);
 
     public void UpsertProject(ProjectDescriptor project)
         => _app.UpsertProject(project);
@@ -40,14 +40,14 @@ internal sealed class CodeAltaShellBridge : ICodeAltaShell
     public void SetReadyStatusForCurrentSelection()
         => _app.SetReadyStatusForCurrentSelection();
 
-    public void HandleRuntimeEvent(WorkThreadRuntimeEvent runtimeEvent)
+    public void HandleRuntimeEvent(SessionRuntimeEvent runtimeEvent)
         => _app.HandleRuntimeEvent(runtimeEvent);
 
     public void PublishStartupCatalogProjectionReady()
         => _app.PublishStartupCatalogProjectionReady();
 
-    public void TrySchedulePendingStartupThreadRestore(CancellationToken cancellationToken)
-        => _app.TrySchedulePendingStartupThreadRestore(cancellationToken);
+    public void TrySchedulePendingStartupSessionRestore(CancellationToken cancellationToken)
+        => _app.TrySchedulePendingStartupSessionRestore(cancellationToken);
 
     public void SelectGlobalScope()
         => _app.SelectGlobalScope();
@@ -55,8 +55,8 @@ internal sealed class CodeAltaShellBridge : ICodeAltaShell
     public void SelectProjectScope(string projectId)
         => _app.SelectProjectScope(projectId);
 
-    public void OpenThread(string threadId)
-        => _app.OpenThread(threadId);
+    public void OpenSession(string sessionId)
+        => _app.OpenSession(sessionId);
 
     public void FocusPromptEditor()
         => _app.FocusPromptEditor();

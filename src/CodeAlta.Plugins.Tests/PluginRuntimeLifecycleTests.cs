@@ -69,21 +69,21 @@ public sealed class PluginRuntimeLifecycleTests
     }
 
     [TestMethod]
-    public async Task ActivatorCollectsThreadEventProjectionContributions()
+    public async Task ActivatorCollectsSessionEventProjectionContributions()
     {
         var registry = new PluginContributionRegistry();
         var activator = new PluginRuntimeActivator(registry);
         var discovered = new DiscoveredPluginType
         {
-            Type = typeof(ThreadEventProjectionPlugin),
-            Descriptor = PluginDescriptorFactory.FromType(typeof(ThreadEventProjectionPlugin)),
+            Type = typeof(SessionEventProjectionPlugin),
+            Descriptor = PluginDescriptorFactory.FromType(typeof(SessionEventProjectionPlugin)),
         };
 
         var result = await activator.ActivateAsync(discovered, null, null, new PluginActivationOptions { HostInfo = CreateHostInfo() });
 
         Assert.IsTrue(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
-        var registration = registry.GetSnapshot().Single(static item => item.Handle.Point == PluginPoint.ThreadEventProjection);
-        Assert.IsInstanceOfType<PluginThreadEventProjectionContribution>(registration.Contribution);
+        var registration = registry.GetSnapshot().Single(static item => item.Handle.Point == PluginPoint.SessionEventProjection);
+        Assert.IsInstanceOfType<PluginSessionEventProjectionContribution>(registration.Contribution);
         await result.ActivePlugin!.DeactivateAsync(TimeSpan.FromSeconds(5));
     }
 
@@ -262,7 +262,7 @@ public sealed class PluginRuntimeLifecycleTests
 
         public IPluginWorkspaceService Workspace => _inner.Workspace;
 
-        public IPluginThreadService Threads => _inner.Threads;
+        public IPluginSessionService Sessions => _inner.Sessions;
 
         public IPluginPromptService Prompts => _inner.Prompts;
 
@@ -292,14 +292,14 @@ public sealed class PluginRuntimeLifecycleTests
     {
     }
 
-    public sealed class ThreadEventProjectionPlugin : PluginBase
+    public sealed class SessionEventProjectionPlugin : PluginBase
     {
-        public override IEnumerable<PluginThreadEventProjectionContribution> GetThreadEventProjections()
+        public override IEnumerable<PluginSessionEventProjectionContribution> GetSessionEventProjections()
         {
-            yield return new PluginThreadEventProjectionContribution
+            yield return new PluginSessionEventProjectionContribution
             {
                 Name = "stats",
-                ProjectAsync = static (_, _) => ValueTask.FromResult<IReadOnlyList<PluginDerivedThreadEvent>>([]),
+                ProjectAsync = static (_, _) => ValueTask.FromResult<IReadOnlyList<PluginDerivedSessionEvent>>([]),
             };
         }
     }

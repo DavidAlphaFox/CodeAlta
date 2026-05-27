@@ -36,7 +36,7 @@ public sealed class SystemPromptBuilder
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.ProviderKey);
-        ArgumentNullException.ThrowIfNull(request.Thread);
+        ArgumentNullException.ThrowIfNull(request.Session);
 
         var diagnostics = new List<SystemPromptDiagnostic>();
         var projectRoot = NormalizeOptionalRoot(request.Project?.ProjectPath ?? FirstNonBlank(request.ProjectRoots));
@@ -60,7 +60,7 @@ public sealed class SystemPromptBuilder
 
         if (instructionResolution.Selected is null)
         {
-            throw new InvalidOperationException($"Missing required thread instructions 'instructions/{template.InstructionName}.instructions.md'.");
+            throw new InvalidOperationException($"Missing required session instructions 'instructions/{template.InstructionName}.instructions.md'.");
         }
 
         var parts = new List<SystemPromptManifestPart>();
@@ -72,7 +72,7 @@ public sealed class SystemPromptBuilder
         }
 
         var developerParts = new List<RenderedPromptPart>();
-        AddDeveloperPart(developerParts, parts, CreateResourcePart(instructionResolution.Selected, "instruction", template.InstructionName, "developer", 300, "selected", instructionResolution.ReplacedPath), "Thread Instructions", instructionResolution.Selected.Body);
+        AddDeveloperPart(developerParts, parts, CreateResourcePart(instructionResolution.Selected, "instruction", template.InstructionName, "developer", 300, "selected", instructionResolution.ReplacedPath), "Session Instructions", instructionResolution.Selected.Body);
         foreach (var skipped in instructionResolution.Skipped)
         {
             parts.Add(CreateResourcePart(skipped.Resource, "instruction", template.InstructionName, "developer", 300, skipped.Status, null));
@@ -162,8 +162,8 @@ public sealed class SystemPromptBuilder
         var instructionPath = Path.Combine(roots.ShippedPromptRoot, "instructions", "default.instructions.md");
         if (!File.Exists(instructionPath))
         {
-            diagnostics.Add(SystemPromptDiagnostic.Error("missing_shipped_instructions", $"Required shipped default thread instructions '{instructionPath}' were not found.", instructionPath));
-            throw new InvalidOperationException($"Required shipped default thread instructions '{instructionPath}' were not found.");
+            diagnostics.Add(SystemPromptDiagnostic.Error("missing_shipped_instructions", $"Required shipped default session instructions '{instructionPath}' were not found.", instructionPath));
+            throw new InvalidOperationException($"Required shipped default session instructions '{instructionPath}' were not found.");
         }
     }
 
@@ -494,7 +494,7 @@ public sealed class SystemPromptBuilder
             $"- Platform: {GetPlatformLabel()}",
             $"- Default shell for shell commands: {GetDefaultShellLabel()}",
         };
-        var workingDirectory = NormalizeOptionalRoot(request.Thread.WorkingDirectory) ?? NormalizeOptionalRoot(request.WorkingDirectory);
+        var workingDirectory = NormalizeOptionalRoot(request.Session.WorkingDirectory) ?? NormalizeOptionalRoot(request.WorkingDirectory);
         if (workingDirectory is not null)
         {
             lines.Add($"- Current working directory: {workingDirectory}");
@@ -505,12 +505,12 @@ public sealed class SystemPromptBuilder
             lines.Add($"- Project root: {projectRoot}");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.Thread.ParentThreadId))
+        if (!string.IsNullOrWhiteSpace(request.Session.ParentSessionId))
         {
-            lines.Add($"- Parent thread: {request.Thread.ParentThreadId}");
+            lines.Add($"- Parent session: {request.Session.ParentSessionId}");
         }
 
-        lines.Add($"- Thread kind: {request.Thread.Kind.ToString().ToLowerInvariant()}");
+        lines.Add($"- Session kind: {request.Session.Kind.ToString().ToLowerInvariant()}");
         return string.Join(Environment.NewLine, lines);
     }
 
@@ -534,7 +534,7 @@ public sealed class SystemPromptBuilder
 
     private static string? BuildProjectContext(SystemPromptBuildRequest request, string? projectRoot, List<SystemPromptDiagnostic> diagnostics, out IReadOnlyList<string> files)
     {
-        var selectedFiles = EnumerateProjectInstructionFiles(request.Thread.WorkingDirectory ?? request.WorkingDirectory, request.ProjectRoots.Count > 0 ? request.ProjectRoots : projectRoot is null ? [] : [projectRoot]);
+        var selectedFiles = EnumerateProjectInstructionFiles(request.Session.WorkingDirectory ?? request.WorkingDirectory, request.ProjectRoots.Count > 0 ? request.ProjectRoots : projectRoot is null ? [] : [projectRoot]);
         files = selectedFiles;
         if (selectedFiles.Count == 0)
         {
@@ -760,8 +760,8 @@ public sealed class SystemPromptBuildRequest
     /// <summary>Gets the selected model id.</summary>
     public string? Model { get; init; }
 
-    /// <summary>Gets the active work thread.</summary>
-    public required SessionViewDescriptor Thread { get; init; }
+    /// <summary>Gets the active session view.</summary>
+    public required SessionViewDescriptor Session { get; init; }
 
     /// <summary>Gets the owning project, if any.</summary>
     public ProjectDescriptor? Project { get; init; }
@@ -769,7 +769,7 @@ public sealed class SystemPromptBuildRequest
     /// <summary>Gets an optional selected base name override.</summary>
     public string? SelectedBaseName { get; init; }
 
-    /// <summary>Gets an optional selected thread instruction name override.</summary>
+    /// <summary>Gets an optional selected session instruction name override.</summary>
     public string? SelectedInstructionName { get; init; }
 
     /// <summary>Gets optional prompt part overrides.</summary>

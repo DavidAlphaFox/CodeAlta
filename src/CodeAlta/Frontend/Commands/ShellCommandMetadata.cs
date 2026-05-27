@@ -7,8 +7,8 @@ namespace CodeAlta.Frontend.Commands;
 internal enum ShellCommandScope
 {
     AnyShell,
-    DraftOrThread,
-    ThreadOnly,
+    DraftOrSession,
+    SessionOnly,
 }
 
 internal enum ShellCommandAvailability
@@ -21,14 +21,14 @@ internal enum ShellCommandAvailability
     CanClearQueue,
     CanCompact,
     CanCloseTab,
-    CanShowThreadInfo,
+    CanShowSessionInfo,
 }
 
 internal enum ShellCommandHelpCategory
 {
     General,
     Prompt,
-    Thread,
+    Session,
     Navigation,
     Inspection,
 }

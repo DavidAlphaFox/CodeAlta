@@ -153,7 +153,7 @@ internal static class ChatTimelineVisualFactory
             (markdown, tone, headerOverride, headerSecondary, maxCodeBlockHeight, localFileRootPath, copyDetailSections, contentVisualFactory));
     }
 
-    public static MarkdownRenderOptions CreateThreadMarkdownOptions(int maxCodeBlockHeight, string? localFileRootPath = null)
+    public static MarkdownRenderOptions CreateSessionMarkdownOptions(int maxCodeBlockHeight, string? localFileRootPath = null)
         => MarkdownRenderOptions.Default with
         {
             WrapCodeBlocks = true,
@@ -289,7 +289,7 @@ internal static class ChatTimelineVisualFactory
         {
             HorizontalAlignment = Align.Stretch,
             VerticalAlignment = Align.Start,
-            Options = CreateThreadMarkdownOptions(maxCodeBlockHeight, localFileRootPath),
+            Options = CreateSessionMarkdownOptions(maxCodeBlockHeight, localFileRootPath),
         };
 
         var timestampText = new Markup(string.Empty);
@@ -340,7 +340,7 @@ internal static class ChatTimelineVisualFactory
                     {
                         HorizontalAlignment = Align.Stretch,
                         VerticalAlignment = Align.Start,
-                        Options = CreateThreadMarkdownOptions(maxCodeBlockHeight, localFileRootPath),
+                        Options = CreateSessionMarkdownOptions(maxCodeBlockHeight, localFileRootPath),
                     };
                     detailMarkdownControls.Add(detailsMarkdown);
                     detailMarkdownSectionIndexes.Add(sectionIndex);

@@ -32,9 +32,9 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         PluginHostBridge pluginHostBridge,
         CatalogOptions catalogOptions,
         List<ModelProviderDescriptor> providerDescriptors,
-        IAgentSessionCatalog sessionCatalog,
+        IAgentSessionCatalog agentSessionCatalog,
         ProjectCatalog projectCatalog,
-        WorkThreadCatalog threadCatalog,
+        SessionViewCatalog sessionViewCatalog,
         SkillCatalog skillCatalog,
         AgentHub agentHub,
         SessionRuntimeService runtimeService,
@@ -48,10 +48,10 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         PluginRuntime = pluginRuntime;
         PluginHostBridge = pluginHostBridge;
         _providerDescriptors = providerDescriptors;
-        SessionCatalog = sessionCatalog;
+        AgentSessionCatalog = agentSessionCatalog;
         CatalogOptions = catalogOptions;
         ProjectCatalog = projectCatalog;
-        ThreadCatalog = threadCatalog;
+        SessionViewCatalog = sessionViewCatalog;
         SkillCatalog = skillCatalog;
         AgentHub = agentHub;
         RuntimeService = runtimeService;
@@ -72,7 +72,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 
     public ProjectCatalog ProjectCatalog { get; }
 
-    public WorkThreadCatalog ThreadCatalog { get; }
+    public SessionViewCatalog SessionViewCatalog { get; }
 
     public SkillCatalog SkillCatalog { get; }
 
@@ -80,7 +80,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 
     public SessionRuntimeService RuntimeService { get; }
 
-    public IAgentSessionCatalog SessionCatalog { get; }
+    public IAgentSessionCatalog AgentSessionCatalog { get; }
 
     public IProjectFileSearchService ProjectFileSearchService { get; }
 
@@ -143,9 +143,9 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             pluginHostBridge,
             sharedHost.CatalogOptions,
             providerDescriptors,
-            sharedHost.SessionCatalog,
+            sharedHost.AgentSessionCatalog,
             sharedHost.ProjectCatalog,
-            sharedHost.ThreadCatalog,
+            sharedHost.SessionViewCatalog,
             sharedHost.SkillCatalog,
             sharedHost.AgentHub,
             sharedHost.RuntimeService,

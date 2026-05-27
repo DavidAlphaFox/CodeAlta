@@ -34,7 +34,7 @@ lunet serve
 
 ## Content Conventions
 
-- Keep this site end-user focused: installation, configuration, workspace usage, providers, threads, plugins, and troubleshooting.
+- Keep this site end-user focused: installation, configuration, workspace usage, providers, sessions, plugins, and troubleshooting.
 - Keep internal specifications and implementation notes in `../doc/**`, not on the public site.
 - Pages use Markdown with YAML front matter (`title` required).
 - Navigation is defined in `menu.yml` files; update the relevant menu when adding or moving pages.

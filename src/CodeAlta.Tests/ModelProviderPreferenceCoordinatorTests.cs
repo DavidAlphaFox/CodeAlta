@@ -28,7 +28,7 @@ public sealed class ModelProviderPreferenceCoordinatorTests
 
         var projectA = Path.Combine(temp.Path, "project-a");
         var projectB = Path.Combine(temp.Path, "project-b");
-        var viewState = new WorkThreadViewState();
+        var viewState = new SessionViewViewState();
         coordinator.RememberGlobalModelProviderPreference(
             viewState,
             new ModelProviderId("zai"),
@@ -62,9 +62,9 @@ public sealed class ModelProviderPreferenceCoordinatorTests
         using var temp = TempDirectory.Create();
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
         var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
-        var viewState = new WorkThreadViewState
+        var viewState = new SessionViewViewState
         {
-            ProjectPreferences = new Dictionary<string, WorkThreadPreference>(StringComparer.OrdinalIgnoreCase)
+            ProjectPreferences = new Dictionary<string, SessionViewPreference>(StringComparer.OrdinalIgnoreCase)
             {
                 ["project-a"] = new()
                 {
@@ -106,7 +106,7 @@ public sealed class ModelProviderPreferenceCoordinatorTests
             """);
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
         var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
-        var viewState = new WorkThreadViewState();
+        var viewState = new SessionViewViewState();
 
         coordinator.RememberGlobalModelProviderPreference(
             viewState,
@@ -124,12 +124,12 @@ public sealed class ModelProviderPreferenceCoordinatorTests
     }
 
     [TestMethod]
-    public void RememberGlobalModelProviderPreference_PersistsThreadScopedProjectPreference()
+    public void RememberGlobalModelProviderPreference_PersistsSessionScopedProjectPreference()
     {
         using var temp = TempDirectory.Create();
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
         var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
-        var viewState = new WorkThreadViewState();
+        var viewState = new SessionViewViewState();
 
         coordinator.RememberGlobalModelProviderPreference(
             viewState,
@@ -147,7 +147,7 @@ public sealed class ModelProviderPreferenceCoordinatorTests
     }
 
     [TestMethod]
-    public void ApplyThreadPreference_PrefersPersistedThreadPreferenceOverProviderDefaults()
+    public void ApplySessionPreference_PrefersPersistedSessionPreferenceOverProviderDefaults()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
@@ -181,12 +181,12 @@ public sealed class ModelProviderPreferenceCoordinatorTests
                 DefaultReasoningEffort: AgentReasoningEffort.Medium,
                 SupportedReasoningEfforts: [AgentReasoningEffort.Low, AgentReasoningEffort.Medium]));
 
-        var tab = CreateOpenThreadState("thread-1", "zai");
-        var viewState = new WorkThreadViewState
+        var tab = CreateOpenSessionState("session-1", "zai");
+        var viewState = new SessionViewViewState
         {
-            ThreadPreferences = new Dictionary<string, WorkThreadPreference>(StringComparer.OrdinalIgnoreCase)
+            SessionPreferences = new Dictionary<string, SessionViewPreference>(StringComparer.OrdinalIgnoreCase)
             {
-                ["thread-1"] = new WorkThreadPreference
+                ["session-1"] = new SessionViewPreference
                 {
                     ModelId = "glm-5.1",
                     ReasoningEffort = AgentReasoningEffort.Medium,
@@ -194,14 +194,14 @@ public sealed class ModelProviderPreferenceCoordinatorTests
             },
         };
 
-        coordinator.ApplyThreadPreference(tab, viewState, threadProjectRoot: null, backendStates);
+        coordinator.ApplySessionPreference(tab, viewState, sessionProjectRoot: null, backendStates);
 
         Assert.AreEqual("glm-5.1", tab.ModelId);
         Assert.AreEqual(AgentReasoningEffort.Medium, tab.ReasoningEffort);
     }
 
     [TestMethod]
-    public void ApplyThreadPreference_PreservesPersistedModelMissingFromCatalog()
+    public void ApplySessionPreference_PreservesPersistedModelMissingFromCatalog()
     {
         using var temp = TempDirectory.Create();
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
@@ -212,12 +212,12 @@ public sealed class ModelProviderPreferenceCoordinatorTests
         ];
         var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["zai"].Models.Add(new AgentModelInfo("gpt-5", DisplayName: "GPT-5"));
-        var tab = CreateOpenThreadState("thread-1", "zai");
-        var viewState = new WorkThreadViewState
+        var tab = CreateOpenSessionState("session-1", "zai");
+        var viewState = new SessionViewViewState
         {
-            ThreadPreferences = new Dictionary<string, WorkThreadPreference>(StringComparer.OrdinalIgnoreCase)
+            SessionPreferences = new Dictionary<string, SessionViewPreference>(StringComparer.OrdinalIgnoreCase)
             {
-                ["thread-1"] = new WorkThreadPreference
+                ["session-1"] = new SessionViewPreference
                 {
                     ModelId = "glm-5.1",
                     ReasoningEffort = AgentReasoningEffort.Medium,
@@ -225,14 +225,14 @@ public sealed class ModelProviderPreferenceCoordinatorTests
             },
         };
 
-        coordinator.ApplyThreadPreference(tab, viewState, threadProjectRoot: null, backendStates);
+        coordinator.ApplySessionPreference(tab, viewState, sessionProjectRoot: null, backendStates);
 
         Assert.AreEqual("glm-5.1", tab.ModelId);
         Assert.AreEqual(AgentReasoningEffort.Medium, tab.ReasoningEffort);
     }
 
     [TestMethod]
-    public void ApplyThreadPreference_PrefersDescriptorModelOverProviderDefaults()
+    public void ApplySessionPreference_PrefersDescriptorModelOverProviderDefaults()
     {
         using var temp = TempDirectory.Create();
         File.WriteAllText(
@@ -259,32 +259,32 @@ public sealed class ModelProviderPreferenceCoordinatorTests
         backendStates["zai"].Models.Add(new AgentModelInfo(
             "glm-5.1",
             SupportedReasoningEfforts: [AgentReasoningEffort.Medium]));
-        var tab = CreateOpenThreadState("thread-1", "zai");
-        tab.Thread.ModelId = "glm-5.1";
-        tab.Thread.ReasoningEffort = AgentReasoningEffort.Medium;
+        var tab = CreateOpenSessionState("session-1", "zai");
+        tab.Session.ModelId = "glm-5.1";
+        tab.Session.ReasoningEffort = AgentReasoningEffort.Medium;
 
-        coordinator.ApplyThreadPreference(tab, new WorkThreadViewState(), threadProjectRoot: null, backendStates);
+        coordinator.ApplySessionPreference(tab, new SessionViewViewState(), sessionProjectRoot: null, backendStates);
 
         Assert.AreEqual("glm-5.1", tab.ModelId);
         Assert.AreEqual(AgentReasoningEffort.Medium, tab.ReasoningEffort);
     }
 
-    private static OpenThreadState CreateOpenThreadState(string threadId, string providerKey)
+    private static OpenSessionState CreateOpenSessionState(string sessionId, string providerKey)
     {
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = threadId,
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = sessionId,
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = providerKey,
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Investigate provider defaults",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,
         };
-        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => null);
-        var tab = new OpenThreadState(thread, timeline)
+        var timeline = new SessionTimelinePresenter(new InlineUiDispatcher(), static () => null);
+        var tab = new OpenSessionState(session, timeline)
         {
             ProviderId = new ModelProviderId(providerKey),
         };

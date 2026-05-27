@@ -34,8 +34,8 @@ internal sealed class SessionLoadCoordinator
         await foreach (var session in _recoverableSessionSource.ListRecoverableSessionsAsync(cancellationToken))
         {
             appliedAny = true;
-            recoveredSessions[session.ThreadId] = session;
-            await ApplySnapshotAsync(projects, recoveredSessions, pruneMissingThreads: false);
+            recoveredSessions[session.SessionId] = session;
+            await ApplySnapshotAsync(projects, recoveredSessions, pruneMissingSessions: false);
         }
 
         if (!appliedAny)
@@ -44,18 +44,18 @@ internal sealed class SessionLoadCoordinator
                 () =>
                 {
                     _shell.ApplyRecoveredCatalogState(projects, []);
-                    _shell.TrySchedulePendingStartupThreadRestore(CancellationToken.None);
+                    _shell.TrySchedulePendingStartupSessionRestore(CancellationToken.None);
                 });
             return;
         }
 
-        await ApplySnapshotAsync(projects, recoveredSessions, pruneMissingThreads: true);
+        await ApplySnapshotAsync(projects, recoveredSessions, pruneMissingSessions: true);
     }
 
     private Task ApplySnapshotAsync(
         IReadOnlyList<ProjectDescriptor> projects,
         Dictionary<string, SessionViewDescriptor> recoveredSessions,
-        bool pruneMissingThreads)
+        bool pruneMissingSessions)
     {
         var sessions = recoveredSessions.Values
             .OrderByDescending(static item => item.LastActiveAt)
@@ -64,8 +64,8 @@ internal sealed class SessionLoadCoordinator
         return _getUiDispatcher().InvokeAsync(
             () =>
             {
-                _shell.ApplyRecoveredCatalogState(projects, sessions, pruneMissingThreads);
-                _shell.TrySchedulePendingStartupThreadRestore(CancellationToken.None);
+                _shell.ApplyRecoveredCatalogState(projects, sessions, pruneMissingSessions);
+                _shell.TrySchedulePendingStartupSessionRestore(CancellationToken.None);
             });
     }
 }

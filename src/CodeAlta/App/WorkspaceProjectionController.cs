@@ -9,31 +9,31 @@ namespace CodeAlta.App;
 
 internal sealed class WorkspaceProjectionController
 {
-    private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel;
-    private readonly ThreadSelectionContext _threadSelection;
+    private readonly SessionWorkspaceViewModel _sessionWorkspaceViewModel;
+    private readonly SessionSelectionContext _sessionSelection;
     private readonly ShellWorkspaceContext _workspaceContext;
     private readonly State<int> _viewRefreshState;
     private readonly ShellStatusProjectionController _statusProjection;
     private readonly SessionUsageProjectionController _sessionUsageProjection;
-    private string? _displayedThreadId;
+    private string? _displayedSessionId;
 
     public WorkspaceProjectionController(
-        ThreadWorkspaceViewModel threadWorkspaceViewModel,
-        ThreadSelectionContext threadSelection,
+        SessionWorkspaceViewModel sessionWorkspaceViewModel,
+        SessionSelectionContext sessionSelection,
         ShellWorkspaceContext workspaceContext,
         State<int> viewRefreshState,
         ShellStatusProjectionController statusProjection,
         SessionUsageProjectionController sessionUsageProjection)
     {
-        ArgumentNullException.ThrowIfNull(threadWorkspaceViewModel);
-        ArgumentNullException.ThrowIfNull(threadSelection);
+        ArgumentNullException.ThrowIfNull(sessionWorkspaceViewModel);
+        ArgumentNullException.ThrowIfNull(sessionSelection);
         ArgumentNullException.ThrowIfNull(workspaceContext);
         ArgumentNullException.ThrowIfNull(viewRefreshState);
         ArgumentNullException.ThrowIfNull(statusProjection);
         ArgumentNullException.ThrowIfNull(sessionUsageProjection);
 
-        _threadWorkspaceViewModel = threadWorkspaceViewModel;
-        _threadSelection = threadSelection;
+        _sessionWorkspaceViewModel = sessionWorkspaceViewModel;
+        _sessionSelection = sessionSelection;
         _workspaceContext = workspaceContext;
         _viewRefreshState = viewRefreshState;
         _statusProjection = statusProjection;
@@ -55,7 +55,7 @@ internal sealed class WorkspaceProjectionController
         => _workspaceContext.DispatchToUi(ApplyShellChromeProjectionCore);
 
     public void ApplyRuntimeTimelineProjection()
-        => ApplyThreadChromeProjection();
+        => ApplySessionChromeProjection();
 
     public void ApplyCatalogProjection()
         => _workspaceContext.DispatchToUi(ApplyCatalogProjectionCore);
@@ -69,7 +69,7 @@ internal sealed class WorkspaceProjectionController
     public void ApplyTabProjection()
         => ApplySelectionProjection();
 
-    public void ApplyThreadStatusProjection()
+    public void ApplySessionStatusProjection()
         => ApplyShellChromeProjection();
 
     public void ApplyPromptDraftProjection()
@@ -81,14 +81,14 @@ internal sealed class WorkspaceProjectionController
                 _viewRefreshState.Value++;
             });
 
-    public void ApplyThreadChromeProjection()
+    public void ApplySessionChromeProjection()
         => _workspaceContext.DispatchToUi(() => _viewRefreshState.Value++);
 
     private void ApplyHeaderProjectionCore()
     {
         _workspaceContext.VerifyBindableAccess();
         _workspaceContext.EnsureSelectionDefaults();
-        RefreshThreadWorkspaceCore();
+        RefreshSessionWorkspaceCore();
     }
 
     private void ApplyShellChromeProjectionCore()
@@ -101,7 +101,7 @@ internal sealed class WorkspaceProjectionController
     private void ApplyCatalogProjectionCore()
     {
         ApplyShellChromeProjectionCore();
-        RefreshThreadWorkspaceCore();
+        RefreshSessionWorkspaceCore();
     }
 
     private void ApplySelectionProjectionCore()
@@ -109,47 +109,47 @@ internal sealed class WorkspaceProjectionController
         _workspaceContext.VerifyBindableAccess();
         _workspaceContext.EnsureSelectionDefaults();
         _workspaceContext.RefreshSidebarProjection();
-        RefreshThreadWorkspaceCore();
+        RefreshSessionWorkspaceCore();
     }
 
-    private void RefreshThreadWorkspaceCore()
+    private void RefreshSessionWorkspaceCore()
     {
         _sessionUsageProjection.Refresh();
-        _threadWorkspaceViewModel.CanShowThreadInfo = _threadSelection.GetSelectedThread() is not null;
+        _sessionWorkspaceViewModel.CanShowSessionInfo = _sessionSelection.GetSelectedSession() is not null;
         _viewRefreshState.Value++;
-        RefreshThreadPaneContent();
+        RefreshSessionPaneContent();
     }
 
-    private void RefreshThreadPaneContent()
+    private void RefreshSessionPaneContent()
     {
         if (!_workspaceContext.HasWorkspaceSurface())
         {
             return;
         }
 
-        _workspaceContext.SyncThreadTabControl();
+        _workspaceContext.SyncSessionTabControl();
 
-        if (_threadSelection.Selection.Target is not WorkspaceTarget.Thread)
+        if (_sessionSelection.Selection.Target is not WorkspaceTarget.Session)
         {
-            RefreshDraftThreadPaneContent();
+            RefreshDraftSessionPaneContent();
             return;
         }
 
-        var selectedThread = _threadSelection.GetSelectedThread();
-        if (selectedThread is null)
+        var selectedSession = _sessionSelection.GetSelectedSession();
+        if (selectedSession is null)
         {
-            RefreshDraftThreadPaneContent();
+            RefreshDraftSessionPaneContent();
             return;
         }
 
-        var tab = _threadSelection.EnsureThreadTab(selectedThread);
+        var tab = _sessionSelection.EnsureSessionTab(selectedSession);
         _workspaceContext.ApplyQueuedPromptProjection();
-        _workspaceContext.RefreshModelProviderSelectorsForThread(tab);
+        _workspaceContext.RefreshModelProviderSelectorsForSession(tab);
         _workspaceContext.SyncPromptDraftText(tab.Session);
         _workspaceContext.ApplyPromptAvailabilityProjection();
-        if (!string.Equals(_displayedThreadId, selectedThread.ThreadId, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(_displayedSessionId, selectedSession.SessionId, StringComparison.OrdinalIgnoreCase))
         {
-            _displayedThreadId = selectedThread.ThreadId;
+            _displayedSessionId = selectedSession.SessionId;
             _workspaceContext.DispatchToUiDeferred(tab.Timeline.RevealTail);
             _workspaceContext.DispatchToUiDeferred(_workspaceContext.FocusPromptTarget);
         }
@@ -157,15 +157,15 @@ internal sealed class WorkspaceProjectionController
         _statusProjection.SetReadyStatusForCurrentSelection();
     }
 
-    private void RefreshDraftThreadPaneContent()
+    private void RefreshDraftSessionPaneContent()
     {
-        var wasDisplayingThread = _displayedThreadId is not null;
-        _displayedThreadId = null;
+        var wasDisplayingSession = _displayedSessionId is not null;
+        _displayedSessionId = null;
         _workspaceContext.ApplyQueuedPromptProjection();
         _workspaceContext.RefreshModelProviderSelectorsForDraftScope();
         _workspaceContext.SyncPromptDraftText(session: null);
         _workspaceContext.ApplyPromptAvailabilityProjection();
-        if (wasDisplayingThread)
+        if (wasDisplayingSession)
         {
             _workspaceContext.DispatchToUiDeferred(_workspaceContext.FocusPromptTarget);
         }

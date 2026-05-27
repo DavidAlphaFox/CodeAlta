@@ -40,15 +40,15 @@ internal sealed record OpenWorkspaceSettingsIntent : ShellInputIntent;
 
 internal sealed record OpenSessionUsageIntent : ShellInputIntent;
 
-internal sealed record OpenThreadInfoIntent : ShellInputIntent;
+internal sealed record OpenSessionInfoIntent : ShellInputIntent;
 
 internal sealed record OpenExpandedPromptIntent : ShellInputIntent;
 
 internal sealed record OpenFolderIntent(string? InitialPath) : ShellInputIntent;
 
-internal sealed record AbortThreadIntent : ShellInputIntent;
+internal sealed record AbortSessionIntent : ShellInputIntent;
 
-internal sealed record CompactThreadIntent : ShellInputIntent;
+internal sealed record CompactSessionIntent : ShellInputIntent;
 
 internal sealed record CloseTabIntent : ShellInputIntent;
 

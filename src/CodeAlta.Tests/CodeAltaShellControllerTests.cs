@@ -19,9 +19,9 @@ public sealed class CodeAltaShellControllerTests
         var importer = new FakeImporter(log);
         var project = new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" };
         var projectCatalog = new FakeProjectCatalogStore(log, [project]);
-        var threads = new FakeRecoverableSessionSource(log, [CreateThread("thread-1")]);
+        var sessions = new FakeRecoverableSessionSource(log, [CreateSession("session-1")]);
         var dispatcher = new FakeUiDispatcher();
-        var controller = new CodeAltaShellController(shell, importer, projectCatalog, threads, new FakeSessionDeleter(log));
+        var controller = new CodeAltaShellController(shell, importer, projectCatalog, sessions, new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(dispatcher);
 
         await controller.ReloadCatalogAsync(CancellationToken.None);
@@ -29,7 +29,7 @@ public sealed class CodeAltaShellControllerTests
         CollectionAssert.Contains(log, "Shell.Status:Refreshing project and session catalog...:True:Info");
         CollectionAssert.Contains(log, "Importer.Import");
         CollectionAssert.Contains(log, "ProjectCatalog.Load");
-        CollectionAssert.Contains(log, "ThreadSource.List");
+        CollectionAssert.Contains(log, "SessionSource.List");
         CollectionAssert.Contains(log, "Shell.ApplyRecoveredCatalogState:1:1:KeepMissing");
         CollectionAssert.Contains(log, "Shell.ApplyRecoveredCatalogState:1:1");
         CollectionAssert.Contains(log, "Shell.SetReadyStatus");
@@ -72,7 +72,7 @@ public sealed class CodeAltaShellControllerTests
             shell,
             new FakeImporter(log),
             new FakeProjectCatalogStore(log, [new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" }]),
-            new FakeRecoverableSessionSource(log, [CreateThread("thread-1")]),
+            new FakeRecoverableSessionSource(log, [CreateSession("session-1")]),
             new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
@@ -84,9 +84,9 @@ public sealed class CodeAltaShellControllerTests
         CollectionAssert.Contains(log, "Shell.SetInitialized:True");
         CollectionAssert.Contains(log, "Importer.Import");
         CollectionAssert.Contains(log, "ProjectCatalog.Load");
-        CollectionAssert.Contains(log, "ThreadSource.List");
+        CollectionAssert.Contains(log, "SessionSource.List");
         CollectionAssert.Contains(log, "Shell.ApplyRecoveredCatalogState:1:1");
-        CollectionAssert.Contains(log, "Shell.TrySchedulePendingStartupThreadRestore");
+        CollectionAssert.Contains(log, "Shell.TrySchedulePendingStartupSessionRestore");
     }
 
     [TestMethod]
@@ -101,7 +101,7 @@ public sealed class CodeAltaShellControllerTests
             shell,
             new FakeImporter(log),
             new FakeProjectCatalogStore(log, [new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" }]),
-            new FakeRecoverableSessionSource(log, [CreateThread("thread-1")]),
+            new FakeRecoverableSessionSource(log, [CreateSession("session-1")]),
             new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
@@ -112,8 +112,8 @@ public sealed class CodeAltaShellControllerTests
         Assert.IsFalse(initializationTask.IsCompleted, "Provider initialization should still be running.");
         CollectionAssert.Contains(log, "Shell.InitializeModelProviders");
         CollectionAssert.Contains(log, "Importer.Import");
-        CollectionAssert.Contains(log, "ThreadSource.List");
-        CollectionAssert.Contains(log, "Shell.TrySchedulePendingStartupThreadRestore");
+        CollectionAssert.Contains(log, "SessionSource.List");
+        CollectionAssert.Contains(log, "Shell.TrySchedulePendingStartupSessionRestore");
 
         shell.InitializeModelProvidersCompletion.SetResult(true);
         await initializationTask.ConfigureAwait(false);
@@ -128,27 +128,27 @@ public sealed class CodeAltaShellControllerTests
             InitializeModelProvidersCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
         };
         var project = new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" };
-        var threadSource = new BlockingRecoverableSessionSource(
+        var sessionSource = new BlockingRecoverableSessionSource(
             log,
             [
-                CreateThread("thread-1"),
+                CreateSession("session-1"),
             ]);
         var controller = new CodeAltaShellController(
             shell,
             new FakeImporter(log),
             new FakeProjectCatalogStore(log, [project]),
-            threadSource,
+            sessionSource,
             new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
         var initializationTask = controller.InitializeAsync(CancellationToken.None);
 
-        await WaitUntilAsync(() => threadSource.ListStarted.Task.IsCompleted).ConfigureAwait(false);
+        await WaitUntilAsync(() => sessionSource.ListStarted.Task.IsCompleted).ConfigureAwait(false);
 
         CollectionAssert.Contains(log, "Shell.InitializeModelProviders");
         Assert.IsFalse(log.Any(static entry => entry.StartsWith("Shell.ApplyRecoveredCatalogState:", StringComparison.Ordinal)));
 
-        threadSource.AllowCompletion();
+        sessionSource.AllowCompletion();
         shell.InitializeModelProvidersCompletion.SetResult(true);
         await initializationTask.ConfigureAwait(false);
 
@@ -163,17 +163,17 @@ public sealed class CodeAltaShellControllerTests
         var slowProviderId = new ModelProviderId("slow");
         var shell = new FakeShell(log);
         var project = new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" };
-        var threadSource = new FakeRecoverableSessionSource(
+        var sessionSource = new FakeRecoverableSessionSource(
             log,
             [
-                CreateThread("thread-codex", ProviderId: codexProviderId.Value),
-                CreateThread("thread-slow", ProviderId: slowProviderId.Value),
+                CreateSession("session-codex", ProviderId: codexProviderId.Value),
+                CreateSession("session-slow", ProviderId: slowProviderId.Value),
             ]);
         var controller = new CodeAltaShellController(
             shell,
             new FakeImporter(log),
             new FakeProjectCatalogStore(log, [project]),
-            threadSource,
+            sessionSource,
             new FakeSessionDeleter(log),
             [
                 new ModelProviderDescriptor(codexProviderId, "Codex"),
@@ -183,8 +183,8 @@ public sealed class CodeAltaShellControllerTests
 
         await controller.InitializeAsync(CancellationToken.None);
 
-        CollectionAssert.Contains(log, "ThreadSource.List");
-        Assert.AreEqual(1, log.Count(static entry => entry == "ThreadSource.List"));
+        CollectionAssert.Contains(log, "SessionSource.List");
+        Assert.AreEqual(1, log.Count(static entry => entry == "SessionSource.List"));
         CollectionAssert.Contains(log, "Shell.ApplyRecoveredCatalogState:1:1:KeepMissing");
         CollectionAssert.Contains(log, "Shell.ApplyRecoveredCatalogState:1:2:KeepMissing");
         CollectionAssert.Contains(log, "Shell.ApplyRecoveredCatalogState:1:2");
@@ -198,7 +198,7 @@ public sealed class CodeAltaShellControllerTests
         var slowProviderId = new ModelProviderId("slow");
         var shell = new FakeShell(log);
         var project = new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" };
-        var parent = CreateThread("thread-parent", ProviderId: codexProviderId.Value);
+        var parent = CreateSession("session-parent", ProviderId: codexProviderId.Value);
         var providerIds = new[]
         {
             codexProviderId,
@@ -210,27 +210,27 @@ public sealed class CodeAltaShellControllerTests
             .Select(index =>
             {
                 var providerId = providerIds[index % providerIds.Length];
-                var child = CreateThread($"thread-child-{index}", ProviderId: providerId.Value);
-                child.ParentThreadId = parent.ThreadId;
+                var child = CreateSession($"session-child-{index}", ProviderId: providerId.Value);
+                child.ParentSessionId = parent.SessionId;
                 child.LastActiveAt = parent.LastActiveAt.AddMinutes(index);
                 return child;
             })
             .ToArray();
-        var completeThreads = new[] { parent }.Concat(children).ToArray();
-        var threadSource = new FakeRecoverableSessionSource(log, completeThreads);
+        var completeSessions = new[] { parent }.Concat(children).ToArray();
+        var sessionSource = new FakeRecoverableSessionSource(log, completeSessions);
         var controller = new CodeAltaShellController(
             shell,
             new FakeImporter(log),
             new FakeProjectCatalogStore(log, [project]),
-            threadSource,
+            sessionSource,
             new FakeSessionDeleter(log),
             providerIds.Select(providerId => new ModelProviderDescriptor(providerId, providerId.Value)).ToArray());
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
         await controller.InitializeAsync(CancellationToken.None);
 
-        CollectionAssert.Contains(log, "ThreadSource.List");
-        Assert.AreEqual(1, log.Count(static entry => entry == "ThreadSource.List"));
+        CollectionAssert.Contains(log, "SessionSource.List");
+        Assert.AreEqual(1, log.Count(static entry => entry == "SessionSource.List"));
         Assert.AreEqual(1, log.Count(static entry => entry == "Shell.InitializeModelProviders"));
         var finalCatalogApplication = log.Last(entry => entry.StartsWith("Shell.ApplyRecoveredCatalogState:", StringComparison.Ordinal));
         Assert.AreEqual("Shell.ApplyRecoveredCatalogState:1:65", finalCatalogApplication);
@@ -249,7 +249,7 @@ public sealed class CodeAltaShellControllerTests
             new FakeRecoverableSessionSource(log, []),
             new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(dispatcher);
-        var runtimeEvent = CreateHostEvent("thread-1");
+        var runtimeEvent = CreateHostEvent("session-1");
 
         await controller.ApplyRuntimeEventAsync(runtimeEvent, CancellationToken.None);
 
@@ -258,7 +258,7 @@ public sealed class CodeAltaShellControllerTests
         CollectionAssert.AreEqual(
             new[]
             {
-                "Shell.HandleRuntimeEvent:thread-1",
+                "Shell.HandleRuntimeEvent:session-1",
             },
             log);
     }
@@ -277,14 +277,14 @@ public sealed class CodeAltaShellControllerTests
             new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(dispatcher);
 
-        controller.QueueRuntimeEvent(CreateHostEvent("thread-1"), CancellationToken.None);
-        controller.QueueRuntimeEvent(CreateHostEvent("thread-2"), CancellationToken.None);
+        controller.QueueRuntimeEvent(CreateHostEvent("session-1"), CancellationToken.None);
+        controller.QueueRuntimeEvent(CreateHostEvent("session-2"), CancellationToken.None);
         Assert.AreEqual(0, dispatcher.InvokeCallCount);
         CollectionAssert.AreEqual(
             new[]
             {
-                "Shell.HandleRuntimeEvent:thread-1",
-                "Shell.HandleRuntimeEvent:thread-2",
+                "Shell.HandleRuntimeEvent:session-1",
+                "Shell.HandleRuntimeEvent:session-2",
             },
             log);
     }
@@ -301,14 +301,14 @@ public sealed class CodeAltaShellControllerTests
             new FakeRecoverableSessionSource(log, []),
             new FakeSessionDeleter(log));
 
-        controller.QueueRuntimeEvent(CreateToolDeltaEvent("thread-1", "tool-1", "alpha"), CancellationToken.None);
-        controller.QueueRuntimeEvent(CreateToolDeltaEvent("thread-1", "tool-1", "beta"), CancellationToken.None);
+        controller.QueueRuntimeEvent(CreateToolDeltaEvent("session-1", "tool-1", "alpha"), CancellationToken.None);
+        controller.QueueRuntimeEvent(CreateToolDeltaEvent("session-1", "tool-1", "beta"), CancellationToken.None);
 
         var drained = controller.DrainPendingRuntimeEvents();
 
         Assert.AreEqual(2, drained);
         Assert.AreEqual(1, log.Count);
-        var runtimeEvent = Assert.IsInstanceOfType<WorkThreadAgentEvent>(shell.LastRuntimeEvent);
+        var runtimeEvent = Assert.IsInstanceOfType<SessionAgentEvent>(shell.LastRuntimeEvent);
         var delta = Assert.IsInstanceOfType<AgentContentDeltaEvent>(runtimeEvent.Event);
         Assert.AreEqual("alphabeta", delta.Delta);
     }
@@ -354,7 +354,7 @@ public sealed class CodeAltaShellControllerTests
     }
 
     [TestMethod]
-    public async Task OpenThreadAsync_RoutesThreadSelectionThroughDispatcher()
+    public async Task OpenSessionAsync_RoutesSessionSelectionThroughDispatcher()
     {
         var log = new List<string>();
         var shell = new FakeShell(log);
@@ -367,14 +367,14 @@ public sealed class CodeAltaShellControllerTests
             new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(dispatcher);
 
-        await controller.OpenThreadAsync("thread-1", CancellationToken.None);
+        await controller.OpenSessionAsync("session-1", CancellationToken.None);
 
         Assert.AreEqual(1, dispatcher.InvokeCallCount);
-        CollectionAssert.AreEqual(new[] { "Shell.OpenThread:thread-1", "Shell.FocusPromptEditor" }, log);
+        CollectionAssert.AreEqual(new[] { "Shell.OpenSession:session-1", "Shell.FocusPromptEditor" }, log);
     }
 
     [TestMethod]
-    public async Task OpenFolderAsync_UpsertsProjectAndSelectsProjectWithoutReloadingThreads()
+    public async Task OpenFolderAsync_UpsertsProjectAndSelectsProjectWithoutReloadingSessions()
     {
         var log = new List<string>();
         var shell = new FakeShell(log);
@@ -384,7 +384,7 @@ public sealed class CodeAltaShellControllerTests
             shell,
             new FakeImporter(log),
             catalog,
-            new FakeRecoverableSessionSource(log, [CreateThread("thread-1")]),
+            new FakeRecoverableSessionSource(log, [CreateSession("session-1")]),
             new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(dispatcher);
 
@@ -435,7 +435,7 @@ public sealed class CodeAltaShellControllerTests
             shell,
             new FakeImporter(log),
             catalog,
-            new FakeRecoverableSessionSource(log, [CreateThread("thread-1")]),
+            new FakeRecoverableSessionSource(log, [CreateSession("session-1")]),
             new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(dispatcher);
 
@@ -475,7 +475,7 @@ public sealed class CodeAltaShellControllerTests
             shell,
             new FakeImporter(log),
             catalog,
-            new FakeRecoverableSessionSource(log, [CreateThread("thread-1")]),
+            new FakeRecoverableSessionSource(log, [CreateSession("session-1")]),
             new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
@@ -504,7 +504,7 @@ public sealed class CodeAltaShellControllerTests
             shell,
             new FakeImporter(log),
             new FakeProjectCatalogStore(log, []),
-            new FakeRecoverableSessionSource(log, [CreateThread("thread-1")]),
+            new FakeRecoverableSessionSource(log, [CreateSession("session-1")]),
             new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
@@ -527,27 +527,27 @@ public sealed class CodeAltaShellControllerTests
     }
 
     [TestMethod]
-    public async Task LoadProjectThreadsAsync_ReturnsProjectThreadsOrderedByRecency()
+    public async Task LoadProjectSessionsAsync_ReturnsProjectSessionsOrderedByRecency()
     {
         var log = new List<string>();
-        var threads = new[]
+        var sessions = new[]
         {
-            CreateThread("thread-1"),
-            CreateThread("thread-2"),
-            CreateThread("thread-3", projectId: "project-2"),
+            CreateSession("session-1"),
+            CreateSession("session-2"),
+            CreateSession("session-3", projectId: "project-2"),
         };
-        threads[0].LastActiveAt = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
-        threads[1].LastActiveAt = DateTimeOffset.Parse("2026-03-29T11:00:00+00:00");
+        sessions[0].LastActiveAt = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
+        sessions[1].LastActiveAt = DateTimeOffset.Parse("2026-03-29T11:00:00+00:00");
         var controller = new CodeAltaShellController(
             new FakeShell(log),
             new FakeImporter(log),
             new FakeProjectCatalogStore(log, []),
-            new FakeRecoverableSessionSource(log, threads),
+            new FakeRecoverableSessionSource(log, sessions),
             new FakeSessionDeleter(log));
 
-        var projectThreads = await controller.LoadProjectThreadsAsync("project-1", CancellationToken.None);
+        var projectSessions = await controller.LoadProjectSessionsAsync("project-1", CancellationToken.None);
 
-        CollectionAssert.AreEqual(new[] { "thread-2", "thread-1" }, projectThreads.Select(static thread => thread.ThreadId).ToArray());
+        CollectionAssert.AreEqual(new[] { "session-2", "session-1" }, projectSessions.Select(static session => session.SessionId).ToArray());
     }
 
     [TestMethod]
@@ -561,7 +561,7 @@ public sealed class CodeAltaShellControllerTests
             shell,
             new FakeImporter(log),
             catalog,
-            new FakeRecoverableSessionSource(log, [CreateThread("thread-1")]),
+            new FakeRecoverableSessionSource(log, [CreateSession("session-1")]),
             new FakeSessionDeleter(log));
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
@@ -574,42 +574,42 @@ public sealed class CodeAltaShellControllerTests
     }
 
     [TestMethod]
-    public async Task DeleteSessionAsync_DeletesThreadWithoutReloadingCatalog()
+    public async Task DeleteSessionAsync_DeletesSessionWithoutReloadingCatalog()
     {
         var log = new List<string>();
         var shell = new FakeShell(log);
-        var thread = CreateThread("thread-1");
+        var session = CreateSession("session-1");
         var deleter = new FakeSessionDeleter(log) { DeleteResult = true };
         var controller = new CodeAltaShellController(
             shell,
             new FakeImporter(log),
             new FakeProjectCatalogStore(log, []),
-            new FakeRecoverableSessionSource(log, [thread]),
+            new FakeRecoverableSessionSource(log, [session]),
             deleter);
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
-        var result = await controller.DeleteSessionAsync(thread, [thread], CancellationToken.None);
+        var result = await controller.DeleteSessionAsync(session, [session], CancellationToken.None);
 
         Assert.IsTrue(result.DeletedByBackend);
-        CollectionAssert.AreEqual(new[] { thread.ThreadId }, result.DeletedThreadIds.ToArray());
-        Assert.AreEqual(thread.ThreadId, deleter.DeletedThreadIds.Single());
+        CollectionAssert.AreEqual(new[] { session.SessionId }, result.DeletedSessionIds.ToArray());
+        Assert.AreEqual(session.SessionId, deleter.DeletedSessionIds.Single());
         Assert.IsFalse(log.Contains("Importer.Import"));
         Assert.IsFalse(log.Contains("ProjectCatalog.Load"));
-        Assert.IsFalse(log.Contains("ThreadSource.List"));
-        Assert.IsFalse(log.Contains("ThreadSource.List"));
+        Assert.IsFalse(log.Contains("SessionSource.List"));
+        Assert.IsFalse(log.Contains("SessionSource.List"));
     }
 
     [TestMethod]
-    public async Task DeleteSessionAsync_DeletesChildThreadsBeforeParent()
+    public async Task DeleteSessionAsync_DeletesChildSessionsBeforeParent()
     {
         var log = new List<string>();
         var shell = new FakeShell(log);
-        var parent = CreateThread("thread-parent");
-        var child = CreateThread("thread-child");
-        var grandchild = CreateThread("thread-grandchild");
-        var sibling = CreateThread("thread-sibling");
-        child.ParentThreadId = parent.ThreadId;
-        grandchild.ParentThreadId = child.ThreadId;
+        var parent = CreateSession("session-parent");
+        var child = CreateSession("session-child");
+        var grandchild = CreateSession("session-grandchild");
+        var sibling = CreateSession("session-sibling");
+        child.ParentSessionId = parent.SessionId;
+        grandchild.ParentSessionId = child.SessionId;
         var deleter = new FakeSessionDeleter(log) { DeleteResult = true };
         var controller = new CodeAltaShellController(
             shell,
@@ -622,14 +622,14 @@ public sealed class CodeAltaShellControllerTests
         var result = await controller.DeleteSessionAsync(parent, [parent, child, grandchild, sibling], CancellationToken.None);
 
         CollectionAssert.AreEqual(
-            new[] { grandchild.ThreadId, child.ThreadId, parent.ThreadId },
-            result.DeletedThreadIds.ToArray());
-        CollectionAssert.AreEqual(result.DeletedThreadIds.ToArray(), deleter.DeletedThreadIds.ToArray());
-        Assert.IsFalse(deleter.DeletedThreadIds.Contains(sibling.ThreadId));
+            new[] { grandchild.SessionId, child.SessionId, parent.SessionId },
+            result.DeletedSessionIds.ToArray());
+        CollectionAssert.AreEqual(result.DeletedSessionIds.ToArray(), deleter.DeletedSessionIds.ToArray());
+        Assert.IsFalse(deleter.DeletedSessionIds.Contains(sibling.SessionId));
     }
 
     [TestMethod]
-    public async Task DeleteProjectAsync_DeletesThreadsMarksProjectArchivedWithoutReloadingCatalog()
+    public async Task DeleteProjectAsync_DeletesSessionsMarksProjectArchivedWithoutReloadingCatalog()
     {
         var log = new List<string>();
         var shell = new FakeShell(log);
@@ -640,31 +640,31 @@ public sealed class CodeAltaShellControllerTests
             shell,
             new FakeImporter(log),
             catalog,
-            new FakeRecoverableSessionSource(log, [CreateThread("thread-1"), CreateThread("thread-2")]),
+            new FakeRecoverableSessionSource(log, [CreateSession("session-1"), CreateSession("session-2")]),
             deleter);
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
-        var threads = new[] { CreateThread("thread-1"), CreateThread("thread-2") };
-        var result = await controller.DeleteProjectAsync(project, threads, CancellationToken.None);
+        var sessions = new[] { CreateSession("session-1"), CreateSession("session-2") };
+        var result = await controller.DeleteProjectAsync(project, sessions, CancellationToken.None);
 
         Assert.IsTrue(catalog.Projects.Single().Archived);
-        CollectionAssert.AreEquivalent(new[] { "thread-1", "thread-2" }, deleter.DeletedThreadIds.ToArray());
-        CollectionAssert.AreEquivalent(new[] { "thread-1", "thread-2" }, result.DeletedThreadIds.ToArray());
+        CollectionAssert.AreEquivalent(new[] { "session-1", "session-2" }, deleter.DeletedSessionIds.ToArray());
+        CollectionAssert.AreEquivalent(new[] { "session-1", "session-2" }, result.DeletedSessionIds.ToArray());
         CollectionAssert.Contains(log, "ProjectCatalog.Save:project-1");
         Assert.IsFalse(log.Contains("Importer.Import"));
         Assert.IsFalse(log.Contains("ProjectCatalog.Load"));
-        Assert.IsFalse(log.Contains("ThreadSource.List"));
-        Assert.IsFalse(log.Contains("ThreadSource.List"));
+        Assert.IsFalse(log.Contains("SessionSource.List"));
+        Assert.IsFalse(log.Contains("SessionSource.List"));
     }
 
-    private static WorkThreadHostEvent CreateHostEvent(string threadId)
-        => new(threadId, DateTimeOffset.UtcNow, AgentSessionUpdateKind.Info, "Updated");
+    private static SessionHostEvent CreateHostEvent(string sessionId)
+        => new(sessionId, DateTimeOffset.UtcNow, AgentSessionUpdateKind.Info, "Updated");
 
-    private static WorkThreadAgentEvent CreateToolDeltaEvent(string threadId, string contentId, string delta)
+    private static SessionAgentEvent CreateToolDeltaEvent(string sessionId, string contentId, string delta)
     {
         var timestamp = DateTimeOffset.UtcNow;
-        return new WorkThreadAgentEvent(
-            threadId,
+        return new SessionAgentEvent(
+            sessionId,
             new AgentContentDeltaEvent(
                 ModelProviderIds.Codex,
                 "session-1",
@@ -676,20 +676,20 @@ public sealed class CodeAltaShellControllerTests
                 delta));
     }
 
-    private static SessionViewDescriptor CreateThread(
-        string threadId,
+    private static SessionViewDescriptor CreateSession(
+        string sessionId,
         string projectId = "project-1",
         string? ProviderId = null)
     {
         return new SessionViewDescriptor
         {
-            ThreadId = threadId,
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = sessionId,
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = ProviderId ?? ModelProviderIds.Codex.Value,
             ProjectRef = projectId,
             WorkingDirectory = @"C:\repo",
-            Title = "Test thread",
-            Status = WorkThreadStatus.Active,
+            Title = "Test session",
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,
@@ -714,7 +714,7 @@ public sealed class CodeAltaShellControllerTests
     {
         private readonly Dictionary<string, TaskCompletionSource<bool>> _backendInitializationCompletions = new(StringComparer.OrdinalIgnoreCase);
 
-        public WorkThreadRuntimeEvent? LastRuntimeEvent { get; private set; }
+        public SessionRuntimeEvent? LastRuntimeEvent { get; private set; }
 
         public List<string?> ProviderSessionLoadStatuses { get; } = [];
 
@@ -750,9 +750,9 @@ public sealed class CodeAltaShellControllerTests
 
         public void ApplyRecoveredCatalogState(
             IReadOnlyList<ProjectDescriptor> projects,
-            IReadOnlyList<SessionViewDescriptor> threads,
-            bool pruneMissingThreads = true)
-            => log.Add($"Shell.ApplyRecoveredCatalogState:{projects.Count}:{threads.Count}" + (pruneMissingThreads ? string.Empty : ":KeepMissing"));
+            IReadOnlyList<SessionViewDescriptor> sessions,
+            bool pruneMissingSessions = true)
+            => log.Add($"Shell.ApplyRecoveredCatalogState:{projects.Count}:{sessions.Count}" + (pruneMissingSessions ? string.Empty : ":KeepMissing"));
 
         public void UpsertProject(ProjectDescriptor project)
             => log.Add($"Shell.UpsertProject:{project.Id}");
@@ -760,17 +760,17 @@ public sealed class CodeAltaShellControllerTests
         public void SetReadyStatusForCurrentSelection()
             => log.Add("Shell.SetReadyStatus");
 
-        public void HandleRuntimeEvent(WorkThreadRuntimeEvent runtimeEvent)
+        public void HandleRuntimeEvent(SessionRuntimeEvent runtimeEvent)
         {
             LastRuntimeEvent = runtimeEvent;
-            log.Add($"Shell.HandleRuntimeEvent:{runtimeEvent.ThreadId}");
+            log.Add($"Shell.HandleRuntimeEvent:{runtimeEvent.SessionId}");
         }
 
         public void PublishStartupCatalogProjectionReady()
             => log.Add("Shell.PublishStartupCatalogProjectionReady");
 
-        public void TrySchedulePendingStartupThreadRestore(CancellationToken cancellationToken)
-            => log.Add("Shell.TrySchedulePendingStartupThreadRestore");
+        public void TrySchedulePendingStartupSessionRestore(CancellationToken cancellationToken)
+            => log.Add("Shell.TrySchedulePendingStartupSessionRestore");
 
         public void SelectGlobalScope()
             => log.Add("Shell.SelectGlobalScope");
@@ -778,8 +778,8 @@ public sealed class CodeAltaShellControllerTests
         public void SelectProjectScope(string projectId)
             => log.Add($"Shell.SelectProjectScope:{projectId}");
 
-        public void OpenThread(string threadId)
-            => log.Add($"Shell.OpenThread:{threadId}");
+        public void OpenSession(string sessionId)
+            => log.Add($"Shell.OpenSession:{sessionId}");
 
         public void FocusPromptEditor()
             => log.Add("Shell.FocusPromptEditor");
@@ -855,24 +855,24 @@ public sealed class CodeAltaShellControllerTests
 
     private sealed class FakeRecoverableSessionSource(
         List<string> log,
-        IReadOnlyList<SessionViewDescriptor> threads) : IRecoverableSessionSource
+        IReadOnlyList<SessionViewDescriptor> sessions) : IRecoverableSessionSource
     {
         public async IAsyncEnumerable<SessionViewDescriptor> ListRecoverableSessionsAsync(
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            log.Add("ThreadSource.List");
-            foreach (var thread in threads)
+            log.Add("SessionSource.List");
+            foreach (var session in sessions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 await Task.Yield();
-                yield return thread;
+                yield return session;
             }
         }
     }
 
     private sealed class BlockingRecoverableSessionSource(
         List<string> log,
-        IReadOnlyList<SessionViewDescriptor> threads) : IRecoverableSessionSource
+        IReadOnlyList<SessionViewDescriptor> sessions) : IRecoverableSessionSource
     {
         private readonly TaskCompletionSource<bool> _allowCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -881,14 +881,14 @@ public sealed class CodeAltaShellControllerTests
         public async IAsyncEnumerable<SessionViewDescriptor> ListRecoverableSessionsAsync(
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            log.Add("ThreadSource.List");
+            log.Add("SessionSource.List");
             ListStarted.TrySetResult(true);
             await _allowCompletion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-            foreach (var thread in threads)
+            foreach (var session in sessions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 await Task.Yield();
-                yield return thread;
+                yield return session;
             }
         }
 
@@ -898,15 +898,15 @@ public sealed class CodeAltaShellControllerTests
 
     private sealed class FakeSessionDeleter(List<string> log) : ISessionDeleter
     {
-        public List<string> DeletedThreadIds { get; } = [];
+        public List<string> DeletedSessionIds { get; } = [];
 
         public bool DeleteResult { get; set; }
 
-        public Task<bool> DeleteSessionAsync(SessionViewDescriptor thread, CancellationToken cancellationToken)
+        public Task<bool> DeleteSessionAsync(SessionViewDescriptor session, CancellationToken cancellationToken)
         {
-            log.Add($"ThreadDeleter.Delete:{thread.ThreadId}");
-            DeletedThreadIds.Add(thread.ThreadId);
-            thread.Status = WorkThreadStatus.Archived;
+            log.Add($"SessionDeleter.Delete:{session.SessionId}");
+            DeletedSessionIds.Add(session.SessionId);
+            session.Status = SessionViewStatus.Archived;
             return Task.FromResult(DeleteResult);
         }
     }

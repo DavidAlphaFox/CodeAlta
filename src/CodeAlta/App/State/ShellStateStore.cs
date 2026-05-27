@@ -5,7 +5,7 @@ using CodeAlta.Threading;
 namespace CodeAlta.App.State;
 
 /// <summary>
-/// UI-thread-owned immutable state store for shell frontend projections.
+/// UI-session-owned immutable state store for shell frontend projections.
 /// </summary>
 /// <remarks>
 /// Frontend state ownership remains split by domain owner; this store is authoritative only
@@ -13,11 +13,11 @@ namespace CodeAlta.App.State;
 ///
 /// | State slice | Authoritative live owner | ShellStateStore role |
 /// | --- | --- | --- |
-/// | Catalog and selection restore | <c>ShellThreadStateCoordinator</c> and catalog/view-state persistence | Snapshot selected target, catalog lists, open thread ids, and navigator settings. |
+/// | Catalog and selection restore | <c>ShellSessionStateCoordinator</c> and catalog/view-state persistence | Snapshot selected target, catalog lists, open session ids, and navigator settings. |
 /// | Live logical tabs | <c>IShellTabService</c> | Snapshot projected tab identity/order/selection only. |
 /// | Prompt draft text and images | <c>PromptDraftUiCoordinator</c> plus prompt composer view models and prompt-draft persistence | No live ownership; consumers read the dedicated prompt services/view models. |
 /// | Model-provider selection and runtime state | <c>ModelProviderSelectorCoordinator</c>, <c>ModelProviderSelectorStateStore</c>, and backend runtime state | No live ownership; projections read the dedicated provider state. |
-/// | Shell and thread status | <c>ShellStatusProjectionController</c> and selected <c>OpenThreadState</c> status fields | Snapshot shell-level status text when needed across boundaries. |
+/// | Shell and session status | <c>ShellStatusProjectionController</c> and selected <c>OpenSessionState</c> status fields | Snapshot shell-level status text when needed across boundaries. |
 /// | File editor tabs | <c>FileEditorWorkspaceCoordinator</c> and <c>IShellTabService</c> | Snapshot logical tab projection only. |
 /// | Plugin projections | <c>PluginHostBridge</c> and plugin-owned surfaces/events | No live ownership; plugins enter through explicit bridge/events. |
 /// </remarks>
@@ -35,7 +35,7 @@ internal class ShellStateStore
     {
         get
         {
-            VerifyOwnerThread();
+            VerifyOwnerSession();
             return _snapshot;
         }
     }
@@ -49,14 +49,14 @@ internal class ShellStateStore
     /// <exception cref="InvalidOperationException">Thrown when the store is accessed from a non-owner thread.</exception>
     public ShellFrontendStateSnapshot Mutate(Func<ShellFrontendStateSnapshot, ShellFrontendStateSnapshot> mutation)
     {
-        VerifyOwnerThread();
+        VerifyOwnerSession();
         ArgumentNullException.ThrowIfNull(mutation);
 
         _snapshot = mutation(_snapshot) ?? throw new InvalidOperationException("Frontend state mutation returned null.");
         return _snapshot;
     }
 
-    private void VerifyOwnerThread()
+    private void VerifyOwnerSession()
     {
         if (_uiDispatcher is not null)
         {
@@ -78,18 +78,18 @@ internal class ShellStateStore
 /// <param name="ActiveTabId">The active tab identifier, when one is selected.</param>
 /// <param name="StatusText">The shell status text, when available.</param>
 /// <param name="Projects">The catalog project snapshot.</param>
-/// <param name="Threads">The catalog session snapshot.</param>
+/// <param name="Sessions">The catalog session snapshot.</param>
 /// <param name="Selection">The selected shell target snapshot.</param>
-/// <param name="OpenThreadIds">The ordered open session identifiers.</param>
+/// <param name="OpenSessionIds">The ordered open session identifiers.</param>
 /// <param name="NavigatorSettings">The navigator settings snapshot.</param>
 internal sealed record ShellFrontendStateSnapshot(
     IReadOnlyList<ShellFrontendTabSnapshot> Tabs,
     string? ActiveTabId,
     string? StatusText,
     IReadOnlyList<ProjectDescriptor> Projects,
-    IReadOnlyList<SessionViewDescriptor> Threads,
+    IReadOnlyList<SessionViewDescriptor> Sessions,
     ShellSelection Selection,
-    IReadOnlyList<string> OpenThreadIds,
+    IReadOnlyList<string> OpenSessionIds,
     NavigatorSettings NavigatorSettings)
 {
     /// <summary>Gets an empty shell frontend snapshot.</summary>
@@ -98,9 +98,9 @@ internal sealed record ShellFrontendStateSnapshot(
         ActiveTabId: null,
         StatusText: null,
         Projects: [],
-        Threads: [],
+        Sessions: [],
         ShellSelection.GlobalDraft(),
-        OpenThreadIds: [],
+        OpenSessionIds: [],
         new NavigatorSettings());
 
     /// <summary>Returns a snapshot with the supplied tab inserted or replaced.</summary>
@@ -150,35 +150,35 @@ internal sealed record ShellFrontendStateSnapshot(
     public ShellFrontendStateSnapshot SetStatus(string? statusText)
         => this with { StatusText = statusText };
 
-    /// <summary>Returns a snapshot with updated catalog projects and threads.</summary>
+    /// <summary>Returns a snapshot with updated catalog projects and sessions.</summary>
     public ShellFrontendStateSnapshot SetCatalog(
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads)
+        IReadOnlyList<SessionViewDescriptor> sessions)
     {
         ArgumentNullException.ThrowIfNull(projects);
-        ArgumentNullException.ThrowIfNull(threads);
+        ArgumentNullException.ThrowIfNull(sessions);
 
         return this with
         {
             Projects = projects.ToArray(),
-            Threads = threads.ToArray(),
+            Sessions = sessions.ToArray(),
         };
     }
 
-    /// <summary>Returns a snapshot with updated selected target, open thread ids, and navigator settings.</summary>
+    /// <summary>Returns a snapshot with updated selected target, open session ids, and navigator settings.</summary>
     public ShellFrontendStateSnapshot SetSelection(
         ShellSelection selection,
-        IReadOnlyList<string> openThreadIds,
+        IReadOnlyList<string> openSessionIds,
         NavigatorSettings navigatorSettings)
     {
         ArgumentNullException.ThrowIfNull(selection);
-        ArgumentNullException.ThrowIfNull(openThreadIds);
+        ArgumentNullException.ThrowIfNull(openSessionIds);
         ArgumentNullException.ThrowIfNull(navigatorSettings);
 
         return this with
         {
             Selection = selection,
-            OpenThreadIds = openThreadIds
+            OpenSessionIds = openSessionIds
                 .Where(static id => !string.IsNullOrWhiteSpace(id))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
@@ -190,7 +190,7 @@ internal sealed record ShellFrontendStateSnapshot(
         => new()
         {
             SortMode = settings.SortMode,
-            RecentThreadsPerProject = settings.RecentThreadsPerProject,
+            RecentSessionsPerProject = settings.RecentSessionsPerProject,
             ThemeSchemeName = settings.ThemeSchemeName,
         };
 }

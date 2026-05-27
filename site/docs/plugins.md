@@ -110,7 +110,7 @@ public sealed class HelloPlugin : PluginBase
     public override IEnumerable<PluginUiContribution> GetUiContributions()
     {
         yield return PluginUi.Status("Hello", static _ => "hello plugin active");
-        yield return PluginUi.Visual(PluginUiRegion.ThreadFooter, static _ => new Markup("[dim]Hello plugin[/]"));
+        yield return PluginUi.Visual(PluginUiRegion.SessionFooter, static _ => new Markup("[dim]Hello plugin[/]"));
     }
 }
 ```
@@ -132,7 +132,7 @@ Plugins can contribute:
 - resource roots such as skills, prompts, templates, themes, MCP manifests, and agent definitions;
 - compaction hooks;
 - normalized agent event observers;
-- transient session event projections for plugin-owned timeline cards (current APIs still use some legacy `Thread` names).
+- transient session event projections for plugin-owned timeline cards (current APIs still use some legacy `Session` names).
 
 Prompt-editor attachments can attach plugin-owned behavior to prompt editors. CodeAlta provides only a small editor host, including the prompt project path; each plugin owns its trigger detection and visual presentation. Attachments can also set `PluginPromptEditorContribution.PlaceholderText` with a short placeholder segment such as `[#] to reference a GitHub issue`, which appears in the ready prompt placeholder while that contribution applies.
 

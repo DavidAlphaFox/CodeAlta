@@ -355,7 +355,7 @@ internal static class SessionUsageFormatter
         {
             AgentUsageScope.CurrentWindow => "Current window",
             AgentUsageScope.LastOperation => "Last operation",
-            AgentUsageScope.ThreadTotal => "Session total",
+            AgentUsageScope.SessionTotal => "Session total",
             AgentUsageScope.Compaction => "Compaction",
             AgentUsageScope.Truncation => "Truncation",
             AgentUsageScope.RateLimitOnly => "Rate-limit only",

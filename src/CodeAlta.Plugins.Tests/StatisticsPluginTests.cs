@@ -66,14 +66,14 @@ public sealed class StatisticsPluginTests
     public async Task Projection_EmitsCompletedTurnCardWithEstimatedStatsAndShellBucket()
     {
         var plugin = new StatisticsPlugin();
-        var contribution = plugin.GetThreadEventProjections().Single();
+        var contribution = plugin.GetSessionEventProjections().Single();
         var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
         var events = CreateTurnEvents(startedAt, includeCompletedAssistant: true, includeUsage: false, runId: new AgentRunId("run-1"));
 
         var result = await contribution.ProjectAsync(CreateContext(events), CancellationToken.None);
 
         Assert.AreEqual(1, result.Count);
-        Assert.AreEqual("statistics:thread-1:run-run-1", result[0].EventId);
+        Assert.AreEqual("statistics:session-1:run-run-1", result[0].EventId);
         StringAssert.Contains(result[0].Markdown, "computing");
         var completed = await WaitForDynamicProjectionAsync(result[0]);
         StringAssert.Contains(completed.Markdown, "**Turn statistics**");
@@ -83,7 +83,7 @@ public sealed class StatisticsPluginTests
         StringAssert.Contains(completed.DetailSections[0].Markdown, "Assistant | 11 chars");
         var cardVisualFactory = result[0].DynamicContent?.VisualFactory;
         Assert.IsNotNull(cardVisualFactory);
-        var cardVisual = cardVisualFactory(new PluginThreadEventVisualContext
+        var cardVisual = cardVisualFactory(new PluginSessionEventVisualContext
         {
             EventId = result[0].EventId,
             Markdown = completed.Markdown,
@@ -94,7 +94,7 @@ public sealed class StatisticsPluginTests
         Assert.IsInstanceOfType<WrapHStack>(card.Content);
         var visualFactory = completed.DetailSections[0].VisualFactory;
         Assert.IsNotNull(visualFactory);
-        var detailVisual = visualFactory(new PluginThreadEventVisualContext
+        var detailVisual = visualFactory(new PluginSessionEventVisualContext
         {
             EventId = result[0].EventId,
             Markdown = completed.DetailSections[0].Markdown,
@@ -110,7 +110,7 @@ public sealed class StatisticsPluginTests
     public async Task Projection_PrefersCompletedContentOverDeltasForFinalSize()
     {
         var plugin = new StatisticsPlugin();
-        var contribution = plugin.GetThreadEventProjections().Single();
+        var contribution = plugin.GetSessionEventProjections().Single();
         var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
         var events = CreateTurnEvents(startedAt, includeCompletedAssistant: true, includeUsage: false, runId: new AgentRunId("run-2"));
 
@@ -125,7 +125,7 @@ public sealed class StatisticsPluginTests
     public async Task Projection_UsesReportedUsageWhenAvailable()
     {
         var plugin = new StatisticsPlugin();
-        var contribution = plugin.GetThreadEventProjections().Single();
+        var contribution = plugin.GetSessionEventProjections().Single();
         var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
         var events = CreateTurnEvents(startedAt, includeCompletedAssistant: false, includeUsage: true, runId: new AgentRunId("run-3"));
 
@@ -141,7 +141,7 @@ public sealed class StatisticsPluginTests
     public async Task Projection_AggregatesProviderUsageAcrossTurnOperations()
     {
         var plugin = new StatisticsPlugin();
-        var contribution = plugin.GetThreadEventProjections().Single();
+        var contribution = plugin.GetSessionEventProjections().Single();
         var ProviderId = new ModelProviderId("provider-1");
         var runId = new AgentRunId("run-provider-aggregate");
         var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
@@ -200,21 +200,21 @@ public sealed class StatisticsPluginTests
     public async Task Projection_GroupsEventsWithoutRunIdByStableFallbackTurn()
     {
         var plugin = new StatisticsPlugin();
-        var contribution = plugin.GetThreadEventProjections().Single();
+        var contribution = plugin.GetSessionEventProjections().Single();
         var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
         var events = CreateTurnEvents(startedAt, includeCompletedAssistant: false, includeUsage: false, runId: null);
 
         var result = await contribution.ProjectAsync(CreateContext(events), CancellationToken.None);
 
         Assert.AreEqual(1, result.Count);
-        Assert.AreEqual("statistics:thread-1:session-session-1-turn-1", result[0].EventId);
+        Assert.AreEqual("statistics:session-1:session-session-1-turn-1", result[0].EventId);
     }
 
     [TestMethod]
     public async Task Projection_DoesNotEmitCardForIncompleteTurn()
     {
         var plugin = new StatisticsPlugin();
-        var contribution = plugin.GetThreadEventProjections().Single();
+        var contribution = plugin.GetSessionEventProjections().Single();
         var ProviderId = new ModelProviderId("provider-1");
         var runId = new AgentRunId("run-open");
         var events = new AgentEvent[]
@@ -232,7 +232,7 @@ public sealed class StatisticsPluginTests
     public async Task Projection_CountsModelGeneratedToolInputAsOutputWithoutToolOutput()
     {
         var plugin = new StatisticsPlugin();
-        var contribution = plugin.GetThreadEventProjections().Single();
+        var contribution = plugin.GetSessionEventProjections().Single();
         var ProviderId = new ModelProviderId("provider-1");
         var runId = new AgentRunId("run-output-accounting");
         var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
@@ -265,7 +265,7 @@ public sealed class StatisticsPluginTests
     public async Task Projection_UsesReasoningSummaryForOutputOnlyWhenFullReasoningIsAbsent()
     {
         var plugin = new StatisticsPlugin();
-        var contribution = plugin.GetThreadEventProjections().Single();
+        var contribution = plugin.GetSessionEventProjections().Single();
         var ProviderId = new ModelProviderId("provider-1");
         var runId = new AgentRunId("run-reasoning-summary-accounting");
         var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
@@ -292,7 +292,7 @@ public sealed class StatisticsPluginTests
     public async Task Projection_EstimatesSpeedWhenOnlyCompletedContentTimestampsAreAvailable()
     {
         var plugin = new StatisticsPlugin();
-        var contribution = plugin.GetThreadEventProjections().Single();
+        var contribution = plugin.GetSessionEventProjections().Single();
         var ProviderId = new ModelProviderId("provider-1");
         var runId = new AgentRunId("run-speed-unavailable");
         var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
@@ -321,7 +321,7 @@ public sealed class StatisticsPluginTests
     public async Task Projection_IncludesCompactionCountAndDurationInDetails()
     {
         var plugin = new StatisticsPlugin();
-        var contribution = plugin.GetThreadEventProjections().Single();
+        var contribution = plugin.GetSessionEventProjections().Single();
         var ProviderId = new ModelProviderId("provider-1");
         var runId = new AgentRunId("run-compaction");
         var startedAt = DateTimeOffset.Parse("2026-05-08T10:00:00Z");
@@ -341,22 +341,22 @@ public sealed class StatisticsPluginTests
         StringAssert.Contains(card.DetailSections.Single().Markdown, "Compactions | 1 / 2.0s");
     }
 
-    private static PluginThreadEventProjectionContext CreateContext(IReadOnlyList<AgentEvent> events)
+    private static PluginSessionEventProjectionContext CreateContext(IReadOnlyList<AgentEvent> events)
         => new()
         {
-            Handle = PluginContributionHandle.Create("builtin:statistics", typeof(StatisticsPlugin).FullName!, PluginPoint.ThreadEventProjection, "statistics", 0, 1),
-            ThreadId = "thread-1",
+            Handle = PluginContributionHandle.Create("builtin:statistics", typeof(StatisticsPlugin).FullName!, PluginPoint.SessionEventProjection, "statistics", 0, 1),
+            SessionId = "session-1",
             ProjectId = "project-1",
             ProjectPath = "C:/project",
             ProviderId = "provider-1",
             Model = "model-1",
-            SessionId = events.LastOrDefault()?.SessionId,
+            RuntimeSessionId = events.LastOrDefault()?.SessionId,
             RunId = events.LastOrDefault(static item => item.RunId is not null)?.RunId?.Value,
             Events = events,
             IsCompleteBatch = true,
         };
 
-    private static async Task<(string Markdown, IReadOnlyList<PluginDerivedThreadEventDetailSection> DetailSections)> WaitForDynamicProjectionAsync(PluginDerivedThreadEvent derivedEvent)
+    private static async Task<(string Markdown, IReadOnlyList<PluginDerivedSessionEventDetailSection> DetailSections)> WaitForDynamicProjectionAsync(PluginDerivedSessionEvent derivedEvent)
     {
         if (derivedEvent.DynamicContent is not { } dynamicContent)
         {

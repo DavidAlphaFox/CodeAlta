@@ -10,10 +10,10 @@ namespace CodeAlta.Views;
 
 internal sealed class FileEditorWorkspaceCoordinator : IAsyncDisposable
 {
-    private readonly Func<ThreadWorkspaceView?> _getWorkspaceView;
-    private readonly Func<Visual?> _getThreadFocusTarget;
+    private readonly Func<SessionWorkspaceView?> _getWorkspaceView;
+    private readonly Func<Visual?> _getSessionFocusTarget;
     private readonly Action<Action> _dispatchToUiDeferred;
-    private readonly Action _syncThreadTabControl;
+    private readonly Action _syncSessionTabControl;
     private readonly Action<string, bool, StatusTone> _setStatus;
     private readonly IShellTabService _shellTabs;
     private readonly Func<Func<Visual>, ComputedVisual> _createComputedVisual;
@@ -25,29 +25,29 @@ internal sealed class FileEditorWorkspaceCoordinator : IAsyncDisposable
         IProjectFileSearchService projectFileSearchService,
         IShellTabService shellTabs,
         Func<string?> resolveProjectRoot,
-        Func<Visual?> getThreadFocusTarget,
-        Func<ThreadWorkspaceView?> getWorkspaceView,
+        Func<Visual?> getSessionFocusTarget,
+        Func<SessionWorkspaceView?> getWorkspaceView,
         Func<Func<Visual>, ComputedVisual> createComputedVisual,
         Action<Action> dispatchToUiDeferred,
-        Action syncThreadTabControl,
+        Action syncSessionTabControl,
         Action<string, bool, StatusTone> setStatus)
     {
         ArgumentNullException.ThrowIfNull(projectFileSearchService);
         ArgumentNullException.ThrowIfNull(shellTabs);
         ArgumentNullException.ThrowIfNull(resolveProjectRoot);
-        ArgumentNullException.ThrowIfNull(getThreadFocusTarget);
+        ArgumentNullException.ThrowIfNull(getSessionFocusTarget);
         ArgumentNullException.ThrowIfNull(getWorkspaceView);
         ArgumentNullException.ThrowIfNull(createComputedVisual);
         ArgumentNullException.ThrowIfNull(dispatchToUiDeferred);
-        ArgumentNullException.ThrowIfNull(syncThreadTabControl);
+        ArgumentNullException.ThrowIfNull(syncSessionTabControl);
         ArgumentNullException.ThrowIfNull(setStatus);
 
         _shellTabs = shellTabs;
         _getWorkspaceView = getWorkspaceView;
-        _getThreadFocusTarget = getThreadFocusTarget;
+        _getSessionFocusTarget = getSessionFocusTarget;
         _createComputedVisual = createComputedVisual;
         _dispatchToUiDeferred = dispatchToUiDeferred;
-        _syncThreadTabControl = syncThreadTabControl;
+        _syncSessionTabControl = syncSessionTabControl;
         _setStatus = setStatus;
         _filePickerController = new ProjectFileOpenDialogController(
             projectFileSearchService,
@@ -140,7 +140,7 @@ internal sealed class FileEditorWorkspaceCoordinator : IAsyncDisposable
         }
 
         _shellTabs.SelectTabAsync(new ShellTabId(tabId)).GetAwaiter().GetResult();
-        _syncThreadTabControl();
+        _syncSessionTabControl();
         if (_fileTabsById.TryGetValue(tabId, out var fileTab))
         {
             _dispatchToUiDeferred(fileTab.Focus);
@@ -167,20 +167,20 @@ internal sealed class FileEditorWorkspaceCoordinator : IAsyncDisposable
                 _getWorkspaceView()?.RemoveTabPage(tabId);
                 if (wasSelected)
                 {
-                    SelectRemainingFileTabOrThreadSurface(removedIndex);
+                    SelectRemainingFileTabOrSessionSurface(removedIndex);
                 }
 
-                _syncThreadTabControl();
+                _syncSessionTabControl();
                 _setStatus($"Closed '{fileTab.Item.Basename}'.", false, StatusTone.Info);
             });
     }
 
-    public void ActivateThreadSurface()
+    public void ActivateSessionSurface()
     {
     }
 
     public Visual? GetActiveWorkspaceFocusTarget()
-        => GetSelectedFileTab()?.Editor as Visual ?? _getThreadFocusTarget();
+        => GetSelectedFileTab()?.Editor as Visual ?? _getSessionFocusTarget();
 
     private void OpenFileTab(ProjectFileSearchItem item, ProjectFileAppearance appearance)
         => _ = OpenFileTabAsync(item, appearance);
@@ -224,12 +224,12 @@ internal sealed class FileEditorWorkspaceCoordinator : IAsyncDisposable
         }
     }
 
-    private void SelectRemainingFileTabOrThreadSurface(int removedIndex)
+    private void SelectRemainingFileTabOrSessionSurface(int removedIndex)
     {
         var openTabIds = GetOpenEditorTabIds();
         if (openTabIds.Count == 0)
         {
-            ActivateThreadSurface();
+            ActivateSessionSurface();
             return;
         }
 

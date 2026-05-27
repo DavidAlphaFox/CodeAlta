@@ -20,31 +20,31 @@ namespace CodeAlta.Tests;
 public sealed class CodeAltaAppSidebarTests
 {
     [TestMethod]
-    public void Build_CreatesProjectThreadChildrenForMatchingProject()
+    public void Build_CreatesProjectSessionChildrenForMatchingProject()
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
         var otherProject = CreateProject("project-2", "Other", @"C:\other");
-        var visibleThread = CreateThread(
-            threadId: "thread-1",
-            title: "Recovered thread",
-            kind: WorkThreadKind.ProjectThread,
+        var visibleSession = CreateSession(
+            sessionId: "session-1",
+            title: "Recovered session",
+            kind: SessionViewKind.ProjectSession,
             projectId: project.Id,
             ProviderId: ModelProviderIds.Codex.Value,
             workingDirectory: project.ProjectPath,
             lastActiveAt: timestamp.AddMinutes(2));
-        var internalThread = CreateThread(
-            threadId: "thread-2",
+        var internalSession = CreateSession(
+            sessionId: "session-2",
             title: "Internal helper",
-            kind: WorkThreadKind.InternalThread,
+            kind: SessionViewKind.InternalSession,
             projectId: project.Id,
             ProviderId: ModelProviderIds.Codex.Value,
             workingDirectory: project.ProjectPath,
             lastActiveAt: timestamp.AddMinutes(1));
-        var unrelatedThread = CreateThread(
-            threadId: "thread-3",
-            title: "Other thread",
-            kind: WorkThreadKind.ProjectThread,
+        var unrelatedSession = CreateSession(
+            sessionId: "session-3",
+            title: "Other session",
+            kind: SessionViewKind.ProjectSession,
             projectId: otherProject.Id,
             ProviderId: ModelProviderIds.Codex.Value,
             workingDirectory: otherProject.ProjectPath,
@@ -52,7 +52,7 @@ public sealed class CodeAltaAppSidebarTests
 
         var projection = BuildProjection(
             [project, otherProject],
-            [unrelatedThread, internalThread, visibleThread],
+            [unrelatedSession, internalSession, visibleSession],
             [project.Id],
             nowUtc: timestamp.AddMinutes(3));
 
@@ -70,26 +70,26 @@ public sealed class CodeAltaAppSidebarTests
         CollectionAssert.AreEquivalent(
             new SidebarSelectionTarget[]
             {
-                SidebarSelectionTarget.Thread(visibleThread.ThreadId),
-                SidebarSelectionTarget.Thread(internalThread.ThreadId),
+                SidebarSelectionTarget.Session(visibleSession.SessionId),
+                SidebarSelectionTarget.Session(internalSession.SessionId),
             },
             projectNode.Children
                 .Select(node => node.SelectionTarget!.Value)
                 .ToArray());
 
-        Assert.IsFalse(projectNode.Children.Any(node => node.SelectionTarget == SidebarSelectionTarget.Thread(unrelatedThread.ThreadId)));
+        Assert.IsFalse(projectNode.Children.Any(node => node.SelectionTarget == SidebarSelectionTarget.Session(unrelatedSession.SessionId)));
     }
 
     [TestMethod]
-    public void Build_NestsSameProjectChildThreadsUnderParent()
+    public void Build_NestsSameProjectChildSessionsUnderParent()
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var parent = CreateThread("thread-parent", "Parent", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
-        var child = CreateThread("thread-child", "Child", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(1));
-        var crossProjectChild = CreateThread("thread-cross-project", "Cross project", WorkThreadKind.ProjectThread, "project-2", ModelProviderIds.Codex.Value, @"C:\other", timestamp.AddMinutes(2));
-        child.ParentThreadId = parent.ThreadId;
-        crossProjectChild.ParentThreadId = parent.ThreadId;
+        var parent = CreateSession("session-parent", "Parent", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
+        var child = CreateSession("session-child", "Child", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(1));
+        var crossProjectChild = CreateSession("session-cross-project", "Cross project", SessionViewKind.ProjectSession, "project-2", ModelProviderIds.Codex.Value, @"C:\other", timestamp.AddMinutes(2));
+        child.ParentSessionId = parent.SessionId;
+        crossProjectChild.ParentSessionId = parent.SessionId;
 
         var projection = BuildProjection(
             [project, CreateProject("project-2", "Other", @"C:\other")],
@@ -100,13 +100,13 @@ public sealed class CodeAltaAppSidebarTests
         var projectNode = projection.Roots[1].Children.Single(node => node.SelectionTarget == SidebarSelectionTarget.Project(project.Id));
         Assert.AreEqual(1, projectNode.Children.Count);
         var parentNode = projectNode.Children[0];
-        Assert.AreEqual(SidebarSelectionTarget.Thread(parent.ThreadId), parentNode.SelectionTarget);
+        Assert.AreEqual(SidebarSelectionTarget.Session(parent.SessionId), parentNode.SelectionTarget);
         Assert.IsTrue(parentNode.IsExpanded);
         Assert.AreEqual(1, parentNode.Children.Count);
-        Assert.AreEqual(SidebarSelectionTarget.Thread(child.ThreadId), parentNode.Children[0].SelectionTarget);
+        Assert.AreEqual(SidebarSelectionTarget.Session(child.SessionId), parentNode.Children[0].SelectionTarget);
 
         var otherProjectNode = projection.Roots[1].Children.Single(node => node.SelectionTarget == SidebarSelectionTarget.Project("project-2"));
-        Assert.AreEqual(SidebarSelectionTarget.Thread(crossProjectChild.ThreadId), otherProjectNode.Children[0].SelectionTarget);
+        Assert.AreEqual(SidebarSelectionTarget.Session(crossProjectChild.SessionId), otherProjectNode.Children[0].SelectionTarget);
         StringAssert.Contains(otherProjectNode.Children[0].Row.StateIconMarkup, NerdFont.MdAlertCircleOutline.ToString());
         StringAssert.Contains(otherProjectNode.Children[0].Row.StateTooltip, "another scope");
     }
@@ -116,12 +116,12 @@ public sealed class CodeAltaAppSidebarTests
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var missingParent = CreateThread("thread-missing", "Missing parent", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(1));
-        var cycleParent = CreateThread("thread-cycle-parent", "Cycle parent", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(2));
-        var cycleChild = CreateThread("thread-cycle-child", "Cycle child", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(3));
-        missingParent.ParentThreadId = "thread-no-longer-present";
-        cycleParent.ParentThreadId = cycleChild.ThreadId;
-        cycleChild.ParentThreadId = cycleParent.ThreadId;
+        var missingParent = CreateSession("session-missing", "Missing parent", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(1));
+        var cycleParent = CreateSession("session-cycle-parent", "Cycle parent", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(2));
+        var cycleChild = CreateSession("session-cycle-child", "Cycle child", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(3));
+        missingParent.ParentSessionId = "session-no-longer-present";
+        cycleParent.ParentSessionId = cycleChild.SessionId;
+        cycleChild.ParentSessionId = cycleParent.SessionId;
         var rows = new Dictionary<string, SidebarNodeViewModel>(StringComparer.OrdinalIgnoreCase);
 
         var projection = SidebarTreeProjectionBuilder.Build(
@@ -129,7 +129,7 @@ public sealed class CodeAltaAppSidebarTests
             [missingParent, cycleParent, cycleChild],
             @"C:\global",
             [project.Id],
-            new NavigatorSettings { RecentThreadsPerProject = 10 },
+            new NavigatorSettings { RecentSessionsPerProject = 10 },
             static _ => default,
             static (_, _) => false,
             (nodeId, kind, selectionTarget) => GetOrCreateRow(rows, nodeId, kind, selectionTarget),
@@ -137,46 +137,46 @@ public sealed class CodeAltaAppSidebarTests
 
         var projectNode = projection.Roots[1].Children.Single(node => node.SelectionTarget == SidebarSelectionTarget.Project(project.Id));
         CollectionAssert.AreEquivalent(
-            new[] { missingParent.ThreadId, cycleParent.ThreadId, cycleChild.ThreadId },
-            projectNode.Children.Select(static node => node.SelectionTarget!.Value.ThreadId).ToArray());
+            new[] { missingParent.SessionId, cycleParent.SessionId, cycleChild.SessionId },
+            projectNode.Children.Select(static node => node.SelectionTarget!.Value.SessionId).ToArray());
         Assert.IsTrue(projectNode.Children.All(static node => node.Children.Count == 0));
-        StringAssert.Contains(rows[$"thread:{missingParent.ThreadId}"].StateIconMarkup, NerdFont.MdAlertCircleOutline.ToString());
-        StringAssert.Contains(rows[$"thread:{missingParent.ThreadId}"].StateTooltip, "missing");
-        StringAssert.Contains(rows[$"thread:{cycleParent.ThreadId}"].StateIconMarkup, NerdFont.MdAlertCircleOutline.ToString());
-        StringAssert.Contains(rows[$"thread:{cycleParent.ThreadId}"].StateTooltip, "cycle");
-        StringAssert.Contains(rows[$"thread:{cycleChild.ThreadId}"].StateIconMarkup, NerdFont.MdAlertCircleOutline.ToString());
-        StringAssert.Contains(rows[$"thread:{cycleChild.ThreadId}"].StateTooltip, "cycle");
+        StringAssert.Contains(rows[$"session:{missingParent.SessionId}"].StateIconMarkup, NerdFont.MdAlertCircleOutline.ToString());
+        StringAssert.Contains(rows[$"session:{missingParent.SessionId}"].StateTooltip, "missing");
+        StringAssert.Contains(rows[$"session:{cycleParent.SessionId}"].StateIconMarkup, NerdFont.MdAlertCircleOutline.ToString());
+        StringAssert.Contains(rows[$"session:{cycleParent.SessionId}"].StateTooltip, "cycle");
+        StringAssert.Contains(rows[$"session:{cycleChild.SessionId}"].StateIconMarkup, NerdFont.MdAlertCircleOutline.ToString());
+        StringAssert.Contains(rows[$"session:{cycleChild.SessionId}"].StateTooltip, "cycle");
     }
 
     [TestMethod]
-    public void Build_FiltersArchivedProjectsAndThreads()
+    public void Build_FiltersArchivedProjectsAndSessions()
     {
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
         var archivedProject = CreateProject("project-2", "Archived", @"C:\archive");
         archivedProject.Archived = true;
-        var visibleThread = CreateThread("thread-1", "Visible", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"));
-        var archivedThread = CreateThread("thread-2", "Archived", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T12:01:00+00:00"));
-        archivedThread.Status = WorkThreadStatus.Archived;
+        var visibleSession = CreateSession("session-1", "Visible", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"));
+        var archivedSession = CreateSession("session-2", "Archived", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T12:01:00+00:00"));
+        archivedSession.Status = SessionViewStatus.Archived;
 
         var projection = BuildProjection(
             [project, archivedProject],
-            [visibleThread, archivedThread],
+            [visibleSession, archivedSession],
             [project.Id],
             nowUtc: DateTimeOffset.Parse("2026-03-29T12:02:00+00:00"));
 
         Assert.AreEqual(1, projection.Roots[1].Children.Count);
         Assert.AreEqual(project.Id, projection.Roots[1].Children[0].SelectionTarget?.ProjectId);
         Assert.AreEqual(1, projection.Roots[1].Children[0].Children.Count);
-        Assert.AreEqual(visibleThread.ThreadId, projection.Roots[1].Children[0].Children[0].SelectionTarget?.ThreadId);
+        Assert.AreEqual(visibleSession.SessionId, projection.Roots[1].Children[0].Children[0].SelectionTarget?.SessionId);
     }
 
     [TestMethod]
-    public void Build_GlobalNodeIncludesOpenThreadsAction()
+    public void Build_GlobalNodeIncludesOpenSessionsAction()
     {
-        var globalThread = CreateThread(
+        var globalSession = CreateSession(
             "global-1",
             "Global session",
-            WorkThreadKind.GlobalThread,
+            SessionViewKind.GlobalSession,
             projectId: null,
             ModelProviderIds.Codex.Value,
             @"C:\global",
@@ -184,14 +184,14 @@ public sealed class CodeAltaAppSidebarTests
 
         var projection = BuildProjection(
             projects: [],
-            threads: [globalThread],
+            sessions: [globalSession],
             expandedProjectIds: [],
             nowUtc: DateTimeOffset.Parse("2026-03-29T12:02:00+00:00"));
 
         var globalNode = projection.Roots[0];
         Assert.AreEqual(SidebarSelectionTarget.Global(), globalNode.SelectionTarget);
         Assert.AreEqual(1, globalNode.Actions.Count);
-        Assert.AreEqual(SidebarRowActionKind.OpenProjectThreads, globalNode.Actions[0].Kind);
+        Assert.AreEqual(SidebarRowActionKind.OpenProjectSessions, globalNode.Actions[0].Kind);
     }
 
     [TestMethod]
@@ -199,7 +199,7 @@ public sealed class CodeAltaAppSidebarTests
     {
         var projection = BuildProjection(
             projects: [],
-            threads: [],
+            sessions: [],
             expandedProjectIds: [],
             nowUtc: DateTimeOffset.Parse("2026-03-29T12:02:00+00:00"));
 
@@ -216,15 +216,15 @@ public sealed class CodeAltaAppSidebarTests
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var olderProject = CreateProject("project-1", "Alpha", @"C:\alpha");
         var newerProject = CreateProject("project-2", "Zulu", @"C:\zulu");
-        var threads = new[]
+        var sessions = new[]
         {
-            CreateThread("thread-1", "Older", WorkThreadKind.ProjectThread, olderProject.Id, ModelProviderIds.Codex.Value, olderProject.ProjectPath, timestamp),
-            CreateThread("thread-2", "Newer", WorkThreadKind.ProjectThread, newerProject.Id, ModelProviderIds.Codex.Value, newerProject.ProjectPath, timestamp.AddDays(1)),
+            CreateSession("session-1", "Older", SessionViewKind.ProjectSession, olderProject.Id, ModelProviderIds.Codex.Value, olderProject.ProjectPath, timestamp),
+            CreateSession("session-2", "Newer", SessionViewKind.ProjectSession, newerProject.Id, ModelProviderIds.Codex.Value, newerProject.ProjectPath, timestamp.AddDays(1)),
         };
 
         var projection = BuildProjection(
             [olderProject, newerProject],
-            threads,
+            sessions,
             expandedProjectIds: [newerProject.Id],
             nowUtc: timestamp.AddDays(1).AddMinutes(2),
             sortMode: NavigatorProjectSortMode.Date);
@@ -256,12 +256,12 @@ public sealed class CodeAltaAppSidebarTests
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
+        var session = CreateSession("session-1", "Recovered session", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
         var rows = new Dictionary<string, SidebarNodeViewModel>(StringComparer.OrdinalIgnoreCase);
 
         var first = SidebarTreeProjectionBuilder.Build(
             [project],
-            [thread],
+            [session],
             @"C:\global",
             [project.Id],
             new NavigatorSettings(),
@@ -271,7 +271,7 @@ public sealed class CodeAltaAppSidebarTests
             timestamp.AddSeconds(30));
         var second = SidebarTreeProjectionBuilder.Build(
             [project],
-            [thread],
+            [session],
             @"C:\global",
             [project.Id],
             new NavigatorSettings(),
@@ -285,24 +285,24 @@ public sealed class CodeAltaAppSidebarTests
     }
 
     [TestMethod]
-    public void ResolveTargetForProjectionChange_PrefersCurrentVisibleThreadSelection()
+    public void ResolveTargetForProjectionChange_PrefersCurrentVisibleSessionSelection()
     {
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var visibleThread = CreateThread(
-            threadId: "thread-1",
-            title: "Recovered thread",
-            kind: WorkThreadKind.ProjectThread,
+        var visibleSession = CreateSession(
+            sessionId: "session-1",
+            title: "Recovered session",
+            kind: SessionViewKind.ProjectSession,
             projectId: project.Id,
             ProviderId: ModelProviderIds.Codex.Value,
             workingDirectory: project.ProjectPath,
             lastActiveAt: DateTimeOffset.Parse("2026-03-29T10:00:00+00:00"));
         var projection = BuildProjection(
             [project],
-            [visibleThread],
+            [visibleSession],
             [project.Id],
             nowUtc: DateTimeOffset.Parse("2026-03-29T10:05:00+00:00"));
         var currentTarget = SidebarSelectionResolver.ResolveCurrentTarget(
-            visibleThread.ThreadId,
+            visibleSession.SessionId,
             project.Id,
             globalScopeSelected: false);
 
@@ -311,7 +311,7 @@ public sealed class CodeAltaAppSidebarTests
             projection,
             currentTarget);
 
-        Assert.AreEqual(SidebarSelectionTarget.Thread(visibleThread.ThreadId), selectedTarget);
+        Assert.AreEqual(SidebarSelectionTarget.Session(visibleSession.SessionId), selectedTarget);
     }
 
     [TestMethod]
@@ -327,7 +327,7 @@ public sealed class CodeAltaAppSidebarTests
         var selectedTarget = SidebarSelectionResolver.ResolveTargetForProjectionChange(
             previousTarget: null,
             projection,
-            SidebarSelectionTarget.Thread("missing-thread"));
+            SidebarSelectionTarget.Session("missing-session"));
 
         Assert.AreEqual(SidebarSelectionTarget.Global(), selectedTarget);
     }
@@ -336,10 +336,10 @@ public sealed class CodeAltaAppSidebarTests
     public void SidebarView_ApplyProjectionBuildsSelectableProjectNode()
     {
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
+        var session = CreateSession("session-1", "Recovered session", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
         var projection = BuildProjection(
             [project],
-            [thread],
+            [session],
             [project.Id],
             nowUtc: DateTimeOffset.Parse("2026-03-29T10:05:00+00:00"));
         var view = new SidebarView(new SidebarViewModel(), static () => { }, static () => { }, static () => { }, static () => { }, static _ => { }, static _ => { }, new CapturingSidebarRowCommandDispatcher(), static _ => { });
@@ -349,10 +349,10 @@ public sealed class CodeAltaAppSidebarTests
         Assert.AreEqual(2, view.Tree.Roots.Count);
         var projectsRoot = view.Tree.Roots[1];
         var projectNode = view.Tree.Roots[1].Children[0];
-        var threadNode = projectNode.Children[0];
+        var sessionNode = projectNode.Children[0];
         AssertSidebarIconStyle(projectsRoot, expectedBasic16Index: 12);
         AssertSidebarIconStyle(projectNode, expectedBasic16Index: 12);
-        AssertSidebarIconStyle(threadNode, expectedBasic16Index: 10);
+        AssertSidebarIconStyle(sessionNode, expectedBasic16Index: 10);
         Assert.AreEqual(1, projectsRoot.RightVisuals.Count);
         Assert.AreEqual(TreeNodeRightVisualVisibility.Always, projectsRoot.RightVisuals[0].Visibility);
         Assert.AreEqual(SidebarSelectionTarget.Project(project.Id), projectNode.Data);
@@ -363,18 +363,18 @@ public sealed class CodeAltaAppSidebarTests
         Assert.AreEqual(TreeNodeRightVisualVisibility.Hover, projectNode.RightVisuals[1].Visibility);
         Assert.AreEqual(TreeNodeRightVisualVisibility.Hover, projectNode.RightVisuals[2].Visibility);
         Assert.AreEqual(TreeNodeRightVisualVisibility.Hover, projectNode.RightVisuals[3].Visibility);
-        Assert.AreEqual(2, threadNode.RightVisuals.Count);
-        Assert.AreEqual(TreeNodeRightVisualVisibility.Always, threadNode.RightVisuals[0].Visibility);
-        Assert.AreEqual(TreeNodeRightVisualVisibility.Hover, threadNode.RightVisuals[1].Visibility);
+        Assert.AreEqual(2, sessionNode.RightVisuals.Count);
+        Assert.AreEqual(TreeNodeRightVisualVisibility.Always, sessionNode.RightVisuals[0].Visibility);
+        Assert.AreEqual(TreeNodeRightVisualVisibility.Hover, sessionNode.RightVisuals[1].Visibility);
     }
 
     [TestMethod]
-    public void SidebarView_ApplyProjectionBuildsSelectableGlobalNodeWithOpenThreadsAction()
+    public void SidebarView_ApplyProjectionBuildsSelectableGlobalNodeWithOpenSessionsAction()
     {
-        var globalThread = CreateThread("global-1", "Recovered global thread", WorkThreadKind.GlobalThread, null, ModelProviderIds.Codex.Value, @"C:\global", DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
+        var globalSession = CreateSession("global-1", "Recovered global session", SessionViewKind.GlobalSession, null, ModelProviderIds.Codex.Value, @"C:\global", DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
         var projection = BuildProjection(
             projects: [],
-            threads: [globalThread],
+            sessions: [globalSession],
             expandedProjectIds: [],
             nowUtc: DateTimeOffset.Parse("2026-03-29T10:05:00+00:00"));
         var view = new SidebarView(new SidebarViewModel(), static () => { }, static () => { }, static () => { }, static () => { }, static _ => { }, static _ => { }, new CapturingSidebarRowCommandDispatcher(), static _ => { });
@@ -383,9 +383,9 @@ public sealed class CodeAltaAppSidebarTests
 
         Assert.AreEqual(2, view.Tree.Roots.Count);
         var globalNode = view.Tree.Roots[0];
-        var globalThreadNode = globalNode.Children[0];
+        var globalSessionNode = globalNode.Children[0];
         AssertSidebarIconStyle(globalNode, expectedBasic16Index: 3);
-        AssertSidebarIconStyle(globalThreadNode, expectedBasic16Index: 3);
+        AssertSidebarIconStyle(globalSessionNode, expectedBasic16Index: 3);
         Assert.AreEqual(SidebarSelectionTarget.Global(), globalNode.Data);
         Assert.AreEqual(2, globalNode.RightVisuals.Count);
         Assert.AreEqual(TreeNodeRightVisualVisibility.Always, globalNode.RightVisuals[0].Visibility);
@@ -439,50 +439,50 @@ public sealed class CodeAltaAppSidebarTests
     }
 
     [TestMethod]
-    public void Build_RunningThreadsPromoteSpinnerStateToThreadAndProjectRows()
+    public void Build_RunningSessionsPromoteSpinnerStateToSessionAndProjectRows()
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
+        var session = CreateSession("session-1", "Recovered session", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
         var rows = new Dictionary<string, SidebarNodeViewModel>(StringComparer.OrdinalIgnoreCase);
 
         SidebarTreeProjectionBuilder.Build(
             [project],
-            [thread],
+            [session],
             @"C:\global",
             [project.Id],
             new NavigatorSettings(),
-            static _ => new ThreadVisualState(IsRunning: true, HasPromptDraft: false),
+            static _ => new SessionVisualState(IsRunning: true, HasPromptDraft: false),
             static (_, _) => false,
             (nodeId, kind, selectionTarget) => GetOrCreateRow(rows, nodeId, kind, selectionTarget),
             timestamp.AddMinutes(1));
 
         Assert.IsTrue(rows[$"project:{project.Id}"].ShowStateSpinner);
-        Assert.IsTrue(rows[$"thread:{thread.ThreadId}"].ShowStateSpinner);
-        Assert.IsNull(rows[$"thread:{thread.ThreadId}"].StateIconMarkup);
+        Assert.IsTrue(rows[$"session:{session.SessionId}"].ShowStateSpinner);
+        Assert.IsNull(rows[$"session:{session.SessionId}"].StateIconMarkup);
     }
 
     [TestMethod]
-    public void Build_EditedPromptThreadsExposeDraftIconState()
+    public void Build_EditedPromptSessionsExposeDraftIconState()
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
+        var session = CreateSession("session-1", "Recovered session", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
         var rows = new Dictionary<string, SidebarNodeViewModel>(StringComparer.OrdinalIgnoreCase);
 
         SidebarTreeProjectionBuilder.Build(
             [project],
-            [thread],
+            [session],
             @"C:\global",
             [project.Id],
             new NavigatorSettings(),
-            static _ => new ThreadVisualState(IsRunning: false, HasPromptDraft: true),
+            static _ => new SessionVisualState(IsRunning: false, HasPromptDraft: true),
             static (_, _) => false,
             (nodeId, kind, selectionTarget) => GetOrCreateRow(rows, nodeId, kind, selectionTarget),
             timestamp.AddMinutes(1));
 
-        Assert.IsFalse(rows[$"thread:{thread.ThreadId}"].ShowStateSpinner);
-        StringAssert.Contains(rows[$"thread:{thread.ThreadId}"].StateIconMarkup, NerdFont.MdSquareEditOutline.ToString());
+        Assert.IsFalse(rows[$"session:{session.SessionId}"].ShowStateSpinner);
+        StringAssert.Contains(rows[$"session:{session.SessionId}"].StateIconMarkup, NerdFont.MdSquareEditOutline.ToString());
     }
 
     [TestMethod]
@@ -535,10 +535,10 @@ public sealed class CodeAltaAppSidebarTests
     public void SidebarView_KeyNavigationNotifiesSelectedTargetChanged()
     {
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
+        var session = CreateSession("session-1", "Recovered session", SessionViewKind.ProjectSession, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
         var projection = BuildProjection(
             [project],
-            [thread],
+            [session],
             [project.Id],
             nowUtc: DateTimeOffset.Parse("2026-03-29T10:05:00+00:00"));
         var observedTargets = new List<SidebarSelectionTarget?>();
@@ -546,10 +546,10 @@ public sealed class CodeAltaAppSidebarTests
 
         view.ApplyProjection(projection);
 
-        using var session = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(80, 20)), new TerminalOptions { ImplicitStartInput = true }, force: true);
+        using var terminalSession = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(80, 20)), new TerminalOptions { ImplicitStartInput = true }, force: true);
         var app = new TerminalApp(
             view.Root,
-            session.Instance,
+            terminalSession.Instance,
             new TerminalAppOptions
             {
                 HostKind = TerminalHostKind.Fullscreen,
@@ -562,7 +562,7 @@ public sealed class CodeAltaAppSidebarTests
         {
             TickTerminalApp(app);
 
-            var backend = (InMemoryTerminalBackend)session.Instance.Backend;
+            var backend = (InMemoryTerminalBackend)terminalSession.Instance.Backend;
             backend.PushEvent(new TerminalKeyEvent { Key = TerminalKey.Down });
             backend.PushEvent(new TerminalKeyEvent { Key = TerminalKey.Down });
             TickTerminalApp(app);
@@ -621,7 +621,7 @@ public sealed class CodeAltaAppSidebarTests
 
     private static SidebarTreeProjection BuildProjection(
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads,
+        IReadOnlyList<SessionViewDescriptor> sessions,
         IReadOnlyCollection<string> expandedProjectIds,
         DateTimeOffset nowUtc,
         NavigatorProjectSortMode sortMode = NavigatorProjectSortMode.Name)
@@ -629,13 +629,13 @@ public sealed class CodeAltaAppSidebarTests
         var rows = new Dictionary<string, SidebarNodeViewModel>(StringComparer.OrdinalIgnoreCase);
         return SidebarTreeProjectionBuilder.Build(
             projects,
-            threads,
+            sessions,
             @"C:\global",
             expandedProjectIds,
             new NavigatorSettings
             {
                 SortMode = sortMode,
-                RecentThreadsPerProject = 3,
+                RecentSessionsPerProject = 3,
             },
             static _ => default,
             static (_, _) => false,
@@ -680,10 +680,10 @@ public sealed class CodeAltaAppSidebarTests
         };
     }
 
-    private static SessionViewDescriptor CreateThread(
-        string threadId,
+    private static SessionViewDescriptor CreateSession(
+        string sessionId,
         string title,
-        WorkThreadKind kind,
+        SessionViewKind kind,
         string? projectId,
         string ProviderId,
         string workingDirectory,
@@ -691,13 +691,13 @@ public sealed class CodeAltaAppSidebarTests
     {
         return new SessionViewDescriptor
         {
-            ThreadId = threadId,
+            SessionId = sessionId,
             Kind = kind,
             ProviderId = ProviderId,
             ProjectRef = projectId,
             WorkingDirectory = workingDirectory,
             Title = title,
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = lastActiveAt.AddMinutes(-2),
             UpdatedAt = lastActiveAt,
             LastActiveAt = lastActiveAt,

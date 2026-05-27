@@ -13,6 +13,6 @@ internal sealed class SessionDeleter : ISessionDeleter
         _runtimeService = runtimeService;
     }
 
-    public Task<bool> DeleteSessionAsync(SessionViewDescriptor thread, CancellationToken cancellationToken)
-        => _runtimeService.DeleteSessionAsync(thread, cancellationToken);
+    public Task<bool> DeleteSessionAsync(SessionViewDescriptor session, CancellationToken cancellationToken)
+        => _runtimeService.DeleteSessionAsync(session, cancellationToken);
 }

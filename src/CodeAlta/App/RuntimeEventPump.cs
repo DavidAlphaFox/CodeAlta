@@ -5,14 +5,14 @@ namespace CodeAlta.App;
 internal sealed class RuntimeEventPump : IAsyncDisposable
 {
     private readonly SessionRuntimeService _runtimeService;
-    private readonly IThreadRuntimeEventProjector _runtimeEventProjector;
+    private readonly ISessionRuntimeEventProjector _runtimeEventProjector;
     private readonly CancellationTokenSource _disposeCts = new();
     private CancellationTokenSource? _pumpCts;
     private Task? _pumpTask;
 
     public RuntimeEventPump(
         SessionRuntimeService runtimeService,
-        IThreadRuntimeEventProjector runtimeEventProjector)
+        ISessionRuntimeEventProjector runtimeEventProjector)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(runtimeEventProjector);

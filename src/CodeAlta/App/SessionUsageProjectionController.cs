@@ -13,26 +13,26 @@ internal sealed class SessionUsageProjectionController
 {
     private readonly SessionUsageViewModel _sessionUsageViewModel;
     private readonly Dictionary<string, ModelProviderState> _modelProviderStates;
-    private readonly ThreadSelectionContext _threadSelection;
+    private readonly SessionSelectionContext _sessionSelection;
     private readonly ShellWorkspaceContext _workspaceContext;
     private readonly IntState _usageRefreshState;
 
     public SessionUsageProjectionController(
         SessionUsageViewModel sessionUsageViewModel,
         Dictionary<string, ModelProviderState> modelProviderStates,
-        ThreadSelectionContext threadSelection,
+        SessionSelectionContext sessionSelection,
         ShellWorkspaceContext workspaceContext,
         IntState usageRefreshState)
     {
         ArgumentNullException.ThrowIfNull(sessionUsageViewModel);
         ArgumentNullException.ThrowIfNull(modelProviderStates);
-        ArgumentNullException.ThrowIfNull(threadSelection);
+        ArgumentNullException.ThrowIfNull(sessionSelection);
         ArgumentNullException.ThrowIfNull(workspaceContext);
         ArgumentNullException.ThrowIfNull(usageRefreshState);
 
         _sessionUsageViewModel = sessionUsageViewModel;
         _modelProviderStates = modelProviderStates;
-        _threadSelection = threadSelection;
+        _sessionSelection = sessionSelection;
         _workspaceContext = workspaceContext;
         _usageRefreshState = usageRefreshState;
     }
@@ -67,15 +67,15 @@ internal sealed class SessionUsageProjectionController
     private void SyncSelectedSessionUsageViewModel()
     {
         _workspaceContext.VerifyBindableAccess();
-        if (_threadSelection.Selection.Target is WorkspaceTarget.Thread)
+        if (_sessionSelection.Selection.Target is WorkspaceTarget.Session)
         {
-            var selectedThread = _threadSelection.GetSelectedThread();
-            if (selectedThread is null)
+            var selectedSession = _sessionSelection.GetSelectedSession();
+            if (selectedSession is null)
             {
                 return;
             }
 
-            var tab = _threadSelection.EnsureThreadTab(selectedThread);
+            var tab = _sessionSelection.EnsureSessionTab(selectedSession);
             _modelProviderStates.TryGetValue(tab.ProviderId.Value, out var backendState);
             _sessionUsageViewModel.Usage = tab.Usage;
             _sessionUsageViewModel.ProviderName = ResolveProviderDisplayName(tab.ProviderId.Value, backendState);
@@ -93,5 +93,5 @@ internal sealed class SessionUsageProjectionController
     }
 
     private static string ResolveProviderDisplayName(string providerKey, ModelProviderState? backendState)
-        => SidebarThreadPresentation.ResolveProviderDisplayName(providerKey, backendState?.DisplayName);
+        => SidebarSessionPresentation.ResolveProviderDisplayName(providerKey, backendState?.DisplayName);
 }

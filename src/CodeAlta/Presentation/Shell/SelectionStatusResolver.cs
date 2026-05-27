@@ -6,18 +6,18 @@ internal static class SelectionStatusResolver
 {
     public static StatusSnapshot Resolve(
         string readyMessage,
-        bool hasThreadStatus,
-        string? threadStatusMessage,
-        bool threadStatusBusy,
-        StatusTone threadStatusTone,
+        bool hasSessionStatus,
+        string? sessionStatusMessage,
+        bool sessionStatusBusy,
+        StatusTone sessionStatusTone,
         bool promptEdited,
         bool promptUnavailable,
         string? promptUnavailableMessage,
         StatusTone promptUnavailableTone)
     {
-        if (hasThreadStatus && !string.IsNullOrWhiteSpace(threadStatusMessage))
+        if (hasSessionStatus && !string.IsNullOrWhiteSpace(sessionStatusMessage))
         {
-            return new StatusSnapshot(threadStatusMessage!, threadStatusBusy, threadStatusTone);
+            return new StatusSnapshot(sessionStatusMessage!, sessionStatusBusy, sessionStatusTone);
         }
 
         if (promptUnavailable && !string.IsNullOrWhiteSpace(promptUnavailableMessage))

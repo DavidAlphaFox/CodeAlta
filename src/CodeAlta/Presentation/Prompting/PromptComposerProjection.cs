@@ -27,7 +27,7 @@ namespace CodeAlta.Presentation.Prompting
             => BuildReadyPromptPlaceholder(isContinuation: false, hasProjectContext: false);
 
         public static PromptComposerProjection Build(
-            SessionViewDescriptor? selectedThread,
+            SessionViewDescriptor? selectedSession,
             ProjectDescriptor? selectedProject,
             bool globalScopeSelected,
             string providerDisplayName,
@@ -35,65 +35,65 @@ namespace CodeAlta.Presentation.Prompting
             bool anyBackendReady,
             bool draftTabOpen,
             int openTabCount,
-            string? selectedThreadId,
-            bool selectedThreadHasQueuedPrompts,
-            bool selectedThreadCanAlwaysEnqueue,
-            bool selectedThreadCanCompact,
-            bool selectedThreadCanAbort,
+            string? selectedSessionId,
+            bool selectedSessionHasQueuedPrompts,
+            bool selectedSessionCanAlwaysEnqueue,
+            bool selectedSessionCanCompact,
+            bool selectedSessionCanAbort,
             IReadOnlyList<string>? promptPlaceholderContributions = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(providerDisplayName);
 
             var isUnavailable = availability != ModelProviderAvailability.Ready;
             var placeholder = isUnavailable
-                ? BuildPromptUnavailablePlaceholder(selectedThread, providerDisplayName, availability, anyBackendReady)
-                : BuildPromptPlaceholder(selectedThread, selectedProject, globalScopeSelected, promptPlaceholderContributions);
+                ? BuildPromptUnavailablePlaceholder(selectedSession, providerDisplayName, availability, anyBackendReady)
+                : BuildPromptPlaceholder(selectedSession, selectedProject, globalScopeSelected, promptPlaceholderContributions);
             var unavailableStatusMessage = isUnavailable
-                ? BuildPromptUnavailableStatusText(selectedThread, providerDisplayName, availability, anyBackendReady)
+                ? BuildPromptUnavailableStatusText(selectedSession, providerDisplayName, availability, anyBackendReady)
                 : null;
             var unavailableStatusTone = availability == ModelProviderAvailability.Probing
                 ? StatusTone.Info
                 : StatusTone.Warning;
-            var hasThread = selectedThread is not null;
+            var hasSession = selectedSession is not null;
 
             return new PromptComposerProjection(
                 Placeholder: placeholder,
                 IsEnabled: !isUnavailable,
                 CanSend: !isUnavailable,
-                CanSteer: hasThread && !isUnavailable,
-                CanAbort: hasThread && selectedThreadCanAbort,
-                CanCompact: hasThread && selectedThreadCanCompact && !isUnavailable,
-                CanCloseTab: hasThread || (draftTabOpen && string.IsNullOrWhiteSpace(selectedThreadId) && openTabCount > 1),
-                CanClearQueue: hasThread && selectedThreadHasQueuedPrompts,
-                CanAlwaysEnqueue: hasThread && selectedThreadCanAlwaysEnqueue,
+                CanSteer: hasSession && !isUnavailable,
+                CanAbort: hasSession && selectedSessionCanAbort,
+                CanCompact: hasSession && selectedSessionCanCompact && !isUnavailable,
+                CanCloseTab: hasSession || (draftTabOpen && string.IsNullOrWhiteSpace(selectedSessionId) && openTabCount > 1),
+                CanClearQueue: hasSession && selectedSessionHasQueuedPrompts,
+                CanAlwaysEnqueue: hasSession && selectedSessionCanAlwaysEnqueue,
                 UnavailableStatusMessage: unavailableStatusMessage,
                 UnavailableStatusTone: unavailableStatusTone);
         }
 
         internal static string BuildPromptPlaceholder(
-            SessionViewDescriptor? thread,
+            SessionViewDescriptor? session,
             ProjectDescriptor? selectedProject,
             bool globalScopeSelected,
             IReadOnlyList<string>? promptPlaceholderContributions = null)
         {
             var hasProjectContext =
-                thread?.Kind == WorkThreadKind.ProjectThread ||
+                session?.Kind == SessionViewKind.ProjectSession ||
                 (!globalScopeSelected && selectedProject is not null);
 
-            return BuildReadyPromptPlaceholder(thread is not null, hasProjectContext, promptPlaceholderContributions);
+            return BuildReadyPromptPlaceholder(session is not null, hasProjectContext, promptPlaceholderContributions);
         }
 
         internal static string BuildPromptUnavailablePlaceholder(
-            SessionViewDescriptor? thread,
+            SessionViewDescriptor? session,
             string providerDisplayName,
             ModelProviderAvailability availability,
             bool anyBackendReady)
         {
-            if (thread is not null)
+            if (session is not null)
             {
                 return availability == ModelProviderAvailability.Probing
                     ? $"Waiting for {providerDisplayName} to reconnect..."
-                    : $"'{thread.Title}' is unavailable until {providerDisplayName} is connected.";
+                    : $"'{session.Title}' is unavailable until {providerDisplayName} is connected.";
             }
 
             if (availability == ModelProviderAvailability.Probing)
@@ -107,16 +107,16 @@ namespace CodeAlta.Presentation.Prompting
         }
 
         internal static string BuildPromptUnavailableStatusText(
-            SessionViewDescriptor? thread,
+            SessionViewDescriptor? session,
             string providerDisplayName,
             ModelProviderAvailability availability,
             bool anyBackendReady)
         {
-            if (thread is not null)
+            if (session is not null)
             {
                 return availability == ModelProviderAvailability.Probing
-                    ? $"Reconnecting session '{thread.Title}' to {providerDisplayName}. Prompt sending is temporarily unavailable."
-                    : $"'{thread.Title}' is unavailable because {providerDisplayName} is not connected.";
+                    ? $"Reconnecting session '{session.Title}' to {providerDisplayName}. Prompt sending is temporarily unavailable."
+                    : $"'{session.Title}' is unavailable because {providerDisplayName} is not connected.";
             }
 
             if (availability == ModelProviderAvailability.Probing)

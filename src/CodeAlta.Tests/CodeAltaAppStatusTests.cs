@@ -9,14 +9,14 @@ namespace CodeAlta.Tests;
 public sealed class CodeAltaAppStatusTests
 {
     [TestMethod]
-    public void ResolveSelectionStatus_PrefersThreadSpecificStatus()
+    public void ResolveSelectionStatus_PrefersSessionSpecificStatus()
     {
         var snapshot = SelectionStatusResolver.Resolve(
             readyMessage: "Prompt ready",
-            hasThreadStatus: true,
-            threadStatusMessage: "Thinking...",
-            threadStatusBusy: true,
-            threadStatusTone: StatusTone.Info,
+            hasSessionStatus: true,
+            sessionStatusMessage: "Thinking...",
+            sessionStatusBusy: true,
+            sessionStatusTone: StatusTone.Info,
             promptEdited: false,
             promptUnavailable: true,
             promptUnavailableMessage: "Codex is unavailable.",
@@ -28,14 +28,14 @@ public sealed class CodeAltaAppStatusTests
     }
 
     [TestMethod]
-    public void ResolveSelectionStatus_FallsBackToPromptUnavailableWhenThreadHasNoCustomStatus()
+    public void ResolveSelectionStatus_FallsBackToPromptUnavailableWhenSessionHasNoCustomStatus()
     {
         var snapshot = SelectionStatusResolver.Resolve(
             readyMessage: "Prompt ready",
-            hasThreadStatus: false,
-            threadStatusMessage: "Stopped",
-            threadStatusBusy: false,
-            threadStatusTone: StatusTone.Warning,
+            hasSessionStatus: false,
+            sessionStatusMessage: "Stopped",
+            sessionStatusBusy: false,
+            sessionStatusTone: StatusTone.Warning,
             promptEdited: false,
             promptUnavailable: true,
             promptUnavailableMessage: "Codex is unavailable.",
@@ -51,10 +51,10 @@ public sealed class CodeAltaAppStatusTests
     {
         var snapshot = SelectionStatusResolver.Resolve(
             readyMessage: "Prompt ready",
-            hasThreadStatus: false,
-            threadStatusMessage: null,
-            threadStatusBusy: false,
-            threadStatusTone: StatusTone.Info,
+            hasSessionStatus: false,
+            sessionStatusMessage: null,
+            sessionStatusBusy: false,
+            sessionStatusTone: StatusTone.Info,
             promptEdited: false,
             promptUnavailable: false,
             promptUnavailableMessage: null,
@@ -70,10 +70,10 @@ public sealed class CodeAltaAppStatusTests
     {
         var snapshot = SelectionStatusResolver.Resolve(
             readyMessage: "Prompt ready",
-            hasThreadStatus: false,
-            threadStatusMessage: null,
-            threadStatusBusy: false,
-            threadStatusTone: StatusTone.Info,
+            hasSessionStatus: false,
+            sessionStatusMessage: null,
+            sessionStatusBusy: false,
+            sessionStatusTone: StatusTone.Info,
             promptEdited: true,
             promptUnavailable: false,
             promptUnavailableMessage: null,

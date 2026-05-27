@@ -10,7 +10,7 @@ namespace CodeAlta.App;
 internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
 {
     private readonly CodeAltaShellController _shellController;
-    private readonly ShellThreadStateCoordinator _threadStateCoordinator;
+    private readonly ShellSessionStateCoordinator _sessionStateCoordinator;
     private readonly Func<string?, string> _resolveProviderDisplayName;
     private readonly Func<Rectangle?> _getDialogBounds;
     private readonly Func<Visual?> _getFocusTarget;
@@ -20,7 +20,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
 
     public NavigatorActionCoordinator(
         CodeAltaShellController shellController,
-        ShellThreadStateCoordinator threadStateCoordinator,
+        ShellSessionStateCoordinator sessionStateCoordinator,
         Func<string?, string> resolveProviderDisplayName,
         Func<Rectangle?> getDialogBounds,
         Func<Visual?> getFocusTarget,
@@ -29,7 +29,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         Action setReadyStatusForCurrentSelection)
     {
         ArgumentNullException.ThrowIfNull(shellController);
-        ArgumentNullException.ThrowIfNull(threadStateCoordinator);
+        ArgumentNullException.ThrowIfNull(sessionStateCoordinator);
         ArgumentNullException.ThrowIfNull(resolveProviderDisplayName);
         ArgumentNullException.ThrowIfNull(getDialogBounds);
         ArgumentNullException.ThrowIfNull(getFocusTarget);
@@ -38,7 +38,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         ArgumentNullException.ThrowIfNull(setReadyStatusForCurrentSelection);
 
         _shellController = shellController;
-        _threadStateCoordinator = threadStateCoordinator;
+        _sessionStateCoordinator = sessionStateCoordinator;
         _resolveProviderDisplayName = resolveProviderDisplayName;
         _getDialogBounds = getDialogBounds;
         _getFocusTarget = getFocusTarget;
@@ -47,21 +47,21 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         _setReadyStatusForCurrentSelection = setReadyStatusForCurrentSelection;
     }
 
-    public void ConfirmDeleteThread(string threadId)
+    public void ConfirmDeleteSession(string sessionId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
-        var thread = _threadStateCoordinator.FindThread(threadId);
-        if (thread is null)
+        var session = _sessionStateCoordinator.FindSession(sessionId);
+        if (session is null)
         {
-            _setStatus($"Session '{threadId}' was not found.", false, StatusTone.Warning);
+            _setStatus($"Session '{sessionId}' was not found.", false, StatusTone.Warning);
             return;
         }
 
-        var project = _threadStateCoordinator.GetProjectById(thread.ProjectRef);
+        var project = _sessionStateCoordinator.GetProjectById(session.ProjectRef);
         var bodyLines = new List<string>
         {
-            $"Delete session '{thread.Title}'?",
+            $"Delete session '{session.Title}'?",
         };
         if (project is not null)
         {
@@ -73,7 +73,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
             bodyLines,
             "Delete",
             ControlTone.Error,
-            () => DeleteSessionAsync(thread),
+            () => DeleteSessionAsync(session),
             _getDialogBounds,
             _getFocusTarget)
             .Show();
@@ -83,77 +83,77 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var project = _threadStateCoordinator.GetProjectById(projectId);
+        var project = _sessionStateCoordinator.GetProjectById(projectId);
         if (project is null)
         {
             _setStatus($"Project '{projectId}' was not found.", false, StatusTone.Warning);
             return;
         }
 
-        var visibleThreads = _threadStateCoordinator.Threads
-            .Where(thread =>
-                thread.Status != WorkThreadStatus.Archived &&
-                string.Equals(thread.ProjectRef, projectId, StringComparison.OrdinalIgnoreCase))
+        var visibleSessions = _sessionStateCoordinator.Sessions
+            .Where(session =>
+                session.Status != SessionViewStatus.Archived &&
+                string.Equals(session.ProjectRef, projectId, StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
         new ConfirmationDialog(
             "Delete Project Sessions",
             [
-                $"Delete {visibleThreads.Length} session(s) from '{project.DisplayName}'?",
+                $"Delete {visibleSessions.Length} session(s) from '{project.DisplayName}'?",
                 "The project will be hidden from the default navigator view.",
             ],
             "Delete",
             ControlTone.Error,
-            () => DeleteProjectAsync(project, visibleThreads),
+            () => DeleteProjectAsync(project, visibleSessions),
             _getDialogBounds,
             _getFocusTarget,
             noteText: "This deletes session history only. The project directory on disk is not deleted.")
             .Show();
     }
 
-    public void OpenProjectThreads(string projectId)
+    public void OpenProjectSessions(string projectId)
     {
         ArgumentNullException.ThrowIfNull(projectId);
 
         if (string.IsNullOrWhiteSpace(projectId))
         {
-            var globalThreads = _threadStateCoordinator.Threads
-                .Where(thread =>
-                    thread.Status != WorkThreadStatus.Archived &&
-                    thread.Kind == WorkThreadKind.GlobalThread)
+            var globalSessions = _sessionStateCoordinator.Sessions
+                .Where(session =>
+                    session.Status != SessionViewStatus.Archived &&
+                    session.Kind == SessionViewKind.GlobalSession)
                 .ToArray();
 
-            new ProjectThreadsDialog(
+            new ProjectSessionsDialog(
                 CreateGlobalDialogProject(),
-                globalThreads,
+                globalSessions,
                 _resolveProviderDisplayName,
-                threadIds => DeleteProjectThreadsAsync(projectId: null, threadIds),
-                threadId => _shellController.OpenThreadAsync(threadId, CancellationToken.None),
+                sessionIds => DeleteProjectSessionsAsync(projectId: null, sessionIds),
+                sessionId => _shellController.OpenSessionAsync(sessionId, CancellationToken.None),
                 _getDialogBounds,
                 _getFocusTarget)
                 .Show();
             return;
         }
 
-        var project = _threadStateCoordinator.GetProjectById(projectId);
+        var project = _sessionStateCoordinator.GetProjectById(projectId);
         if (project is null)
         {
             _setStatus($"Project '{projectId}' was not found.", false, StatusTone.Warning);
             return;
         }
 
-        var threads = _threadStateCoordinator.Threads
-            .Where(thread =>
-                thread.Status != WorkThreadStatus.Archived &&
-                string.Equals(thread.ProjectRef, projectId, StringComparison.OrdinalIgnoreCase))
+        var sessions = _sessionStateCoordinator.Sessions
+            .Where(session =>
+                session.Status != SessionViewStatus.Archived &&
+                string.Equals(session.ProjectRef, projectId, StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
-        new ProjectThreadsDialog(
+        new ProjectSessionsDialog(
             project,
-            threads,
+            sessions,
             _resolveProviderDisplayName,
-            threadIds => DeleteProjectThreadsAsync(projectId, threadIds),
-            threadId => _shellController.OpenThreadAsync(threadId, CancellationToken.None),
+            sessionIds => DeleteProjectSessionsAsync(projectId, sessionIds),
+            sessionId => _shellController.OpenSessionAsync(sessionId, CancellationToken.None),
             _getDialogBounds,
             _getFocusTarget)
             .Show();
@@ -163,7 +163,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var project = _threadStateCoordinator.GetProjectById(projectId);
+        var project = _sessionStateCoordinator.GetProjectById(projectId);
         if (project is null)
         {
             _setStatus($"Project '{projectId}' was not found.", false, StatusTone.Warning);
@@ -187,7 +187,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
                 _getFocusTarget,
                 OpenFolderAsync,
                 _getPromptFocusTarget,
-                () => _threadStateCoordinator.Projects),
+                () => _sessionStateCoordinator.Projects),
             placeholder: "CodeAlta or C:\\code\\SomeFolder")
             .Show();
     }
@@ -197,7 +197,7 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
 
-        var project = _threadStateCoordinator.GetProjectById(projectId);
+        var project = _sessionStateCoordinator.GetProjectById(projectId);
         if (project is null)
         {
             throw new InvalidOperationException($"Project '{projectId}' was not found.");
@@ -208,14 +208,14 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         await SaveProjectAsync(updatedProject);
     }
 
-    private async Task DeleteSessionAsync(SessionViewDescriptor thread)
+    private async Task DeleteSessionAsync(SessionViewDescriptor session)
     {
         try
         {
-            _setStatus($"Deleting session '{thread.Title}'...", true, StatusTone.Info);
-            var result = await _shellController.DeleteSessionAsync(thread, _threadStateCoordinator.Threads, CancellationToken.None);
-            _threadStateCoordinator.RemoveDeletedThreads(result.DeletedThreadIds, thread.ProjectRef);
-            await _threadStateCoordinator.RemoveDeletedThreadArtifactsAsync(result.DeletedThreadIds);
+            _setStatus($"Deleting session '{session.Title}'...", true, StatusTone.Info);
+            var result = await _shellController.DeleteSessionAsync(session, _sessionStateCoordinator.Sessions, CancellationToken.None);
+            _sessionStateCoordinator.RemoveDeletedSessions(result.DeletedSessionIds, session.ProjectRef);
+            await _sessionStateCoordinator.RemoveDeletedSessionArtifactsAsync(result.DeletedSessionIds);
             _setReadyStatusForCurrentSelection();
         }
         catch (Exception ex)
@@ -224,14 +224,14 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         }
     }
 
-    private async Task DeleteProjectAsync(ProjectDescriptor project, IReadOnlyList<SessionViewDescriptor> threads)
+    private async Task DeleteProjectAsync(ProjectDescriptor project, IReadOnlyList<SessionViewDescriptor> sessions)
     {
         try
         {
             _setStatus($"Deleting sessions for project '{project.DisplayName}'...", true, StatusTone.Info);
-            var result = await _shellController.DeleteProjectAsync(project, threads, CancellationToken.None);
-            _threadStateCoordinator.RemoveDeletedProject(project, result.DeletedThreadIds);
-            await _threadStateCoordinator.RemoveDeletedThreadArtifactsAsync(result.DeletedThreadIds);
+            var result = await _shellController.DeleteProjectAsync(project, sessions, CancellationToken.None);
+            _sessionStateCoordinator.RemoveDeletedProject(project, result.DeletedSessionIds);
+            await _sessionStateCoordinator.RemoveDeletedSessionArtifactsAsync(result.DeletedSessionIds);
             _setReadyStatusForCurrentSelection();
         }
         catch (Exception ex)
@@ -240,33 +240,33 @@ internal sealed class NavigatorActionCoordinator : IProjectDetailsDialogService
         }
     }
 
-    private async Task DeleteProjectThreadsAsync(string? projectId, IReadOnlyList<string> threadIds)
+    private async Task DeleteProjectSessionsAsync(string? projectId, IReadOnlyList<string> sessionIds)
     {
         try
         {
-            _setStatus($"Deleting {threadIds.Count} session(s)...", true, StatusTone.Info);
-            var deletedThreadIds = new List<string>();
-            var deletedThreadIdSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var threadId in threadIds)
+            _setStatus($"Deleting {sessionIds.Count} session(s)...", true, StatusTone.Info);
+            var deletedSessionIds = new List<string>();
+            var deletedSessionIdSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var sessionId in sessionIds)
             {
-                if (deletedThreadIdSet.Contains(threadId))
+                if (deletedSessionIdSet.Contains(sessionId))
                 {
                     continue;
                 }
 
-                var knownThreads = _threadStateCoordinator.Threads
-                    .Where(thread => !deletedThreadIdSet.Contains(thread.ThreadId))
+                var knownSessions = _sessionStateCoordinator.Sessions
+                    .Where(session => !deletedSessionIdSet.Contains(session.SessionId))
                     .ToArray();
-                var result = await _shellController.DeleteSessionAsync(threadId, knownThreads, CancellationToken.None);
-                deletedThreadIds.AddRange(result.DeletedThreadIds);
-                foreach (var deletedThreadId in result.DeletedThreadIds)
+                var result = await _shellController.DeleteSessionAsync(sessionId, knownSessions, CancellationToken.None);
+                deletedSessionIds.AddRange(result.DeletedSessionIds);
+                foreach (var deletedSessionId in result.DeletedSessionIds)
                 {
-                    deletedThreadIdSet.Add(deletedThreadId);
+                    deletedSessionIdSet.Add(deletedSessionId);
                 }
             }
 
-            _threadStateCoordinator.RemoveDeletedThreads(deletedThreadIds, projectId);
-            await _threadStateCoordinator.RemoveDeletedThreadArtifactsAsync(deletedThreadIds);
+            _sessionStateCoordinator.RemoveDeletedSessions(deletedSessionIds, projectId);
+            await _sessionStateCoordinator.RemoveDeletedSessionArtifactsAsync(deletedSessionIds);
             _setReadyStatusForCurrentSelection();
         }
         catch (Exception ex)

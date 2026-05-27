@@ -18,7 +18,7 @@ internal sealed class PluginTransientEventProjectionStore
         }
     }
 
-    public bool Apply(PluginDerivedThreadEvent derivedEvent)
+    public bool Apply(PluginDerivedSessionEvent derivedEvent)
     {
         ArgumentNullException.ThrowIfNull(derivedEvent);
         ArgumentException.ThrowIfNullOrWhiteSpace(derivedEvent.EventId);
@@ -78,7 +78,7 @@ internal sealed class PluginTransientEventProjectionStore
         }
     }
 
-    public bool ApplyRange(IEnumerable<PluginDerivedThreadEvent> events)
+    public bool ApplyRange(IEnumerable<PluginDerivedSessionEvent> events)
     {
         ArgumentNullException.ThrowIfNull(events);
         var changed = false;
@@ -98,12 +98,12 @@ internal sealed class PluginTransientEventProjectionStore
         }
     }
 
-    private static string BuildDefaultMarkdown(PluginDerivedThreadEvent derivedEvent)
+    private static string BuildDefaultMarkdown(PluginDerivedSessionEvent derivedEvent)
         => string.IsNullOrWhiteSpace(derivedEvent.RenderTarget)
             ? $"Plugin event `{derivedEvent.EventId}`"
             : $"Plugin event `{derivedEvent.EventId}` ({derivedEvent.RenderTarget})";
 
-    private static string ResolveMarkdown(PluginDerivedThreadEvent derivedEvent)
+    private static string ResolveMarkdown(PluginDerivedSessionEvent derivedEvent)
         => derivedEvent.DynamicContent is { } dynamicContent
             ? dynamicContent.Markdown
             : string.IsNullOrWhiteSpace(derivedEvent.Markdown)
@@ -113,10 +113,10 @@ internal sealed class PluginTransientEventProjectionStore
     private static string ResolveMarkdown(PluginTransientEventProjection projection)
         => projection.DynamicContent?.Markdown ?? projection.Markdown;
 
-    private static IReadOnlyList<PluginDerivedThreadEventDetailSection> ResolveDetailSections(PluginDerivedThreadEvent derivedEvent)
+    private static IReadOnlyList<PluginDerivedSessionEventDetailSection> ResolveDetailSections(PluginDerivedSessionEvent derivedEvent)
         => derivedEvent.DynamicContent?.DetailSections ?? derivedEvent.DetailSections;
 
-    private static PluginThreadEventVisualFactory? ResolveVisualFactory(PluginDerivedThreadEvent derivedEvent)
+    private static PluginSessionEventVisualFactory? ResolveVisualFactory(PluginDerivedSessionEvent derivedEvent)
         => derivedEvent.DynamicContent?.VisualFactory ?? derivedEvent.VisualFactory;
 }
 
@@ -126,15 +126,15 @@ internal sealed record PluginTransientEventProjection(
     DateTimeOffset? Timestamp,
     string? RenderTarget,
     object? Payload,
-    IReadOnlyList<PluginDerivedThreadEventDetailSection> DetailSections,
-    PluginThreadEventVisualFactory? VisualFactory,
-    PluginDynamicDerivedThreadEventContent? DynamicContent);
+    IReadOnlyList<PluginDerivedSessionEventDetailSection> DetailSections,
+    PluginSessionEventVisualFactory? VisualFactory,
+    PluginDynamicDerivedSessionEventContent? DynamicContent);
 
 internal sealed class PluginDynamicProjectionSubscription : IDisposable
 {
     private readonly EventHandler _handler;
 
-    public PluginDynamicProjectionSubscription(PluginDynamicDerivedThreadEventContent content, EventHandler handler)
+    public PluginDynamicProjectionSubscription(PluginDynamicDerivedSessionEventContent content, EventHandler handler)
     {
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(handler);
@@ -143,7 +143,7 @@ internal sealed class PluginDynamicProjectionSubscription : IDisposable
         Content.Changed += _handler;
     }
 
-    public PluginDynamicDerivedThreadEventContent Content { get; }
+    public PluginDynamicDerivedSessionEventContent Content { get; }
 
     public void Dispose() => Content.Changed -= _handler;
 }

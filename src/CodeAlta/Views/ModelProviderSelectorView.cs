@@ -11,7 +11,7 @@ namespace CodeAlta.Views;
 internal sealed class ModelProviderSelectorView
 {
     public ModelProviderSelectorView(
-        ThreadWorkspaceViewModel workspaceViewModel,
+        SessionWorkspaceViewModel workspaceViewModel,
         PromptComposerViewModel promptComposerViewModel,
         ModelProviderSelectorController controller)
     {
@@ -44,8 +44,8 @@ internal sealed class ModelProviderSelectorView
         AlwaysEnqueueCheckBox = new CheckBox("AlwaysQueue")
             .IsChecked(promptComposerViewModel.Bind.AlwaysEnqueue)
             .IsEnabled(promptComposerViewModel.Bind.CanAlwaysEnqueue);
-        var compactThreadButton = new Button(new TextBlock($"{NerdFont.MdSelectCompare}"))
-            .Click(controller.CompactThread)
+        var compactSessionButton = new Button(new TextBlock($"{NerdFont.MdSelectCompare}"))
+            .Click(controller.CompactSession)
             .IsEnabled(promptComposerViewModel.Bind.CanCompact)
             .Tooltip(new TextBlock("Compact the selected session when it is idle (Ctrl+F11)."));
 
@@ -54,7 +54,7 @@ internal sealed class ModelProviderSelectorView
             ModelProviderSelect,
             ChatModelSelect,
             ChatReasoningSelect,
-            compactThreadButton,
+            compactSessionButton,
             AlwaysEnqueueCheckBox,
         ])
         {
@@ -72,7 +72,7 @@ internal sealed class ModelProviderSelectorView
 
     public CheckBox AlwaysEnqueueCheckBox { get; }
 
-    public void SyncItems(ThreadWorkspaceViewModel workspaceViewModel)
+    public void SyncItems(SessionWorkspaceViewModel workspaceViewModel)
     {
         ArgumentNullException.ThrowIfNull(workspaceViewModel);
 

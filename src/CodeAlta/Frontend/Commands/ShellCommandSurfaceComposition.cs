@@ -7,10 +7,10 @@ internal static class ShellCommandSurfaceComposition
 {
     public static ShellCommandSurfaceCoordinator Create(
         PromptComposerViewModel promptComposerViewModel,
-        ThreadWorkspaceViewModel threadWorkspaceViewModel,
-        ThreadCommandCoordinator threadCommandCoordinator,
+        SessionWorkspaceViewModel sessionWorkspaceViewModel,
+        SessionCommandCoordinator sessionCommandCoordinator,
         IShellPromptInputService promptInputService,
-        IShellThreadCommandService threadCommandService,
+        IShellSessionCommandService sessionCommandService,
         IShellDialogCommandService dialogCommandService,
         IShellNavigationCommandService navigationCommandService,
         IShellTabCommandService tabCommandService,
@@ -19,10 +19,10 @@ internal static class ShellCommandSurfaceComposition
         Action toggleCommandBarMultiLine)
     {
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
-        ArgumentNullException.ThrowIfNull(threadWorkspaceViewModel);
-        ArgumentNullException.ThrowIfNull(threadCommandCoordinator);
+        ArgumentNullException.ThrowIfNull(sessionWorkspaceViewModel);
+        ArgumentNullException.ThrowIfNull(sessionCommandCoordinator);
         ArgumentNullException.ThrowIfNull(promptInputService);
-        ArgumentNullException.ThrowIfNull(threadCommandService);
+        ArgumentNullException.ThrowIfNull(sessionCommandService);
         ArgumentNullException.ThrowIfNull(dialogCommandService);
         ArgumentNullException.ThrowIfNull(navigationCommandService);
         ArgumentNullException.ThrowIfNull(tabCommandService);
@@ -32,7 +32,7 @@ internal static class ShellCommandSurfaceComposition
 
         var commandPalettePresenter = new ShellCommandPalettePresenter(dialogCommandService);
         var shellCommandRegistry = new ShellCommandRegistryFactory(
-            threadCommandCoordinator,
+            sessionCommandCoordinator,
             dialogCommandService,
             navigationCommandService,
             tabCommandService,
@@ -41,8 +41,8 @@ internal static class ShellCommandSurfaceComposition
         var shellCommandDispatcher = new ShellCommandDispatcher(shellCommandRegistry);
         var shellCommandBindingProjector = new ShellCommandBindingProjector(
             promptComposerViewModel,
-            threadWorkspaceViewModel,
-            threadCommandService,
+            sessionWorkspaceViewModel,
+            sessionCommandService,
             statusService,
             shellCommandRegistry,
             shellCommandDispatcher,

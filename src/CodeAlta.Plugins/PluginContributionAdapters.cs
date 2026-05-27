@@ -16,8 +16,8 @@ public sealed record PluginAdapterOperationOptions
     /// <summary>Gets the current project path, when known.</summary>
     public string? ProjectPath { get; init; }
 
-    /// <summary>Gets the current thread id, when known.</summary>
-    public string? ThreadId { get; init; }
+    /// <summary>Gets the current session id, when known.</summary>
+    public string? SessionId { get; init; }
 
     /// <summary>Gets the current run id, when known.</summary>
     public string? RunId { get; init; }
@@ -845,7 +845,7 @@ public sealed class PluginContributionAdapterService
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options?.ProjectId,
             ProjectPath = options?.ProjectPath,
-            ThreadId = options?.ThreadId,
+            SessionId = options?.SessionId,
             RunId = options?.RunId,
             ProviderId = options?.ProviderId,
             Model = options?.Model,
@@ -864,7 +864,7 @@ public sealed class PluginContributionAdapterService
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options?.ProjectId,
             ProjectPath = options?.ProjectPath,
-            ThreadId = options?.ThreadId,
+            SessionId = options?.SessionId,
             RunId = options?.RunId,
             ProviderId = options?.ProviderId,
             Model = options?.Model,
@@ -884,7 +884,7 @@ public sealed class PluginContributionAdapterService
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options?.ProjectId,
             ProjectPath = options?.ProjectPath,
-            ThreadId = options?.ThreadId,
+            SessionId = options?.SessionId,
             RunId = options?.RunId,
             ProviderId = options?.ProviderId,
             Model = options?.Model,
@@ -904,7 +904,7 @@ public sealed class PluginContributionAdapterService
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options?.ProjectId,
             ProjectPath = options?.ProjectPath,
-            ThreadId = options?.ThreadId,
+            SessionId = options?.SessionId,
             RunId = options?.RunId,
             ProviderId = options?.ProviderId,
             Model = options?.Model,
@@ -923,7 +923,7 @@ public sealed class PluginContributionAdapterService
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options?.ProjectId ?? template.ProjectId,
             ProjectPath = options?.ProjectPath ?? template.ProjectPath,
-            ThreadId = options?.ThreadId ?? template.ThreadId,
+            SessionId = options?.SessionId ?? template.SessionId,
             RunId = options?.RunId ?? template.RunId,
             ProviderId = options?.ProviderId ?? template.ProviderId,
             Model = options?.Model ?? template.Model,
@@ -943,7 +943,7 @@ public sealed class PluginContributionAdapterService
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options?.ProjectId ?? template.ProjectId,
             ProjectPath = options?.ProjectPath ?? template.ProjectPath,
-            ThreadId = options?.ThreadId ?? template.ThreadId,
+            SessionId = options?.SessionId ?? template.SessionId,
             RunId = options?.RunId ?? template.RunId,
             ProviderId = options?.ProviderId ?? template.ProviderId,
             Model = options?.Model ?? template.Model,
@@ -961,7 +961,7 @@ public sealed class PluginContributionAdapterService
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options?.ProjectId ?? template.ProjectId,
             ProjectPath = options?.ProjectPath ?? template.ProjectPath,
-            ThreadId = options?.ThreadId ?? template.ThreadId,
+            SessionId = options?.SessionId ?? template.SessionId,
             RunId = options?.RunId ?? template.RunId,
             ProviderId = options?.ProviderId ?? template.ProviderId,
             Model = options?.Model ?? template.Model,
@@ -980,7 +980,7 @@ public sealed class PluginContributionAdapterService
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options?.ProjectId ?? template.ProjectId,
             ProjectPath = options?.ProjectPath ?? template.ProjectPath,
-            ThreadId = options?.ThreadId ?? template.ThreadId,
+            SessionId = options?.SessionId ?? template.SessionId,
             RunId = options?.RunId ?? template.RunId,
             ProviderId = options?.ProviderId ?? template.ProviderId,
             Model = options?.Model ?? template.Model,
@@ -999,7 +999,7 @@ public sealed class PluginContributionAdapterService
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options?.ProjectId,
             ProjectPath = options?.ProjectPath,
-            ThreadId = options?.ThreadId,
+            SessionId = options?.SessionId,
             RunId = options?.RunId,
             ProviderId = options?.ProviderId,
             Model = options?.Model,
@@ -1016,7 +1016,7 @@ public sealed class PluginContributionAdapterService
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options?.ProjectId,
             ProjectPath = options?.ProjectPath,
-            ThreadId = options?.ThreadId,
+            SessionId = options?.SessionId,
             RunId = options?.RunId,
             ProviderId = options?.ProviderId,
             Model = options?.Model,
@@ -1035,7 +1035,7 @@ public sealed class PluginContributionAdapterService
             ScopeProjectPath = active.RuntimeContext.ScopeProjectPath,
             ProjectId = options?.ProjectId,
             ProjectPath = options?.ProjectPath,
-            ThreadId = options?.ThreadId,
+            SessionId = options?.SessionId,
             RunId = options?.RunId,
             ProviderId = options?.ProviderId,
             Model = options?.Model,

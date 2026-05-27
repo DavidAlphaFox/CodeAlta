@@ -8,9 +8,9 @@ namespace CodeAlta.Catalog;
 public sealed class NavigatorSettings
 {
     /// <summary>
-    /// Gets the default number of recent threads shown per project.
+    /// Gets the default number of recent sessions shown per project.
     /// </summary>
-    public const int DefaultRecentThreadsPerProject = 10;
+    public const int DefaultRecentSessionsPerProject = 10;
 
     /// <summary>
     /// Gets or sets the project sort mode.
@@ -19,10 +19,10 @@ public sealed class NavigatorSettings
     public NavigatorProjectSortMode SortMode { get; set; } = NavigatorProjectSortMode.Date;
 
     /// <summary>
-    /// Gets or sets the number of recent threads shown per project.
+    /// Gets or sets the number of recent sessions shown per project.
     /// </summary>
-    [JsonPropertyName("recent_threads_per_project")]
-    public int RecentThreadsPerProject { get; set; } = DefaultRecentThreadsPerProject;
+    [JsonPropertyName("recent_sessions_per_project")]
+    public int RecentSessionsPerProject { get; set; } = DefaultRecentSessionsPerProject;
 
     /// <summary>
     /// Gets or sets the preferred UI color scheme name. When empty or unknown, the default theme is used.
@@ -41,12 +41,12 @@ public sealed class NavigatorSettings
             throw new ArgumentOutOfRangeException(nameof(SortMode), SortMode, "Navigator sort mode is invalid.");
         }
 
-        if (RecentThreadsPerProject is < 1 or > 50)
+        if (RecentSessionsPerProject is < 1 or > 50)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(RecentThreadsPerProject),
-                RecentThreadsPerProject,
-                "Navigator recent thread count must be between 1 and 50.");
+                nameof(RecentSessionsPerProject),
+                RecentSessionsPerProject,
+                "Navigator recent session count must be between 1 and 50.");
         }
 
         if (ThemeSchemeName is { Length: > 256 })

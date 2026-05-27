@@ -13,7 +13,7 @@ public sealed class PromptReferenceProjectRootResolverTests
         const string globalRoot = @"C:\Users\alex\.alta";
 
         var root = PromptReferenceProjectRootResolver.Resolve(
-            selectedThread: null,
+            selectedSession: null,
             getProjectById: static _ => null,
             getSelectedProject: static () => null,
             globalRoot);
@@ -22,7 +22,7 @@ public sealed class PromptReferenceProjectRootResolverTests
     }
 
     [TestMethod]
-    public void Resolve_GlobalThreadUsesThreadWorkingDirectoryInsteadOfSelectedProject()
+    public void Resolve_GlobalSessionUsesSessionWorkingDirectoryInsteadOfSelectedProject()
     {
         const string globalRoot = @"C:\Users\alex\.alta";
         var project = new ProjectDescriptor
@@ -34,21 +34,21 @@ public sealed class PromptReferenceProjectRootResolverTests
             ProjectPath = @"C:\Users\alex\.azuredevops",
             DefaultBranch = "main",
         };
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = "global-thread",
-            Kind = WorkThreadKind.GlobalThread,
+            SessionId = "global-session",
+            Kind = SessionViewKind.GlobalSession,
             ProviderId = ModelProviderIds.Codex.Value,
             WorkingDirectory = globalRoot,
-            Title = "Global Thread",
-            Status = WorkThreadStatus.Active,
+            Title = "Global Session",
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"),
             UpdatedAt = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"),
             LastActiveAt = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"),
         };
 
         var root = PromptReferenceProjectRootResolver.Resolve(
-            thread,
+            session,
             getProjectById: _ => project,
             getSelectedProject: () => project,
             globalRoot);

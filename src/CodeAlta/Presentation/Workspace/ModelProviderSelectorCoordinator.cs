@@ -16,18 +16,18 @@ namespace CodeAlta.Presentation.Workspace;
 internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProjectionController
 {
     private readonly IReadOnlyList<ModelProviderDescriptor> _providerDescriptors;
-    private readonly ThreadWorkspaceViewModel _workspaceViewModel;
+    private readonly SessionWorkspaceViewModel _workspaceViewModel;
     private readonly PromptComposerViewModel _promptComposerViewModel;
     private readonly Dictionary<string, ModelProviderState> _modelProviderStates;
     private readonly ModelProviderSelectorStateStore _selectorState;
-    private readonly ThreadSelectionContext _threadSelection;
+    private readonly SessionSelectionContext _sessionSelection;
     private readonly IModelProviderPreferencePort _preferences;
     private readonly WorkspaceRefreshContext _workspaceRefresh;
     private readonly Func<string?, string?> _getEffectiveDefaultProviderKey;
     private readonly Action _syncModelProviderSelectorItems;
-    private readonly Func<SessionViewDescriptor, OpenThreadState, bool> _canSelectThreadProvider;
-    private readonly Func<SessionViewDescriptor, OpenThreadState, ModelProviderId, Task<bool>> _trySwitchThreadProviderAsync;
-    private readonly Action _refreshSelectionAndThreadWorkspace;
+    private readonly Func<SessionViewDescriptor, OpenSessionState, bool> _canSelectSessionProvider;
+    private readonly Func<SessionViewDescriptor, OpenSessionState, ModelProviderId, Task<bool>> _trySwitchSessionProviderAsync;
+    private readonly Action _refreshSelectionAndSessionWorkspace;
     private readonly Func<IReadOnlyList<string>>? _getConfiguredProviderKeys;
     private readonly Func<ModelProviderPreference?> _getDraftModelProviderPreference;
     private readonly Func<IReadOnlyList<string>> _getPromptPlaceholderContributions;
@@ -36,18 +36,18 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
     private bool _selectorsRefreshing;
 
     public ModelProviderSelectorCoordinator(
-        ThreadWorkspaceViewModel workspaceViewModel,
+        SessionWorkspaceViewModel workspaceViewModel,
         PromptComposerViewModel promptComposerViewModel,
         Dictionary<string, ModelProviderState> modelProviderStates,
         ModelProviderSelectorStateStore selectorState,
-        ThreadSelectionContext threadSelection,
+        SessionSelectionContext sessionSelection,
         IModelProviderPreferencePort preferences,
         WorkspaceRefreshContext workspaceRefresh,
         Func<string?, string?> getEffectiveDefaultProviderKey,
         Action syncModelProviderSelectorItems,
-        Func<SessionViewDescriptor, OpenThreadState, bool>? canSelectThreadProvider = null,
-        Func<SessionViewDescriptor, OpenThreadState, ModelProviderId, Task<bool>>? trySwitchThreadProviderAsync = null,
-        Action? refreshSelectionAndThreadWorkspace = null,
+        Func<SessionViewDescriptor, OpenSessionState, bool>? canSelectSessionProvider = null,
+        Func<SessionViewDescriptor, OpenSessionState, ModelProviderId, Task<bool>>? trySwitchSessionProviderAsync = null,
+        Action? refreshSelectionAndSessionWorkspace = null,
         Func<IReadOnlyList<string>>? getConfiguredProviderKeys = null,
         Func<ModelProviderPreference?>? getDraftModelProviderPreference = null,
         Func<IReadOnlyList<string>>? getPromptPlaceholderContributions = null)
@@ -59,14 +59,14 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             promptComposerViewModel,
             modelProviderStates,
             selectorState,
-            threadSelection,
+            sessionSelection,
             preferences,
             workspaceRefresh,
             getEffectiveDefaultProviderKey,
             syncModelProviderSelectorItems,
-            canSelectThreadProvider,
-            trySwitchThreadProviderAsync,
-            refreshSelectionAndThreadWorkspace,
+            canSelectSessionProvider,
+            trySwitchSessionProviderAsync,
+            refreshSelectionAndSessionWorkspace,
             getConfiguredProviderKeys,
             getDraftModelProviderPreference,
             getPromptPlaceholderContributions)
@@ -75,18 +75,18 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
 
     public ModelProviderSelectorCoordinator(
         IReadOnlyList<ModelProviderDescriptor> providerDescriptors,
-        ThreadWorkspaceViewModel workspaceViewModel,
+        SessionWorkspaceViewModel workspaceViewModel,
         PromptComposerViewModel promptComposerViewModel,
         Dictionary<string, ModelProviderState> modelProviderStates,
         ModelProviderSelectorStateStore selectorState,
-        ThreadSelectionContext threadSelection,
+        SessionSelectionContext sessionSelection,
         IModelProviderPreferencePort preferences,
         WorkspaceRefreshContext workspaceRefresh,
         Func<string?, string?> getEffectiveDefaultProviderKey,
         Action syncModelProviderSelectorItems,
-        Func<SessionViewDescriptor, OpenThreadState, bool>? canSelectThreadProvider = null,
-        Func<SessionViewDescriptor, OpenThreadState, ModelProviderId, Task<bool>>? trySwitchThreadProviderAsync = null,
-        Action? refreshSelectionAndThreadWorkspace = null,
+        Func<SessionViewDescriptor, OpenSessionState, bool>? canSelectSessionProvider = null,
+        Func<SessionViewDescriptor, OpenSessionState, ModelProviderId, Task<bool>>? trySwitchSessionProviderAsync = null,
+        Action? refreshSelectionAndSessionWorkspace = null,
         Func<IReadOnlyList<string>>? getConfiguredProviderKeys = null,
         Func<ModelProviderPreference?>? getDraftModelProviderPreference = null,
         Func<IReadOnlyList<string>>? getPromptPlaceholderContributions = null)
@@ -96,7 +96,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
         ArgumentNullException.ThrowIfNull(modelProviderStates);
         ArgumentNullException.ThrowIfNull(selectorState);
-        ArgumentNullException.ThrowIfNull(threadSelection);
+        ArgumentNullException.ThrowIfNull(sessionSelection);
         ArgumentNullException.ThrowIfNull(preferences);
         ArgumentNullException.ThrowIfNull(workspaceRefresh);
         ArgumentNullException.ThrowIfNull(getEffectiveDefaultProviderKey);
@@ -107,14 +107,14 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         _promptComposerViewModel = promptComposerViewModel;
         _modelProviderStates = modelProviderStates;
         _selectorState = selectorState;
-        _threadSelection = threadSelection;
+        _sessionSelection = sessionSelection;
         _preferences = preferences;
         _workspaceRefresh = workspaceRefresh;
         _getEffectiveDefaultProviderKey = getEffectiveDefaultProviderKey;
         _syncModelProviderSelectorItems = syncModelProviderSelectorItems;
-        _canSelectThreadProvider = canSelectThreadProvider ?? ((_, _) => false);
-        _trySwitchThreadProviderAsync = trySwitchThreadProviderAsync ?? ((_, _, _) => Task.FromResult(false));
-        _refreshSelectionAndThreadWorkspace = refreshSelectionAndThreadWorkspace ?? (() => { });
+        _canSelectSessionProvider = canSelectSessionProvider ?? ((_, _) => false);
+        _trySwitchSessionProviderAsync = trySwitchSessionProviderAsync ?? ((_, _, _) => Task.FromResult(false));
+        _refreshSelectionAndSessionWorkspace = refreshSelectionAndSessionWorkspace ?? (() => { });
         _getConfiguredProviderKeys = getConfiguredProviderKeys;
         _getDraftModelProviderPreference = getDraftModelProviderPreference ?? (static () => null);
         _getPromptPlaceholderContributions = getPromptPlaceholderContributions ?? (static () => []);
@@ -183,7 +183,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         }
     }
 
-    public void RefreshForThread(OpenThreadState tab)
+    public void RefreshForSession(OpenSessionState tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
 
@@ -192,7 +192,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         try
         {
             var configuredBackendOptions = ModelProviderPresentation.BuildProviderOptions(_providerDescriptors);
-            var backendOptions = BuildThreadProviderOptions(tab, configuredBackendOptions);
+            var backendOptions = BuildSessionProviderOptions(tab, configuredBackendOptions);
             _workspaceViewModel.ProviderSummaryMarkup = ModelProviderPresentation.BuildProviderSummaryMarkup(
                 _modelProviderStates.Values,
                 isInitializing: false,
@@ -216,8 +216,8 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
                 0,
                 Math.Max(0, backendOptions.Count - 1)));
 
-            var backendState = GetThreadProviderState(tab, out var backendStateIsRegistered);
-            _preferences.ApplyThreadModelProviderState(tab);
+            var backendState = GetSessionProviderState(tab, out var backendStateIsRegistered);
+            _preferences.ApplySessionModelProviderState(tab);
 
             var modelOptions = ModelProviderPresentation.BuildModelOptions(backendState, tab.ModelId);
             _selectorState.SetModelSelection(
@@ -237,7 +237,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
                 reasoningOptions.FindIndex(option => option.Effort == tab.ReasoningEffort),
                 0,
                 Math.Max(0, reasoningOptions.Count - 1)));
-            _workspaceViewModel.CanSelectModelProvider = HasRegisteredProviderOption(backendOptions) && _canSelectThreadProvider(tab.Thread, tab);
+            _workspaceViewModel.CanSelectModelProvider = HasRegisteredProviderOption(backendOptions) && _canSelectSessionProvider(tab.SessionView, tab);
             _workspaceViewModel.CanSelectModel = backendStateIsRegistered && backendState.Availability == ModelProviderAvailability.Ready;
             _workspaceViewModel.CanSelectReasoning = backendStateIsRegistered && backendState.Availability == ModelProviderAvailability.Ready;
             _syncModelProviderSelectorItems();
@@ -268,8 +268,8 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
 
         _selectorState.SetSelectedModelProviderIndex(newIndex);
 
-        var thread = _threadSelection.GetSelectedThread();
-        if (thread is null)
+        var session = _sessionSelection.GetSelectedSession();
+        if (session is null)
         {
             var selectedProviderId = options[newIndex].ProviderId;
             if (!_modelProviderStates.TryGetValue(selectedProviderId.Value, out var draftBackendState))
@@ -289,7 +289,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             return;
         }
 
-        var tab = _threadSelection.EnsureThreadTab(thread);
+        var tab = _sessionSelection.EnsureSessionTab(session);
         var targetProviderId = options[newIndex].ProviderId;
         if (string.Equals(tab.ProviderId.Value, targetProviderId.Value, StringComparison.OrdinalIgnoreCase))
         {
@@ -298,23 +298,23 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
 
         if (!_modelProviderStates.ContainsKey(targetProviderId.Value))
         {
-            RefreshForThread(tab);
+            RefreshForSession(tab);
             return;
         }
 
-        if (!_canSelectThreadProvider(thread, tab))
+        if (!_canSelectSessionProvider(session, tab))
         {
-            RefreshForThread(tab);
+            RefreshForSession(tab);
             return;
         }
 
-        if (await _trySwitchThreadProviderAsync(thread, tab, targetProviderId))
+        if (await _trySwitchSessionProviderAsync(session, tab, targetProviderId))
         {
-            _refreshSelectionAndThreadWorkspace();
+            _refreshSelectionAndSessionWorkspace();
             return;
         }
 
-        RefreshForThread(tab);
+        RefreshForSession(tab);
     }
 
     public void OnModelSelectionChanged(int newIndex)
@@ -324,8 +324,8 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             return;
         }
 
-        var thread = _threadSelection.GetSelectedThread();
-        if (thread is null)
+        var session = _sessionSelection.GetSelectedSession();
+        if (session is null)
         {
             var ProviderId = GetPreferredModelProviderId();
             var draftBackendState = _modelProviderStates[ProviderId.Value];
@@ -344,10 +344,10 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             return;
         }
 
-        var tab = _threadSelection.EnsureThreadTab(thread);
+        var tab = _sessionSelection.EnsureSessionTab(session);
         if (!_modelProviderStates.TryGetValue(tab.ProviderId.Value, out var backendState))
         {
-            RefreshForThread(tab);
+            RefreshForSession(tab);
             return;
         }
 
@@ -361,7 +361,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         var selectedModel = ModelProviderPreferenceCoordinator.FindModel(backendState.Models, tab.ModelId);
         tab.ReasoningEffort = ModelProviderPresentation.ResolvePreferredReasoningEffort(selectedModel, preferredReasoningEffort: null);
         UpdateModelSelectorState(options, newIndex, selectedModel, tab.ReasoningEffort);
-        _preferences.RememberThreadPreference(tab.Thread.ThreadId, CreatePreference(new ModelProviderId(tab.ProviderId.Value), tab.ModelId, tab.ReasoningEffort), true);
+        _preferences.RememberSessionPreference(tab.SessionView.SessionId, CreatePreference(new ModelProviderId(tab.ProviderId.Value), tab.ModelId, tab.ReasoningEffort), true);
         _preferences.RememberGlobalPreference(CreatePreference(new ModelProviderId(tab.ProviderId.Value), tab.ModelId, tab.ReasoningEffort));
         _workspaceRefresh.ApplyHeaderProjection();
     }
@@ -373,8 +373,8 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             return;
         }
 
-        var thread = _threadSelection.GetSelectedThread();
-        if (thread is null)
+        var session = _sessionSelection.GetSelectedSession();
+        if (session is null)
         {
             var ProviderId = GetPreferredModelProviderId();
             var draftBackendState = _modelProviderStates[ProviderId.Value];
@@ -392,10 +392,10 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             return;
         }
 
-        var tab = _threadSelection.EnsureThreadTab(thread);
+        var tab = _sessionSelection.EnsureSessionTab(session);
         if (!_modelProviderStates.TryGetValue(tab.ProviderId.Value, out var backendState))
         {
-            RefreshForThread(tab);
+            RefreshForSession(tab);
             return;
         }
 
@@ -408,7 +408,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
 
         tab.ReasoningEffort = options[newIndex].Effort;
         UpdateReasoningSelectorState(options, newIndex);
-        _preferences.RememberThreadPreference(tab.Thread.ThreadId, CreatePreference(new ModelProviderId(tab.ProviderId.Value), tab.ModelId, tab.ReasoningEffort), true);
+        _preferences.RememberSessionPreference(tab.SessionView.SessionId, CreatePreference(new ModelProviderId(tab.ProviderId.Value), tab.ModelId, tab.ReasoningEffort), true);
         _preferences.RememberGlobalPreference(CreatePreference(new ModelProviderId(tab.ProviderId.Value), tab.ModelId, tab.ReasoningEffort));
     }
 
@@ -422,24 +422,24 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             return false;
         }
 
-        var thread = _threadSelection.GetSelectedThread();
-        if (thread is null)
+        var session = _sessionSelection.GetSelectedSession();
+        if (session is null)
         {
             SelectDraftProviderModel(providerId, backendState, modelId);
             return true;
         }
 
-        var tab = _threadSelection.EnsureThreadTab(thread);
+        var tab = _sessionSelection.EnsureSessionTab(session);
         if (!string.Equals(tab.ProviderId.Value, providerId.Value, StringComparison.OrdinalIgnoreCase))
         {
-            if (!_canSelectThreadProvider(thread, tab) ||
-                !await _trySwitchThreadProviderAsync(thread, tab, providerId))
+            if (!_canSelectSessionProvider(session, tab) ||
+                !await _trySwitchSessionProviderAsync(session, tab, providerId))
             {
-                RefreshForThread(tab);
+                RefreshForSession(tab);
                 return false;
             }
 
-            _refreshSelectionAndThreadWorkspace();
+            _refreshSelectionAndSessionWorkspace();
         }
 
         if (!_modelProviderStates.TryGetValue(tab.ProviderId.Value, out backendState))
@@ -447,7 +447,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             return false;
         }
 
-        SelectThreadProviderModel(tab, backendState, modelId);
+        SelectSessionProviderModel(tab, backendState, modelId);
         return true;
     }
 
@@ -463,14 +463,14 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         _workspaceRefresh.ApplySessionUsageProjection();
     }
 
-    private void SelectThreadProviderModel(OpenThreadState tab, ModelProviderState backendState, string modelId)
+    private void SelectSessionProviderModel(OpenSessionState tab, ModelProviderState backendState, string modelId)
     {
         tab.ModelId = modelId.Trim();
         var selectedModel = ModelProviderPreferenceCoordinator.FindModel(backendState.Models, tab.ModelId);
         tab.ReasoningEffort = ModelProviderPresentation.ResolvePreferredReasoningEffort(selectedModel, preferredReasoningEffort: null);
-        _preferences.RememberThreadPreference(tab.Thread.ThreadId, CreatePreference(new ModelProviderId(tab.ProviderId.Value), tab.ModelId, tab.ReasoningEffort), true);
+        _preferences.RememberSessionPreference(tab.SessionView.SessionId, CreatePreference(new ModelProviderId(tab.ProviderId.Value), tab.ModelId, tab.ReasoningEffort), true);
         _preferences.RememberGlobalPreference(CreatePreference(new ModelProviderId(tab.ProviderId.Value), tab.ModelId, tab.ReasoningEffort));
-        RefreshForThread(tab);
+        RefreshForSession(tab);
         _workspaceRefresh.ApplyHeaderProjection();
     }
 
@@ -541,25 +541,25 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         _promptComposerViewModel.CanCloseTab = projection.CanCloseTab;
         _promptComposerViewModel.CanClearQueue = projection.CanClearQueue;
         _promptComposerViewModel.CanAlwaysEnqueue = projection.CanAlwaysEnqueue;
-        UpdateThreadModelProviderSelectionAvailability();
+        UpdateSessionModelProviderSelectionAvailability();
     }
 
-    private void UpdateThreadModelProviderSelectionAvailability()
+    private void UpdateSessionModelProviderSelectionAvailability()
     {
-        if (_threadSelection.Selection.Target is not WorkspaceTarget.Thread)
+        if (_sessionSelection.Selection.Target is not WorkspaceTarget.Session)
         {
             return;
         }
 
-        var selectedThread = _threadSelection.GetSelectedThread();
-        if (selectedThread is null ||
-            _threadSelection.FindOpenThread(selectedThread.ThreadId) is not { } selectedTab)
+        var selectedSession = _sessionSelection.GetSelectedSession();
+        if (selectedSession is null ||
+            _sessionSelection.FindOpenSession(selectedSession.SessionId) is not { } selectedTab)
         {
             return;
         }
 
         _workspaceViewModel.CanSelectModelProvider = HasRegisteredProviderOption(_workspaceViewModel.ModelProviderOptions) &&
-            _canSelectThreadProvider(selectedThread, selectedTab);
+            _canSelectSessionProvider(selectedSession, selectedTab);
     }
 
     private IReadOnlyList<ModelProviderOption> GetCurrentModelProviderOptions()
@@ -567,8 +567,8 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             ? _workspaceViewModel.ModelProviderOptions
             : ModelProviderPresentation.BuildProviderOptions(_providerDescriptors);
 
-    private List<ModelProviderOption> BuildThreadProviderOptions(
-        OpenThreadState tab,
+    private List<ModelProviderOption> BuildSessionProviderOptions(
+        OpenSessionState tab,
         IReadOnlyList<ModelProviderOption> configuredBackendOptions)
     {
         ArgumentNullException.ThrowIfNull(tab);
@@ -580,11 +580,11 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
             return options;
         }
 
-        options.Insert(0, new ModelProviderOption(new ModelProviderId(tab.ProviderId.Value), BuildUnavailableThreadProviderLabel(tab.Thread, new ModelProviderId(tab.ProviderId.Value))));
+        options.Insert(0, new ModelProviderOption(new ModelProviderId(tab.ProviderId.Value), BuildUnavailableSessionProviderLabel(tab.SessionView, new ModelProviderId(tab.ProviderId.Value))));
         return options;
     }
 
-    private ModelProviderState GetThreadProviderState(OpenThreadState tab, out bool isRegistered)
+    private ModelProviderState GetSessionProviderState(OpenSessionState tab, out bool isRegistered)
     {
         ArgumentNullException.ThrowIfNull(tab);
         if (_modelProviderStates.TryGetValue(tab.ProviderId.Value, out var backendState))
@@ -594,7 +594,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         }
 
         isRegistered = false;
-        return new ModelProviderState(new ModelProviderId(tab.ProviderId.Value), BuildUnavailableThreadProviderLabel(tab.Thread, new ModelProviderId(tab.ProviderId.Value)))
+        return new ModelProviderState(new ModelProviderId(tab.ProviderId.Value), BuildUnavailableSessionProviderLabel(tab.SessionView, new ModelProviderId(tab.ProviderId.Value)))
         {
             Availability = ModelProviderAvailability.Unsupported,
             SelectedModelId = tab.ModelId,
@@ -701,12 +701,12 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
 
     private PromptComposerProjection BuildPromptComposerProjection()
     {
-        var selection = _threadSelection.Selection;
-        var selectedThread = selection.Target is WorkspaceTarget.Thread ? _threadSelection.GetSelectedThread() : null;
-        var providerId = selectedThread is not null ? new ModelProviderId(selectedThread.ProviderId) : GetPreferredModelProviderId();
-        if (!_modelProviderStates.TryGetValue(providerId.Value, out var backendState) && selectedThread is not null)
+        var selection = _sessionSelection.Selection;
+        var selectedSession = selection.Target is WorkspaceTarget.Session ? _sessionSelection.GetSelectedSession() : null;
+        var providerId = selectedSession is not null ? new ModelProviderId(selectedSession.ProviderId) : GetPreferredModelProviderId();
+        if (!_modelProviderStates.TryGetValue(providerId.Value, out var backendState) && selectedSession is not null)
         {
-            backendState = new ModelProviderState(providerId, BuildUnavailableThreadProviderLabel(selectedThread, providerId))
+            backendState = new ModelProviderState(providerId, BuildUnavailableSessionProviderLabel(selectedSession, providerId))
             {
                 Availability = ModelProviderAvailability.Unsupported,
             };
@@ -719,25 +719,25 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         }
 
         return PromptComposerProjectionBuilder.Build(
-            selectedThread,
-            _threadSelection.GetSelectedProject(),
+            selectedSession,
+            _sessionSelection.GetSelectedProject(),
             selection.Target is WorkspaceTarget.Draft { IsGlobal: true },
             backendState.DisplayName,
             backendState.Availability,
             HasAnyReadyModelProvider(),
-            _threadSelection.HasOpenDraftTab(),
-            _threadSelection.OpenThreadIds.Count + (_threadSelection.HasOpenDraftTab() ? 1 : 0),
-            selectedThread?.ThreadId,
-            selectedThread is not null &&
-            _threadSelection.FindOpenThread(selectedThread.ThreadId) is { } selectedTab &&
+            _sessionSelection.HasOpenDraftTab(),
+            _sessionSelection.OpenSessionIds.Count + (_sessionSelection.HasOpenDraftTab() ? 1 : 0),
+            selectedSession?.SessionId,
+            selectedSession is not null &&
+            _sessionSelection.FindOpenSession(selectedSession.SessionId) is { } selectedTab &&
             selectedTab.QueuedPrompts.Count > 0,
-            selectedThread is not null,
-            selectedThread is not null &&
-            _threadSelection.FindOpenThread(selectedThread.ThreadId) is { } selectedThreadTab &&
-            selectedThread.StartedAt is not null &&
-            !selectedThreadTab.StatusBusy,
-            selectedThread is not null &&
-            _threadSelection.FindOpenThread(selectedThread.ThreadId) is { } selectedAbortTab &&
+            selectedSession is not null,
+            selectedSession is not null &&
+            _sessionSelection.FindOpenSession(selectedSession.SessionId) is { } selectedSessionTab &&
+            selectedSession.StartedAt is not null &&
+            !selectedSessionTab.StatusBusy,
+            selectedSession is not null &&
+            _sessionSelection.FindOpenSession(selectedSession.SessionId) is { } selectedAbortTab &&
             selectedAbortTab.StatusBusy,
             _getPromptPlaceholderContributions());
     }
@@ -753,12 +753,12 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         AgentReasoningEffort? reasoningEffort)
         => new(modelProviderId, modelId, reasoningEffort);
 
-    private static string BuildUnavailableThreadProviderLabel(SessionViewDescriptor thread, ModelProviderId providerId)
+    private static string BuildUnavailableSessionProviderLabel(SessionViewDescriptor session, ModelProviderId providerId)
     {
-        ArgumentNullException.ThrowIfNull(thread);
-        var providerKey = string.IsNullOrWhiteSpace(thread.ResolvedProviderKey)
+        ArgumentNullException.ThrowIfNull(session);
+        var providerKey = string.IsNullOrWhiteSpace(session.ResolvedProviderKey)
             ? providerId.Value
-            : thread.ResolvedProviderKey.Trim();
+            : session.ResolvedProviderKey.Trim();
         return $"{providerKey} (not configured)";
     }
 
@@ -769,7 +769,7 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var projectRoot = _threadSelection.GetSelectedProject()?.ProjectPath;
+        var projectRoot = _sessionSelection.GetSelectedProject()?.ProjectPath;
         var configuredProviderKey = _getEffectiveDefaultProviderKey(projectRoot);
         if (string.IsNullOrWhiteSpace(configuredProviderKey))
         {
@@ -785,5 +785,5 @@ internal sealed class ModelProviderSelectorCoordinator : IPromptAvailabilityProj
         => _draftProviderIdsByScope[GetCurrentDraftScopeKey()] = providerId;
 
     private string GetCurrentDraftScopeKey()
-        => _threadSelection.GetSelectedProject()?.ProjectPath ?? "__global__";
+        => _sessionSelection.GetSelectedProject()?.ProjectPath ?? "__global__";
 }

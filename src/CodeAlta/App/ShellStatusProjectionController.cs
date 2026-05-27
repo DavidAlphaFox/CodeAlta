@@ -11,23 +11,23 @@ namespace CodeAlta.App;
 internal sealed class ShellStatusProjectionController
 {
     private readonly CodeAltaShellViewModel _shellViewModel;
-    private readonly ThreadSelectionContext _threadSelection;
+    private readonly SessionSelectionContext _sessionSelection;
     private readonly ShellWorkspaceContext _workspaceContext;
     private readonly IntState _viewRefreshState;
 
     public ShellStatusProjectionController(
         CodeAltaShellViewModel shellViewModel,
-        ThreadSelectionContext threadSelection,
+        SessionSelectionContext sessionSelection,
         ShellWorkspaceContext workspaceContext,
         IntState viewRefreshState)
     {
         ArgumentNullException.ThrowIfNull(shellViewModel);
-        ArgumentNullException.ThrowIfNull(threadSelection);
+        ArgumentNullException.ThrowIfNull(sessionSelection);
         ArgumentNullException.ThrowIfNull(workspaceContext);
         ArgumentNullException.ThrowIfNull(viewRefreshState);
 
         _shellViewModel = shellViewModel;
-        _threadSelection = threadSelection;
+        _sessionSelection = sessionSelection;
         _workspaceContext = workspaceContext;
         _viewRefreshState = viewRefreshState;
     }
@@ -61,8 +61,8 @@ internal sealed class ShellStatusProjectionController
             });
     }
 
-    public void SetThreadStatus(
-        OpenThreadState tab,
+    public void SetSessionStatus(
+        OpenSessionState tab,
         string message,
         bool showSpinner = false,
         StatusTone tone = StatusTone.Info,
@@ -86,7 +86,7 @@ internal sealed class ShellStatusProjectionController
                 tab.StatusTone = tone;
                 tab.HasCustomStatus = hasCustomStatus;
 
-                if (_threadSelection.IsSelectedThread(tab.Thread.ThreadId))
+                if (_sessionSelection.IsSelectedSession(tab.SessionView.SessionId))
                 {
                     _workspaceContext.ApplyPromptAvailabilityProjection();
                     SetReadyStatusForCurrentSelection();
@@ -100,12 +100,12 @@ internal sealed class ShellStatusProjectionController
             });
     }
 
-    public void ClearThreadStatus(OpenThreadState tab)
+    public void ClearSessionStatus(OpenSessionState tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        SetThreadStatus(
+        SetSessionStatus(
             tab,
-            ShellTextFormatter.BuildReadyStatusText(tab.Thread, _threadSelection.GetSelectedProject(), globalScopeSelected: false),
+            ShellTextFormatter.BuildReadyStatusText(tab.SessionView, _sessionSelection.GetSelectedProject(), globalScopeSelected: false),
             tone: StatusTone.Ready,
             hasCustomStatus: false);
     }
@@ -116,13 +116,13 @@ internal sealed class ShellStatusProjectionController
             () =>
             {
                 _workspaceContext.VerifyBindableAccess();
-                var selectedThread = _threadSelection.GetSelectedThread();
-                if (selectedThread is null)
+                var selectedSession = _sessionSelection.GetSelectedSession();
+                if (selectedSession is null)
                 {
                     return;
                 }
 
-                var selectedTab = _threadSelection.EnsureThreadTab(selectedThread);
+                var selectedTab = _sessionSelection.EnsureSessionTab(selectedSession);
                 if (!selectedTab.HasCustomStatus ||
                     !selectedTab.StatusBusy ||
                     selectedTab.ActiveRunStartedAt is not { } startedAt ||
@@ -155,16 +155,16 @@ internal sealed class ShellStatusProjectionController
 
     public void SetReadyStatusForCurrentSelection()
     {
-        var selection = _threadSelection.Selection;
-        var selectedThread = selection.Target is WorkspaceTarget.Thread ? _threadSelection.GetSelectedThread() : null;
+        var selection = _sessionSelection.Selection;
+        var selectedSession = selection.Target is WorkspaceTarget.Session ? _sessionSelection.GetSelectedSession() : null;
         var readyMessage = ShellTextFormatter.BuildReadyStatusText(
-            selectedThread,
-            _threadSelection.GetSelectedProject(),
+            selectedSession,
+            _sessionSelection.GetSelectedProject(),
             selection.Target is WorkspaceTarget.Draft { IsGlobal: true });
         var promptUnavailable = _workspaceContext.GetPromptUnavailableStatus();
-        if (selectedThread is not null)
+        if (selectedSession is not null)
         {
-            var selectedTab = _threadSelection.EnsureThreadTab(selectedThread);
+            var selectedTab = _sessionSelection.EnsureSessionTab(selectedSession);
             var snapshot = SelectionStatusResolver.Resolve(
                 readyMessage,
                 selectedTab.HasCustomStatus,

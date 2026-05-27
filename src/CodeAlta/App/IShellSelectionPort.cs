@@ -6,7 +6,7 @@ namespace CodeAlta.App;
 internal sealed record ShellSelectionSnapshot(
     ShellSelection Selection,
     ProjectDescriptor? SelectedProject,
-    SessionViewDescriptor? SelectedThread,
+    SessionViewDescriptor? SelectedSession,
     PromptSessionBinding? PromptSession);
 
 internal interface IShellSelectionPort
@@ -15,11 +15,11 @@ internal interface IShellSelectionPort
 
     Task SelectAsync(ShellSelection selection, CancellationToken cancellationToken = default);
 
-    bool IsSelectedThread(string threadId);
+    bool IsSelectedSession(string sessionId);
 
     ProjectDescriptor? GetSelectedProject();
 
-    SessionViewDescriptor? GetSelectedThread();
+    SessionViewDescriptor? GetSelectedSession();
 
     PromptSessionBinding? GetSelectedPromptSession();
 }
@@ -28,51 +28,51 @@ internal sealed class DelegatingShellSelectionPort : IShellSelectionPort
 {
     private readonly Func<ShellSelection> _getSelection;
     private readonly Func<ProjectDescriptor?> _getSelectedProject;
-    private readonly Func<SessionViewDescriptor?> _getSelectedThread;
+    private readonly Func<SessionViewDescriptor?> _getSelectedSession;
     private readonly Func<PromptSessionBinding?> _getSelectedPromptSession;
     private readonly Func<ShellSelection, CancellationToken, Task> _selectAsync;
-    private readonly Func<string, bool> _isSelectedThread;
+    private readonly Func<string, bool> _isSelectedSession;
 
     public DelegatingShellSelectionPort(
         Func<ShellSelection> getSelection,
         Func<ProjectDescriptor?> getSelectedProject,
-        Func<SessionViewDescriptor?> getSelectedThread,
+        Func<SessionViewDescriptor?> getSelectedSession,
         Func<PromptSessionBinding?> getSelectedPromptSession,
         Func<ShellSelection, CancellationToken, Task> selectAsync,
-        Func<string, bool> isSelectedThread)
+        Func<string, bool> isSelectedSession)
     {
         ArgumentNullException.ThrowIfNull(getSelection);
         ArgumentNullException.ThrowIfNull(getSelectedProject);
-        ArgumentNullException.ThrowIfNull(getSelectedThread);
+        ArgumentNullException.ThrowIfNull(getSelectedSession);
         ArgumentNullException.ThrowIfNull(getSelectedPromptSession);
         ArgumentNullException.ThrowIfNull(selectAsync);
-        ArgumentNullException.ThrowIfNull(isSelectedThread);
+        ArgumentNullException.ThrowIfNull(isSelectedSession);
 
         _getSelection = getSelection;
         _getSelectedProject = getSelectedProject;
-        _getSelectedThread = getSelectedThread;
+        _getSelectedSession = getSelectedSession;
         _getSelectedPromptSession = getSelectedPromptSession;
         _selectAsync = selectAsync;
-        _isSelectedThread = isSelectedThread;
+        _isSelectedSession = isSelectedSession;
     }
 
     public ShellSelectionSnapshot GetSnapshot()
-        => new(_getSelection(), _getSelectedProject(), _getSelectedThread(), _getSelectedPromptSession());
+        => new(_getSelection(), _getSelectedProject(), _getSelectedSession(), _getSelectedPromptSession());
 
     public Task SelectAsync(ShellSelection selection, CancellationToken cancellationToken = default)
         => _selectAsync(selection, cancellationToken);
 
-    public bool IsSelectedThread(string threadId)
+    public bool IsSelectedSession(string sessionId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
-        return _isSelectedThread(threadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        return _isSelectedSession(sessionId);
     }
 
     public ProjectDescriptor? GetSelectedProject()
         => _getSelectedProject();
 
-    public SessionViewDescriptor? GetSelectedThread()
-        => _getSelectedThread();
+    public SessionViewDescriptor? GetSelectedSession()
+        => _getSelectedSession();
 
     public PromptSessionBinding? GetSelectedPromptSession()
         => _getSelectedPromptSession();

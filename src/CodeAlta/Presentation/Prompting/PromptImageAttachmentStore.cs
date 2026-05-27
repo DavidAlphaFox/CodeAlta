@@ -15,18 +15,18 @@ internal sealed class PromptImageAttachmentStore
     }
 
     public async Task<IReadOnlyList<PromptImageAttachmentReference>> SaveAsync(
-        SessionViewDescriptor thread,
+        SessionViewDescriptor session,
         IReadOnlyList<PromptImageAttachment> images,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(images);
         if (images.Count == 0)
         {
             return [];
         }
 
-        var directory = GetAttachmentDirectory(thread);
+        var directory = GetAttachmentDirectory(session);
         Directory.CreateDirectory(directory);
 
         var references = new List<PromptImageAttachmentReference>(images.Count);
@@ -43,13 +43,13 @@ internal sealed class PromptImageAttachmentStore
         return references;
     }
 
-    internal string GetAttachmentDirectory(SessionViewDescriptor thread)
+    internal string GetAttachmentDirectory(SessionViewDescriptor session)
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
 
-        var createdAt = thread.CreatedAt == default ? DateTimeOffset.UtcNow : thread.CreatedAt;
-        var sessionSegment = !string.IsNullOrWhiteSpace(thread.ThreadId)
-            ? thread.ThreadId
+        var createdAt = session.CreatedAt == default ? DateTimeOffset.UtcNow : session.CreatedAt;
+        var sessionSegment = !string.IsNullOrWhiteSpace(session.SessionId)
+            ? session.SessionId
             : Guid.CreateVersion7().ToString("N");
 
         return Path.Combine(

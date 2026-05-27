@@ -46,7 +46,7 @@ public sealed class ProjectFileSearchServiceTests
         await usageStore.RecordAsync(
             new ProjectFileUsageEvent(
                 temp.Path,
-                "src/CodeAlta/ThreadPromptDispatchCoordinator.cs",
+                "src/CodeAlta/SessionPromptDispatchCoordinator.cs",
                 ProjectFileSearchItemKind.File,
                 DateTimeOffset.UtcNow,
                 ProjectFileUsageAccessKind.PromptInserted)).ConfigureAwait(false);
@@ -66,7 +66,7 @@ public sealed class ProjectFileSearchServiceTests
             }).ConfigureAwait(false);
 
         Assert.IsTrue(session.Current.IsRefreshing);
-        Assert.AreEqual("src/CodeAlta/ThreadPromptDispatchCoordinator.cs", session.Current.Results[0].Item.RelativePath);
+        Assert.AreEqual("src/CodeAlta/SessionPromptDispatchCoordinator.cs", session.Current.Results[0].Item.RelativePath);
     }
 
     [TestMethod]

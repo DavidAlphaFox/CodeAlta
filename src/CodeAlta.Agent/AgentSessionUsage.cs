@@ -140,9 +140,9 @@ public enum AgentUsageScope
     LastOperation,
 
     /// <summary>
-    /// The snapshot represents cumulative thread totals.
+    /// The snapshot represents cumulative session totals.
     /// </summary>
-    ThreadTotal,
+    SessionTotal,
 
     /// <summary>
     /// The snapshot represents compaction.
@@ -196,9 +196,9 @@ public enum AgentUsageSource
     CopilotTruncation,
 
     /// <summary>
-    /// Codex thread token usage updates.
+    /// Codex session token usage updates.
     /// </summary>
-    CodexThreadTokenUsageUpdated,
+    CodexSessionTokenUsageUpdated,
 
     /// <summary>
     /// Codex token-count events.
@@ -233,7 +233,7 @@ public abstract record AgentSessionUsageDetails;
 /// Codex-specific usage details.
 /// </summary>
 /// <param name="LastTurnUsage">Token usage for the most recent turn when available.</param>
-/// <param name="TotalUsage">Cumulative thread token usage when available.</param>
+/// <param name="TotalUsage">Cumulative session token usage when available.</param>
 /// <param name="ModelContextWindow">The model context-window size reported by Codex when available.</param>
 /// <param name="RateLimits">The latest Codex account rate-limit snapshot when available.</param>
 public sealed record CodexSessionUsageDetails(

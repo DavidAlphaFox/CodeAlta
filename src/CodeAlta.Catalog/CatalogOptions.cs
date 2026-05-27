@@ -57,7 +57,7 @@ public sealed class CatalogOptions
     public string PromptDraftsRoot => Path.Combine(GlobalRoot, "saved_prompts");
 
     /// <summary>
-    /// Gets the thread view state path.
+    /// Gets the session view state path.
     /// </summary>
     public string UiStatePath => Path.Combine(GlobalRoot, "ui-state.yaml");
 
@@ -68,7 +68,8 @@ public sealed class CatalogOptions
     public string MachineRoot => CacheRoot;
 
     /// <summary>
-    /// Gets the internal thread linkage root path under the global catalog.
+    /// Gets the internal session linkage root path under the global catalog.
     /// </summary>
-    public string InternalThreadsRoot => Path.Combine(GlobalRoot, "threads", "internal");
+    // Compatibility: keep the persisted legacy threads/internal directory loadable.
+    public string InternalSessionsRoot => Path.Combine(GlobalRoot, "threads", "internal");
 }

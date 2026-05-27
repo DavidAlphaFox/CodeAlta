@@ -1,0 +1,183 @@
+using CodeAlta.Agent;
+using CodeAlta.App;
+using CodeAlta.App.Context;
+using CodeAlta.App.State;
+using CodeAlta.Catalog;
+using CodeAlta.Models;
+using CodeAlta.Presentation.Prompting;
+using CodeAlta.Presentation.Timeline;
+using CodeAlta.Threading;
+using CodeAlta.ViewModels;
+
+namespace CodeAlta.Tests;
+
+[TestClass]
+public sealed class SessionPromptQueueCoordinatorTests
+{
+    [TestMethod]
+    public async Task DrainNextQueuedPromptAsync_RemovesPromptBeforeDispatchCompletes()
+    {
+        using var temp = TempDirectory.Create();
+        var tab = CreateOpenSessionState();
+        var dispatchStarted = new TaskCompletionSource<PromptSubmission>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondDispatchStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDispatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dispatchCount = 0;
+        var coordinator = CreateCoordinator(
+            temp.Path,
+            async (_, prompt, _) =>
+            {
+                var count = Interlocked.Increment(ref dispatchCount);
+                if (count == 1)
+                {
+                    dispatchStarted.SetResult(prompt.Copy());
+                }
+                else
+                {
+                    secondDispatchStarted.SetResult();
+                }
+
+                await releaseDispatch.Task.ConfigureAwait(false);
+            });
+        coordinator.EnqueuePrompt(tab, "queued once");
+
+        var firstDrain = coordinator.DrainNextQueuedPromptAsync(tab);
+        var dispatchedPrompt = await dispatchStarted.Task.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+        var secondDrain = coordinator.DrainNextQueuedPromptAsync(tab);
+        var secondDispatchResult = await Task.WhenAny(secondDispatchStarted.Task, Task.Delay(TimeSpan.FromMilliseconds(100))).ConfigureAwait(false);
+
+        Assert.AreEqual("queued once", dispatchedPrompt.Text);
+        Assert.AreEqual(0, tab.QueuedPrompts.Count);
+        Assert.AreEqual(1, dispatchCount);
+        Assert.AreNotSame(secondDispatchStarted.Task, secondDispatchResult);
+
+        releaseDispatch.SetResult();
+        await Task.WhenAll(firstDrain, secondDrain).WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+        Assert.AreEqual(0, tab.QueuedPrompts.Count);
+        Assert.AreEqual(1, dispatchCount);
+    }
+
+    [TestMethod]
+    public async Task DrainNextQueuedPromptAsync_RestoresPromptWhenDispatchThrows()
+    {
+        using var temp = TempDirectory.Create();
+        var tab = CreateOpenSessionState();
+        var coordinator = CreateCoordinator(
+            temp.Path,
+            static (_, _, _) => throw new InvalidOperationException("dispatch failed"));
+        coordinator.EnqueuePrompt(tab, "retry me");
+
+        await coordinator.DrainNextQueuedPromptAsync(tab).WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+
+        Assert.AreEqual(1, tab.QueuedPrompts.Count);
+        Assert.AreEqual("retry me", tab.QueuedPrompts[0].Text);
+    }
+
+    private static SessionPromptQueueCoordinator CreateCoordinator(
+        string rootPath,
+        Func<OpenSessionState, PromptSubmission, CancellationToken, Task> dispatchQueuedPromptAsync)
+    {
+        var sessionSelection = CreateSessionSelectionContext(rootPath);
+        return new SessionPromptQueueCoordinator(
+            new SessionWorkspaceViewModel(),
+            sessionSelection,
+            static action => action(),
+            static () => { },
+            dispatchQueuedPromptAsync,
+            static (_, _, _) => Task.CompletedTask);
+    }
+
+    private static SessionSelectionContext CreateSessionSelectionContext(string rootPath)
+    {
+        var catalogOptions = new CatalogOptions { GlobalRoot = rootPath };
+        var sessionState = TestSessionStateServices.CreateCoordinator(
+            new ProjectCatalog(catalogOptions),
+            new SessionViewCatalog(catalogOptions),
+            new InlineUiDispatcher(),
+            new ShellStateStore(new InlineUiDispatcher()));
+        sessionState.ViewState = new SessionViewViewState();
+
+        return new SessionSelectionContext(
+            sessionState,
+            static (_, _) => Task.CompletedTask,
+            static _ => false);
+    }
+
+    private static OpenSessionState CreateOpenSessionState()
+    {
+        var session = new SessionViewDescriptor
+        {
+            SessionId = "session-1",
+            Kind = SessionViewKind.ProjectSession,
+            ProviderId = ModelProviderIds.Codex.Value,
+            ProjectRef = "project-1",
+            WorkingDirectory = @"C:\code\CodeAlta",
+            Title = "Review startup",
+            Status = SessionViewStatus.Active,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            LastActiveAt = DateTimeOffset.UtcNow,
+        };
+
+        var timeline = new SessionTimelinePresenter(new InlineUiDispatcher(), static () => null);
+        return new OpenSessionState(session, timeline);
+    }
+
+    private sealed class InlineUiDispatcher : IUiDispatcher
+    {
+        public bool CheckAccess()
+            => true;
+
+        public void Post(Action action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            action();
+        }
+
+        public Task InvokeAsync(Action action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            action();
+            return Task.CompletedTask;
+        }
+
+        public Task<T> InvokeAsync<T>(Func<T> action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            return Task.FromResult(action());
+        }
+    }
+
+    private sealed class TempDirectory : IDisposable
+    {
+        private TempDirectory(string path)
+        {
+            Path = path;
+        }
+
+        public string Path { get; }
+
+        public static TempDirectory Create()
+        {
+            var path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"CodeAlta.Tests.{Guid.NewGuid():N}");
+            Directory.CreateDirectory(path);
+            return new TempDirectory(path);
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                if (Directory.Exists(Path))
+                {
+                    Directory.Delete(Path, recursive: true);
+                }
+            }
+            catch
+            {
+            }
+        }
+    }
+}

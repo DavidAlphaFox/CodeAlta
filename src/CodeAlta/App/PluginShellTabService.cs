@@ -11,7 +11,7 @@ internal sealed record PluginShellTabRequest
 
     public ProjectId? ProjectId { get; init; }
 
-    public string? ThreadId { get; init; }
+    public string? SessionId { get; init; }
 
     public required Visual Header { get; init; }
 
@@ -60,7 +60,7 @@ internal sealed class PluginShellTabService : IPluginShellTabService
         {
             TabId = tabId,
             Kind = ShellTabKind.Plugin,
-            Association = new ShellTabAssociation.Plugin(request.PluginId, request.SurfaceKey, request.ProjectId, request.ThreadId),
+            Association = new ShellTabAssociation.Plugin(request.PluginId, request.SurfaceKey, request.ProjectId, request.SessionId),
             Header = request.Header,
             Content = request.Content,
             ViewModel = request.ViewModel,

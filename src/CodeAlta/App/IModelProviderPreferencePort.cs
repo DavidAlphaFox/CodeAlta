@@ -23,15 +23,15 @@ internal interface IModelProviderPreferencePort
 
     void ApplyDraftPreference(PromptSessionBinding promptSession, ModelProviderPreference preference);
 
-    void ApplyThreadPreference(string threadId, ModelProviderPreference preference);
+    void ApplySessionPreference(string sessionId, ModelProviderPreference preference);
 
     void RememberProjectPreference(ProjectId projectId, ModelProviderPreference preference);
 
-    void RememberThreadPreference(string threadId, ModelProviderPreference preference, bool persistNow);
+    void RememberSessionPreference(string sessionId, ModelProviderPreference preference, bool persistNow);
 
     void ApplyDraftModelProviderState(ModelProviderState modelProviderState);
 
-    void ApplyThreadModelProviderState(OpenThreadState threadState);
+    void ApplySessionModelProviderState(OpenSessionState sessionState);
 
     void RememberGlobalPreference(ModelProviderPreference preference);
 }
@@ -41,39 +41,39 @@ internal sealed class DelegatingModelProviderPreferencePort : IModelProviderPref
     private readonly Func<ProjectId, ModelProviderId> _getPreferredModelProviderId;
     private readonly Func<ModelProviderId, bool> _isModelProviderReady;
     private readonly Action<PromptSessionBinding, ModelProviderPreference> _applyDraftPreference;
-    private readonly Action<string, ModelProviderPreference> _applyThreadPreference;
+    private readonly Action<string, ModelProviderPreference> _applySessionPreference;
     private readonly Action<ProjectId, ModelProviderPreference> _rememberProjectPreference;
-    private readonly Action<string, ModelProviderPreference, bool> _rememberThreadPreference;
+    private readonly Action<string, ModelProviderPreference, bool> _rememberSessionPreference;
     private readonly Action<ModelProviderState> _applyDraftModelProviderState;
-    private readonly Action<OpenThreadState> _applyThreadModelProviderState;
+    private readonly Action<OpenSessionState> _applySessionModelProviderState;
     private readonly Action<ModelProviderPreference> _rememberGlobalPreference;
 
     public DelegatingModelProviderPreferencePort(
         Func<ProjectId, ModelProviderId> getPreferredModelProviderId,
         Func<ModelProviderId, bool> isModelProviderReady,
         Action<PromptSessionBinding, ModelProviderPreference> applyDraftPreference,
-        Action<string, ModelProviderPreference> applyThreadPreference,
+        Action<string, ModelProviderPreference> applySessionPreference,
         Action<ProjectId, ModelProviderPreference> rememberProjectPreference,
-        Action<string, ModelProviderPreference, bool> rememberThreadPreference,
+        Action<string, ModelProviderPreference, bool> rememberSessionPreference,
         Action<ModelProviderState>? applyDraftModelProviderState = null,
-        Action<OpenThreadState>? applyThreadModelProviderState = null,
+        Action<OpenSessionState>? applySessionModelProviderState = null,
         Action<ModelProviderPreference>? rememberGlobalPreference = null)
     {
         ArgumentNullException.ThrowIfNull(getPreferredModelProviderId);
         ArgumentNullException.ThrowIfNull(isModelProviderReady);
         ArgumentNullException.ThrowIfNull(applyDraftPreference);
-        ArgumentNullException.ThrowIfNull(applyThreadPreference);
+        ArgumentNullException.ThrowIfNull(applySessionPreference);
         ArgumentNullException.ThrowIfNull(rememberProjectPreference);
-        ArgumentNullException.ThrowIfNull(rememberThreadPreference);
+        ArgumentNullException.ThrowIfNull(rememberSessionPreference);
 
         _getPreferredModelProviderId = getPreferredModelProviderId;
         _isModelProviderReady = isModelProviderReady;
         _applyDraftPreference = applyDraftPreference;
-        _applyThreadPreference = applyThreadPreference;
+        _applySessionPreference = applySessionPreference;
         _rememberProjectPreference = rememberProjectPreference;
-        _rememberThreadPreference = rememberThreadPreference;
+        _rememberSessionPreference = rememberSessionPreference;
         _applyDraftModelProviderState = applyDraftModelProviderState ?? (static _ => { });
-        _applyThreadModelProviderState = applyThreadModelProviderState ?? (static _ => { });
+        _applySessionModelProviderState = applySessionModelProviderState ?? (static _ => { });
         _rememberGlobalPreference = rememberGlobalPreference ?? (static _ => { });
     }
 
@@ -100,11 +100,11 @@ internal sealed class DelegatingModelProviderPreferencePort : IModelProviderPref
         _applyDraftPreference(promptSession, preference.Normalize());
     }
 
-    public void ApplyThreadPreference(string threadId, ModelProviderPreference preference)
+    public void ApplySessionPreference(string sessionId, ModelProviderPreference preference)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
         EnsurePreference(preference);
-        _applyThreadPreference(threadId, preference.Normalize());
+        _applySessionPreference(sessionId, preference.Normalize());
     }
 
     public void RememberProjectPreference(ProjectId projectId, ModelProviderPreference preference)
@@ -118,11 +118,11 @@ internal sealed class DelegatingModelProviderPreferencePort : IModelProviderPref
         _rememberProjectPreference(projectId, preference.Normalize());
     }
 
-    public void RememberThreadPreference(string threadId, ModelProviderPreference preference, bool persistNow)
+    public void RememberSessionPreference(string sessionId, ModelProviderPreference preference, bool persistNow)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
         EnsurePreference(preference);
-        _rememberThreadPreference(threadId, preference.Normalize(), persistNow);
+        _rememberSessionPreference(sessionId, preference.Normalize(), persistNow);
     }
 
     public void ApplyDraftModelProviderState(ModelProviderState modelProviderState)
@@ -131,10 +131,10 @@ internal sealed class DelegatingModelProviderPreferencePort : IModelProviderPref
         _applyDraftModelProviderState(modelProviderState);
     }
 
-    public void ApplyThreadModelProviderState(OpenThreadState threadState)
+    public void ApplySessionModelProviderState(OpenSessionState sessionState)
     {
-        ArgumentNullException.ThrowIfNull(threadState);
-        _applyThreadModelProviderState(threadState);
+        ArgumentNullException.ThrowIfNull(sessionState);
+        _applySessionModelProviderState(sessionState);
     }
 
     public void RememberGlobalPreference(ModelProviderPreference preference)
@@ -161,25 +161,25 @@ internal sealed class DelegatingModelProviderPreferencePort : IModelProviderPref
 internal sealed class FrontendModelProviderPreferencePort : IModelProviderPreferencePort
 {
     private readonly Action<ModelProviderState> _applyDraftModelProviderState;
-    private readonly Action<OpenThreadState> _applyThreadModelProviderState;
+    private readonly Action<OpenSessionState> _applySessionModelProviderState;
     private readonly Action<ModelProviderId, string?, AgentReasoningEffort?> _rememberGlobalPreference;
-    private readonly Action<string, string?, AgentReasoningEffort?, bool> _rememberThreadPreference;
+    private readonly Action<string, string?, AgentReasoningEffort?, bool> _rememberSessionPreference;
 
     public FrontendModelProviderPreferencePort(
         Action<ModelProviderState> applyDraftModelProviderState,
-        Action<OpenThreadState> applyThreadModelProviderState,
+        Action<OpenSessionState> applySessionModelProviderState,
         Action<ModelProviderId, string?, AgentReasoningEffort?> rememberGlobalPreference,
-        Action<string, string?, AgentReasoningEffort?, bool> rememberThreadPreference)
+        Action<string, string?, AgentReasoningEffort?, bool> rememberSessionPreference)
     {
         ArgumentNullException.ThrowIfNull(applyDraftModelProviderState);
-        ArgumentNullException.ThrowIfNull(applyThreadModelProviderState);
+        ArgumentNullException.ThrowIfNull(applySessionModelProviderState);
         ArgumentNullException.ThrowIfNull(rememberGlobalPreference);
-        ArgumentNullException.ThrowIfNull(rememberThreadPreference);
+        ArgumentNullException.ThrowIfNull(rememberSessionPreference);
 
         _applyDraftModelProviderState = applyDraftModelProviderState;
-        _applyThreadModelProviderState = applyThreadModelProviderState;
+        _applySessionModelProviderState = applySessionModelProviderState;
         _rememberGlobalPreference = rememberGlobalPreference;
-        _rememberThreadPreference = rememberThreadPreference;
+        _rememberSessionPreference = rememberSessionPreference;
     }
 
     public ModelProviderId GetPreferredModelProviderId(ProjectId projectId)
@@ -191,18 +191,18 @@ internal sealed class FrontendModelProviderPreferencePort : IModelProviderPrefer
     public void ApplyDraftPreference(PromptSessionBinding promptSession, ModelProviderPreference preference)
         => ApplyDraftModelProviderState(CreateLegacyModelProviderState(preference));
 
-    public void ApplyThreadPreference(string threadId, ModelProviderPreference preference)
+    public void ApplySessionPreference(string sessionId, ModelProviderPreference preference)
         => throw new NotSupportedException("Applying session preference still requires the open session projection during frontend migration.");
 
     public void RememberProjectPreference(ProjectId projectId, ModelProviderPreference preference)
         => RememberGlobalPreference(preference);
 
-    public void RememberThreadPreference(string threadId, ModelProviderPreference preference, bool persistNow)
+    public void RememberSessionPreference(string sessionId, ModelProviderPreference preference, bool persistNow)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
         EnsurePreference(preference);
         var normalized = preference.Normalize();
-        _rememberThreadPreference(threadId, normalized.ModelId, normalized.ReasoningEffort, persistNow);
+        _rememberSessionPreference(sessionId, normalized.ModelId, normalized.ReasoningEffort, persistNow);
     }
 
     public void ApplyDraftModelProviderState(ModelProviderState modelProviderState)
@@ -211,10 +211,10 @@ internal sealed class FrontendModelProviderPreferencePort : IModelProviderPrefer
         _applyDraftModelProviderState(modelProviderState);
     }
 
-    public void ApplyThreadModelProviderState(OpenThreadState threadState)
+    public void ApplySessionModelProviderState(OpenSessionState sessionState)
     {
-        ArgumentNullException.ThrowIfNull(threadState);
-        _applyThreadModelProviderState(threadState);
+        ArgumentNullException.ThrowIfNull(sessionState);
+        _applySessionModelProviderState(sessionState);
     }
 
     public void RememberGlobalPreference(ModelProviderPreference preference)

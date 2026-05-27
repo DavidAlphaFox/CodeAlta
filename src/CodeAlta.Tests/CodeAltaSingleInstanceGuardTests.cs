@@ -81,7 +81,7 @@ public sealed class CodeAltaSingleInstanceGuardTests
     }
 
     [TestMethod]
-    public async Task Dispose_CanRunOnDifferentThreadThanAcquire()
+    public async Task Dispose_CanRunOnDifferentSessionThanAcquire()
     {
         var directory = CreateTemporaryDirectory();
         try

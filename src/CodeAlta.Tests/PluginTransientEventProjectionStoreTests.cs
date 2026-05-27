@@ -11,12 +11,12 @@ public sealed class PluginTransientEventProjectionStoreTests
     {
         var store = new PluginTransientEventProjectionStore();
 
-        var changed = store.Apply(new PluginDerivedThreadEvent
+        var changed = store.Apply(new PluginDerivedSessionEvent
         {
             EventId = "plugin:event-1",
             Markdown = "### Stats",
         });
-        var unchanged = store.Apply(new PluginDerivedThreadEvent
+        var unchanged = store.Apply(new PluginDerivedSessionEvent
         {
             EventId = "plugin:event-1",
             Markdown = "### Stats",
@@ -31,9 +31,9 @@ public sealed class PluginTransientEventProjectionStoreTests
     public void Apply_RemoveDeletesExistingProjection()
     {
         var store = new PluginTransientEventProjectionStore();
-        store.Apply(new PluginDerivedThreadEvent { EventId = "plugin:event-1", Markdown = "text" });
+        store.Apply(new PluginDerivedSessionEvent { EventId = "plugin:event-1", Markdown = "text" });
 
-        var removed = store.Apply(new PluginDerivedThreadEvent { EventId = "plugin:event-1", Remove = true });
+        var removed = store.Apply(new PluginDerivedSessionEvent { EventId = "plugin:event-1", Remove = true });
 
         Assert.IsTrue(removed);
         Assert.AreEqual(0, store.Snapshot.Count);
@@ -44,7 +44,7 @@ public sealed class PluginTransientEventProjectionStoreTests
     {
         var store = new PluginTransientEventProjectionStore();
 
-        store.Apply(new PluginDerivedThreadEvent
+        store.Apply(new PluginDerivedSessionEvent
         {
             EventId = "plugin:event-1",
             RenderTarget = "stats",
@@ -59,7 +59,7 @@ public sealed class PluginTransientEventProjectionStoreTests
     {
         var store = new PluginTransientEventProjectionStore();
         var dynamicContent = new TestDynamicContent("computing", []);
-        store.Apply(new PluginDerivedThreadEvent
+        store.Apply(new PluginDerivedSessionEvent
         {
             EventId = "plugin:event-1",
             DynamicContent = dynamicContent,
@@ -67,7 +67,7 @@ public sealed class PluginTransientEventProjectionStoreTests
 
         dynamicContent.Update(
             "done",
-            [new PluginDerivedThreadEventDetailSection { Header = "Details", Markdown = "ready" }]);
+            [new PluginDerivedSessionEventDetailSection { Header = "Details", Markdown = "ready" }]);
         var changed = store.RefreshDynamic("plugin:event-1");
 
         Assert.IsTrue(changed);
@@ -78,16 +78,16 @@ public sealed class PluginTransientEventProjectionStoreTests
 
     private sealed class TestDynamicContent(
         string markdown,
-        IReadOnlyList<PluginDerivedThreadEventDetailSection> detailSections) : PluginDynamicDerivedThreadEventContent
+        IReadOnlyList<PluginDerivedSessionEventDetailSection> detailSections) : PluginDynamicDerivedSessionEventContent
     {
         private string _markdown = markdown;
-        private IReadOnlyList<PluginDerivedThreadEventDetailSection> _detailSections = detailSections;
+        private IReadOnlyList<PluginDerivedSessionEventDetailSection> _detailSections = detailSections;
 
         public override string Markdown => _markdown;
 
-        public override IReadOnlyList<PluginDerivedThreadEventDetailSection> DetailSections => _detailSections;
+        public override IReadOnlyList<PluginDerivedSessionEventDetailSection> DetailSections => _detailSections;
 
-        public void Update(string newMarkdown, IReadOnlyList<PluginDerivedThreadEventDetailSection> newDetailSections)
+        public void Update(string newMarkdown, IReadOnlyList<PluginDerivedSessionEventDetailSection> newDetailSections)
         {
             _markdown = newMarkdown;
             _detailSections = newDetailSections;

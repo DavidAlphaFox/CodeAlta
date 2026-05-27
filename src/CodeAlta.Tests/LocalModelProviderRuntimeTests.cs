@@ -19,7 +19,7 @@ public sealed class CodeAltaAgentRuntimeTests
                 new AgentSessionCreateOptions
                 {
                     ProviderKey = "openai",
-                    Title = "Initial thread title",
+                    Title = "Initial session title",
                     ParentSessionId = "parent-session",
                     CreatedByRunId = new AgentRunId("run-parent"),
                     Model = "gpt-5.4",
@@ -45,7 +45,7 @@ public sealed class CodeAltaAgentRuntimeTests
         Assert.AreEqual(new AgentRunId("run-parent"), sessions[0].CreatedByRunId);
         var details = Assert.IsInstanceOfType<RawApiSessionMetadataDetails>(sessions[0].Details);
         Assert.IsNull(details.ProviderDisplayName);
-        Assert.AreEqual("Initial thread title", details.Title);
+        Assert.AreEqual("Initial session title", details.Title);
 
         await using var resumedSession = await backend.ResumeSessionAsync(
                 createdSession.SessionId,
@@ -156,7 +156,7 @@ public sealed class CodeAltaAgentRuntimeTests
                 new AgentSessionCreateOptions
                 {
                     ProviderKey = "openai",
-                    Title = "Switchable thread",
+                    Title = "Switchable session",
                     Model = "gpt-5.4",
                     WorkingDirectory = "C:\\repo\\sample",
                     OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),

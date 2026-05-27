@@ -4,117 +4,117 @@ namespace CodeAlta.App;
 
 internal sealed class ShellCatalogStateCoordinator
 {
-    internal readonly record struct CatalogRecoveryResult(string? RestoredThreadId);
+    internal readonly record struct CatalogRecoveryResult(string? RestoredSessionId);
 
     private readonly ProjectCatalog _projectCatalog;
-    private readonly WorkThreadCatalog _threadCatalog;
-    private readonly ThreadViewStateCoordinator _viewStateCoordinator;
-    private readonly OpenThreadStateStore _OpenThreadStateStore;
+    private readonly SessionViewCatalog _sessionCatalog;
+    private readonly SessionViewStateCoordinator _viewStateCoordinator;
+    private readonly OpenSessionStateStore _openSessionStateStore;
     private IReadOnlyList<ProjectDescriptor> _projects = [];
-    private IReadOnlyList<SessionViewDescriptor> _threads = [];
+    private IReadOnlyList<SessionViewDescriptor> _sessions = [];
 
     public ShellCatalogStateCoordinator(
         ProjectCatalog projectCatalog,
-        WorkThreadCatalog threadCatalog,
-        ThreadViewStateCoordinator viewStateCoordinator,
-        OpenThreadStateStore OpenThreadStateStore)
+        SessionViewCatalog sessionCatalog,
+        SessionViewStateCoordinator viewStateCoordinator,
+        OpenSessionStateStore OpenSessionStateStore)
     {
         ArgumentNullException.ThrowIfNull(projectCatalog);
-        ArgumentNullException.ThrowIfNull(threadCatalog);
+        ArgumentNullException.ThrowIfNull(sessionCatalog);
         ArgumentNullException.ThrowIfNull(viewStateCoordinator);
-        ArgumentNullException.ThrowIfNull(OpenThreadStateStore);
+        ArgumentNullException.ThrowIfNull(OpenSessionStateStore);
 
         _projectCatalog = projectCatalog;
-        _threadCatalog = threadCatalog;
+        _sessionCatalog = sessionCatalog;
         _viewStateCoordinator = viewStateCoordinator;
-        _OpenThreadStateStore = OpenThreadStateStore;
+        _openSessionStateStore = OpenSessionStateStore;
     }
 
     public IReadOnlyList<ProjectDescriptor> Projects => _projects;
 
-    public IReadOnlyList<SessionViewDescriptor> Threads => _threads;
+    public IReadOnlyList<SessionViewDescriptor> Sessions => _sessions;
 
-    public async Task<ShellThreadStateCoordinator.InitialCatalogState> LoadInitialCatalogStateAsync(CancellationToken cancellationToken)
+    public async Task<ShellSessionStateCoordinator.InitialCatalogState> LoadInitialCatalogStateAsync(CancellationToken cancellationToken)
     {
         var projects = await _projectCatalog.LoadAsync(cancellationToken).ConfigureAwait(false);
-        var threads = await _threadCatalog.LoadInternalAsync(cancellationToken).ConfigureAwait(false);
+        var sessions = await _sessionCatalog.LoadInternalAsync(cancellationToken).ConfigureAwait(false);
         var viewState = await _viewStateCoordinator.LoadViewStateAsync(cancellationToken).ConfigureAwait(false);
-        await _viewStateCoordinator.ApplyThreadLocalStateAsync(threads, viewState, cancellationToken: cancellationToken).ConfigureAwait(false);
-        return new ShellThreadStateCoordinator.InitialCatalogState(projects, threads, viewState);
+        await _viewStateCoordinator.ApplySessionLocalStateAsync(sessions, viewState, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return new ShellSessionStateCoordinator.InitialCatalogState(projects, sessions, viewState);
     }
 
-    public void ApplyInitialCatalogState(ShellThreadStateCoordinator.InitialCatalogState state)
+    public void ApplyInitialCatalogState(ShellSessionStateCoordinator.InitialCatalogState state)
     {
         ArgumentNullException.ThrowIfNull(state);
 
         _projects = state.Projects;
-        _threads = state.Threads;
+        _sessions = state.Sessions;
     }
 
     public CatalogRecoveryResult ApplyRecoveredCatalogState(
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads,
-        WorkThreadViewState viewState,
-        string? pendingStartupThreadRestoreId,
-        bool pruneMissingThreads = true)
+        IReadOnlyList<SessionViewDescriptor> sessions,
+        SessionViewViewState viewState,
+        string? pendingStartupSessionRestoreId,
+        bool pruneMissingSessions = true)
     {
         ArgumentNullException.ThrowIfNull(projects);
-        ArgumentNullException.ThrowIfNull(threads);
+        ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(viewState);
 
         _projects = projects;
-        _threads = _viewStateCoordinator.ApplyThreadLocalState(threads, viewState, readJournal: false);
-        if (pruneMissingThreads)
+        _sessions = _viewStateCoordinator.ApplySessionLocalState(sessions, viewState, readJournal: false);
+        if (pruneMissingSessions)
         {
-            _OpenThreadStateStore.PruneRetainedThreadState(_threads);
+            _openSessionStateStore.PruneRetainedSessionState(_sessions);
         }
-        viewState.Selection ??= WorkThreadSelectionState.GlobalDraft();
+        viewState.Selection ??= SessionViewSelectionState.GlobalDraft();
 
-        if (pruneMissingThreads)
+        if (pruneMissingSessions)
         {
-            viewState.OpenThreadIds.RemoveAll(id => _threads.All(thread => !string.Equals(thread.ThreadId, id, StringComparison.OrdinalIgnoreCase)));
+            viewState.OpenSessionIds.RemoveAll(id => _sessions.All(session => !string.Equals(session.SessionId, id, StringComparison.OrdinalIgnoreCase)));
         }
-        if (viewState.Selection.Surface == WorkThreadSelectionSurface.Thread &&
-            (!viewState.OpenThreadIds.Contains(viewState.Selection.ThreadId, StringComparer.OrdinalIgnoreCase) ||
-             FindThread(viewState.Selection.ThreadId) is null))
+        if (viewState.Selection.Surface == SessionViewSelectionSurface.Session &&
+            (!viewState.OpenSessionIds.Contains(viewState.Selection.SessionId, StringComparer.OrdinalIgnoreCase) ||
+             FindSession(viewState.Selection.SessionId) is null))
         {
             viewState.Selection = viewState.Selection.ProjectId is { Length: > 0 } projectId
-                ? WorkThreadSelectionState.ProjectDraft(projectId)
-                : WorkThreadSelectionState.GlobalDraft(viewState.Selection.ProjectId);
-            viewState.SelectedThreadId = null;
+                ? SessionViewSelectionState.ProjectDraft(projectId)
+                : SessionViewSelectionState.GlobalDraft(viewState.Selection.ProjectId);
+            viewState.SelectedSessionId = null;
         }
         else
         {
-            viewState.SelectedThreadId = viewState.Selection.Surface == WorkThreadSelectionSurface.Thread
-                ? viewState.Selection.ThreadId
+            viewState.SelectedSessionId = viewState.Selection.Surface == SessionViewSelectionSurface.Session
+                ? viewState.Selection.SessionId
                 : null;
         }
 
-        string? restoredThreadId = null;
-        if (viewState.Selection.Surface != WorkThreadSelectionSurface.Thread &&
-            !string.IsNullOrWhiteSpace(pendingStartupThreadRestoreId) &&
-            FindThread(pendingStartupThreadRestoreId) is { } restoredThread)
+        string? restoredSessionId = null;
+        if (viewState.Selection.Surface != SessionViewSelectionSurface.Session &&
+            !string.IsNullOrWhiteSpace(pendingStartupSessionRestoreId) &&
+            FindSession(pendingStartupSessionRestoreId) is { } restoredSession)
         {
-            if (!viewState.OpenThreadIds.Contains(restoredThread.ThreadId, StringComparer.OrdinalIgnoreCase))
+            if (!viewState.OpenSessionIds.Contains(restoredSession.SessionId, StringComparer.OrdinalIgnoreCase))
             {
-                viewState.OpenThreadIds.Insert(0, restoredThread.ThreadId);
+                viewState.OpenSessionIds.Insert(0, restoredSession.SessionId);
             }
 
-            viewState.Selection = WorkThreadSelectionState.Thread(restoredThread.ThreadId, restoredThread.ProjectRef);
-            viewState.SelectedThreadId = restoredThread.ThreadId;
-            restoredThreadId = restoredThread.ThreadId;
+            viewState.Selection = SessionViewSelectionState.Session(restoredSession.SessionId, restoredSession.ProjectRef);
+            viewState.SelectedSessionId = restoredSession.SessionId;
+            restoredSessionId = restoredSession.SessionId;
         }
 
-        return new CatalogRecoveryResult(restoredThreadId);
+        return new CatalogRecoveryResult(restoredSessionId);
     }
 
-    public void UpsertThread(SessionViewDescriptor thread)
+    public void UpsertSession(SessionViewDescriptor session)
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
 
-        _threads = _threads
-            .Where(existing => !string.Equals(existing.ThreadId, thread.ThreadId, StringComparison.OrdinalIgnoreCase))
-            .Append(thread)
+        _sessions = _sessions
+            .Where(existing => !string.Equals(existing.SessionId, session.SessionId, StringComparison.OrdinalIgnoreCase))
+            .Append(session)
             .OrderByDescending(static item => item.LastActiveAt)
             .ToArray();
     }
@@ -144,18 +144,18 @@ internal sealed class ShellCatalogStateCoordinator
         }
     }
 
-    public void RemoveThreads(IReadOnlyCollection<string> threadIds)
+    public void RemoveSessions(IReadOnlyCollection<string> sessionIds)
     {
-        ArgumentNullException.ThrowIfNull(threadIds);
+        ArgumentNullException.ThrowIfNull(sessionIds);
 
-        if (threadIds.Count == 0)
+        if (sessionIds.Count == 0)
         {
             return;
         }
 
-        var removedThreadIds = new HashSet<string>(threadIds, StringComparer.OrdinalIgnoreCase);
-        _threads = _threads
-            .Where(thread => !removedThreadIds.Contains(thread.ThreadId))
+        var removedSessionIds = new HashSet<string>(sessionIds, StringComparer.OrdinalIgnoreCase);
+        _sessions = _sessions
+            .Where(session => !removedSessionIds.Contains(session.SessionId))
             .ToArray();
     }
 
@@ -169,13 +169,13 @@ internal sealed class ShellCatalogStateCoordinator
         return _projects.FirstOrDefault(project => string.Equals(project.Id, projectId, StringComparison.OrdinalIgnoreCase));
     }
 
-    public SessionViewDescriptor? FindThread(string? threadId)
+    public SessionViewDescriptor? FindSession(string? sessionId)
     {
-        if (string.IsNullOrWhiteSpace(threadId))
+        if (string.IsNullOrWhiteSpace(sessionId))
         {
             return null;
         }
 
-        return _threads.FirstOrDefault(thread => string.Equals(thread.ThreadId, threadId, StringComparison.OrdinalIgnoreCase));
+        return _sessions.FirstOrDefault(session => string.Equals(session.SessionId, sessionId, StringComparison.OrdinalIgnoreCase));
     }
 }

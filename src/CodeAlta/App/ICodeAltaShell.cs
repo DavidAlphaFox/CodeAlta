@@ -17,24 +17,24 @@ internal interface ICodeAltaShell
 
     void ApplyRecoveredCatalogState(
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads,
-        bool pruneMissingThreads = true);
+        IReadOnlyList<SessionViewDescriptor> sessions,
+        bool pruneMissingSessions = true);
 
     void UpsertProject(ProjectDescriptor project);
 
     void SetReadyStatusForCurrentSelection();
 
-    void HandleRuntimeEvent(WorkThreadRuntimeEvent runtimeEvent);
+    void HandleRuntimeEvent(SessionRuntimeEvent runtimeEvent);
 
     void PublishStartupCatalogProjectionReady();
 
-    void TrySchedulePendingStartupThreadRestore(CancellationToken cancellationToken);
+    void TrySchedulePendingStartupSessionRestore(CancellationToken cancellationToken);
 
     void SelectGlobalScope();
 
     void SelectProjectScope(string projectId);
 
-    void OpenThread(string threadId);
+    void OpenSession(string sessionId);
 
     void FocusPromptEditor();
 

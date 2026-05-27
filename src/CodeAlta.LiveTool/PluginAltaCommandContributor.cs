@@ -163,7 +163,7 @@ public sealed class PluginAltaCommandContributor : IAltaCommandContributor
 
         public IPluginWorkspaceService Workspace => inner.Workspace;
 
-        public IPluginThreadService Threads => inner.Threads;
+        public IPluginSessionService Sessions => inner.Sessions;
 
         public IPluginPromptService Prompts => inner.Prompts;
 

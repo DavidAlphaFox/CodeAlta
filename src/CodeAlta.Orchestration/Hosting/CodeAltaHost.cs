@@ -20,11 +20,11 @@ public sealed class CodeAltaHost : IAsyncDisposable
     private CodeAltaHost(
         CatalogOptions catalogOptions,
         ProjectCatalog projectCatalog,
-        WorkThreadCatalog threadCatalog,
+        SessionViewCatalog sessionViewCatalog,
         SkillCatalog skillCatalog,
         ModelProviderRegistry modelProviderRegistry,
         ModelProviderInitializationService modelProviderInitializationService,
-        IAgentSessionCatalog sessionCatalog,
+        IAgentSessionCatalog agentSessionCatalog,
         AgentHub agentHub,
         SessionRuntimeService runtimeService,
         IProjectFileSearchService projectFileSearchService,
@@ -35,11 +35,11 @@ public sealed class CodeAltaHost : IAsyncDisposable
     {
         CatalogOptions = catalogOptions;
         ProjectCatalog = projectCatalog;
-        ThreadCatalog = threadCatalog;
+        SessionViewCatalog = sessionViewCatalog;
         SkillCatalog = skillCatalog;
         ModelProviderRegistry = modelProviderRegistry;
         ModelProviderInitializationService = modelProviderInitializationService;
-        SessionCatalog = sessionCatalog;
+        AgentSessionCatalog = agentSessionCatalog;
         AgentHub = agentHub;
         RuntimeService = runtimeService;
         ProjectFileSearchService = projectFileSearchService;
@@ -60,9 +60,9 @@ public sealed class CodeAltaHost : IAsyncDisposable
     public ProjectCatalog ProjectCatalog { get; }
 
     /// <summary>
-    /// Gets the work-thread catalog.
+    /// Gets the session-view catalog.
     /// </summary>
-    public WorkThreadCatalog ThreadCatalog { get; }
+    public SessionViewCatalog SessionViewCatalog { get; }
 
     /// <summary>
     /// Gets the skill catalog.
@@ -82,7 +82,7 @@ public sealed class CodeAltaHost : IAsyncDisposable
     /// <summary>
     /// Gets the provider-independent session catalog used by the host.
     /// </summary>
-    public IAgentSessionCatalog SessionCatalog { get; }
+    public IAgentSessionCatalog AgentSessionCatalog { get; }
 
     /// <summary>
     /// Gets the agent hub.
@@ -90,7 +90,7 @@ public sealed class CodeAltaHost : IAsyncDisposable
     public AgentHub AgentHub { get; }
 
     /// <summary>
-    /// Gets the work-thread runtime service.
+    /// Gets the session-view runtime service.
     /// </summary>
     public SessionRuntimeService RuntimeService { get; }
 
@@ -169,7 +169,7 @@ public sealed class CodeAltaHost : IAsyncDisposable
         }
 
         var sessionJournalFile = new LocalAgentSessionJournalFile();
-        var threadCatalog = new WorkThreadCatalog(catalogOptions, sessionJournalFile);
+        var sessionViewCatalog = new SessionViewCatalog(catalogOptions, sessionJournalFile);
         var pluginOperationOptions = CreatePluginOperationOptions(options, catalogOptions, currentProject);
         var skillCatalog = new SkillCatalog([
             new ProjectCodeAltaSkillRootProvider(),
@@ -184,12 +184,12 @@ public sealed class CodeAltaHost : IAsyncDisposable
         options.ConfigureModelProviders?.Invoke(modelProviderRegistry);
         var modelProviderInitializationService = new ModelProviderInitializationService(modelProviderRegistry);
         var agentHub = new AgentHub(modelProviderRegistry, globalRoot);
-        var sessionCatalog = new AgentSessionCatalog(threadCatalog.JournalStore.CreateSessionStore());
+        var agentSessionCatalog = new AgentSessionCatalog(sessionViewCatalog.JournalStore.CreateSessionStore());
         var runtimeService = new SessionRuntimeService(
             agentHub,
-            sessionCatalog,
+            agentSessionCatalog,
             projectCatalog,
-            threadCatalog,
+            sessionViewCatalog,
             instructionTemplateProvider,
             catalogOptions,
             skillCatalog);
@@ -200,11 +200,11 @@ public sealed class CodeAltaHost : IAsyncDisposable
         return new CodeAltaHost(
             catalogOptions,
             projectCatalog,
-            threadCatalog,
+            sessionViewCatalog,
             skillCatalog,
             modelProviderRegistry,
             modelProviderInitializationService,
-            sessionCatalog,
+            agentSessionCatalog,
             agentHub,
             runtimeService,
             projectFileSearchService,

@@ -11,7 +11,7 @@ internal interface IFrontendPersistencePort
 
     Task PersistViewStateAsync(CancellationToken cancellationToken = default);
 
-    Task RegisterCreatedThreadAsync(SessionViewDescriptor thread, CancellationToken cancellationToken = default);
+    Task RegisterCreatedSessionAsync(SessionViewDescriptor session, CancellationToken cancellationToken = default);
 }
 
 internal sealed class FrontendPersistencePort : IFrontendPersistencePort
@@ -19,23 +19,23 @@ internal sealed class FrontendPersistencePort : IFrontendPersistencePort
     private readonly Func<string, string?> _loadPromptDraft;
     private readonly Action<string> _deletePromptDraft;
     private readonly Func<CancellationToken, Task> _persistViewStateAsync;
-    private readonly Func<SessionViewDescriptor, CancellationToken, Task> _registerCreatedThreadAsync;
+    private readonly Func<SessionViewDescriptor, CancellationToken, Task> _registerCreatedSessionAsync;
 
     public FrontendPersistencePort(
         Func<string, string?> loadPromptDraft,
         Action<string> deletePromptDraft,
         Func<CancellationToken, Task> persistViewStateAsync,
-        Func<SessionViewDescriptor, CancellationToken, Task> registerCreatedThreadAsync)
+        Func<SessionViewDescriptor, CancellationToken, Task> registerCreatedSessionAsync)
     {
         ArgumentNullException.ThrowIfNull(loadPromptDraft);
         ArgumentNullException.ThrowIfNull(deletePromptDraft);
         ArgumentNullException.ThrowIfNull(persistViewStateAsync);
-        ArgumentNullException.ThrowIfNull(registerCreatedThreadAsync);
+        ArgumentNullException.ThrowIfNull(registerCreatedSessionAsync);
 
         _loadPromptDraft = loadPromptDraft;
         _deletePromptDraft = deletePromptDraft;
         _persistViewStateAsync = persistViewStateAsync;
-        _registerCreatedThreadAsync = registerCreatedThreadAsync;
+        _registerCreatedSessionAsync = registerCreatedSessionAsync;
     }
 
     public string? LoadPromptDraft(PromptSessionId promptSessionId)
@@ -47,10 +47,10 @@ internal sealed class FrontendPersistencePort : IFrontendPersistencePort
     public async Task PersistViewStateAsync(CancellationToken cancellationToken = default)
         => await _persistViewStateAsync(cancellationToken);
 
-    public async Task RegisterCreatedThreadAsync(SessionViewDescriptor thread, CancellationToken cancellationToken = default)
+    public async Task RegisterCreatedSessionAsync(SessionViewDescriptor session, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(thread);
-        await _registerCreatedThreadAsync(thread, cancellationToken);
+        ArgumentNullException.ThrowIfNull(session);
+        await _registerCreatedSessionAsync(session, cancellationToken);
     }
 
     private static string GetPromptSessionKey(PromptSessionId promptSessionId)

@@ -9,31 +9,31 @@ namespace CodeAlta.Tests;
 public sealed class ShellSelectionPortTests
 {
     [TestMethod]
-    public void GetSnapshot_CapturesSelectionProjectThreadAndPromptSession()
+    public void GetSnapshot_CapturesSelectionProjectSessionAndPromptSession()
     {
         var project = new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" };
-        var thread = new SessionViewDescriptor { ThreadId = "thread-1", ProjectRef = project.Id, Title = "Thread" };
+        var session = new SessionViewDescriptor { SessionId = "session-1", ProjectRef = project.Id, Title = "Session" };
         var promptSession = new PromptSessionBinding(
             new PromptSessionId("prompt-1"),
             ProjectId.NewVersion7(),
-            new ShellThreadRef.Running(thread.ThreadId),
+            new ShellSessionRef.Running(session.SessionId),
             new ModelProviderId("provider-1"));
-        var selection = ShellSelection.Thread(thread.ThreadId, project.Id);
+        var selection = ShellSelection.Session(session.SessionId, project.Id);
         var port = new DelegatingShellSelectionPort(
             () => selection,
             () => project,
-            () => thread,
+            () => session,
             () => promptSession,
             (_, _) => Task.CompletedTask,
-            id => id == thread.ThreadId);
+            id => id == session.SessionId);
 
         var snapshot = port.GetSnapshot();
 
         Assert.AreEqual(selection, snapshot.Selection);
         Assert.AreSame(project, snapshot.SelectedProject);
-        Assert.AreSame(thread, snapshot.SelectedThread);
+        Assert.AreSame(session, snapshot.SelectedSession);
         Assert.AreSame(promptSession, snapshot.PromptSession);
-        Assert.IsTrue(port.IsSelectedThread(thread.ThreadId));
+        Assert.IsTrue(port.IsSelectedSession(session.SessionId));
     }
 
     [TestMethod]
@@ -63,7 +63,7 @@ public sealed class ShellSelectionPortTests
     }
 
     [TestMethod]
-    public void IsSelectedThread_RejectsBlankThreadIdBeforeForwarding()
+    public void IsSelectedSession_RejectsBlankSessionIdBeforeForwarding()
     {
         var invoked = false;
         var port = new DelegatingShellSelectionPort(
@@ -78,7 +78,7 @@ public sealed class ShellSelectionPortTests
                 return true;
             });
 
-        Assert.ThrowsExactly<ArgumentException>(() => port.IsSelectedThread("   "));
+        Assert.ThrowsExactly<ArgumentException>(() => port.IsSelectedSession("   "));
         Assert.IsFalse(invoked);
     }
 }

@@ -5,5 +5,5 @@ internal enum SidebarNodeKind
     Global,
     ProjectsRoot,
     Project,
-    Thread,
+    Session,
 }

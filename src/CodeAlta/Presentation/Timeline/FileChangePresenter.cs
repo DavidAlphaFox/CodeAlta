@@ -334,7 +334,7 @@ internal sealed class FileChangePresenter
             {
                 HorizontalAlignment = Align.Stretch,
                 VerticalAlignment = Align.Start,
-                Options = ChatTimelineVisualFactory.CreateThreadMarkdownOptions(5, _localFileRootPath),
+                Options = ChatTimelineVisualFactory.CreateSessionMarkdownOptions(5, _localFileRootPath),
             };
             var wrapText = new State<bool>(false);
             var log = new LogControl

@@ -234,7 +234,7 @@ internal sealed class SidebarView
             IsExpanded = projection.IsExpanded,
         };
 
-        if (projection.Kind is SidebarNodeKind.Global or SidebarNodeKind.Project or SidebarNodeKind.Thread)
+        if (projection.Kind is SidebarNodeKind.Global or SidebarNodeKind.Project or SidebarNodeKind.Session)
         {
             node.AddRightVisual(CreateTimestampVisual(projection.Row), TreeNodeRightVisualVisibility.Always);
         }
@@ -350,14 +350,14 @@ internal sealed class SidebarView
     {
         return actionKind switch
         {
-            SidebarRowActionKind.DeleteThread when target?.ThreadId is { } threadId
-                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.DeleteThread(threadId)),
+            SidebarRowActionKind.DeleteSession when target?.SessionId is { } sessionId
+                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.DeleteSession(sessionId)),
             SidebarRowActionKind.DeleteProject when target?.ProjectId is { } projectId
                 => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.DeleteProject(projectId)),
-            SidebarRowActionKind.OpenProjectThreads when target?.Kind == SidebarSelectionKind.GlobalScope
-                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.OpenProjectThreads(string.Empty)),
-            SidebarRowActionKind.OpenProjectThreads when target?.ProjectId is { } projectId
-                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.OpenProjectThreads(projectId)),
+            SidebarRowActionKind.OpenProjectSessions when target?.Kind == SidebarSelectionKind.GlobalScope
+                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.OpenProjectSessions(string.Empty)),
+            SidebarRowActionKind.OpenProjectSessions when target?.ProjectId is { } projectId
+                => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.OpenProjectSessions(projectId)),
             SidebarRowActionKind.OpenProjectDetails when target?.ProjectId is { } projectId
                 => () => _rowCommandDispatcher.Dispatch(new SidebarRowCommand.OpenProjectDetails(projectId)),
             SidebarRowActionKind.OpenFolder
@@ -373,7 +373,7 @@ internal sealed class SidebarView
             : TreeNodeRightVisualVisibility.Hover;
 
     private static ControlTone ResolveRowActionTone(SidebarRowActionKind actionKind)
-        => actionKind is SidebarRowActionKind.DeleteThread or SidebarRowActionKind.DeleteProject
+        => actionKind is SidebarRowActionKind.DeleteSession or SidebarRowActionKind.DeleteProject
             ? ControlTone.Error
             : ControlTone.Default;
 }

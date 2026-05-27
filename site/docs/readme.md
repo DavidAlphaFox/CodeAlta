@@ -21,7 +21,7 @@ Start with the first two pages, then use the topic pages as a reference while yo
 
 ## Daily workflow topics
 
-- [Sessions and Delegation](threads.md): global vs project sessions, multiple-agent delegation, prompt queues, steering, compaction, and the in-session `alta` live tool.
+- [Sessions and Delegation](sessions.md): global vs project sessions, multiple-agent delegation, prompt queues, steering, compaction, and the in-session `alta` live tool.
 - [CodeAlta Principles](principles.md): the efficient, transparent, keyboard-first, session-oriented, provider-agnostic, native .NET, error-aware, and pluggable design manifesto.
 - [Plugins](plugins.md): trusted source plugins, plugin scopes, management UI, safe mode, and a minimal plugin example.
 - [Troubleshooting](troubleshooting.md): logs, broken configuration, plugin startup failures, login flows, and single-instance behavior.

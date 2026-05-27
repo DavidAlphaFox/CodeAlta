@@ -11,10 +11,10 @@ public sealed class InitialCatalogStateCoordinatorTests
     [TestMethod]
     public void TryResolve_RefreshesCatalogWorkspaceImmediatelyAfterApplyingState()
     {
-        var state = new ShellThreadStateCoordinator.InitialCatalogState(
+        var state = new ShellSessionStateCoordinator.InitialCatalogState(
             Array.Empty<ProjectDescriptor>(),
             Array.Empty<SessionViewDescriptor>(),
-            new WorkThreadViewState());
+            new SessionViewViewState());
         var sequence = new List<string>();
         var stateApplied = false;
         var coordinator = new InitialCatalogStateCoordinator(

@@ -34,8 +34,8 @@ public enum PluginPoint
     ToolResult,
     /// <summary>Agent event observer.</summary>
     AgentEvent,
-    /// <summary>Plugin-derived transient thread event projector.</summary>
-    ThreadEventProjection,
+    /// <summary>Plugin-derived transient session event projector.</summary>
+    SessionEventProjection,
     /// <summary>Compaction hook.</summary>
     Compaction,
     /// <summary>UI contribution.</summary>
@@ -242,8 +242,8 @@ public enum PluginCommandKind
     Shell,
     /// <summary>A prompt slash/text command.</summary>
     Prompt,
-    /// <summary>A selected-thread command.</summary>
-    Thread,
+    /// <summary>A selected-session command.</summary>
+    Session,
 }
 
 /// <summary>Describes a plugin key binding.</summary>
@@ -293,8 +293,8 @@ public sealed record PluginCommandAvailability
     /// <summary>Gets a predicate requiring a project.</summary>
     public static PluginCommandAvailability ProjectSelected { get; } = new() { RequiresProject = true };
 
-    /// <summary>Gets a predicate requiring a thread.</summary>
-    public static PluginCommandAvailability ThreadSelected { get; } = new() { RequiresThread = true };
+    /// <summary>Gets a predicate requiring a session.</summary>
+    public static PluginCommandAvailability SessionSelected { get; } = new() { RequiresSession = true };
 
     /// <summary>Gets a value indicating whether interactive UI is required.</summary>
     public bool RequiresInteractiveUi { get; init; }
@@ -302,14 +302,14 @@ public sealed record PluginCommandAvailability
     /// <summary>Gets a value indicating whether a project is required.</summary>
     public bool RequiresProject { get; init; }
 
-    /// <summary>Gets a value indicating whether a thread is required.</summary>
-    public bool RequiresThread { get; init; }
+    /// <summary>Gets a value indicating whether a session is required.</summary>
+    public bool RequiresSession { get; init; }
 
-    /// <summary>Gets a value indicating whether an idle thread is required.</summary>
-    public bool RequiresIdleThread { get; init; }
+    /// <summary>Gets a value indicating whether an idle session is required.</summary>
+    public bool RequiresIdleSession { get; init; }
 
-    /// <summary>Gets a value indicating whether a busy thread is required.</summary>
-    public bool RequiresBusyThread { get; init; }
+    /// <summary>Gets a value indicating whether a busy session is required.</summary>
+    public bool RequiresBusySession { get; init; }
 
     /// <summary>Gets a value indicating whether a CodeAlta-managed backend is required.</summary>
     public bool RequiresCodeAltaManagedBackend { get; init; }

@@ -56,8 +56,8 @@ public sealed class ResponsiveDialogSizeTests
     }
 
     [TestMethod]
-    public void ThreadWorkspaceView_UsesF6ForExpandedPromptShortcut()
-        => Assert.AreEqual("F6", ThreadWorkspaceView.ExpandPromptShortcutKey.ToString());
+    public void SessionWorkspaceView_UsesF6ForExpandedPromptShortcut()
+        => Assert.AreEqual("F6", SessionWorkspaceView.ExpandPromptShortcutKey.ToString());
 
     [TestMethod]
     public void ShellCommandCatalog_UsesCtrlGCtrlSForFocusSidebarShortcut()
@@ -96,9 +96,9 @@ public sealed class ResponsiveDialogSizeTests
     }
 
     [TestMethod]
-    public void ThreadWorkspaceView_UsesCtrlGCtrlRForModelProvidersShortcut()
+    public void SessionWorkspaceView_UsesCtrlGCtrlRForModelProvidersShortcut()
     {
-        var sequence = ThreadWorkspaceView.ModelProvidersShortcutSequence;
+        var sequence = SessionWorkspaceView.ModelProvidersShortcutSequence;
 
         Assert.AreEqual(2, sequence.Count);
         Assert.AreEqual(TerminalChar.CtrlG, sequence[0].Char);
@@ -180,9 +180,9 @@ public sealed class ResponsiveDialogSizeTests
     }
 
     [TestMethod]
-    public void ThreadWorkspaceView_UsesCtrlGCtrlTForThreadInfoShortcut()
+    public void SessionWorkspaceView_UsesCtrlGCtrlTForSessionInfoShortcut()
     {
-        var sequence = ThreadWorkspaceView.ThreadInfoShortcutSequence;
+        var sequence = SessionWorkspaceView.SessionInfoShortcutSequence;
 
         Assert.AreEqual(2, sequence.Count);
         Assert.AreEqual(TerminalChar.CtrlG, sequence[0].Char);
@@ -192,9 +192,9 @@ public sealed class ResponsiveDialogSizeTests
     }
 
     [TestMethod]
-    public void ThreadWorkspaceView_UsesCtrlGCtrlUForSessionUsageShortcut()
+    public void SessionWorkspaceView_UsesCtrlGCtrlUForSessionUsageShortcut()
     {
-        var sequence = ThreadWorkspaceView.SessionUsageShortcutSequence;
+        var sequence = SessionWorkspaceView.SessionUsageShortcutSequence;
 
         Assert.AreEqual(2, sequence.Count);
         Assert.AreEqual(TerminalChar.CtrlG, sequence[0].Char);
@@ -206,7 +206,7 @@ public sealed class ResponsiveDialogSizeTests
     [TestMethod]
     public void ShellCommandCatalog_UsesCtrlAltLeftForTabLeftShortcut()
     {
-        var gesture = ShellCommandCatalog.Get("CodeAlta.Thread.TabLeft").Gesture;
+        var gesture = ShellCommandCatalog.Get("CodeAlta.Session.TabLeft").Gesture;
 
         Assert.AreEqual(new KeyGesture(TerminalKey.Left, TerminalModifiers.Ctrl | TerminalModifiers.Alt), gesture);
     }
@@ -214,7 +214,7 @@ public sealed class ResponsiveDialogSizeTests
     [TestMethod]
     public void ShellCommandCatalog_UsesCtrlAltRightForTabRightShortcut()
     {
-        var gesture = ShellCommandCatalog.Get("CodeAlta.Thread.TabRight").Gesture;
+        var gesture = ShellCommandCatalog.Get("CodeAlta.Session.TabRight").Gesture;
 
         Assert.AreEqual(new KeyGesture(TerminalKey.Right, TerminalModifiers.Ctrl | TerminalModifiers.Alt), gesture);
     }
@@ -222,9 +222,9 @@ public sealed class ResponsiveDialogSizeTests
     [TestMethod]
     public void ShellCommandCatalog_UsesFunctionKeysForMessageNavigation()
     {
-        Assert.AreEqual(new KeyGesture(TerminalKey.F3), ShellCommandCatalog.Get("CodeAlta.Thread.MessagePrevious").Gesture);
-        Assert.AreEqual(new KeyGesture(TerminalKey.F4), ShellCommandCatalog.Get("CodeAlta.Thread.MessageNext").Gesture);
-        Assert.AreEqual(new KeyGesture(TerminalKey.F3, TerminalModifiers.Ctrl), ShellCommandCatalog.Get("CodeAlta.Thread.MessageFirst").Gesture);
-        Assert.AreEqual(new KeyGesture(TerminalKey.F4, TerminalModifiers.Ctrl), ShellCommandCatalog.Get("CodeAlta.Thread.MessageLast").Gesture);
+        Assert.AreEqual(new KeyGesture(TerminalKey.F3), ShellCommandCatalog.Get("CodeAlta.Session.MessagePrevious").Gesture);
+        Assert.AreEqual(new KeyGesture(TerminalKey.F4), ShellCommandCatalog.Get("CodeAlta.Session.MessageNext").Gesture);
+        Assert.AreEqual(new KeyGesture(TerminalKey.F3, TerminalModifiers.Ctrl), ShellCommandCatalog.Get("CodeAlta.Session.MessageFirst").Gesture);
+        Assert.AreEqual(new KeyGesture(TerminalKey.F4, TerminalModifiers.Ctrl), ShellCommandCatalog.Get("CodeAlta.Session.MessageLast").Gesture);
     }
 }

@@ -12,8 +12,8 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
 {
     private const string SessionSummaryEventType = "local.sessionSummary";
     private const string SessionStateEventType = "local.sessionState";
-    private const string CodeAltaThreadHeaderEventType = "codealta.threadHeader";
-    private const string CodeAltaThreadStateEventType = "codealta.threadState";
+    private const string CodeAltaSessionHeaderEventType = "codealta.sessionHeader";
+    private const string CodeAltaSessionStateEventType = "codealta.sessionState";
     private const int MetadataProbeHeadByteCount = 64 * 1024;
     private const int MetadataProbeTailByteCount = 256 * 1024;
     private const int DefaultMaxConcurrentMetadataProjections = 8;
@@ -595,7 +595,7 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
                     continue;
                 }
 
-                if (rawEvent.BackendEventType is CodeAltaThreadHeaderEventType or CodeAltaThreadStateEventType)
+                if (rawEvent.BackendEventType is CodeAltaSessionHeaderEventType or CodeAltaSessionStateEventType)
                 {
                     continue;
                 }

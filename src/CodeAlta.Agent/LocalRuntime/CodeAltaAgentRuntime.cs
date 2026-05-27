@@ -171,9 +171,9 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
 
         var registration = ResolveProvider(options.ProviderKey);
         var now = DateTimeOffset.UtcNow;
-        var sessionId = string.IsNullOrWhiteSpace(options.ThreadId)
+        var sessionId = string.IsNullOrWhiteSpace(options.SessionId)
             ? Guid.CreateVersion7().ToString()
-            : options.ThreadId.Trim();
+            : options.SessionId.Trim();
         var summary = new LocalAgentSessionSummary
         {
             SessionId = sessionId,

@@ -4,17 +4,17 @@ internal abstract record ShellCommand;
 
 internal sealed record SubmitPromptCommand(string? Text, bool Steer) : ShellCommand;
 
-internal sealed record AbortSelectedThreadCommand : ShellCommand;
+internal sealed record AbortSelectedSessionCommand : ShellCommand;
 
-internal sealed record CompactSelectedThreadCommand : ShellCommand;
+internal sealed record CompactSelectedSessionCommand : ShellCommand;
 
 internal sealed record CloseCurrentTabCommand : ShellCommand;
 
 internal sealed record SelectRelativeTabCommand(int Offset) : ShellCommand;
 
-internal sealed record ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget Target) : ShellCommand;
+internal sealed record ScrollSelectedSessionMessageCommand(SessionMessageScrollTarget Target) : ShellCommand;
 
-internal enum ThreadMessageScrollTarget
+internal enum SessionMessageScrollTarget
 {
     Previous,
     Next,
@@ -56,10 +56,10 @@ internal sealed record FocusModelProviderCommand : ShellCommand;
 
 internal sealed record OpenSessionUsageCommand : ShellCommand;
 
-internal sealed record OpenThreadInfoCommand : ShellCommand;
+internal sealed record OpenSessionInfoCommand : ShellCommand;
 
 internal sealed record OpenExpandedPromptCommand : ShellCommand;
 
-internal sealed record ClearSelectedThreadQueueCommand : ShellCommand;
+internal sealed record ClearSelectedSessionQueueCommand : ShellCommand;
 
 internal sealed record ExecutePluginTextCommand(string CommandName, string? Arguments) : ShellCommand;

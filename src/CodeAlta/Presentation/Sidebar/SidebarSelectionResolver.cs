@@ -2,17 +2,17 @@ namespace CodeAlta.Presentation.Sidebar;
 
 internal static class SidebarSelectionResolver
 {
-    public static string? ResolvePreferredExpandedProjectId(string? selectedThreadProjectId)
-        => string.IsNullOrWhiteSpace(selectedThreadProjectId) ? null : selectedThreadProjectId;
+    public static string? ResolvePreferredExpandedProjectId(string? selectedSessionProjectId)
+        => string.IsNullOrWhiteSpace(selectedSessionProjectId) ? null : selectedSessionProjectId;
 
     public static SidebarSelectionTarget ResolveCurrentTarget(
-        string? selectedThreadId,
+        string? selectedSessionId,
         string? selectedProjectId,
         bool globalScopeSelected)
     {
-        if (!string.IsNullOrWhiteSpace(selectedThreadId))
+        if (!string.IsNullOrWhiteSpace(selectedSessionId))
         {
-            return SidebarSelectionTarget.Thread(selectedThreadId);
+            return SidebarSelectionTarget.Session(selectedSessionId);
         }
 
         if (globalScopeSelected || string.IsNullOrWhiteSpace(selectedProjectId))

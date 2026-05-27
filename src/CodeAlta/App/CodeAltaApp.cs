@@ -12,7 +12,7 @@ using CodeAlta.Presentation.Editing;
 using CodeAlta.Presentation.Prompting;
 using CodeAlta.Presentation.Sidebar;
 using CodeAlta.Presentation.Tabs;
-using CodeAlta.Presentation.Threads;
+using CodeAlta.Presentation.Sessions;
 using CodeAlta.Presentation.Usage;
 using CodeAlta.Presentation.Workspace;
 using CodeAlta.Plugins.Abstractions;
@@ -45,63 +45,63 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private readonly FrontendEventPublisher _frontendEvents;
     private readonly ShellProjectionCoordinator _projectionCoordinator;
     private readonly ModelProviderInitializationCoordinator _modelProviderInitializationCoordinator;
-    private readonly ShellThreadStateCoordinator _threadStateCoordinator;
+    private readonly ShellSessionStateCoordinator _sessionStateCoordinator;
     private readonly ShellWorkspaceCoordinator _workspaceCoordinator;
-    private readonly SessionHistoryCoordinator _threadHistoryCoordinator;
-    private readonly ThreadRuntimeEventCoordinator _threadRuntimeEventCoordinator;
-    private readonly ThreadPromptQueueCoordinator _threadPromptQueueCoordinator;
-    private readonly ThreadCommandCoordinator _threadCommandCoordinator;
+    private readonly SessionHistoryCoordinator _sessionHistoryCoordinator;
+    private readonly SessionRuntimeEventCoordinator _sessionRuntimeEventCoordinator;
+    private readonly SessionPromptQueueCoordinator _sessionPromptQueueCoordinator;
+    private readonly SessionCommandCoordinator _sessionCommandCoordinator;
     private readonly ShellCommandSurfaceCoordinator _shellCommandSurfaceCoordinator;
-    private readonly ThreadCreationCoordinator _threadCreationCoordinator;
+    private readonly SessionCreationCoordinator _sessionCreationCoordinator;
     private readonly PromptDraftUiCoordinator _promptDraftUiCoordinator;
     private readonly CodeAltaShellViewModel _shellViewModel;
     private readonly SidebarViewModel _sidebarViewModel;
-    private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel;
+    private readonly SessionWorkspaceViewModel _sessionWorkspaceViewModel;
     private readonly PromptComposerViewModel _promptComposerViewModel;
     private readonly SessionUsageViewModel _sessionUsageViewModel;
     private readonly Dictionary<string, ModelProviderState> _modelProviderStates;
     private readonly SidebarCoordinator _sidebarCoordinator;
     private readonly NavigatorActionCoordinator _navigatorActionCoordinator;
     private readonly ModelProviderSelectorCoordinator _modelProviderSelectorCoordinator;
-    private readonly ThreadTabStripCoordinator _threadTabStripCoordinator;
+    private readonly SessionTabStripCoordinator _sessionTabStripCoordinator;
     private readonly InMemoryShellTabService _shellTabService = new();
     private readonly ShellAnimationRuntime _shellAnimationRuntime = new();
     private readonly DeferredUiActionQueue _deferredUiActionQueue = new();
     private readonly ShellWorkspaceContext _shellWorkspaceContext;
-    private readonly ThreadSelectionContext _threadSelectionContext;
-    private readonly ThreadTabContext _threadTabContext;
+    private readonly SessionSelectionContext _sessionSelectionContext;
+    private readonly SessionTabContext _sessionTabContext;
     private readonly WorkspaceRefreshContext _workspaceRefreshContext;
     private readonly ProviderFrontendCoordinator _providerUi;
     private readonly ProviderDialogCoordinator _providerDialogCoordinator;
     private readonly FileEditorWorkspaceCoordinator _fileEditorWorkspaceCoordinator;
     private readonly InitialCatalogStateCoordinator _initialCatalogStateCoordinator;
     private CodeAltaShellView? _shellView;
-    private ThreadWorkspaceView? _threadWorkspaceView;
+    private SessionWorkspaceView? _sessionWorkspaceView;
     private SessionUsagePresenter? _sessionUsagePresenter;
-    private ThreadInfoPresenter? _threadInfoPresenter;
+    private SessionInfoPresenter? _sessionInfoPresenter;
     private readonly IUiDispatcher _uiDispatcher = new TerminalUiDispatcher(Dispatcher.Current);
     private bool _disableTerminalLoopCallback;
     private bool _commandBarMultiLine;
     private bool _startupProviderDialogHandled;
-    private WorkThreadViewState _viewState
+    private SessionViewViewState _viewState
     {
-        get => _threadStateCoordinator.ViewState;
-        set => _threadStateCoordinator.ViewState = value;
+        get => _sessionStateCoordinator.ViewState;
+        set => _sessionStateCoordinator.ViewState = value;
     }
-    internal Visual? ThreadPaneLayout => _threadWorkspaceView?.ThreadPaneLayout;
-    internal ChatPromptEditor? ThreadInput => _threadWorkspaceView?.ThreadInput;
-    private Visual GetDialogAnchor() => ThreadInput is { } input ? input : _sidebarCoordinator.View.Tree;
+    internal Visual? SessionPaneLayout => _sessionWorkspaceView?.SessionPaneLayout;
+    internal ChatPromptEditor? SessionInput => _sessionWorkspaceView?.SessionInput;
+    private Visual GetDialogAnchor() => SessionInput is { } input ? input : _sidebarCoordinator.View.Tree;
 
     public CodeAltaApp(
         ProjectCatalog projectCatalog,
-        WorkThreadCatalog threadCatalog,
+        SessionViewCatalog sessionCatalog,
         SessionRuntimeService runtimeService,
         CatalogOptions catalogOptions,
         AgentHub agentHub)
         : this(
             CodeAltaOwnedServices.CreateBuiltInProviderDescriptors(),
             projectCatalog,
-            threadCatalog,
+            sessionCatalog,
             runtimeService,
             catalogOptions,
             agentHub,
@@ -119,19 +119,19 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         return new(
             ownedServices.ProviderDescriptors,
             ownedServices.ProjectCatalog,
-            ownedServices.ThreadCatalog,
+            ownedServices.SessionViewCatalog,
             ownedServices.RuntimeService,
             ownedServices.CatalogOptions,
             ownedServices.AgentHub,
             ownedServices.ProjectFileSearchService,
-            new KnownProjectImporter(ownedServices.SessionCatalog, ownedServices.ProjectCatalog),
+            new KnownProjectImporter(ownedServices.AgentSessionCatalog, ownedServices.ProjectCatalog),
             ownedServices,
             updateService);
     }
 
     private CodeAltaApp(IReadOnlyList<ModelProviderDescriptor> providerDescriptors,
         ProjectCatalog projectCatalog,
-        WorkThreadCatalog threadCatalog,
+        SessionViewCatalog sessionCatalog,
         SessionRuntimeService runtimeService,
         CatalogOptions catalogOptions,
         AgentHub agentHub,
@@ -141,7 +141,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         CodeAltaUpdateService? updateService = null)
     {
         ArgumentNullException.ThrowIfNull(projectCatalog);
-        ArgumentNullException.ThrowIfNull(threadCatalog);
+        ArgumentNullException.ThrowIfNull(sessionCatalog);
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(agentHub);
@@ -150,14 +150,14 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _runtimeService = runtimeService;
         _catalogOptions = catalogOptions;
         _knownProjectImporter = knownProjectImporter ?? new KnownProjectImporter(
-            new AgentSessionCatalog(threadCatalog.JournalStore.CreateSessionStore()),
+            new AgentSessionCatalog(sessionCatalog.JournalStore.CreateSessionStore()),
             projectCatalog);
         _ownedServices = ownedServices;
         _frontendHost = new ShellFrontendHost(this);
         var composition = CodeAltaFrontendComposition.Create(
             providerDescriptors,
             projectCatalog,
-            threadCatalog,
+            sessionCatalog,
             runtimeService,
             catalogOptions,
             agentHub,
@@ -173,16 +173,16 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _frontendEvents = composition.FrontendEvents;
         _shellTabService.SetFrontendEvents(_frontendEvents);
         _modelProviderInitializationCoordinator = composition.ModelProviderInitializationCoordinator;
-        _threadStateCoordinator = composition.ThreadStateCoordinator;
+        _sessionStateCoordinator = composition.SessionStateCoordinator;
         _workspaceCoordinator = composition.WorkspaceCoordinator;
-        _threadRuntimeEventCoordinator = composition.ThreadRuntimeEventCoordinator;
-        _threadPromptQueueCoordinator = composition.ThreadPromptQueueCoordinator;
-        _threadCommandCoordinator = composition.ThreadCommandCoordinator;
-        _threadCreationCoordinator = composition.ThreadCreationCoordinator;
+        _sessionRuntimeEventCoordinator = composition.SessionRuntimeEventCoordinator;
+        _sessionPromptQueueCoordinator = composition.SessionPromptQueueCoordinator;
+        _sessionCommandCoordinator = composition.SessionCommandCoordinator;
+        _sessionCreationCoordinator = composition.SessionCreationCoordinator;
         _promptDraftUiCoordinator = composition.PromptDraftUiCoordinator;
         _shellViewModel = composition.ShellViewModel;
         _sidebarViewModel = composition.SidebarViewModel;
-        _threadWorkspaceViewModel = composition.ThreadWorkspaceViewModel;
+        _sessionWorkspaceViewModel = composition.SessionWorkspaceViewModel;
         _promptComposerViewModel = composition.PromptComposerViewModel;
         _sessionUsageViewModel = composition.SessionUsageViewModel;
         _modelProviderStates = composition.ModelProviderStates;
@@ -193,13 +193,13 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             _frontendEvents,
             _workspaceCoordinator,
             _modelProviderSelectorCoordinator,
-            _threadPromptQueueCoordinator);
+            _sessionPromptQueueCoordinator);
         _shellWorkspaceContext = composition.ShellWorkspaceContext;
-        _threadSelectionContext = composition.ThreadSelectionContext;
+        _sessionSelectionContext = composition.SessionSelectionContext;
         _workspaceRefreshContext = composition.WorkspaceRefreshContext;
         _initialCatalogStateCoordinator = new InitialCatalogStateCoordinator(
-            cancellationToken => _threadStateCoordinator.LoadInitialCatalogStateAsync(cancellationToken),
-            _threadStateCoordinator.ApplyInitialCatalogState,
+            cancellationToken => _sessionStateCoordinator.LoadInitialCatalogStateAsync(cancellationToken),
+            _sessionStateCoordinator.ApplyInitialCatalogState,
             PublishStartupCatalogProjectionReady,
             FocusPromptEditor,
             SetStatus);
@@ -212,69 +212,69 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             projectFileSearchService,
             _shellTabService,
             ResolvePromptRoot,
-            () => ThreadInput,
-            () => _threadWorkspaceView,
+            () => SessionInput,
+            () => _sessionWorkspaceView,
             build => CreateComputedVisual(build),
             DispatchToUiDeferred,
-            SyncThreadTabControl,
+            SyncSessionTabControl,
             SetStatus);
-        _threadTabContext = new ThreadTabContext(
-            new DelegatingThreadTabSurfacePort(
-                () => _threadWorkspaceView?.ThreadTabControl,
-                () => _threadWorkspaceView,
+        _sessionTabContext = new SessionTabContext(
+            new DelegatingSessionTabSurfacePort(
+                () => _sessionWorkspaceView?.SessionTabControl,
+                () => _sessionWorkspaceView,
                 build => CreateComputedVisual(build),
                 _uiDispatcher),
-            new DelegatingThreadTabLifecyclePort(
+            new DelegatingSessionTabLifecyclePort(
                 () => ObserveUiTask(ActivateDraftTabAsync, "activate the draft tab"),
-                ActivateThreadSurface,
-                threadId => ObserveUiTask(() => CloseThreadTabAsync(threadId), "close the session tab"),
+                ActivateSessionSurface,
+                sessionId => ObserveUiTask(() => CloseSessionTabAsync(sessionId), "close the session tab"),
                 () => ObserveUiTask(CloseDraftTabAsync, "close the draft tab"),
-                threadId => ObserveUiTask(() => _shellController.OpenThreadAsync(threadId, CancellationToken.None), "open the session tab")),
+                sessionId => ObserveUiTask(() => _shellController.OpenSessionAsync(sessionId, CancellationToken.None), "open the session tab")),
             new DelegatingFileEditorTabPort(
                 tabId => _fileEditorWorkspaceCoordinator.GetFileTab(tabId),
                 tabId => _fileEditorWorkspaceCoordinator.SelectFileTab(tabId),
                 tabId => ObserveUiTask(() => _fileEditorWorkspaceCoordinator.CloseFileTabAsync(tabId), "close the file tab")));
-        _threadTabStripCoordinator = new ThreadTabStripCoordinator(
-            _threadSelectionContext,
-            _threadTabContext,
+        _sessionTabStripCoordinator = new SessionTabStripCoordinator(
+            _sessionSelectionContext,
+            _sessionTabContext,
             _shellTabService,
             _shellAnimationRuntime.WelcomePhase01,
             () => _promptDraftUiCoordinator.HasCurrentPromptDraft);
-        composition.DraftTabReplacement.Bind(_threadTabStripCoordinator.ReplaceDraftTabWithThread);
-        var input = new DelegatingShellPromptInputService(() => ReadBindableState(() => _promptDraftUiCoordinator.PromptText), _threadCommandCoordinator.IsCurrentPromptEmpty);
-        var threadSvc = new DelegatingShellThreadCommandService(GetSelectedThread, EnsureThreadTab);
+        composition.DraftTabReplacement.Bind(_sessionTabStripCoordinator.ReplaceDraftTabWithSession);
+        var input = new DelegatingShellPromptInputService(() => ReadBindableState(() => _promptDraftUiCoordinator.PromptText), _sessionCommandCoordinator.IsCurrentPromptEmpty);
+        var sessionSvc = new DelegatingShellSessionCommandService(GetSelectedSession, EnsureSessionTab);
         var dialogs = new DelegatingShellDialogCommandService(
-            () => DialogBoundsResolver.ResolveAppBounds(ThreadInput), () => ThreadInput, () => _threadStateCoordinator.Projects,
+            () => DialogBoundsResolver.ResolveAppBounds(SessionInput), () => SessionInput, () => _sessionStateCoordinator.Projects,
             OpenFolderAsync, OpenModelProvidersAsync, () => new AboutDialog(() => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()), GetDialogAnchor, _shellAnimationRuntime.WelcomePhase01, updateService).Show(), composition.ModelCatalogCoordinator.Open, _sidebarCoordinator.OpenLogs, _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
-            SkillsManagementCoordinatorFactory.Create(_ownedServices, _catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync, _threadCommandCoordinator.ActivateSelectedSkillAsync, SetStatus),
+            SkillsManagementCoordinatorFactory.Create(_ownedServices, _catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync, _sessionCommandCoordinator.ActivateSelectedSkillAsync, SetStatus),
             PluginManagementCoordinatorFactory.Create(_catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync), _sidebarCoordinator.OpenNavigatorSettings,
             () => EnsureSessionUsagePresenter().TogglePopupFromIndicator(),
-            () => { if (ThreadInput is not null) EnsureThreadInfoPresenter().TogglePopup(ThreadInput); },
-            () => _threadWorkspaceView?.OpenExpandedPromptDialog(), ToggleCommandBarMultiLine);
+            () => { if (SessionInput is not null) EnsureSessionInfoPresenter().TogglePopup(SessionInput); },
+            () => _sessionWorkspaceView?.OpenExpandedPromptDialog(), ToggleCommandBarMultiLine);
         var navigation = new DelegatingShellNavigationCommandService(
             FocusSidebar, FocusPromptEditor, FocusModelProviderSelector,
-            () => { _ = _threadTabStripCoordinator.TrySelectRelativeTab(-1); return Task.CompletedTask; },
-            () => { _ = _threadTabStripCoordinator.TrySelectRelativeTab(1); return Task.CompletedTask; },
-            () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToPreviousMessage()), () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToNextMessage()),
-            () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToFirstMessage()), () => ScrollSelectedThreadMessageAsync(static tab => tab.Timeline.ScrollToLastMessage()));
-        var tabCommands = new DelegatingShellTabCommandService(() => _threadTabStripCoordinator.CloseSelectedTabAsync());
+            () => { _ = _sessionTabStripCoordinator.TrySelectRelativeTab(-1); return Task.CompletedTask; },
+            () => { _ = _sessionTabStripCoordinator.TrySelectRelativeTab(1); return Task.CompletedTask; },
+            () => ScrollSelectedSessionMessageAsync(static tab => tab.Timeline.ScrollToPreviousMessage()), () => ScrollSelectedSessionMessageAsync(static tab => tab.Timeline.ScrollToNextMessage()),
+            () => ScrollSelectedSessionMessageAsync(static tab => tab.Timeline.ScrollToFirstMessage()), () => ScrollSelectedSessionMessageAsync(static tab => tab.Timeline.ScrollToLastMessage()));
+        var tabCommands = new DelegatingShellTabCommandService(() => _sessionTabStripCoordinator.CloseSelectedTabAsync());
         var status = new DelegatingShellStatusService(SetStatus);
         var plugins = new PluginHostCommandService(_ownedServices?.PluginHostBridge);
-        _shellCommandSurfaceCoordinator = ShellCommandSurfaceComposition.Create(_promptComposerViewModel, _threadWorkspaceViewModel, _threadCommandCoordinator, input, threadSvc, dialogs, navigation, tabCommands, status, plugins, ToggleCommandBarMultiLine);
-        _threadHistoryCoordinator = new SessionHistoryCoordinator(
+        _shellCommandSurfaceCoordinator = ShellCommandSurfaceComposition.Create(_promptComposerViewModel, _sessionWorkspaceViewModel, _sessionCommandCoordinator, input, sessionSvc, dialogs, navigation, tabCommands, status, plugins, ToggleCommandBarMultiLine);
+        _sessionHistoryCoordinator = new SessionHistoryCoordinator(
             _runtimeService,
-            EnsureThreadTab,
-            _threadStateCoordinator.FindThread,
-            threadId => _threadStateCoordinator.FindOpenThread(threadId),
-            SessionHistoryCoordinator.CanLoadThreadHistory,
-            _threadCommandCoordinator.BuildExecutionOptions,
-            (tab, message, showSpinner, tone) => SetThreadStatus(tab, message, showSpinner, tone),
-            ClearThreadStatus,
-            ResetThreadTab,
-            _threadRuntimeEventCoordinator.HandleAgentEventAsync,
-            thread => _threadStateCoordinator.PersistThreadLocalStateAsync(thread),
-            tab => _frontendEvents.Publish(new SessionUsageChangedEvent(tab.Thread.ThreadId)),
-            _threadRuntimeEventCoordinator.ProjectLoadedHistory,
+            EnsureSessionTab,
+            _sessionStateCoordinator.FindSession,
+            sessionId => _sessionStateCoordinator.FindOpenSession(sessionId),
+            SessionHistoryCoordinator.CanLoadSessionHistory,
+            _sessionCommandCoordinator.BuildExecutionOptions,
+            (tab, message, showSpinner, tone) => SetSessionStatus(tab, message, showSpinner, tone),
+            ClearSessionStatus,
+            ResetSessionTab,
+            _sessionRuntimeEventCoordinator.HandleAgentEventAsync,
+            session => _sessionStateCoordinator.PersistSessionLocalStateAsync(session),
+            tab => _frontendEvents.Publish(new SessionUsageChangedEvent(tab.SessionView.SessionId)),
+            _sessionRuntimeEventCoordinator.ProjectLoadedHistory,
             DispatchToUiAsync);
     }
 
@@ -296,24 +296,24 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     }
 
     private string? GetDraftProjectRoot()
-        => _threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true }
+        => _sessionStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true }
             ? null
             : GetSelectedProject()?.ProjectPath;
 
     private string? GetDraftProjectId()
-        => _threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true }
+        => _sessionStateCoordinator.Selection.Target is WorkspaceTarget.Draft { IsGlobal: true }
             ? null
             : GetSelectedProject()?.Id;
 
-    private string? GetThreadProjectRoot(SessionView thread)
-        => GetProjectById(thread.ProjectRef)?.ProjectPath;
+    private string? GetSessionProjectRoot(SessionView session)
+        => GetProjectById(session.ProjectRef)?.ProjectPath;
 
 
     internal void ApplyDraftModelProviderPreference(ModelProviderState backendState)
         => _modelProviderPreferences.ApplyDraftModelProviderPreference(backendState, _viewState, GetDraftProjectRoot(), GetDraftProjectId());
 
-    internal void ApplyThreadPreference(OpenThreadState tab)
-        => _modelProviderPreferences.ApplyThreadPreference(tab, _viewState, GetThreadProjectRoot(tab.Thread), _modelProviderStates);
+    internal void ApplySessionPreference(OpenSessionState tab)
+        => _modelProviderPreferences.ApplySessionPreference(tab, _viewState, GetSessionProjectRoot(tab.SessionView), _modelProviderStates);
 
     internal void RememberGlobalModelProviderPreference(
         ModelProviderId providerId,
@@ -327,33 +327,33 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             reasoningEffort,
             GetDraftProjectRoot(),
             GetDraftProjectId(),
-            _threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft);
+            _sessionStateCoordinator.Selection.Target is WorkspaceTarget.Draft);
         _ = PersistViewStateAsync();
     }
 
-    internal void RememberThreadPreference(
-        string threadId,
+    internal void RememberSessionPreference(
+        string sessionId,
         string? modelId,
         AgentReasoningEffort? reasoningEffort,
         bool persistNow)
     {
-        _modelProviderPreferences.RememberThreadPreference(_viewState, threadId, modelId, reasoningEffort);
-        var tab = _threadStateCoordinator.FindOpenThread(threadId);
-        var thread = tab?.Thread ?? _threadStateCoordinator.FindThread(threadId);
-        if (thread is not null)
+        _modelProviderPreferences.RememberSessionPreference(_viewState, sessionId, modelId, reasoningEffort);
+        var tab = _sessionStateCoordinator.FindOpenSession(sessionId);
+        var session = tab?.SessionView ?? _sessionStateCoordinator.FindSession(sessionId);
+        if (session is not null)
         {
-            var providerKey = tab?.ProviderId.Value ?? thread.ResolvedProviderKey;
+            var providerKey = tab?.ProviderId.Value ?? session.ResolvedProviderKey;
             if (!string.IsNullOrWhiteSpace(providerKey))
             {
-                thread.ProviderKey = providerKey;
-                thread.ProviderId = providerKey;
+                session.ProviderKey = providerKey;
+                session.ProviderId = providerKey;
             }
 
-            thread.ModelId = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
-            thread.ReasoningEffort = reasoningEffort;
+            session.ModelId = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
+            session.ReasoningEffort = reasoningEffort;
             if (persistNow)
             {
-                _ = _threadStateCoordinator.PersistThreadLocalStateAsync(thread);
+                _ = _sessionStateCoordinator.PersistSessionLocalStateAsync(session);
             }
         }
 
@@ -364,10 +364,10 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     }
 
     internal void RefreshSidebarProjection()
-        => SidebarUiStateHelpers.RefreshProjection(_sidebarCoordinator, _threadStateCoordinator, _promptDraftUiCoordinator, threadId => _threadStateCoordinator.FindOpenThread(threadId), _threadRuntimeEventCoordinator.IsThreadRunning, VerifyBindableAccess);
+        => SidebarUiStateHelpers.RefreshProjection(_sidebarCoordinator, _sessionStateCoordinator, _promptDraftUiCoordinator, sessionId => _sessionStateCoordinator.FindOpenSession(sessionId), _sessionRuntimeEventCoordinator.IsSessionRunning, VerifyBindableAccess);
 
     internal void SyncSidebarSelectionToCurrentState()
-        => _sidebarCoordinator.SyncSelectionToCurrentState(SidebarUiStateHelpers.ResolveCurrentTarget(_threadStateCoordinator));
+        => _sidebarCoordinator.SyncSelectionToCurrentState(SidebarUiStateHelpers.ResolveCurrentTarget(_sessionStateCoordinator));
 
     internal void ApplyPendingSidebarSelection()
         => _sidebarCoordinator.ApplyPendingSelection();
@@ -412,7 +412,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private void ToggleCommandBarMultiLine()
     {
         _commandBarMultiLine = !_commandBarMultiLine;
-        if (_threadWorkspaceView?.ThreadCommandBar is { } commandBar) commandBar.MultiLine = _commandBarMultiLine;
+        if (_sessionWorkspaceView?.SessionCommandBar is { } commandBar) commandBar.MultiLine = _commandBarMultiLine;
 
         SetStatus(
             _commandBarMultiLine
@@ -439,11 +439,11 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     }
 
     private string? ResolvePromptRoot()
-        => PromptReferenceProjectRootResolver.Resolve(GetSelectedThread(), GetProjectById, GetSelectedProject, _catalogOptions.GlobalRoot);
+        => PromptReferenceProjectRootResolver.Resolve(GetSelectedSession(), GetProjectById, GetSelectedProject, _catalogOptions.GlobalRoot);
 
     internal void RefreshModelProviderSelectorsForDraftScope(ModelProviderId? id = null) => _modelProviderSelectorCoordinator.RefreshForDraftScope(id);
-    internal void RefreshModelProviderSelectorsForThread(OpenThreadState tab) => _modelProviderSelectorCoordinator.RefreshForThread(tab);
-    internal void SyncModelProviderSelectorItems() => _threadWorkspaceView?.SyncModelProviderSelectorItems(_threadWorkspaceViewModel);
+    internal void RefreshModelProviderSelectorsForSession(OpenSessionState tab) => _modelProviderSelectorCoordinator.RefreshForSession(tab);
+    internal void SyncModelProviderSelectorItems() => _sessionWorkspaceView?.SyncModelProviderSelectorItems(_sessionWorkspaceViewModel);
     private void OnModelProviderSelectionChanged(int newIndex) => ObserveUiTask(() => _modelProviderSelectorCoordinator.OnModelProviderSelectionChangedAsync(newIndex), "change the selected provider");
     private void OnModelSelectionChanged(int newIndex) => _modelProviderSelectorCoordinator.OnModelSelectionChanged(newIndex);
     private void OnReasoningSelectionChanged(int newIndex) => _modelProviderSelectorCoordinator.OnReasoningSelectionChanged(newIndex);
@@ -455,14 +455,14 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     internal bool TrySetPromptUnavailableStatus() { if (!TryGetPromptUnavailableStatus(out var message, out var tone)) return false; SetStatus(message, tone: tone); return true; }
     internal void ApplyPromptAvailabilityProjection() => _modelProviderSelectorCoordinator.ApplyPromptAvailabilityProjection();
 
-    internal void ApplyQueuedPromptProjection() => _threadPromptQueueCoordinator.RefreshSelectedThreadQueueUi();
+    internal void ApplyQueuedPromptProjection() => _sessionPromptQueueCoordinator.RefreshSelectedSessionQueueUi();
 
-    internal void UpdatePromptImageAttachmentsUi() { _promptComposerViewModel.PromptImageAttachmentVersion++; _threadWorkspaceView?.RefreshActivePromptImages(); RefreshSidebarProjection(); }
-    internal void SyncActivePromptPanelProjection() => _threadWorkspaceView?.SyncActivePromptPanelProjection();
-    internal bool GetAlwaysEnqueue() => _threadWorkspaceView?.AlwaysEnqueue ?? _promptComposerViewModel.AlwaysEnqueue;
-    internal void SyncThreadTabControl() => _threadTabStripCoordinator.SyncControl();
-    private void OnThreadTabControlSelectionChanged(int selectedIndex) => _threadTabStripCoordinator.OnSelectionChanged(selectedIndex);
-    internal void ResetPendingThreadTabSelection() => _threadTabStripCoordinator.ResetPendingSelection();
+    internal void UpdatePromptImageAttachmentsUi() { _promptComposerViewModel.PromptImageAttachmentVersion++; _sessionWorkspaceView?.RefreshActivePromptImages(); RefreshSidebarProjection(); }
+    internal void SyncActivePromptPanelProjection() => _sessionWorkspaceView?.SyncActivePromptPanelProjection();
+    internal bool GetAlwaysEnqueue() => _sessionWorkspaceView?.AlwaysEnqueue ?? _promptComposerViewModel.AlwaysEnqueue;
+    internal void SyncSessionTabControl() => _sessionTabStripCoordinator.SyncControl();
+    private void OnSessionTabControlSelectionChanged(int selectedIndex) => _sessionTabStripCoordinator.OnSelectionChanged(selectedIndex);
+    internal void ResetPendingSessionTabSelection() => _sessionTabStripCoordinator.ResetPendingSelection();
 
     private CodeAltaShellView EnsureShellView()
     {
@@ -472,20 +472,20 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         Func<string?> promptRoot = ResolvePromptRoot;
         var pb = _ownedServices?.PluginHostBridge;
         var pec = pb?.GetPromptEditorContributions() ?? [];
-        var getPromptComposerSession = PromptComposerSessionBindingFactory.Create(_promptDraftUiCoordinator, new PromptImageCapabilityContext(GetSelectedThread, _threadStateCoordinator.FindOpenThread, GetPreferredProviderId, _modelProviderStates), (message, tone) => SetStatus(message, tone: tone));
+        var getPromptComposerSession = PromptComposerSessionBindingFactory.Create(_promptDraftUiCoordinator, new PromptImageCapabilityContext(GetSelectedSession, _sessionStateCoordinator.FindOpenSession, GetPreferredProviderId, _modelProviderStates), (message, tone) => SetStatus(message, tone: tone));
         var openHelp = () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.ShowHelpAsync(), "show help");
         var showPalette = () => _shellCommandSurfaceCoordinator.ShowCommandPalette();
         var shellSurface = CodeAltaShellViewFactory.CreateSurface(new CodeAltaShellSurfaceOptions
         {
             ShellViewModel = _shellViewModel,
-            WorkspaceViewModel = _threadWorkspaceViewModel,
+            WorkspaceViewModel = _sessionWorkspaceViewModel,
             PromptComposerViewModel = _promptComposerViewModel,
             WorkspaceCommandBindings = _shellCommandSurfaceCoordinator.BuildWorkspaceCommandBindings(),
-            WorkspaceChromeController = ThreadWorkspaceChromeController.Create(() => CreateUsageComputedVisual(EnsureSessionUsagePresenter().BuildIndicatorVisual), () => ShellPluginFooterComposer.ComposeRegion(pb, PluginUiRegion.ThreadStatus), anchor => EnsureThreadInfoPresenter().TogglePopup(anchor), () => ObserveUiTask(OpenModelProvidersAsync, "open model providers")),
-            PromptComposerController = PromptComposerViewController.Create(acceptedPrompt => ObserveUiTask(() => _shellCommandSurfaceCoordinator.HandleAcceptedPromptAsync(acceptedPrompt), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync(steer: false), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.AbortSelectedThreadAsync(), "abort the selected session"), openHelp, showPalette),
-            QueuedPromptController = QueuedPromptStripController.Create(markdown => (_threadWorkspaceView?.ThreadPaneLayout.App)?.Terminal.Clipboard.TrySetText(markdown), queuedPromptId => ObserveUiTask(() => _threadCommandCoordinator.ConvertSelectedThreadQueuedPromptToSteerAsync(queuedPromptId), "convert the queued prompt to steer"), pendingSteerId => _threadCommandCoordinator.DeleteSelectedThreadPendingSteer(pendingSteerId), queuedPromptId => _threadCommandCoordinator.DeleteSelectedThreadQueuedPrompt(queuedPromptId), (queuedPromptId, remainingCount) => _threadCommandCoordinator.UpdateSelectedThreadQueuedPromptCount(queuedPromptId, remainingCount), (queuedPromptId, text) => _threadCommandCoordinator.UpdateSelectedThreadQueuedPromptText(queuedPromptId, text), (onAccepted, placeholder) => ThreadWorkspaceView.CreateStyledPromptEditor(onAccepted, openHelp, showPalette, pfs, promptRoot, pec, placeholder)),
-            ModelProviderSelectorController = ModelProviderSelectorController.Create(OnModelProviderSelectionChanged, OnModelSelectionChanged, OnReasoningSelectionChanged, () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.CompactSelectedThreadAsync(), "compact the selected session")),
-            ThreadTabHostController = ThreadTabHostController.Create(selectedIndex => _threadTabStripCoordinator.ObserveBoundSelection(selectedIndex)),
+            WorkspaceChromeController = SessionWorkspaceChromeController.Create(() => CreateUsageComputedVisual(EnsureSessionUsagePresenter().BuildIndicatorVisual), () => ShellPluginFooterComposer.ComposeRegion(pb, PluginUiRegion.SessionStatus), anchor => EnsureSessionInfoPresenter().TogglePopup(anchor), () => ObserveUiTask(OpenModelProvidersAsync, "open model providers")),
+            PromptComposerController = PromptComposerViewController.Create(acceptedPrompt => ObserveUiTask(() => _shellCommandSurfaceCoordinator.HandleAcceptedPromptAsync(acceptedPrompt), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync(steer: false), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.AbortSelectedSessionAsync(), "abort the selected session"), openHelp, showPalette),
+            QueuedPromptController = QueuedPromptStripController.Create(markdown => (_sessionWorkspaceView?.SessionPaneLayout.App)?.Terminal.Clipboard.TrySetText(markdown), queuedPromptId => ObserveUiTask(() => _sessionCommandCoordinator.ConvertSelectedSessionQueuedPromptToSteerAsync(queuedPromptId), "convert the queued prompt to steer"), pendingSteerId => _sessionCommandCoordinator.DeleteSelectedSessionPendingSteer(pendingSteerId), queuedPromptId => _sessionCommandCoordinator.DeleteSelectedSessionQueuedPrompt(queuedPromptId), (queuedPromptId, remainingCount) => _sessionCommandCoordinator.UpdateSelectedSessionQueuedPromptCount(queuedPromptId, remainingCount), (queuedPromptId, text) => _sessionCommandCoordinator.UpdateSelectedSessionQueuedPromptText(queuedPromptId, text), (onAccepted, placeholder) => SessionWorkspaceView.CreateStyledPromptEditor(onAccepted, openHelp, showPalette, pfs, promptRoot, pec, placeholder)),
+            ModelProviderSelectorController = ModelProviderSelectorController.Create(OnModelProviderSelectionChanged, OnModelSelectionChanged, OnReasoningSelectionChanged, () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.CompactSelectedSessionAsync(), "compact the selected session")),
+            SessionTabHostController = SessionTabHostController.Create(selectedIndex => _sessionTabStripCoordinator.ObserveBoundSelection(selectedIndex)),
             ProjectFileSearchService = pfs,
             GetPromptReferenceProjectRoot = promptRoot,
             PromptEditorContributions = pec,
@@ -499,39 +499,39 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             ComposePluginFooter = commandBar => ShellPluginFooterComposer.Compose(commandBar, pb),
             CommandBarMultiLine = _commandBarMultiLine,
         });
-        _threadWorkspaceView = shellSurface.WorkspaceView;
+        _sessionWorkspaceView = shellSurface.WorkspaceView;
         _sidebarCoordinator.View.CollapsedChanged += shellSurface.ShellView.SetSidebarCollapsed;
         shellSurface.ShellView.SetSidebarCollapsed(_sidebarCoordinator.View.IsCollapsed);
-        _shellView = UiTheme.Set(shellSurface.ShellView, _threadStateCoordinator);
+        _shellView = UiTheme.Set(shellSurface.ShellView, _sessionStateCoordinator);
         _frontendEvents.Publish(new CatalogChangedEvent());
         return _shellView;
     }
 
     internal void ApplyShellChromeProjection() => _workspaceCoordinator.ApplyShellChromeProjection();
 
-    internal void ApplyCatalogProjection() { _threadInfoPresenter?.InvalidateSelection(); _workspaceCoordinator.ApplyCatalogProjection(); }
+    internal void ApplyCatalogProjection() { _sessionInfoPresenter?.InvalidateSelection(); _workspaceCoordinator.ApplyCatalogProjection(); }
 
     internal void PublishStartupCatalogProjectionReady()
         => _frontendEvents.Publish(new StartupCatalogProjectionReadyEvent());
 
     internal void ApplyHeaderProjection() => _workspaceCoordinator.ApplyHeaderProjection();
 
-    internal void ApplySelectionProjection() { _threadInfoPresenter?.InvalidateSelection(); _workspaceCoordinator.ApplySelectionProjection(); }
+    internal void ApplySelectionProjection() { _sessionInfoPresenter?.InvalidateSelection(); _workspaceCoordinator.ApplySelectionProjection(); }
 
-    internal void SelectGlobalScope() { _threadStateCoordinator.SelectGlobalScope(); ActivateThreadSurface(); }
+    internal void SelectGlobalScope() { _sessionStateCoordinator.SelectGlobalScope(); ActivateSessionSurface(); }
 
-    internal void SelectProjectScope(string projectId) { _threadStateCoordinator.SelectProjectScope(projectId); ActivateThreadSurface(); }
-    internal void EnsureSelectionDefaults() => _threadStateCoordinator.EnsureSelectionDefaults();
+    internal void SelectProjectScope(string projectId) { _sessionStateCoordinator.SelectProjectScope(projectId); ActivateSessionSurface(); }
+    internal void EnsureSelectionDefaults() => _sessionStateCoordinator.EnsureSelectionDefaults();
     internal void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info) => _workspaceCoordinator.SetStatus(message, showSpinner, tone);
     internal void SetProviderSessionLoadStatus(string? message) => _workspaceCoordinator.SetProviderSessionLoadStatus(message);
-    internal void SetThreadStatus(OpenThreadState tab, string message, bool showSpinner = false, StatusTone tone = StatusTone.Info, bool hasCustomStatus = true) => _workspaceCoordinator.SetThreadStatus(tab, message, showSpinner, tone, hasCustomStatus);
-    internal void ClearThreadStatus(OpenThreadState tab) => _workspaceCoordinator.ClearThreadStatus(tab);
+    internal void SetSessionStatus(OpenSessionState tab, string message, bool showSpinner = false, StatusTone tone = StatusTone.Info, bool hasCustomStatus = true) => _workspaceCoordinator.SetSessionStatus(tab, message, showSpinner, tone, hasCustomStatus);
+    internal void ClearSessionStatus(OpenSessionState tab) => _workspaceCoordinator.ClearSessionStatus(tab);
     internal void ApplySessionUsageProjection() => _workspaceCoordinator.ApplySessionUsageProjection();
-    internal void ApplyThreadChromeProjection() => _workspaceCoordinator.ApplyThreadChromeProjection();
+    internal void ApplySessionChromeProjection() => _workspaceCoordinator.ApplySessionChromeProjection();
 
-    internal bool IsSelectedThread(string threadId)
-        => !string.IsNullOrWhiteSpace(threadId) &&
-           string.Equals(_threadStateCoordinator.Selection.SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase);
+    internal bool IsSelectedSession(string sessionId)
+        => !string.IsNullOrWhiteSpace(sessionId) &&
+           string.Equals(_sessionStateCoordinator.Selection.SelectedSessionId, sessionId, StringComparison.OrdinalIgnoreCase);
 
     internal void SetReadyStatusForCurrentSelection() => _workspaceCoordinator.SetReadyStatusForCurrentSelection();
 
@@ -541,15 +541,15 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private SessionUsagePresenter EnsureSessionUsagePresenter()
         => _sessionUsagePresenter ??= PopupPresenterFactory.CreateSessionUsagePresenter(
             _sessionUsageViewModel,
-            () => ThreadPaneLayout?.App,
-            () => ThreadInput,
+            () => SessionPaneLayout?.App,
+            () => SessionInput,
             build => CreateUsageComputedVisual(build));
 
-    private ThreadInfoPresenter EnsureThreadInfoPresenter()
-        => _threadInfoPresenter ??= PopupPresenterFactory.CreateThreadInfoPresenter(
-            () => ThreadPaneLayout?.App,
-            () => ThreadInput,
-            new ThreadInfoService(_ownedServices!.SessionCatalog, _threadSelectionContext, _modelProviderStates),
+    private SessionInfoPresenter EnsureSessionInfoPresenter()
+        => _sessionInfoPresenter ??= PopupPresenterFactory.CreateSessionInfoPresenter(
+            () => SessionPaneLayout?.App,
+            () => SessionInput,
+            new SessionInfoService(_ownedServices!.AgentSessionCatalog, _sessionSelectionContext, _modelProviderStates),
             DispatchToUi,
             build => CreateComputedVisual(build));
 
@@ -558,12 +558,12 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     internal void SetShellInitialized(bool isInitialized)
         => _workspaceCoordinator.SetShellInitialized(isInitialized);
 
-    internal void DispatchToUi(Action action) { ArgumentNullException.ThrowIfNull(action); var dispatcher = GetUiDispatcher(); UiDispatch.Post(dispatcher, action, allowInline: ShouldRunInlineOnCurrentThread(dispatcher.CheckAccess(), _terminalLoopCoordinator.HasStarted)); }
+    internal void DispatchToUi(Action action) { ArgumentNullException.ThrowIfNull(action); var dispatcher = GetUiDispatcher(); UiDispatch.Post(dispatcher, action, allowInline: ShouldRunInlineOnCurrentSession(dispatcher.CheckAccess(), _terminalLoopCoordinator.HasStarted)); }
     internal Task DispatchToUiAsync(Func<Task> action)
     {
         ArgumentNullException.ThrowIfNull(action);
         var dispatcher = GetUiDispatcher();
-        return UiDispatch.InvokeAsync(dispatcher, action, ShouldRunInlineOnCurrentThread(dispatcher.CheckAccess(), _terminalLoopCoordinator.HasStarted));
+        return UiDispatch.InvokeAsync(dispatcher, action, ShouldRunInlineOnCurrentSession(dispatcher.CheckAccess(), _terminalLoopCoordinator.HasStarted));
     }
 
     internal void DispatchToUiDeferred(Action action) { ArgumentNullException.ThrowIfNull(action); _deferredUiActionQueue.Enqueue(action); }
@@ -582,10 +582,10 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         throw new InvalidOperationException("Bindable state must be accessed on the UI thread.");
     }
 
-    internal static bool ShouldRunInlineOnCurrentThread(bool dispatcherHasAccess, bool terminalLoopStarted)
+    internal static bool ShouldRunInlineOnCurrentSession(bool dispatcherHasAccess, bool terminalLoopStarted)
         => !terminalLoopStarted || dispatcherHasAccess;
 
-    internal static bool ShouldRunDeferredUiActionInlineOnCurrentThread(bool dispatcherHasAccess, bool terminalLoopStarted)
+    internal static bool ShouldRunDeferredUiActionInlineOnCurrentSession(bool dispatcherHasAccess, bool terminalLoopStarted)
         => !terminalLoopStarted && dispatcherHasAccess;
 
     private void DrainDeferredUiActions()
@@ -594,27 +594,27 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     internal IUiDispatcher GetUiDispatcher()
         => _uiDispatcher;
 
-    internal string? LoadPromptDraft(string threadId)
-        => _promptDraftUiCoordinator!.LoadPromptDraft(threadId);
+    internal string? LoadPromptDraft(string sessionId)
+        => _promptDraftUiCoordinator!.LoadPromptDraft(sessionId);
 
-    internal void DeletePromptDraft(string threadId)
-        => _promptDraftUiCoordinator!.DeletePersistedPromptDraft(threadId);
+    internal void DeletePromptDraft(string sessionId)
+        => _promptDraftUiCoordinator!.DeletePersistedPromptDraft(sessionId);
 
-    internal void RemoveThreadTabPage(string threadId, ShellTabCloseReason reason)
+    internal void RemoveSessionTabPage(string sessionId, ShellTabCloseReason reason)
     {
-        _ = _shellTabService.CloseTabAsync(new ShellTabId(threadId), reason);
-        _threadWorkspaceView?.RemoveTabPage(threadId);
+        _ = _shellTabService.CloseTabAsync(new ShellTabId(sessionId), reason);
+        _sessionWorkspaceView?.RemoveTabPage(sessionId);
     }
 
     internal IReadOnlyList<ShellTabSnapshot> GetShellTabs() => _shellTabService.GetTabs();
 
-    internal void RekeyThreadIdentity(string oldThreadId, SessionView thread)
-        => _threadStateCoordinator.RekeyThreadIdentity(oldThreadId, thread);
+    internal void RekeySessionIdentity(string oldSessionId, SessionView session)
+        => _sessionStateCoordinator.RekeySessionIdentity(oldSessionId, session);
 
     internal bool HasWorkspaceSurface()
-        => _threadWorkspaceView is not null;
+        => _sessionWorkspaceView is not null;
 
-    internal void SyncPromptText(ThreadSessionState? session)
+    internal void SyncPromptText(SessionState? session)
         => _promptDraftUiCoordinator!.SyncPromptText(session);
 
     internal void ClearDraftPromptText()
@@ -649,27 +649,27 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
 
     private async Task ActivateDraftTabAsync()
     {
-        ResetPendingThreadTabSelection();
-        _threadStateCoordinator.DraftTabOpen = true;
-        _threadStateCoordinator.SelectedThreadId = null;
-        _viewState.SelectedThreadId = null;
+        ResetPendingSessionTabSelection();
+        _sessionStateCoordinator.DraftTabOpen = true;
+        _sessionStateCoordinator.SelectedSessionId = null;
+        _viewState.SelectedSessionId = null;
         _viewState.UpdatedAt = DateTimeOffset.UtcNow;
-        ActivateThreadSurface();
+        ActivateSessionSurface();
         await PersistViewStateAsync();
         _frontendEvents.Publish(new SelectionChangedEvent());
     }
 
     private async Task CloseDraftTabAsync()
     {
-        if (_threadStateCoordinator.Selection.Target is WorkspaceTarget.Draft)
+        if (_sessionStateCoordinator.Selection.Target is WorkspaceTarget.Draft)
         {
-            _threadStateCoordinator.SelectedThreadId = _viewState.OpenThreadIds.FirstOrDefault();
-            _viewState.SelectedThreadId = _threadStateCoordinator.Selection.SelectedThreadId;
+            _sessionStateCoordinator.SelectedSessionId = _viewState.OpenSessionIds.FirstOrDefault();
+            _viewState.SelectedSessionId = _sessionStateCoordinator.Selection.SelectedSessionId;
         }
 
         _viewState.UpdatedAt = DateTimeOffset.UtcNow;
         await _shellTabService.CloseTabAsync(new ShellTabId(DraftTabId), ShellTabCloseReason.UserDetached);
-        ActivateThreadSurface();
+        ActivateSessionSurface();
         await PersistViewStateAsync();
         _frontendEvents.Publish(new SelectionChangedEvent());
     }
@@ -678,7 +678,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         => _shellController.OpenFolderAsync(folderPath, includeHidden, CancellationToken.None);
 
     internal async Task PersistViewStateAsync()
-        => await _threadStateCoordinator.PersistViewStateAsync();
+        => await _sessionStateCoordinator.PersistViewStateAsync();
     internal Task InitializeModelProvidersAsync(CancellationToken cancellationToken)
         => _modelProviderInitializationCoordinator.InitializeAsync(cancellationToken);
     internal Task InitializeModelProviderAsync(ModelProviderId providerId, CancellationToken cancellationToken)
@@ -686,51 +686,51 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
 
     internal void ApplyRecoveredCatalogState(
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionView> threads,
-        bool pruneMissingThreads = true)
-        => _threadStateCoordinator.ApplyRecoveredCatalogState(projects, threads, pruneMissingThreads);
+        IReadOnlyList<SessionView> sessions,
+        bool pruneMissingSessions = true)
+        => _sessionStateCoordinator.ApplyRecoveredCatalogState(projects, sessions, pruneMissingSessions);
 
     internal void UpsertProject(ProjectDescriptor project)
-        => _threadStateCoordinator.UpsertProject(project);
+        => _sessionStateCoordinator.UpsertProject(project);
 
-    internal void TrySchedulePendingStartupThreadRestore(CancellationToken cancellationToken)
-        => _threadStateCoordinator.TrySchedulePendingStartupThreadRestore(cancellationToken);
+    internal void TrySchedulePendingStartupSessionRestore(CancellationToken cancellationToken)
+        => _sessionStateCoordinator.TrySchedulePendingStartupSessionRestore(cancellationToken);
 
-    private async Task RestoreStartupThreadHistoryAsync(string? threadId, CancellationToken cancellationToken)
-        => await _threadStateCoordinator.RestoreStartupThreadHistoryAsync(threadId, cancellationToken);
+    private async Task RestoreStartupSessionHistoryAsync(string? sessionId, CancellationToken cancellationToken)
+        => await _sessionStateCoordinator.RestoreStartupSessionHistoryAsync(sessionId, cancellationToken);
 
-    internal Task RegisterCreatedThreadAsync(SessionView thread)
-        => _threadStateCoordinator.RegisterCreatedThreadAsync(thread);
+    internal Task RegisterCreatedSessionAsync(SessionView session)
+        => _sessionStateCoordinator.RegisterCreatedSessionAsync(session);
 
-    internal void OpenThread(string threadId)
+    internal void OpenSession(string sessionId)
     {
-        if (_threadStateCoordinator.OpenThread(threadId) == OpenThreadResult.NotFound)
+        if (_sessionStateCoordinator.OpenSession(sessionId) == OpenSessionResult.NotFound)
         {
-            SetStatus($"Session '{threadId}' was not found.", false, StatusTone.Warning);
+            SetStatus($"Session '{sessionId}' was not found.", false, StatusTone.Warning);
             return;
         }
 
-        ActivateThreadSurface();
+        ActivateSessionSurface();
     }
-    internal void FocusPromptEditor() { ActivateThreadSurface(); ThreadPaneLayout?.App?.Focus(ThreadInput); }
-    internal void FocusPromptTarget() => ThreadPaneLayout?.App?.Focus(ThreadInput);
-    internal void FocusModelProviderSelector() { ActivateThreadSurface(); DispatchToUiDeferred(() => _threadWorkspaceView?.FocusModelProviderSelector()); }
+    internal void FocusPromptEditor() { ActivateSessionSurface(); SessionPaneLayout?.App?.Focus(SessionInput); }
+    internal void FocusPromptTarget() => SessionPaneLayout?.App?.Focus(SessionInput);
+    internal void FocusModelProviderSelector() { ActivateSessionSurface(); DispatchToUiDeferred(() => _sessionWorkspaceView?.FocusModelProviderSelector()); }
 
-    internal void FocusReasoningSelector() { ActivateThreadSurface(); DispatchToUiDeferred(() => _threadWorkspaceView?.FocusReasoningSelector()); }
+    internal void FocusReasoningSelector() { ActivateSessionSurface(); DispatchToUiDeferred(() => _sessionWorkspaceView?.FocusReasoningSelector()); }
 
-    private Task ScrollSelectedThreadMessageAsync(Action<OpenThreadState> scroll)
+    private Task ScrollSelectedSessionMessageAsync(Action<OpenSessionState> scroll)
     {
         ArgumentNullException.ThrowIfNull(scroll);
 
         if (_fileEditorWorkspaceCoordinator.SelectedTabId is not null ||
-            _threadStateCoordinator.Selection.Target is not WorkspaceTarget.Thread ||
-            GetSelectedThread() is not { } thread)
+            _sessionStateCoordinator.Selection.Target is not WorkspaceTarget.Session ||
+            GetSelectedSession() is not { } session)
         {
             SetStatus("Open a session tab before navigating messages.", false, StatusTone.Warning);
             return Task.CompletedTask;
         }
 
-        var tab = EnsureThreadTab(thread);
+        var tab = EnsureSessionTab(session);
         if (!tab.Timeline.HasNavigableMessages)
         {
             SetStatus("No user or assistant messages to navigate in this session.", false, StatusTone.Info);
@@ -744,36 +744,36 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     internal Task OpenModelProvidersAsync() => _providerDialogCoordinator.OpenAsync();
 
     internal void FocusSidebar() { SyncSidebarSelectionToCurrentState(); ApplyPendingSidebarSelection(); _sidebarCoordinator.View.Tree.App?.Focus(_sidebarCoordinator.View.Tree); }
-    private async Task CloseThreadTabAsync(string threadId)
-        => await _threadStateCoordinator.CloseThreadTabAsync(threadId);
+    private async Task CloseSessionTabAsync(string sessionId)
+        => await _sessionStateCoordinator.CloseSessionTabAsync(sessionId);
 
-    internal Task EnsureThreadHistoryLoadedAsync(SessionView thread, CancellationToken cancellationToken = default)
-        => _threadHistoryCoordinator.EnsureLoadedAsync(thread, cancellationToken);
+    internal Task EnsureSessionHistoryLoadedAsync(SessionView session, CancellationToken cancellationToken = default)
+        => _sessionHistoryCoordinator.EnsureLoadedAsync(session, cancellationToken);
 
-    internal void HandleRuntimeEvent(WorkThreadRuntimeEvent runtimeEvent)
-        => _threadRuntimeEventCoordinator.ApplyRuntimeEvent(runtimeEvent);
+    internal void HandleRuntimeEvent(SessionRuntimeEvent runtimeEvent)
+        => _sessionRuntimeEventCoordinator.ApplyRuntimeEvent(runtimeEvent);
 
-    private OpenThreadState EnsureThreadTab(SessionView thread)
-        => _threadStateCoordinator.EnsureThreadTab(thread);
+    private OpenSessionState EnsureSessionTab(SessionView session)
+        => _sessionStateCoordinator.EnsureSessionTab(session);
 
-    private void ResetThreadTab(OpenThreadState tab)
-        => _threadStateCoordinator.ResetThreadTab(tab);
+    private void ResetSessionTab(OpenSessionState tab)
+        => _sessionStateCoordinator.ResetSessionTab(tab);
 
-    private void ActivateThreadSurface()
+    private void ActivateSessionSurface()
     {
-        _fileEditorWorkspaceCoordinator.ActivateThreadSurface();
-        _threadTabStripCoordinator.SelectCurrentThreadSurfaceTab();
-        SyncThreadTabControl();
-        DispatchToUiDeferred(() => ThreadPaneLayout?.App?.Focus(ThreadInput));
+        _fileEditorWorkspaceCoordinator.ActivateSessionSurface();
+        _sessionTabStripCoordinator.SelectCurrentSessionSurfaceTab();
+        SyncSessionTabControl();
+        DispatchToUiDeferred(() => SessionPaneLayout?.App?.Focus(SessionInput));
     }
 
     private ProjectDescriptor? GetSelectedProject()
-        => _threadStateCoordinator.GetSelectedProject();
+        => _sessionStateCoordinator.GetSelectedProject();
 
     private ProjectDescriptor? GetProjectById(string? projectId)
-        => _threadStateCoordinator.GetProjectById(projectId);
+        => _sessionStateCoordinator.GetProjectById(projectId);
 
-    private SessionView? GetSelectedThread()
-        => _threadStateCoordinator.GetSelectedThread();
+    private SessionView? GetSelectedSession()
+        => _sessionStateCoordinator.GetSelectedSession();
 
 }

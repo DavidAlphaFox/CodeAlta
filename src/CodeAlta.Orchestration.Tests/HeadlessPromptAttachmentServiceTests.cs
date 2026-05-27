@@ -25,20 +25,20 @@ public sealed class HeadlessPromptAttachmentServiceTests
             var result = service.Materialize(
                 "prompt",
                 [
-                    new WorkThreadPromptAttachment
+                    new SessionPromptAttachment
                     {
                         AttachmentId = "file",
                         Path = filePath,
                         DisplayName = "Notes",
                         LineRange = new AgentLineRange(2, 4),
                     },
-                    new WorkThreadPromptAttachment
+                    new SessionPromptAttachment
                     {
                         AttachmentId = "directory",
                         Path = root,
                         DisplayName = "Root",
                     },
-                    new WorkThreadPromptAttachment
+                    new SessionPromptAttachment
                     {
                         AttachmentId = "image",
                         Path = imagePath,
@@ -79,16 +79,16 @@ public sealed class HeadlessPromptAttachmentServiceTests
         var result = service.Materialize(
             "prompt",
             [
-                new WorkThreadPromptAttachment
+                new SessionPromptAttachment
                 {
                     AttachmentId = "selection",
-                    Kind = WorkThreadPromptAttachmentKind.Selection,
+                    Kind = SessionPromptAttachmentKind.Selection,
                     Path = "src/Test.cs",
                     DisplayName = "selection",
                     Text = "selected",
                     SelectionRange = range,
                 },
-                new WorkThreadPromptAttachment
+                new SessionPromptAttachment
                 {
                     AttachmentId = "text",
                     Content = Encoding.UTF8.GetBytes("inline"),
@@ -117,10 +117,10 @@ public sealed class HeadlessPromptAttachmentServiceTests
         Assert.ThrowsExactly<ArgumentException>(() => service.Materialize(
             "prompt",
             [
-                new WorkThreadPromptAttachment
+                new SessionPromptAttachment
                 {
                     AttachmentId = "bad",
-                    Kind = WorkThreadPromptAttachmentKind.Selection,
+                    Kind = SessionPromptAttachmentKind.Selection,
                     Path = "file.cs",
                     Text = "selected",
                 },

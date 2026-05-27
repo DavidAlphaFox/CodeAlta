@@ -24,7 +24,7 @@ internal readonly record struct ShellTabId
 internal enum ShellTabKind
 {
     PromptDraft,
-    Thread,
+    Session,
     Editor,
     Plugin,
 }
@@ -33,7 +33,7 @@ internal enum ShellTabCloseReason
 {
     UserDetached,
     FileEditorClosed,
-    ThreadDeleted,
+    SessionDeleted,
     ProjectClosed,
     PluginUnloaded,
     Replaced,
@@ -56,15 +56,15 @@ internal abstract record ShellTabAssociation
         public PromptSessionBinding Prompt { get; init; }
     }
 
-    public sealed record Thread : ShellTabAssociation
+    public sealed record Session : ShellTabAssociation
     {
-        public Thread(
-            string threadId,
+        public Session(
+            string sessionId,
             PromptSessionId promptSessionId,
             ProjectId projectId,
             ModelProviderId modelProviderId)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+            ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
             if (promptSessionId.IsEmpty)
             {
                 throw new ArgumentException("Prompt session id cannot be empty.", nameof(promptSessionId));
@@ -80,13 +80,13 @@ internal abstract record ShellTabAssociation
                 throw new ArgumentException("Model provider id cannot be empty.", nameof(modelProviderId));
             }
 
-            ThreadId = threadId;
+            SessionId = sessionId;
             PromptSessionId = promptSessionId;
             ProjectId = projectId;
             ModelProviderId = modelProviderId;
         }
 
-        public string ThreadId { get; init; }
+        public string SessionId { get; init; }
 
         public PromptSessionId PromptSessionId { get; init; }
 
@@ -116,14 +116,14 @@ internal abstract record ShellTabAssociation
 
     public sealed record Plugin : ShellTabAssociation
     {
-        public Plugin(string pluginId, string surfaceKey, ProjectId? projectId = null, string? threadId = null)
+        public Plugin(string pluginId, string surfaceKey, ProjectId? projectId = null, string? sessionId = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
             ArgumentException.ThrowIfNullOrWhiteSpace(surfaceKey);
             PluginId = pluginId;
             SurfaceKey = surfaceKey;
             ProjectId = projectId;
-            ThreadId = string.IsNullOrWhiteSpace(threadId) ? null : threadId;
+            SessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId;
         }
 
         public string PluginId { get; init; }
@@ -132,7 +132,7 @@ internal abstract record ShellTabAssociation
 
         public ProjectId? ProjectId { get; init; }
 
-        public string? ThreadId { get; init; }
+        public string? SessionId { get; init; }
     }
 }
 

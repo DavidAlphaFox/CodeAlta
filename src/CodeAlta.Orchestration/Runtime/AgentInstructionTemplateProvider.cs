@@ -32,19 +32,19 @@ public sealed class AgentInstructionTemplateProvider
     /// <summary>
     /// Builds the instruction bundle for a coordinator session.
     /// </summary>
-    /// <param name="thread">The active work thread.</param>
+    /// <param name="session">The active session view.</param>
     /// <param name="project">The owning project, if any.</param>
     /// <returns>
     /// An instruction bundle containing no overrides so backend defaults remain active
     /// while orchestration-specific prompting is disabled.
     /// </returns>
     public AgentInstructionBundle BuildCoordinatorInstructions(
-        SessionViewDescriptor thread,
+        SessionViewDescriptor session,
         ProjectDescriptor? project,
         string? model = null)
     {
-        ArgumentNullException.ThrowIfNull(thread);
-        var bundle = BuildPromptBundle(thread, project, model);
+        ArgumentNullException.ThrowIfNull(session);
+        var bundle = BuildPromptBundle(session, project, model);
         return new AgentInstructionBundle
         {
             SystemMessage = bundle.SystemMessage,
@@ -56,19 +56,19 @@ public sealed class AgentInstructionTemplateProvider
     /// <summary>
     /// Builds the instruction bundle for a general scoped agent session.
     /// </summary>
-    /// <param name="thread">The active work thread.</param>
+    /// <param name="session">The active session view.</param>
     /// <param name="project">The owning project, if any.</param>
     /// <returns>
     /// An instruction bundle containing no overrides so backend defaults remain active
     /// while orchestration-specific prompting is disabled.
     /// </returns>
     public AgentInstructionBundle BuildGeneralInstructions(
-        SessionViewDescriptor thread,
+        SessionViewDescriptor session,
         ProjectDescriptor? project,
         string? model = null)
     {
-        ArgumentNullException.ThrowIfNull(thread);
-        var bundle = BuildPromptBundle(thread, project, model);
+        ArgumentNullException.ThrowIfNull(session);
+        var bundle = BuildPromptBundle(session, project, model);
         return new AgentInstructionBundle
         {
             SystemMessage = bundle.SystemMessage,
@@ -78,7 +78,7 @@ public sealed class AgentInstructionTemplateProvider
     }
 
     private SystemPromptBundle BuildPromptBundle(
-        SessionViewDescriptor thread,
+        SessionViewDescriptor session,
         ProjectDescriptor? project,
         string? model = null)
     {
@@ -87,24 +87,24 @@ public sealed class AgentInstructionTemplateProvider
             : [project.ProjectPath];
         return _promptBuilder.Build(new SystemPromptBuildRequest
         {
-            ProviderKey = thread.ResolvedProviderKey,
-            ProviderType = thread.ProviderId,
-            ProtocolFamily = thread.ProviderId,
+            ProviderKey = session.ResolvedProviderKey,
+            ProviderType = session.ProviderId,
+            ProtocolFamily = session.ProviderId,
             Model = model,
-            Thread = thread,
+            Session = session,
             Project = project,
-            WorkingDirectory = thread.WorkingDirectory,
+            WorkingDirectory = session.WorkingDirectory,
             ProjectRoots = projectRoots,
-            AvailableSkillsMarkdown = BuildSkillsDeveloperInstructions(thread, project),
+            AvailableSkillsMarkdown = BuildSkillsDeveloperInstructions(session, project),
         });
     }
 
     private string? BuildSkillsDeveloperInstructions(
-        SessionViewDescriptor thread,
+        SessionViewDescriptor session,
         ProjectDescriptor? project,
         string? model = null)
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
         if (_skillCatalog is null || _catalogOptions is null)
         {
             return null;
@@ -113,7 +113,7 @@ public sealed class AgentInstructionTemplateProvider
         var descriptors = _skillCatalog.ListAsync(
                 new SkillCatalogQuery
                 {
-                    Discovery = CreateDiscoveryContext(thread, project),
+                    Discovery = CreateDiscoveryContext(session, project),
                     IncludeInvalid = false,
                     IncludeShadowed = false,
                     IncludeUntrusted = false,
@@ -131,7 +131,7 @@ public sealed class AgentInstructionTemplateProvider
         var builder = new StringBuilder();
         builder.AppendLine("Filesystem skills are available for this session.");
         builder.AppendLine("Activate a skill only when it clearly matches the current task.");
-        builder.AppendLine("When the `alta` live tool is available, inspect skills with `alta skill list`/`alta skill show` and activate with `alta skill activate <skill-name> --session <thread-id>`; prefer the singular `skill` group over compatibility aliases.");
+        builder.AppendLine("When the `alta` live tool is available, inspect skills with `alta skill list`/`alta skill show` and activate with `alta skill activate <skill-name> --session <session-id>`; prefer the singular `skill` group over compatibility aliases.");
         if (preferredSkills.Count > 0)
         {
             builder.AppendLine("");
@@ -162,7 +162,7 @@ public sealed class AgentInstructionTemplateProvider
         return builder.ToString();
     }
 
-    private SkillDiscoveryContext CreateDiscoveryContext(SessionViewDescriptor thread, ProjectDescriptor? project)
+    private SkillDiscoveryContext CreateDiscoveryContext(SessionViewDescriptor session, ProjectDescriptor? project)
     {
         var projectRoots = new List<string>();
         if (!string.IsNullOrWhiteSpace(project?.ProjectPath))

@@ -71,7 +71,7 @@ internal sealed class PluginAltaServiceBridge : IPluginAltaRuntimeService
                 new AltaCallerIdentity
                 {
                     Kind = "plugin",
-                    SourceThreadId = options.SourceThreadId,
+                    SourceSessionId = options.SourceSessionId,
                     SourceProjectId = options.SourceProjectId,
                     SourceAgentId = options.SourceAgentId,
                     PluginRuntimeKey = pluginRuntimeKey,
@@ -102,7 +102,7 @@ internal sealed class CodeAltaPluginServices(IPluginAltaService alta, IPluginSer
 
     public IPluginWorkspaceService Workspace => _inner.Workspace;
 
-    public IPluginThreadService Threads => _inner.Threads;
+    public IPluginSessionService Sessions => _inner.Sessions;
 
     public IPluginPromptService Prompts => _inner.Prompts;
 

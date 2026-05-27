@@ -12,7 +12,7 @@ namespace CodeAlta.Tests;
 public sealed class QueuedPromptListProjectionTests
 {
     [TestMethod]
-    public void Build_ReturnsEmptyProjection_WhenNoThreadIsSelected()
+    public void Build_ReturnsEmptyProjection_WhenNoSessionIsSelected()
     {
         var projection = QueuedPromptListProjectionBuilder.Build(tab: null);
 
@@ -23,8 +23,8 @@ public sealed class QueuedPromptListProjectionTests
     [TestMethod]
     public void Build_NormalizesPreviewTextAndPreservesQueueCount()
     {
-        var tab = CreateOpenThreadState();
-        tab.QueuedPrompts.Add(new QueuedThreadPrompt("  First line\r\n\r\nSecond line  ", remainingCount: 3));
+        var tab = CreateOpenSessionState();
+        tab.QueuedPrompts.Add(new QueuedSessionPrompt("  First line\r\n\r\nSecond line  ", remainingCount: 3));
 
         var projection = QueuedPromptListProjectionBuilder.Build(tab);
 
@@ -40,9 +40,9 @@ public sealed class QueuedPromptListProjectionTests
     [TestMethod]
     public void Build_RendersPendingSteersBeforeQueuedPrompts()
     {
-        var tab = CreateOpenThreadState();
+        var tab = CreateOpenSessionState();
         tab.PendingSteers.Add(new PendingSteerPrompt("  steer this next  "));
-        tab.QueuedPrompts.Add(new QueuedThreadPrompt("queued prompt", remainingCount: 2));
+        tab.QueuedPrompts.Add(new QueuedSessionPrompt("queued prompt", remainingCount: 2));
 
         var projection = QueuedPromptListProjectionBuilder.Build(tab);
 
@@ -55,24 +55,24 @@ public sealed class QueuedPromptListProjectionTests
         Assert.IsTrue(projection.HasQueuedPrompts);
     }
 
-    private static OpenThreadState CreateOpenThreadState()
+    private static OpenSessionState CreateOpenSessionState()
     {
-        var thread = new SessionViewDescriptor
+        var session = new SessionViewDescriptor
         {
-            ThreadId = "thread-1",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "session-1",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Review startup",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,
         };
 
-        var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => null);
-        return new OpenThreadState(thread, timeline);
+        var timeline = new SessionTimelinePresenter(new InlineUiDispatcher(), static () => null);
+        return new OpenSessionState(session, timeline);
     }
 
     private sealed class InlineUiDispatcher : IUiDispatcher

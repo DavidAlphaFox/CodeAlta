@@ -24,25 +24,25 @@ public sealed class CodeAltaAppTabStripTests
     {
         Assert.AreEqual(
             OpenTabIndicatorKind.Running,
-            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: true, StatusTone.Ready));
+            SessionTabVisualFactory.ResolveIndicatorKind(isBusy: true, StatusTone.Ready));
         Assert.AreEqual(
             OpenTabIndicatorKind.Edited,
-            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: false, hasPromptDraft: true, StatusTone.Ready));
+            SessionTabVisualFactory.ResolveIndicatorKind(isBusy: false, hasPromptDraft: true, StatusTone.Ready));
         Assert.AreEqual(
             OpenTabIndicatorKind.Ready,
-            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: false, StatusTone.Ready));
+            SessionTabVisualFactory.ResolveIndicatorKind(isBusy: false, StatusTone.Ready));
         Assert.AreEqual(
             OpenTabIndicatorKind.Warning,
-            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: false, StatusTone.Warning));
+            SessionTabVisualFactory.ResolveIndicatorKind(isBusy: false, StatusTone.Warning));
         Assert.AreEqual(
             OpenTabIndicatorKind.Error,
-            ThreadTabVisualFactory.ResolveIndicatorKind(isBusy: false, StatusTone.Error));
+            SessionTabVisualFactory.ResolveIndicatorKind(isBusy: false, StatusTone.Error));
     }
 
     [TestMethod]
     public void CompactTabTitle_DoesNotChangeForSelectionState()
     {
-        Assert.AreEqual("Review startup", ThreadTabVisualFactory.CompactTitle("Review startup"));
+        Assert.AreEqual("Review startup", SessionTabVisualFactory.CompactTitle("Review startup"));
     }
 
     [TestMethod]
@@ -57,34 +57,34 @@ public sealed class CodeAltaAppTabStripTests
     }
 
     [TestMethod]
-    public void Build_IncludesOpenThreadTabsAndSelectedDraftTab()
+    public void Build_IncludesOpenSessionTabsAndSelectedDraftTab()
     {
         var tabs = new InMemoryShellTabService();
-        tabs.OpenOrGetTab(CreateDescriptor("thread-1", ShellTabKind.Thread));
+        tabs.OpenOrGetTab(CreateDescriptor("session-1", ShellTabKind.Session));
         tabs.OpenOrGetTab(CreateDescriptor(CodeAltaApp.DraftTabId, ShellTabKind.PromptDraft));
         tabs.SelectTabAsync(new ShellTabId(CodeAltaApp.DraftTabId)).GetAwaiter().GetResult();
 
-        var projection = ThreadTabStripProjectionBuilder.Build(tabs.GetTabs());
+        var projection = SessionTabStripProjectionBuilder.Build(tabs.GetTabs());
 
         CollectionAssert.AreEqual(
-            new[] { "thread-1", CodeAltaApp.DraftTabId },
+            new[] { "session-1", CodeAltaApp.DraftTabId },
             projection.Tabs.Select(static tab => tab.TabId).ToArray());
         Assert.AreEqual(CodeAltaApp.DraftTabId, projection.SelectedTabId);
         Assert.IsTrue(projection.Tabs[1].IsDraft);
     }
 
     [TestMethod]
-    public void Build_SelectsOpenThreadWhenAvailable()
+    public void Build_SelectsOpenSessionWhenAvailable()
     {
         var tabs = new InMemoryShellTabService();
-        tabs.OpenOrGetTab(CreateDescriptor("thread-1", ShellTabKind.Thread));
-        tabs.OpenOrGetTab(CreateDescriptor("thread-2", ShellTabKind.Thread));
+        tabs.OpenOrGetTab(CreateDescriptor("session-1", ShellTabKind.Session));
+        tabs.OpenOrGetTab(CreateDescriptor("session-2", ShellTabKind.Session));
         tabs.OpenOrGetTab(CreateDescriptor(CodeAltaApp.DraftTabId, ShellTabKind.PromptDraft));
-        tabs.SelectTabAsync(new ShellTabId("thread-2")).GetAwaiter().GetResult();
+        tabs.SelectTabAsync(new ShellTabId("session-2")).GetAwaiter().GetResult();
 
-        var projection = ThreadTabStripProjectionBuilder.Build(tabs.GetTabs());
+        var projection = SessionTabStripProjectionBuilder.Build(tabs.GetTabs());
 
-        Assert.AreEqual("thread-2", projection.SelectedTabId);
+        Assert.AreEqual("session-2", projection.SelectedTabId);
         Assert.IsFalse(projection.Tabs[1].IsDraft);
         Assert.IsTrue(projection.Tabs[2].IsDraft);
     }
@@ -94,15 +94,15 @@ public sealed class CodeAltaAppTabStripTests
     {
         var fileTabId = "file:C:/code/CodeAlta/readme.md";
         var tabs = new InMemoryShellTabService();
-        tabs.OpenOrGetTab(CreateDescriptor("thread-1", ShellTabKind.Thread));
+        tabs.OpenOrGetTab(CreateDescriptor("session-1", ShellTabKind.Session));
         tabs.OpenOrGetTab(CreateDescriptor(CodeAltaApp.DraftTabId, ShellTabKind.PromptDraft));
         tabs.OpenOrGetTab(CreateDescriptor(fileTabId, ShellTabKind.Editor));
         tabs.SelectTabAsync(new ShellTabId(fileTabId)).GetAwaiter().GetResult();
 
-        var projection = ThreadTabStripProjectionBuilder.Build(tabs.GetTabs());
+        var projection = SessionTabStripProjectionBuilder.Build(tabs.GetTabs());
 
         CollectionAssert.AreEqual(
-            new[] { "thread-1", CodeAltaApp.DraftTabId, "file:C:/code/CodeAlta/readme.md" },
+            new[] { "session-1", CodeAltaApp.DraftTabId, "file:C:/code/CodeAlta/readme.md" },
             projection.Tabs.Select(static tab => tab.TabId).ToArray());
         Assert.AreEqual("file:C:/code/CodeAlta/readme.md", projection.SelectedTabId);
         Assert.IsTrue(projection.Tabs[2].IsFile);
@@ -114,7 +114,7 @@ public sealed class CodeAltaAppTabStripTests
         var tabs = new InMemoryShellTabService();
         tabs.OpenOrGetTab(CreateDescriptor("plugin:stats:main", ShellTabKind.Plugin));
 
-        var projection = ThreadTabStripProjectionBuilder.Build(tabs.GetTabs());
+        var projection = SessionTabStripProjectionBuilder.Build(tabs.GetTabs());
 
         Assert.AreEqual("plugin:stats:main", projection.Tabs[0].TabId);
         Assert.IsTrue(projection.Tabs[0].IsPlugin);
@@ -124,44 +124,44 @@ public sealed class CodeAltaAppTabStripTests
     [TestMethod]
     public void CanCloseTab_HidesCloseButtonForOnlyDraftTab()
     {
-        Assert.IsFalse(ThreadTabStripCoordinator.CanCloseTab(
-            new ThreadTabStripItemProjection(CodeAltaApp.DraftTabId, ShellTabKind.PromptDraft, CanClose: false),
+        Assert.IsFalse(SessionTabStripCoordinator.CanCloseTab(
+            new SessionTabStripItemProjection(CodeAltaApp.DraftTabId, ShellTabKind.PromptDraft, CanClose: false),
             totalTabCount: 1));
     }
 
     [TestMethod]
     public void CanCloseTab_AllowsClosingDraftWhenMultipleTabsExist()
     {
-        Assert.IsTrue(ThreadTabStripCoordinator.CanCloseTab(
-            new ThreadTabStripItemProjection(CodeAltaApp.DraftTabId, ShellTabKind.PromptDraft, CanClose: true),
+        Assert.IsTrue(SessionTabStripCoordinator.CanCloseTab(
+            new SessionTabStripItemProjection(CodeAltaApp.DraftTabId, ShellTabKind.PromptDraft, CanClose: true),
             totalTabCount: 2));
     }
 
     [TestMethod]
-    public void CanCloseTab_AllowsClosingThreadTabsEvenWhenLast()
+    public void CanCloseTab_AllowsClosingSessionTabsEvenWhenLast()
     {
-        Assert.IsTrue(ThreadTabStripCoordinator.CanCloseTab(
-            new ThreadTabStripItemProjection("thread-1", ShellTabKind.Thread, CanClose: true),
+        Assert.IsTrue(SessionTabStripCoordinator.CanCloseTab(
+            new SessionTabStripItemProjection("session-1", ShellTabKind.Session, CanClose: true),
             totalTabCount: 1));
     }
 
     [TestMethod]
-    public async Task CloseSelectedTabAsync_ClosesThreadThroughTabStripLifecyclePath()
+    public async Task CloseSelectedTabAsync_ClosesSessionThroughTabStripLifecyclePath()
     {
         var tabs = new InMemoryShellTabService();
-        tabs.OpenOrGetTab(CreateDescriptor("thread-1", ShellTabKind.Thread));
-        var closedThreads = new List<string>();
-        var coordinator = CreateCoordinator(tabs, closeThreadTab: threadId =>
+        tabs.OpenOrGetTab(CreateDescriptor("session-1", ShellTabKind.Session));
+        var closedSessions = new List<string>();
+        var coordinator = CreateCoordinator(tabs, closeSessionTab: sessionId =>
         {
-            closedThreads.Add(threadId);
-            tabs.CloseTabAsync(new ShellTabId(threadId), ShellTabCloseReason.UserDetached).GetAwaiter().GetResult();
+            closedSessions.Add(sessionId);
+            tabs.CloseTabAsync(new ShellTabId(sessionId), ShellTabCloseReason.UserDetached).GetAwaiter().GetResult();
         });
 
         var closed = await coordinator.CloseSelectedTabAsync();
 
         Assert.IsTrue(closed);
-        CollectionAssert.AreEqual(new[] { "thread-1" }, closedThreads.ToArray());
-        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("thread-1"), out _));
+        CollectionAssert.AreEqual(new[] { "session-1" }, closedSessions.ToArray());
+        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("session-1"), out _));
     }
 
     [TestMethod]
@@ -180,54 +180,54 @@ public sealed class CodeAltaAppTabStripTests
     }
 
     [TestMethod]
-    public void ReplaceDraftTabWithThread_ClosesDraftAndSelectsCreatedThread()
+    public void ReplaceDraftTabWithSession_ClosesDraftAndSelectsCreatedSession()
     {
         var tabs = new InMemoryShellTabService();
         tabs.OpenOrGetTab(CreateDescriptor(CodeAltaApp.DraftTabId, ShellTabKind.PromptDraft));
-        tabs.OpenOrGetTab(CreateDescriptor("thread-1", ShellTabKind.Thread));
+        tabs.OpenOrGetTab(CreateDescriptor("session-1", ShellTabKind.Session));
         tabs.SelectTabAsync(new ShellTabId(CodeAltaApp.DraftTabId)).GetAwaiter().GetResult();
         var coordinator = CreateCoordinator(tabs);
 
-        var replaced = coordinator.ReplaceDraftTabWithThread("thread-1");
+        var replaced = coordinator.ReplaceDraftTabWithSession("session-1");
 
         Assert.IsTrue(replaced);
         Assert.IsFalse(tabs.TryGetTab(new ShellTabId(CodeAltaApp.DraftTabId), out _));
-        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("thread-1"), out var threadTab));
-        Assert.IsTrue(threadTab.IsSelected);
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("session-1"), out var sessionTab));
+        Assert.IsTrue(sessionTab.IsSelected);
     }
 
     [TestMethod]
-    public void SyncControl_RestoresPersistedSelectedThreadTab()
+    public void SyncControl_RestoresPersistedSelectedSessionTab()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
         var dispatcher = new InlineUiDispatcher();
-        var threadState = TestThreadStateServices.CreateCoordinator(
+        var sessionState = TestSessionStateServices.CreateCoordinator(
             new ProjectCatalog(options),
-            new WorkThreadCatalog(options),
+            new SessionViewCatalog(options),
             dispatcher,
             new ShellStateStore(dispatcher));
         var project = CreateProject("project-1", "CodeAlta");
-        threadState.ViewState = new WorkThreadViewState
+        sessionState.ViewState = new SessionViewViewState
         {
-            OpenThreadIds = ["thread-1", "thread-2"],
-            Selection = WorkThreadSelectionState.Thread("thread-2", project.Id),
-            SelectedThreadId = "thread-2",
+            OpenSessionIds = ["session-1", "session-2"],
+            Selection = SessionViewSelectionState.Session("session-2", project.Id),
+            SelectedSessionId = "session-2",
         };
-        threadState.ApplyRecoveredCatalogState(
+        sessionState.ApplyRecoveredCatalogState(
             [project],
-            [CreateThread("thread-1", project.Id), CreateThread("thread-2", project.Id)]);
-        var workspaceView = CreateThreadWorkspaceView();
+            [CreateSession("session-1", project.Id), CreateSession("session-2", project.Id)]);
+        var workspaceView = CreateSessionWorkspaceView();
         var tabs = new InMemoryShellTabService();
-        var coordinator = CreateCoordinator(tabs, threadState, workspaceView, dispatcher);
+        var coordinator = CreateCoordinator(tabs, sessionState, workspaceView, dispatcher);
 
         coordinator.SyncControl();
 
-        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("thread-1"), out var firstTab));
-        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("thread-2"), out var selectedTab));
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("session-1"), out var firstTab));
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("session-2"), out var selectedTab));
         Assert.IsFalse(firstTab.IsSelected);
         Assert.IsTrue(selectedTab.IsSelected);
-        Assert.AreEqual(1, workspaceView.ThreadTabControl.SelectedIndex);
+        Assert.AreEqual(1, workspaceView.SessionTabControl.SelectedIndex);
     }
 
     [TestMethod]
@@ -236,214 +236,214 @@ public sealed class CodeAltaAppTabStripTests
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
         var dispatcher = new InlineUiDispatcher();
-        var threadState = TestThreadStateServices.CreateCoordinator(
+        var sessionState = TestSessionStateServices.CreateCoordinator(
             new ProjectCatalog(options),
-            new WorkThreadCatalog(options),
+            new SessionViewCatalog(options),
             dispatcher,
             new ShellStateStore(dispatcher));
-        var workspaceView = CreateThreadWorkspaceView();
+        var workspaceView = CreateSessionWorkspaceView();
         var tabs = new InMemoryShellTabService();
-        var coordinator = CreateCoordinator(tabs, threadState, workspaceView, dispatcher);
+        var coordinator = CreateCoordinator(tabs, sessionState, workspaceView, dispatcher);
 
         coordinator.SyncControl();
         Assert.IsTrue(tabs.TryGetTab(new ShellTabId(CodeAltaApp.DraftTabId), out var draftTab));
         Assert.IsTrue(draftTab.IsSelected);
 
         var project = CreateProject("project-1", "CodeAlta");
-        var firstThread = CreateThread("thread-1", project.Id);
-        var lastThread = CreateThread("thread-2", project.Id);
-        threadState.ApplyInitialCatalogState(new ShellThreadStateCoordinator.InitialCatalogState(
+        var firstSession = CreateSession("session-1", project.Id);
+        var lastSession = CreateSession("session-2", project.Id);
+        sessionState.ApplyInitialCatalogState(new ShellSessionStateCoordinator.InitialCatalogState(
             [project],
-            [firstThread, lastThread],
-            new WorkThreadViewState
+            [firstSession, lastSession],
+            new SessionViewViewState
             {
-                OpenThreadIds = [firstThread.ThreadId, lastThread.ThreadId],
-                Selection = WorkThreadSelectionState.ProjectDraft(project.Id),
+                OpenSessionIds = [firstSession.SessionId, lastSession.SessionId],
+                Selection = SessionViewSelectionState.ProjectDraft(project.Id),
             }));
 
         coordinator.SyncControl();
 
-        Assert.IsTrue(tabs.TryGetTab(new ShellTabId(firstThread.ThreadId), out _));
-        Assert.IsTrue(tabs.TryGetTab(new ShellTabId(lastThread.ThreadId), out _));
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId(firstSession.SessionId), out _));
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId(lastSession.SessionId), out _));
         Assert.IsTrue(tabs.TryGetTab(new ShellTabId(CodeAltaApp.DraftTabId), out var selectedTab));
         Assert.IsTrue(selectedTab.IsSelected);
-        Assert.AreEqual(0, workspaceView.ThreadTabControl.SelectedIndex);
+        Assert.AreEqual(0, workspaceView.SessionTabControl.SelectedIndex);
     }
 
     [TestMethod]
-    public async Task SyncControl_ReplacesLastClosedThreadWithDraftDuringCloseProjectionRefresh()
+    public async Task SyncControl_ReplacesLastClosedSessionWithDraftDuringCloseProjectionRefresh()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
         var dispatcher = new InlineUiDispatcher();
-        var workspaceView = CreateThreadWorkspaceView();
+        var workspaceView = CreateSessionWorkspaceView();
         var tabs = new InMemoryShellTabService();
-        ThreadTabStripCoordinator? coordinator = null;
-        var threadState = TestThreadStateServices.CreateCoordinator(
+        SessionTabStripCoordinator? coordinator = null;
+        var sessionState = TestSessionStateServices.CreateCoordinator(
             new ProjectCatalog(options),
-            new WorkThreadCatalog(options),
+            new SessionViewCatalog(options),
             dispatcher,
             new ShellStateStore(dispatcher),
-            getOpenThreadTabIds: () => tabs.GetTabs()
-                .Where(static tab => tab.Kind == ShellTabKind.Thread)
+            getOpenSessionTabIds: () => tabs.GetTabs()
+                .Where(static tab => tab.Kind == ShellTabKind.Session)
                 .Select(static tab => tab.TabId.Value)
                 .ToArray(),
-            removeThreadTabPage: (threadId, reason) =>
+            removeSessionTabPage: (sessionId, reason) =>
             {
-                tabs.CloseTabAsync(new ShellTabId(threadId), reason).GetAwaiter().GetResult();
-                workspaceView.RemoveTabPage(threadId);
+                tabs.CloseTabAsync(new ShellTabId(sessionId), reason).GetAwaiter().GetResult();
+                workspaceView.RemoveTabPage(sessionId);
                 coordinator?.SyncControl();
             });
         var project = CreateProject("project-1", "CodeAlta");
-        threadState.ApplyRecoveredCatalogState([project], [CreateThread("thread-1", project.Id)]);
-        threadState.OpenThread("thread-1");
-        coordinator = CreateCoordinator(tabs, threadState, workspaceView, dispatcher);
+        sessionState.ApplyRecoveredCatalogState([project], [CreateSession("session-1", project.Id)]);
+        sessionState.OpenSession("session-1");
+        coordinator = CreateCoordinator(tabs, sessionState, workspaceView, dispatcher);
         coordinator.SyncControl();
 
-        await threadState.CloseThreadTabAsync("thread-1").ConfigureAwait(false);
+        await sessionState.CloseSessionTabAsync("session-1").ConfigureAwait(false);
         coordinator.SyncControl();
 
-        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("thread-1"), out _));
+        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("session-1"), out _));
         Assert.IsTrue(tabs.TryGetTab(new ShellTabId(CodeAltaApp.DraftTabId), out var draftTab));
         Assert.IsTrue(draftTab.IsSelected);
         CollectionAssert.AreEqual(
             new[] { CodeAltaApp.DraftTabId },
-            workspaceView.ThreadTabControl.Tabs
+            workspaceView.SessionTabControl.Tabs
                 .Select(GetTabPageId)
                 .ToArray());
-        Assert.AreEqual(0, workspaceView.ThreadTabControl.SelectedIndex);
+        Assert.AreEqual(0, workspaceView.SessionTabControl.SelectedIndex);
     }
 
     [TestMethod]
-    public async Task SyncControl_SelectsFallbackThreadAndActivatesTimelineAfterSelectedTabClose()
+    public async Task SyncControl_SelectsFallbackSessionAndActivatesTimelineAfterSelectedTabClose()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
         var dispatcher = new InlineUiDispatcher();
-        var workspaceView = CreateThreadWorkspaceView();
+        var workspaceView = CreateSessionWorkspaceView();
         var tabs = new InMemoryShellTabService();
-        var threadState = TestThreadStateServices.CreateCoordinator(
+        var sessionState = TestSessionStateServices.CreateCoordinator(
             new ProjectCatalog(options),
-            new WorkThreadCatalog(options),
+            new SessionViewCatalog(options),
             dispatcher,
             new ShellStateStore(dispatcher),
-            getOpenThreadTabIds: () => tabs.GetTabs()
-                .Where(static tab => tab.Kind == ShellTabKind.Thread)
+            getOpenSessionTabIds: () => tabs.GetTabs()
+                .Where(static tab => tab.Kind == ShellTabKind.Session)
                 .Select(static tab => tab.TabId.Value)
                 .ToArray(),
-            removeThreadTabPage: (threadId, reason) =>
+            removeSessionTabPage: (sessionId, reason) =>
             {
-                tabs.CloseTabAsync(new ShellTabId(threadId), reason).GetAwaiter().GetResult();
-                workspaceView.RemoveTabPage(threadId);
+                tabs.CloseTabAsync(new ShellTabId(sessionId), reason).GetAwaiter().GetResult();
+                workspaceView.RemoveTabPage(sessionId);
             });
         var project = CreateProject("project-1", "CodeAlta");
-        threadState.ApplyRecoveredCatalogState(
+        sessionState.ApplyRecoveredCatalogState(
             [project],
-            [CreateThread("thread-1", project.Id), CreateThread("thread-2", project.Id)]);
-        threadState.OpenThread("thread-1");
-        threadState.OpenThread("thread-2");
+            [CreateSession("session-1", project.Id), CreateSession("session-2", project.Id)]);
+        sessionState.OpenSession("session-1");
+        sessionState.OpenSession("session-2");
         tabs.OpenOrGetTab(CreateDescriptor(CodeAltaApp.DraftTabId, ShellTabKind.PromptDraft));
-        var coordinator = CreateCoordinator(tabs, threadState, workspaceView, dispatcher);
+        var coordinator = CreateCoordinator(tabs, sessionState, workspaceView, dispatcher);
         coordinator.SyncControl();
 
-        await threadState.CloseThreadTabAsync("thread-2").ConfigureAwait(false);
+        await sessionState.CloseSessionTabAsync("session-2").ConfigureAwait(false);
         coordinator.SyncControl();
 
-        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("thread-2"), out _));
-        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("thread-1"), out var fallbackTab));
+        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("session-2"), out _));
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("session-1"), out var fallbackTab));
         Assert.IsTrue(fallbackTab.IsSelected);
         CollectionAssert.AreEqual(
-            new[] { CodeAltaApp.DraftTabId, "thread-1" },
-            workspaceView.ThreadTabControl.Tabs
+            new[] { CodeAltaApp.DraftTabId, "session-1" },
+            workspaceView.SessionTabControl.Tabs
                 .Select(GetTabPageId)
                 .ToArray());
-        Assert.AreEqual(1, workspaceView.ThreadTabControl.SelectedIndex);
-        Assert.IsTrue(workspaceView.TryGetTabPage("thread-1", out var page));
-        var threadContent = Assert.IsInstanceOfType<VSplitter>(page.Content);
-        Assert.AreSame(workspaceView.ThreadBottomPanel, threadContent.Second);
+        Assert.AreEqual(1, workspaceView.SessionTabControl.SelectedIndex);
+        Assert.IsTrue(workspaceView.TryGetTabPage("session-1", out var page));
+        var sessionContent = Assert.IsInstanceOfType<VSplitter>(page.Content);
+        Assert.AreSame(workspaceView.SessionBottomPanel, sessionContent.Second);
     }
 
     [TestMethod]
-    public void SyncControl_PrunesThreadShellTabsMissingFromCatalog()
+    public void SyncControl_PrunesSessionShellTabsMissingFromCatalog()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
         var dispatcher = new InlineUiDispatcher();
-        var workspaceView = CreateThreadWorkspaceView();
+        var workspaceView = CreateSessionWorkspaceView();
         var tabs = new InMemoryShellTabService();
-        tabs.OpenOrGetTab(CreateDescriptor("missing-thread", ShellTabKind.Thread));
-        var threadState = TestThreadStateServices.CreateCoordinator(
+        tabs.OpenOrGetTab(CreateDescriptor("missing-session", ShellTabKind.Session));
+        var sessionState = TestSessionStateServices.CreateCoordinator(
             new ProjectCatalog(options),
-            new WorkThreadCatalog(options),
+            new SessionViewCatalog(options),
             dispatcher,
             new ShellStateStore(dispatcher));
         var project = CreateProject("project-1", "CodeAlta");
-        var thread = CreateThread("thread-1", project.Id);
-        threadState.ApplyRecoveredCatalogState([project], [thread]);
-        threadState.OpenThread(thread.ThreadId);
-        var coordinator = CreateCoordinator(tabs, threadState, workspaceView, dispatcher);
+        var session = CreateSession("session-1", project.Id);
+        sessionState.ApplyRecoveredCatalogState([project], [session]);
+        sessionState.OpenSession(session.SessionId);
+        var coordinator = CreateCoordinator(tabs, sessionState, workspaceView, dispatcher);
 
         coordinator.SyncControl();
 
-        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("missing-thread"), out _));
-        Assert.IsTrue(tabs.TryGetTab(new ShellTabId(thread.ThreadId), out var selectedTab));
+        Assert.IsFalse(tabs.TryGetTab(new ShellTabId("missing-session"), out _));
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId(session.SessionId), out var selectedTab));
         Assert.IsTrue(selectedTab.IsSelected);
         CollectionAssert.AreEqual(
-            new[] { thread.ThreadId },
-            workspaceView.ThreadTabControl.Tabs
+            new[] { session.SessionId },
+            workspaceView.SessionTabControl.Tabs
                 .Select(GetTabPageId)
                 .ToArray());
     }
 
     [TestMethod]
-    public void SyncControl_IgnoresReentrantShellTabEventsWhileOpeningThreadTabs()
+    public void SyncControl_IgnoresReentrantShellTabEventsWhileOpeningSessionTabs()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
         var dispatcher = new InlineUiDispatcher();
-        var workspaceView = CreateThreadWorkspaceView();
+        var workspaceView = CreateSessionWorkspaceView();
         var tabs = new InMemoryShellTabService();
-        var threadState = TestThreadStateServices.CreateCoordinator(
+        var sessionState = TestSessionStateServices.CreateCoordinator(
             new ProjectCatalog(options),
-            new WorkThreadCatalog(options),
+            new SessionViewCatalog(options),
             dispatcher,
             new ShellStateStore(dispatcher));
         var project = CreateProject("project-1", "CodeAlta");
-        var thread = CreateThread("thread-1", project.Id);
-        threadState.ApplyRecoveredCatalogState([project], [thread]);
-        threadState.OpenThread(thread.ThreadId);
-        var coordinator = CreateCoordinator(tabs, threadState, workspaceView, dispatcher);
+        var session = CreateSession("session-1", project.Id);
+        sessionState.ApplyRecoveredCatalogState([project], [session]);
+        sessionState.OpenSession(session.SessionId);
+        var coordinator = CreateCoordinator(tabs, sessionState, workspaceView, dispatcher);
         tabs.TabsChanged += (_, _) => coordinator.SyncControl();
 
         coordinator.SyncControl();
 
-        Assert.IsTrue(tabs.TryGetTab(new ShellTabId(thread.ThreadId), out var selectedTab));
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId(session.SessionId), out var selectedTab));
         Assert.IsTrue(selectedTab.IsSelected);
         CollectionAssert.AreEqual(
-            new[] { thread.ThreadId },
-            workspaceView.ThreadTabControl.Tabs
+            new[] { session.SessionId },
+            workspaceView.SessionTabControl.Tabs
                 .Select(GetTabPageId)
                 .ToArray());
     }
 
     [TestMethod]
-    public void ThreadTabSelection_KeepsPromptPanelAttachedAfterFileEditorTab()
+    public void SessionTabSelection_KeepsPromptPanelAttachedAfterFileEditorTab()
     {
         using var temp = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = temp.Path };
         var dispatcher = new InlineUiDispatcher();
-        ThreadTabStripCoordinator? coordinator = null;
-        var workspaceView = CreateThreadWorkspaceView(index => coordinator?.OnSelectionChanged(index));
+        SessionTabStripCoordinator? coordinator = null;
+        var workspaceView = CreateSessionWorkspaceView(index => coordinator?.OnSelectionChanged(index));
         var tabs = new InMemoryShellTabService();
-        var threadState = TestThreadStateServices.CreateCoordinator(
+        var sessionState = TestSessionStateServices.CreateCoordinator(
             new ProjectCatalog(options),
-            new WorkThreadCatalog(options),
+            new SessionViewCatalog(options),
             dispatcher,
             new ShellStateStore(dispatcher));
         var project = CreateProject("project-1", "CodeAlta");
-        threadState.ApplyRecoveredCatalogState([project], [CreateThread("thread-1", project.Id)]);
-        threadState.OpenThread("thread-1");
-        coordinator = CreateCoordinator(tabs, threadState, workspaceView, dispatcher);
+        sessionState.ApplyRecoveredCatalogState([project], [CreateSession("session-1", project.Id)]);
+        sessionState.OpenSession("session-1");
+        coordinator = CreateCoordinator(tabs, sessionState, workspaceView, dispatcher);
         coordinator.SyncControl();
 
         var fileTabId = "file:C:/code/CodeAlta/readme.md";
@@ -451,36 +451,36 @@ public sealed class CodeAltaAppTabStripTests
         tabs.SelectTabAsync(new ShellTabId(fileTabId)).GetAwaiter().GetResult();
         coordinator.SyncControl();
 
-        Assert.IsTrue(workspaceView.TryGetTabPage("thread-1", out var threadPage));
-        var threadContent = Assert.IsInstanceOfType<VSplitter>(threadPage.Content);
-        Assert.IsNotNull(threadContent.Second, "The thread prompt panel should stay attached to its thread tab content while a file editor tab is active.");
-        var stablePromptPanel = threadContent.Second;
-        var threadIndex = Array.FindIndex(
-            workspaceView.ThreadTabControl.Tabs.Select(GetTabPageId).ToArray(),
-            static tabId => string.Equals(tabId, "thread-1", StringComparison.Ordinal));
-        Assert.AreNotEqual(-1, threadIndex);
+        Assert.IsTrue(workspaceView.TryGetTabPage("session-1", out var sessionPage));
+        var sessionContent = Assert.IsInstanceOfType<VSplitter>(sessionPage.Content);
+        Assert.IsNotNull(sessionContent.Second, "The session prompt panel should stay attached to its session tab content while a file editor tab is active.");
+        var stablePromptPanel = sessionContent.Second;
+        var sessionIndex = Array.FindIndex(
+            workspaceView.SessionTabControl.Tabs.Select(GetTabPageId).ToArray(),
+            static tabId => string.Equals(tabId, "session-1", StringComparison.Ordinal));
+        Assert.AreNotEqual(-1, sessionIndex);
 
-        workspaceView.ThreadTabControl.SelectedIndex = threadIndex;
+        workspaceView.SessionTabControl.SelectedIndex = sessionIndex;
 
         Assert.AreSame(
-            workspaceView.ThreadBottomPanel,
-            threadContent.Second,
-            "Selecting the already-open thread tab should activate its existing prompt panel on the first switch.");
-        Assert.AreSame(stablePromptPanel, threadContent.Second);
-        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("thread-1"), out var selectedThreadTab));
-        Assert.IsTrue(selectedThreadTab.IsSelected);
+            workspaceView.SessionBottomPanel,
+            sessionContent.Second,
+            "Selecting the already-open session tab should activate its existing prompt panel on the first switch.");
+        Assert.AreSame(stablePromptPanel, sessionContent.Second);
+        Assert.IsTrue(tabs.TryGetTab(new ShellTabId("session-1"), out var selectedSessionTab));
+        Assert.IsTrue(selectedSessionTab.IsSelected);
     }
 
     [TestMethod]
     public void GetAdjacentTabIndex_WrapsLeftFromFirstTab()
     {
-        Assert.AreEqual(2, ThreadTabStripCoordinator.GetAdjacentTabIndex(selectedIndex: 0, tabCount: 3, delta: -1));
+        Assert.AreEqual(2, SessionTabStripCoordinator.GetAdjacentTabIndex(selectedIndex: 0, tabCount: 3, delta: -1));
     }
 
     [TestMethod]
     public void GetAdjacentTabIndex_WrapsRightFromLastTab()
     {
-        Assert.AreEqual(0, ThreadTabStripCoordinator.GetAdjacentTabIndex(selectedIndex: 2, tabCount: 3, delta: 1));
+        Assert.AreEqual(0, SessionTabStripCoordinator.GetAdjacentTabIndex(selectedIndex: 2, tabCount: 3, delta: 1));
     }
 
     private static ShellTabDescriptor CreateDescriptor(string tabId, ShellTabKind kind)
@@ -502,9 +502,9 @@ public sealed class CodeAltaAppTabStripTests
             ShellTabKind.PromptDraft => new ShellTabAssociation.PromptDraft(new PromptSessionBinding(
                 new PromptSessionId(tabId),
                 projectId,
-                new ShellThreadRef.Draft(new ThreadDraftId(tabId)),
+                new ShellSessionRef.Draft(new SessionDraftId(tabId)),
                 new ModelProviderId("provider-1"))),
-            ShellTabKind.Thread => new ShellTabAssociation.Thread(
+            ShellTabKind.Session => new ShellTabAssociation.Session(
                 tabId,
                 new PromptSessionId(tabId),
                 projectId,
@@ -515,9 +515,9 @@ public sealed class CodeAltaAppTabStripTests
         };
     }
 
-    private static ThreadTabStripCoordinator CreateCoordinator(
+    private static SessionTabStripCoordinator CreateCoordinator(
         IShellTabService tabs,
-        Action<string>? closeThreadTab = null,
+        Action<string>? closeSessionTab = null,
         Action<string>? closeFileTab = null)
     {
         var options = new CatalogOptions
@@ -525,71 +525,71 @@ public sealed class CodeAltaAppTabStripTests
             GlobalRoot = Path.Combine(Path.GetTempPath(), "CodeAltaTests", Guid.NewGuid().ToString("N")),
         };
         var dispatcher = new InlineUiDispatcher();
-        var threadState = TestThreadStateServices.CreateCoordinator(
+        var sessionState = TestSessionStateServices.CreateCoordinator(
             new ProjectCatalog(options),
-            new WorkThreadCatalog(options),
+            new SessionViewCatalog(options),
             dispatcher,
             new ShellStateStore(dispatcher));
 
-        var selection = new ThreadSelectionContext(
-            threadState,
+        var selection = new SessionSelectionContext(
+            sessionState,
             static (_, _) => Task.CompletedTask,
             static _ => false);
-        var context = new ThreadTabContext(
-            new DelegatingThreadTabSurfacePort(
+        var context = new SessionTabContext(
+            new DelegatingSessionTabSurfacePort(
                 static () => null,
                 static () => null,
                 static build => new ComputedVisual(build),
                 dispatcher),
-            new DelegatingThreadTabLifecyclePort(
+            new DelegatingSessionTabLifecyclePort(
                 static () => { },
                 static () => { },
-                closeThreadTab ?? (static _ => { }),
+                closeSessionTab ?? (static _ => { }),
                 static () => { },
                 static _ => { }),
             new DelegatingFileEditorTabPort(
                 static _ => null,
                 static _ => { },
                 closeFileTab ?? (static _ => { })));
-        return new ThreadTabStripCoordinator(selection, context, tabs, new State<float>(0));
+        return new SessionTabStripCoordinator(selection, context, tabs, new State<float>(0));
     }
 
-    private static ThreadTabStripCoordinator CreateCoordinator(
+    private static SessionTabStripCoordinator CreateCoordinator(
         IShellTabService tabs,
-        ShellThreadStateCoordinator threadState,
-        ThreadWorkspaceView workspaceView,
+        ShellSessionStateCoordinator sessionState,
+        SessionWorkspaceView workspaceView,
         IUiDispatcher dispatcher)
     {
-        var selection = new ThreadSelectionContext(
-            threadState,
+        var selection = new SessionSelectionContext(
+            sessionState,
             static (_, _) => Task.CompletedTask,
-            threadId => string.Equals(threadState.SelectedThreadId, threadId, StringComparison.OrdinalIgnoreCase));
-        var context = new ThreadTabContext(
-            new DelegatingThreadTabSurfacePort(
-                () => workspaceView.ThreadTabControl,
+            sessionId => string.Equals(sessionState.SelectedSessionId, sessionId, StringComparison.OrdinalIgnoreCase));
+        var context = new SessionTabContext(
+            new DelegatingSessionTabSurfacePort(
+                () => workspaceView.SessionTabControl,
                 () => workspaceView,
                 static build => new ComputedVisual(build),
                 dispatcher),
-            new DelegatingThreadTabLifecyclePort(
+            new DelegatingSessionTabLifecyclePort(
                 static () => { },
                 static () => { },
-                threadId => threadState.CloseThreadTabAsync(threadId).GetAwaiter().GetResult(),
+                sessionId => sessionState.CloseSessionTabAsync(sessionId).GetAwaiter().GetResult(),
                 static () => { },
-                threadId => _ = threadState.OpenThread(threadId)),
+                sessionId => _ = sessionState.OpenSession(sessionId)),
             new DelegatingFileEditorTabPort(
                 static _ => null,
                 static _ => { },
                 static _ => { }));
-        return new ThreadTabStripCoordinator(selection, context, tabs, new State<float>(0));
+        return new SessionTabStripCoordinator(selection, context, tabs, new State<float>(0));
     }
 
-    private static ThreadWorkspaceView CreateThreadWorkspaceView(Action<int>? selectTab = null)
+    private static SessionWorkspaceView CreateSessionWorkspaceView(Action<int>? selectTab = null)
         => new(
             new CodeAltaShellViewModel(),
-            new ThreadWorkspaceViewModel(),
+            new SessionWorkspaceViewModel(),
             new PromptComposerViewModel(),
-            Array.Empty<ThreadWorkspaceCommandBinding>(),
-            ThreadWorkspaceChromeController.Empty,
+            Array.Empty<SessionWorkspaceCommandBinding>(),
+            SessionWorkspaceChromeController.Empty,
             PromptComposerViewController.Create(static _ => { }, static () => { }, static () => { }, static () => { }, static () => { }),
             QueuedPromptStripController.Create(
                 static _ => { },
@@ -598,9 +598,9 @@ public sealed class CodeAltaAppTabStripTests
                 static _ => { },
                 static (_, _) => { },
                 static (_, _) => { },
-                static (onAccepted, placeholder) => ThreadWorkspaceView.CreateStyledPromptEditor(onAccepted, null, null, placeholder)),
+                static (onAccepted, placeholder) => SessionWorkspaceView.CreateStyledPromptEditor(onAccepted, null, null, placeholder)),
             ModelProviderSelectorController.Create(static _ => { }, static _ => { }, static _ => { }, static () => { }),
-            ThreadTabHostController.Create(selectTab ?? (static _ => { })),
+            SessionTabHostController.Create(selectTab ?? (static _ => { })),
             NullProjectFileSearchService.Instance,
             static () => null,
             static (_, _) => new PromptComposerSessionBinding(new State<string?>(string.Empty)),
@@ -626,18 +626,18 @@ public sealed class CodeAltaAppTabStripTests
         };
     }
 
-    private static SessionViewDescriptor CreateThread(string threadId, string projectId)
+    private static SessionViewDescriptor CreateSession(string sessionId, string projectId)
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00");
         return new SessionViewDescriptor
         {
-            ThreadId = threadId,
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = sessionId,
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = "codex",
             ProjectRef = projectId,
             WorkingDirectory = @"C:\repo",
-            Title = threadId,
-            Status = WorkThreadStatus.Active,
+            Title = sessionId,
+            Status = SessionViewStatus.Active,
             CreatedAt = timestamp,
             UpdatedAt = timestamp,
             LastActiveAt = timestamp,

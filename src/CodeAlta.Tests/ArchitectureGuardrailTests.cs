@@ -14,16 +14,70 @@ public sealed class ArchitectureGuardrailTests
     public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
-    public void CodeAltaSource_DoesNotContainLegacyUiThreadHelpersOrBroadRefreshView()
+    public void CodeAltaSource_DoesNotContainLegacyUiSessionHelpersOrBroadRefreshView()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
         var sourceFiles = Directory.EnumerateFiles(codeAltaRoot, "*.cs", SearchOption.AllDirectories).ToArray();
 
         AssertSourceDoesNotContain(sourceFiles, "PostToUi");
         AssertSourceDoesNotContain(sourceFiles, "ReadUiValue");
-        AssertSourceDoesNotContain(sourceFiles, "RunOnUiThread");
+        AssertSourceDoesNotContain(sourceFiles, "RunOnUiSession");
         AssertSourceDoesNotContain(sourceFiles, "RefreshView(");
-        AssertSourceDoesNotContain(sourceFiles, "ThreadTabState");
+        AssertSourceDoesNotContain(sourceFiles, "SessionTabState");
+    }
+
+    [TestMethod]
+    public void CodeAltaSource_UsesSessionTerminologyForConversationConcepts()
+    {
+        var sourceRoot = GetSourceRoot();
+        var forbiddenConversationTerms = new Regex(@"\b(?:Work" + "Thread[A-Za-z0-9_]*|Thread" + "Id|Thread[A-Za-z0-9_]*)\b", RegexOptions.Compiled);
+
+        var violations = Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(static file => !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&
+                                  !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(file =>
+            {
+                var relativePath = Path.GetRelativePath(sourceRoot, file).Replace('\\', '/');
+                return File.ReadLines(file)
+                    .Select((line, index) => new { RelativePath = relativePath, Number = index + 1, Text = line.Trim() })
+                    .Where(line => forbiddenConversationTerms.IsMatch(line.Text));
+            })
+            .Where(static line => !IsAllowedThreadTerminologyUse(line.RelativePath, line.Text))
+            .Select(line => $"{line.RelativePath}:{line.Number}:{line.Text}")
+            .OrderBy(static violation => violation, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), violations);
+
+        static bool IsAllowedThreadTerminologyUse(string relativePath, string text)
+        {
+            if (relativePath == "CodeAlta.Tests/ArchitectureGuardrailTests.cs")
+            {
+                return true;
+            }
+
+            if (relativePath is "CodeAlta/Program.cs" or
+                "CodeAlta/App/State/ShellStateStore.cs" or
+                "CodeAlta.Tests/ProgramThreadGuardTests.cs" or
+                "CodeAlta.Tests/ShellStateStoreTests.cs")
+            {
+                return true;
+            }
+
+            if (relativePath.StartsWith("CodeAlta/Threading/", StringComparison.Ordinal) ||
+                text.Contains("using CodeAlta.Threading", StringComparison.Ordinal) ||
+                text.Contains("namespace CodeAlta.Threading", StringComparison.Ordinal) ||
+                text.Contains("using System.Threading", StringComparison.Ordinal) ||
+                text.Contains("System.Threading", StringComparison.Ordinal) ||
+                text.Contains("XenoAtom.Terminal.UI.Threading", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return text.Contains("Thread.Sleep(", StringComparison.Ordinal) ||
+                   text.Contains("ThreadPool.", StringComparison.Ordinal) ||
+                   text.Contains("new Thread(", StringComparison.Ordinal);
+        }
     }
 
     [TestMethod]
@@ -81,7 +135,7 @@ public sealed class ArchitectureGuardrailTests
             })
             .Where(static entry => entry.Content.Contains("StreamEventsAsync(", StringComparison.Ordinal))
             .Select(static entry => Path.GetFileName(entry.File))
-            .Where(static fileName => fileName is not "RuntimeWorkThreadOrchestratorAdapter.cs")
+            .Where(static fileName => fileName is not "RuntimeSessionOrchestratorAdapter.cs")
             .ToArray();
 
         CollectionAssert.AreEqual(
@@ -121,7 +175,7 @@ public sealed class ArchitectureGuardrailTests
         var runtimeRoot = Path.Combine(GetSourceRoot(), "CodeAlta.Orchestration", "Runtime");
         var matches = Directory
             .EnumerateFiles(runtimeRoot, "*.cs", SearchOption.AllDirectories)
-            .Where(static file => File.ReadAllText(file).Contains("Channel.CreateUnbounded<WorkThreadRuntimeEvent>", StringComparison.Ordinal))
+            .Where(static file => File.ReadAllText(file).Contains("Channel.CreateUnbounded<SessionRuntimeEvent>", StringComparison.Ordinal))
             .Select(file => Path.GetRelativePath(runtimeRoot, file).Replace('\\', '/'))
             .OrderBy(static path => path, StringComparer.Ordinal)
             .ToArray();
@@ -189,15 +243,15 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
-    public void PromptSessionContracts_RequireProjectThreadRefAndModelProvider()
+    public void PromptSessionContracts_RequireProjectSessionRefAndModelProvider()
     {
         var source = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Models", "PromptSessionBinding.cs"));
 
         Assert.IsTrue(source.Contains("ProjectId projectId", StringComparison.Ordinal));
-        Assert.IsTrue(source.Contains("ShellThreadRef thread", StringComparison.Ordinal));
+        Assert.IsTrue(source.Contains("ShellSessionRef session", StringComparison.Ordinal));
         Assert.IsTrue(source.Contains("ModelProviderId modelProviderId", StringComparison.Ordinal));
         Assert.IsTrue(source.Contains("projectId == default", StringComparison.Ordinal));
-        Assert.IsTrue(source.Contains("ArgumentNullException.ThrowIfNull(thread)", StringComparison.Ordinal));
+        Assert.IsTrue(source.Contains("ArgumentNullException.ThrowIfNull(session)", StringComparison.Ordinal));
         Assert.IsTrue(source.Contains("modelProviderId.IsEmpty", StringComparison.Ordinal));
         Assert.IsFalse(source.Contains("ProjectId? projectId", StringComparison.Ordinal));
         Assert.IsFalse(source.Contains("ModelProviderId? modelProviderId", StringComparison.Ordinal));
@@ -262,8 +316,8 @@ public sealed class ArchitectureGuardrailTests
             "ICodeAltaFrontendServices",
             "CodeAltaFrontendServicesAdapter",
             "IProjectionInvalidator",
-            "RefreshCatalogAndThreadWorkspace",
-            "RefreshSelectionAndThreadWorkspace",
+            "RefreshCatalogAndSessionWorkspace",
+            "RefreshSelectionAndSessionWorkspace",
             "RefreshShellChrome",
         };
         var transitionalReferences = sourceFiles
@@ -352,21 +406,21 @@ public sealed class ArchitectureGuardrailTests
             ["App/LegacyPromptSessionPort.cs:LegacyPromptSessionPort"] = "Legacy prompt-session bridge kept during facade migration.",
             ["App/NavigatorActionCoordinator.cs:NavigatorActionCoordinator"] = "Legacy navigator coordinator pending port extraction.",
             ["App/NavigatorSettingsCoordinator.cs:NavigatorSettingsCoordinator"] = "Legacy navigator settings coordinator pending service split.",
-            ["App/OpenThreadStateStore.cs:OpenThreadStateStore"] = "Legacy open-thread registry pending state-store migration.",
-            ["App/ShellThreadStateCoordinator.cs:ShellThreadStateCoordinator"] = "Legacy shell state coordinator pending tab service migration.",
+            ["App/OpenSessionStateStore.cs:OpenSessionStateStore"] = "Legacy open-session registry pending state-store migration.",
+            ["App/ShellSessionStateCoordinator.cs:ShellSessionStateCoordinator"] = "Legacy shell state coordinator pending tab service migration.",
             ["App/ShellWorkspacePorts.cs:DelegatingShellWorkspaceProjectionPort"] = "Transitional workspace projection port adapter.",
             ["App/SidebarCoordinator.cs:SidebarCoordinator"] = "Legacy sidebar coordinator pending projection-only migration.",
             ["App/SkillsManagementCoordinator.cs:SkillsManagementCoordinator"] = "Legacy skills coordinator pending service/view split.",
-            ["App/ThreadCommandPorts.cs:DelegatingThreadLifecycleCommandPort"] = "Transitional command port adapter.",
-            ["App/ThreadCommandPorts.cs:ThreadCommandUiPort"] = "Transitional command UI port adapter.",
-            ["App/ThreadCreationCoordinator.cs:ThreadCreationCoordinator"] = "Legacy thread creation coordinator pending orchestration facade migration.",
+            ["App/SessionCommandPorts.cs:DelegatingSessionLifecycleCommandPort"] = "Transitional command port adapter.",
+            ["App/SessionCommandPorts.cs:SessionCommandUiPort"] = "Transitional command UI port adapter.",
+            ["App/SessionCreationCoordinator.cs:SessionCreationCoordinator"] = "Legacy session creation coordinator pending orchestration facade migration.",
             ["App/SessionHistoryCoordinator.cs:SessionHistoryCoordinator"] = "Legacy history coordinator pending runtime event projection migration.",
-            ["App/ThreadPromptQueueCoordinator.cs:ThreadPromptQueueCoordinator"] = "Legacy queue coordinator pending prompt facade migration.",
+            ["App/SessionPromptQueueCoordinator.cs:SessionPromptQueueCoordinator"] = "Legacy queue coordinator pending prompt facade migration.",
             ["App/SessionProviderSwitchCoordinator.cs:SessionProviderSwitchCoordinator"] = "Legacy provider switch coordinator pending model-provider port migration.",
-            ["App/ThreadRuntimeEventCoordinator.cs:ThreadRuntimeEventCoordinator"] = "Legacy runtime event coordinator pending centralized event projection.",
-            ["App/ThreadStateServices.cs:ThreadStateTabLifecycleService"] = "Transitional tab lifecycle adapter preserving shell-tab callbacks.",
-            ["App/ThreadTabPorts.cs:DelegatingThreadTabSurfacePort"] = "Transitional tab surface port adapter.",
-            ["App/ThreadTabPorts.cs:DelegatingThreadTabLifecyclePort"] = "Transitional tab lifecycle port adapter.",
+            ["App/SessionRuntimeEventCoordinator.cs:SessionRuntimeEventCoordinator"] = "Legacy runtime event coordinator pending centralized event projection.",
+            ["App/SessionStateServices.cs:SessionStateTabLifecycleService"] = "Transitional tab lifecycle adapter preserving shell-tab callbacks.",
+            ["App/SessionTabPorts.cs:DelegatingSessionTabSurfacePort"] = "Transitional tab surface port adapter.",
+            ["App/SessionTabPorts.cs:DelegatingSessionTabLifecyclePort"] = "Transitional tab lifecycle port adapter.",
         };
         var violations = Directory
             .EnumerateFiles(Path.Combine(codeAltaRoot, "App"), "*.cs", SearchOption.AllDirectories)
@@ -393,7 +447,7 @@ public sealed class ArchitectureGuardrailTests
 
         var source = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Frontend", "Commands", "ShellInputCoordinator.cs"));
         Assert.IsFalse(source.Contains("PluginHostBridge", StringComparison.Ordinal));
-        Assert.IsFalse(source.Contains("ThreadCommandCoordinator", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("SessionCommandCoordinator", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -431,7 +485,7 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsTrue(serviceSource.Contains("internal interface IPluginCommandService", StringComparison.Ordinal));
         Assert.IsFalse(source.Contains("Func<Task> scrollToPreviousMessageAsync", StringComparison.Ordinal));
         Assert.IsFalse(source.Contains("Func<Task> openModelProvidersAsync", StringComparison.Ordinal));
-        Assert.IsFalse(source.Contains("Func<SessionViewDescriptor?> getSelectedThread", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("Func<SessionViewDescriptor?> getSelectedSession", StringComparison.Ordinal));
         Assert.IsFalse(viewFactorySource.Contains("Action focusSidebar", StringComparison.Ordinal));
         Assert.IsFalse(viewFactorySource.Contains("Action focusPromptEditor", StringComparison.Ordinal));
         Assert.IsTrue(viewFactorySource.Contains("shellCommandSurfaceCoordinator.FocusSidebarAsync", StringComparison.Ordinal));
@@ -489,9 +543,9 @@ public sealed class ArchitectureGuardrailTests
             "App/PromptImageCapabilityContext.cs",
             "App/ShellWorkspacePorts.cs",
             "App/State/ModelProviderSelectorStateStore.cs",
-            "App/State/OpenThreadState.cs",
+            "App/State/OpenSessionState.cs",
             "Models/ChatTimelineModels.cs",
-            "Models/ThreadSessionState.cs",
+            "Models/SessionState.cs",
         };
         var contractRoots = new[]
         {
@@ -532,8 +586,8 @@ public sealed class ArchitectureGuardrailTests
             "CodeAlta.Agent/AgentToolDefinition.cs",
             "CodeAlta.Agent/LocalRuntime/LocalAgentSessionFiles.cs",
             "CodeAlta.Catalog/SessionViewDescriptor.cs",
-            "CodeAlta.Catalog/WorkThreadJournalStore.cs",
-            "CodeAlta.Catalog/WorkThreadYamlSerializer.cs",
+            "CodeAlta.Catalog/SessionViewJournalStore.cs",
+            "CodeAlta.Catalog/SessionViewYamlSerializer.cs",
         };
         var forbiddenSymbols = new[]
         {
@@ -591,30 +645,30 @@ public sealed class ArchitectureGuardrailTests
             "App/CodeAltaApp.cs:362:_ = PersistViewStateAsync();",
             "App/CodeAltaApp.cs:435:_ = OpenModelProvidersAsync();",
             "App/RuntimeEventPump.cs:34:_pumpTask = Task.Run(",
-            "App/ShellThreadStateCoordinator.cs:274:_ = RestoreStartupThreadHistoryAsync(threadId, cancellationToken);",
-            "App/ShellThreadStateCoordinator.cs:283:_ = PersistViewStateAsync();",
-            "App/ShellThreadStateCoordinator.cs:296:_ = PersistViewStateAsync();",
-            "App/ShellThreadStateCoordinator.cs:355:_ = PersistViewStateAsync();",
-            "App/ShellThreadStateCoordinator.cs:485:_ = PersistViewStateAsync();",
-            "App/ShellThreadStateCoordinator.cs:533:_ = PersistViewStateAsync();",
+            "App/ShellSessionStateCoordinator.cs:274:_ = RestoreStartupSessionHistoryAsync(sessionId, cancellationToken);",
+            "App/ShellSessionStateCoordinator.cs:283:_ = PersistViewStateAsync();",
+            "App/ShellSessionStateCoordinator.cs:296:_ = PersistViewStateAsync();",
+            "App/ShellSessionStateCoordinator.cs:355:_ = PersistViewStateAsync();",
+            "App/ShellSessionStateCoordinator.cs:485:_ = PersistViewStateAsync();",
+            "App/ShellSessionStateCoordinator.cs:533:_ = PersistViewStateAsync();",
             "App/SidebarCoordinator.cs:308:_ = CommitInlineRenameAsync(row, projectId, displayName, previousTitle);",
-            "App/ThreadPromptDispatchCoordinator.cs:178:_ = RecordResolvedReferenceUsageAsync(promptInput.ResolvedReferences);",
-            "App/ThreadPromptDraftPersistenceCoordinator.cs:83:_ = PersistPromptDraftAsync(threadId, normalizedPrompt, cancellationSource);",
+            "App/SessionPromptDispatchCoordinator.cs:178:_ = RecordResolvedReferenceUsageAsync(promptInput.ResolvedReferences);",
+            "App/SessionPromptDraftPersistenceCoordinator.cs:83:_ = PersistPromptDraftAsync(sessionId, normalizedPrompt, cancellationSource);",
             "App/SessionHistoryCoordinator.cs:103:await Task.Run(",
-            "App/SessionHistoryCoordinator.cs:478:var loadTask = Task.Run(() => LoadCoreAsync(thread, tab, cancellationToken));",
-            "App/ThreadRuntimeEventCoordinator.cs:255:Task.Run(async () =>",
-            "App/ThreadRuntimeEventCoordinator.cs:484:_ = InvalidateProjectFileSearchAsync(thread.WorkingDirectory);",
+            "App/SessionHistoryCoordinator.cs:478:var loadTask = Task.Run(() => LoadCoreAsync(session, tab, cancellationToken));",
+            "App/SessionRuntimeEventCoordinator.cs:255:Task.Run(async () =>",
+            "App/SessionRuntimeEventCoordinator.cs:484:_ = InvalidateProjectFileSearchAsync(session.WorkingDirectory);",
             "Presentation/Editing/FileEditorTab.cs:223:_ = RefreshExternalStateAsync();",
             "Presentation/Editing/ProjectFileOpenDialogController.cs:217:_ = AcceptSelectedAsync(selected);",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:153:var sessionCreateTask = Task.Run(",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:164:_ = sessionCreateTask.ContinueWith(",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:377:_ = CloseAsync();",
             "Presentation/Prompting/ProjectFileReferencePopupController.cs:378:_ = RecordUsageAsync(selected);",
-            "Presentation/Tabs/ThreadTabStripCoordinator.cs:495:_ = CloseTabFromViewAsync(currentThreadId, ShellTabCloseReason.UserDetached);",
-            "Presentation/Tabs/ThreadTabStripCoordinator.cs:701:_ = CloseTabFromViewAsync(CodeAltaApp.DraftTabId, ShellTabCloseReason.UserDetached);",
-            "Presentation/Tabs/ThreadTabStripCoordinator.cs:736:_ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.FileEditorClosed);",
-            "Presentation/Tabs/ThreadTabStripCoordinator.cs:777:_ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.UserDetached);",
-            "Presentation/Threads/ThreadInfoPresenter.cs:96:_ = LoadAsync(cancellationTokenSource.Token);",
+            "Presentation/Tabs/SessionTabStripCoordinator.cs:495:_ = CloseTabFromViewAsync(currentSessionId, ShellTabCloseReason.UserDetached);",
+            "Presentation/Tabs/SessionTabStripCoordinator.cs:701:_ = CloseTabFromViewAsync(CodeAltaApp.DraftTabId, ShellTabCloseReason.UserDetached);",
+            "Presentation/Tabs/SessionTabStripCoordinator.cs:736:_ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.FileEditorClosed);",
+            "Presentation/Tabs/SessionTabStripCoordinator.cs:777:_ = CloseTabFromViewAsync(currentTabId, ShellTabCloseReason.UserDetached);",
+            "Presentation/Sessions/SessionInfoPresenter.cs:96:_ = LoadAsync(cancellationTokenSource.Token);",
         };
         var violations = new[]
             {
@@ -645,7 +699,7 @@ public sealed class ArchitectureGuardrailTests
     {
         var pumpSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "RuntimeEventPump.cs"));
 
-        Assert.IsTrue(pumpSource.Contains("IThreadRuntimeEventProjector", StringComparison.Ordinal));
+        Assert.IsTrue(pumpSource.Contains("ISessionRuntimeEventProjector", StringComparison.Ordinal));
         Assert.IsFalse(pumpSource.Contains("CodeAltaShellController", StringComparison.Ordinal));
         Assert.IsTrue(pumpSource.Contains("_runtimeEventProjector.QueueRuntimeEvent(runtimeEvent, cancellationToken);", StringComparison.Ordinal));
     }
@@ -656,8 +710,8 @@ public sealed class ArchitectureGuardrailTests
         var codeAltaRoot = GetCodeAltaSourceRoot();
         var mutationCoordinatorFiles = new[]
         {
-            Path.Combine(codeAltaRoot, "App", "ShellThreadStateCoordinator.cs"),
-            Path.Combine(codeAltaRoot, "App", "ThreadRuntimeEventCoordinator.cs"),
+            Path.Combine(codeAltaRoot, "App", "ShellSessionStateCoordinator.cs"),
+            Path.Combine(codeAltaRoot, "App", "SessionRuntimeEventCoordinator.cs"),
             Path.Combine(codeAltaRoot, "App", "ModelProviderInitializationCoordinator.cs"),
             Path.Combine(codeAltaRoot, "App", "ProviderFrontendCoordinator.cs"),
             Path.Combine(codeAltaRoot, "Views", "InitialCatalogStateCoordinator.cs"),
@@ -706,21 +760,21 @@ public sealed class ArchitectureGuardrailTests
 
         var coordinatorSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "Events", "ShellProjectionCoordinator.cs"));
         Assert.IsFalse(coordinatorSource.Contains("IProjectionInvalidator", StringComparison.Ordinal));
-        Assert.IsFalse(coordinatorSource.Contains("RefreshCatalogAndThreadWorkspace", StringComparison.Ordinal));
+        Assert.IsFalse(coordinatorSource.Contains("RefreshCatalogAndSessionWorkspace", StringComparison.Ordinal));
         StringAssert.Contains(coordinatorSource, "StartupCatalogProjectionReadyEvent");
         StringAssert.Contains(coordinatorSource, "IWorkspaceProjectionController");
         StringAssert.Contains(coordinatorSource, "IPromptAvailabilityProjectionController");
         StringAssert.Contains(coordinatorSource, "IQueuedPromptProjectionController");
         StringAssert.Contains(coordinatorSource, "ApplyCatalogProjection");
         StringAssert.Contains(coordinatorSource, "ApplySelectionProjection");
-        StringAssert.Contains(coordinatorSource, "ApplyThreadStatusProjection");
+        StringAssert.Contains(coordinatorSource, "ApplySessionStatusProjection");
         StringAssert.Contains(coordinatorSource, "ApplyPromptAvailabilityProjection");
         StringAssert.Contains(coordinatorSource, "ApplyQueuedPromptProjection");
         StringAssert.Contains(coordinatorSource, "ApplySessionUsageProjection");
         StringAssert.Contains(coordinatorSource, "ApplyTabProjection");
 
         var shellBridgeSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "ICodeAltaShell.cs"));
-        Assert.IsFalse(shellBridgeSource.Contains("RefreshCatalogAndThreadWorkspace", StringComparison.Ordinal));
+        Assert.IsFalse(shellBridgeSource.Contains("RefreshCatalogAndSessionWorkspace", StringComparison.Ordinal));
         StringAssert.Contains(shellBridgeSource, "PublishStartupCatalogProjectionReady");
     }
 
@@ -741,9 +795,9 @@ public sealed class ArchitectureGuardrailTests
             "CodeAltaFrontendServicesAdapter",
             "IProjectionInvalidator",
             "CodeAltaProjectionInvalidator",
-            "RefreshCatalogAndThreadWorkspace",
-            "RefreshSelectionAndThreadWorkspace",
-            "RefreshHeaderAndThreadWorkspace",
+            "RefreshCatalogAndSessionWorkspace",
+            "RefreshSelectionAndSessionWorkspace",
+            "RefreshHeaderAndSessionWorkspace",
             "RefreshShellChrome",
         };
         var violations = allProductionSource
@@ -764,9 +818,9 @@ public sealed class ArchitectureGuardrailTests
         {
             "App/IModelProviderPreferencePort.cs:DelegatingModelProviderPreferencePort:9",
             "App/IShellSelectionPort.cs:DelegatingShellSelectionPort:6",
+            "App/SessionCommandPorts.cs:DelegatingSessionLifecycleCommandPort:4",
+            "App/SessionTabPorts.cs:DelegatingSessionTabLifecyclePort:5",
             "App/ShellWorkspacePorts.cs:DelegatingShellWorkspaceProjectionPort:10",
-            "App/ThreadCommandPorts.cs:DelegatingThreadLifecycleCommandPort:4",
-            "App/ThreadTabPorts.cs:DelegatingThreadTabLifecyclePort:5",
         };
         var largeDelegatingPorts = Directory.EnumerateFiles(Path.Combine(codeAltaRoot, "App"), "*.cs", SearchOption.AllDirectories)
             .SelectMany(file => FindLargeDelegatingPorts(codeAltaRoot, file, maxDelegateFields: 3))
@@ -784,7 +838,7 @@ public sealed class ArchitectureGuardrailTests
         var approvedViewDependencies = new[]
         {
             "Presentation/Editing/FileEditorTab.cs",
-            "Presentation/Tabs/ThreadTabStripCoordinator.cs",
+            "Presentation/Tabs/SessionTabStripCoordinator.cs",
             "Presentation/Timeline/ChatTimelineVisualFactory.cs",
             "Presentation/Timeline/FileChangePresenter.cs",
             "Presentation/Timeline/ToolCallPresenter.cs",
@@ -805,9 +859,9 @@ public sealed class ArchitectureGuardrailTests
         var codeAltaRoot = GetCodeAltaSourceRoot();
         var legacyApis = new[]
         {
-            "SetThreadPaneContent",
+            "SetSessionPaneContent",
             "SetActiveTabContent",
-            "CreateThreadTabPageContentPlaceholder",
+            "CreateSessionTabPageContentPlaceholder",
         };
         var matches = Directory
             .EnumerateFiles(codeAltaRoot, "*.cs", SearchOption.AllDirectories)
@@ -829,69 +883,69 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void ShellTabs_AssociatedViewModelsUseTabPageData()
     {
-        var coordinatorSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Tabs", "ThreadTabStripCoordinator.cs"));
+        var coordinatorSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Tabs", "SessionTabStripCoordinator.cs"));
 
-        Assert.IsTrue(coordinatorSource.Contains("private sealed record ThreadTabPageData(string TabId, ShellTabKind Kind, object ViewModel)", StringComparison.Ordinal));
-        Assert.IsTrue(coordinatorSource.Contains("Data = new ThreadTabPageData(thread.ThreadId, shellTab.Kind, shellTab.ViewModel)", StringComparison.Ordinal));
-        Assert.IsTrue(coordinatorSource.Contains("Data = new ThreadTabPageData(tabId, shellTab.Kind, shellTab.ViewModel)", StringComparison.Ordinal));
-        Assert.IsTrue(coordinatorSource.Contains("Data = new ThreadTabPageData(CodeAltaApp.DraftTabId, shellTab.Kind, shellTab.ViewModel)", StringComparison.Ordinal));
-        Assert.IsFalse(coordinatorSource.Contains("Data = thread.ThreadId", StringComparison.Ordinal));
+        Assert.IsTrue(coordinatorSource.Contains("private sealed record SessionTabPageData(string TabId, ShellTabKind Kind, object ViewModel)", StringComparison.Ordinal));
+        Assert.IsTrue(coordinatorSource.Contains("Data = new SessionTabPageData(session.SessionId, shellTab.Kind, shellTab.ViewModel)", StringComparison.Ordinal));
+        Assert.IsTrue(coordinatorSource.Contains("Data = new SessionTabPageData(tabId, shellTab.Kind, shellTab.ViewModel)", StringComparison.Ordinal));
+        Assert.IsTrue(coordinatorSource.Contains("Data = new SessionTabPageData(CodeAltaApp.DraftTabId, shellTab.Kind, shellTab.ViewModel)", StringComparison.Ordinal));
+        Assert.IsFalse(coordinatorSource.Contains("Data = session.SessionId", StringComparison.Ordinal));
         Assert.IsFalse(coordinatorSource.Contains("Data = tabId,", StringComparison.Ordinal));
         Assert.IsFalse(coordinatorSource.Contains("Data = CodeAltaApp.DraftTabId", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void ThreadTabStripCoordinator_UsesShellTabsAsLogicalTabSource()
+    public void SessionTabStripCoordinator_UsesShellTabsAsLogicalTabSource()
     {
-        var coordinatorSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Tabs", "ThreadTabStripCoordinator.cs"));
+        var coordinatorSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Tabs", "SessionTabStripCoordinator.cs"));
 
-        StringAssert.Contains(coordinatorSource, "ThreadTabStripProjectionBuilder.Build(_shellTabs.GetTabs())");
-        StringAssert.Contains(coordinatorSource, "RestoreThreadTabsFromViewState(workspaceView);");
-        StringAssert.Contains(coordinatorSource, "_restoredThreadTabsFromViewState");
+        StringAssert.Contains(coordinatorSource, "SessionTabStripProjectionBuilder.Build(_shellTabs.GetTabs())");
+        StringAssert.Contains(coordinatorSource, "RestoreSessionTabsFromViewState(workspaceView);");
+        StringAssert.Contains(coordinatorSource, "_restoredSessionTabsFromViewState");
         Assert.IsFalse(coordinatorSource.Contains("_getOpenFileTabIds", StringComparison.Ordinal));
         Assert.IsFalse(coordinatorSource.Contains("_getSelectedTabIdOverride", StringComparison.Ordinal));
-        Assert.IsFalse(coordinatorSource.Contains("private void EnsureThreadSurfaceShellTabs", StringComparison.Ordinal));
+        Assert.IsFalse(coordinatorSource.Contains("private void EnsureSessionSurfaceShellTabs", StringComparison.Ordinal));
 
-        var buildProjectionStart = coordinatorSource.IndexOf("private ThreadTabStripProjection BuildProjection()", StringComparison.Ordinal);
-        var restoreStart = coordinatorSource.IndexOf("private void RestoreThreadTabsFromViewState", StringComparison.Ordinal);
+        var buildProjectionStart = coordinatorSource.IndexOf("private SessionTabStripProjection BuildProjection()", StringComparison.Ordinal);
+        var restoreStart = coordinatorSource.IndexOf("private void RestoreSessionTabsFromViewState", StringComparison.Ordinal);
         Assert.IsTrue(buildProjectionStart >= 0);
         Assert.IsTrue(restoreStart > buildProjectionStart);
         var buildProjectionSource = coordinatorSource[buildProjectionStart..restoreStart];
-        Assert.IsFalse(buildProjectionSource.Contains("OpenThreadIds", StringComparison.Ordinal));
+        Assert.IsFalse(buildProjectionSource.Contains("OpenSessionIds", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void ThreadTabCloseSemantics_AreExplicitlySeparated()
+    public void SessionTabCloseSemantics_AreExplicitlySeparated()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
         var shellTabsSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "IShellTabService.cs"));
-        var threadStateSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "ShellThreadStateCoordinator.cs"));
+        var sessionStateSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "ShellSessionStateCoordinator.cs"));
         var fileEditorSource = File.ReadAllText(Path.Combine(codeAltaRoot, "Views", "FileEditorWorkspaceCoordinator.cs"));
-        var threadCommandsSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "ThreadCommandCoordinator.cs"));
+        var sessionCommandsSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "SessionCommandCoordinator.cs"));
         var navigatorSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "NavigatorActionCoordinator.cs"));
         var appSource = File.ReadAllText(Path.Combine(codeAltaRoot, "App", "CodeAltaApp.cs"));
 
         StringAssert.Contains(shellTabsSource, "UserDetached");
         StringAssert.Contains(shellTabsSource, "FileEditorClosed");
-        StringAssert.Contains(shellTabsSource, "ThreadDeleted");
+        StringAssert.Contains(shellTabsSource, "SessionDeleted");
         StringAssert.Contains(shellTabsSource, "ProjectClosed");
         Assert.IsFalse(shellTabsSource.Contains("User,", StringComparison.Ordinal));
 
-        StringAssert.Contains(threadStateSource, "ShellTabCloseReason.UserDetached");
-        StringAssert.Contains(threadStateSource, "ShellTabCloseReason.ThreadDeleted");
-        StringAssert.Contains(threadStateSource, "ShellTabCloseReason.ProjectClosed");
+        StringAssert.Contains(sessionStateSource, "ShellTabCloseReason.UserDetached");
+        StringAssert.Contains(sessionStateSource, "ShellTabCloseReason.SessionDeleted");
+        StringAssert.Contains(sessionStateSource, "ShellTabCloseReason.ProjectClosed");
         StringAssert.Contains(fileEditorSource, "ShellTabCloseReason.FileEditorClosed");
-        StringAssert.Contains(appSource, "new DelegatingShellTabCommandService(() => _threadTabStripCoordinator.CloseSelectedTabAsync())");
-        Assert.IsFalse(appSource.Contains("CloseSelectedThreadAsync", StringComparison.Ordinal));
+        StringAssert.Contains(appSource, "new DelegatingShellTabCommandService(() => _sessionTabStripCoordinator.CloseSelectedTabAsync())");
+        Assert.IsFalse(appSource.Contains("CloseSelectedSessionAsync", StringComparison.Ordinal));
 
-        StringAssert.Contains(threadCommandsSource, "AbortSelectedThreadAsync");
-        StringAssert.Contains(threadCommandsSource, "_runtimeService.AbortAsync(thread.ThreadId)");
+        StringAssert.Contains(sessionCommandsSource, "AbortSelectedSessionAsync");
+        StringAssert.Contains(sessionCommandsSource, "_runtimeService.AbortAsync(session.SessionId)");
         StringAssert.Contains(navigatorSource, "DeleteSessionAsync");
         StringAssert.Contains(navigatorSource, "DeleteProjectAsync");
     }
 
     [TestMethod]
-    public void OrchestrationStateOwnershipInventory_ReportsMutablePerThreadState()
+    public void OrchestrationStateOwnershipInventory_ReportsMutablePerSessionState()
     {
         var sourceRoot = GetSourceRoot();
         var orchestrationRoot = Path.Combine(sourceRoot, "CodeAlta.Orchestration");
@@ -902,7 +956,7 @@ public sealed class ArchitectureGuardrailTests
             "Channel<",
             "CancellationTokenSource",
             "SessionViewDescriptor",
-            "ThreadSessionEntry",
+            "RuntimeSessionEntry",
             "Queue<",
         };
         var matches = Directory
@@ -986,16 +1040,16 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void RuntimeCommands_AreNamedRequestRecordsWithStructuredOutcomes()
     {
-        var commandMethods = typeof(IWorkThreadOrchestrator)
+        var commandMethods = typeof(ISessionOrchestrator)
             .GetMethods()
             .Where(static method => method.Name.EndsWith("Async", StringComparison.Ordinal) &&
-                method.Name is not "StreamEventsAsync" and not "GetThreadSnapshotAsync")
+                method.Name is not "StreamEventsAsync" and not "GetSessionSnapshotAsync")
             .ToArray();
 
         Assert.IsTrue(commandMethods.Length > 0);
         foreach (var method in commandMethods)
         {
-            Assert.AreEqual(typeof(ValueTask<WorkThreadCommandResult>), method.ReturnType, method.Name);
+            Assert.AreEqual(typeof(ValueTask<SessionCommandResult>), method.ReturnType, method.Name);
             var parameters = method.GetParameters();
             Assert.AreEqual(2, parameters.Length, method.Name);
             Assert.IsTrue(parameters[0].ParameterType.Name.EndsWith("Request", StringComparison.Ordinal), method.Name);
@@ -1006,7 +1060,7 @@ public sealed class ArchitectureGuardrailTests
     [TestMethod]
     public void RuntimeActors_AreInternalImplementationDetails()
     {
-        var actorPublicTypes = typeof(IWorkThreadOrchestrator).Assembly
+        var actorPublicTypes = typeof(ISessionOrchestrator).Assembly
             .GetExportedTypes()
             .Where(static type => type.FullName?.Contains(".Runtime.Actors.", StringComparison.Ordinal) == true)
             .Select(static type => type.FullName)
@@ -1017,41 +1071,41 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
-    public void SessionRuntimeService_AbortRoutesThroughPerThreadActor()
+    public void SessionRuntimeService_AbortRoutesThroughPerSessionActor()
     {
         var runtimeSource = File.ReadAllText(Path.Combine(GetSourceRoot(), "CodeAlta.Orchestration", "Runtime", "SessionRuntimeService.cs"));
 
-        StringAssert.Contains(runtimeSource, "private readonly WorkThreadActorRegistry _threadActors");
-        StringAssert.Contains(runtimeSource, "var actor = _threadActors.GetOrCreate(threadId);");
+        StringAssert.Contains(runtimeSource, "private readonly SessionActorRegistry _sessionActors");
+        StringAssert.Contains(runtimeSource, "var actor = _sessionActors.GetOrCreate(sessionId);");
         StringAssert.Contains(runtimeSource, "await actor.ExecuteReservedAsync(");
-        StringAssert.Contains(runtimeSource, "await _threadActors.DisposeAsync()");
+        StringAssert.Contains(runtimeSource, "await _sessionActors.DisposeAsync()");
     }
 
     [TestMethod]
-    public void WorkThreadRuntimeState_IsMailboxOwned()
+    public void SessionViewRuntimeState_IsMailboxOwned()
     {
         var runtimeSource = File.ReadAllText(Path.Combine(GetSourceRoot(), "CodeAlta.Orchestration", "Runtime", "SessionRuntimeService.cs"));
 
-        StringAssert.Contains(runtimeSource, "private readonly WorkThreadActorRegistry _threadActors");
-        StringAssert.Contains(runtimeSource, "EnsureCoordinatorSessionCoreAsync(thread, options, actorCancellationToken)");
+        StringAssert.Contains(runtimeSource, "private readonly SessionActorRegistry _sessionActors");
+        StringAssert.Contains(runtimeSource, "EnsureCoordinatorSessionCoreAsync(session, options, actorCancellationToken)");
         Assert.IsFalse(runtimeSource.Contains("SemaphoreSlim _gate", StringComparison.Ordinal));
         Assert.IsFalse(runtimeSource.Contains("_gate.WaitAsync", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void SessionRuntimeService_SendSteerAndEventsRouteThroughPerThreadActor()
+    public void SessionRuntimeService_SendSteerAndEventsRouteThroughPerSessionActor()
     {
         var runtimeSource = File.ReadAllText(Path.Combine(GetSourceRoot(), "CodeAlta.Orchestration", "Runtime", "SessionRuntimeService.cs"));
 
-        StringAssert.Contains(runtimeSource, "var sessionHandleId = await _threadActors.GetOrCreate(thread.ThreadId).QueryAsync(");
+        StringAssert.Contains(runtimeSource, "var sessionHandleId = await _sessionActors.GetOrCreate(session.SessionId).QueryAsync(");
         StringAssert.Contains(runtimeSource, "var runId = await _agentHub.RunAsync(sessionHandleId, sendOptions, cancellationToken)");
-        StringAssert.Contains(runtimeSource, "await MarkActiveRunIfStillInFlightAsync(thread.ThreadId, runId, runStartedAt, cancellationToken)");
-        StringAssert.Contains(runtimeSource, "var entry = await GetActiveCoordinatorSessionForSteeringAsync(thread, options, actorCancellationToken)");
+        StringAssert.Contains(runtimeSource, "await MarkActiveRunIfStillInFlightAsync(session.SessionId, runId, runStartedAt, cancellationToken)");
+        StringAssert.Contains(runtimeSource, "var entry = await GetActiveRuntimeSessionForSteeringAsync(session, options, actorCancellationToken)");
         StringAssert.Contains(runtimeSource, "return await _agentHub.SteerAsync(sessionHandleId, steerOptions, cancellationToken)");
-        StringAssert.Contains(runtimeSource, "@event => _ = PostAgentEventToActorAsync(actor, thread.ThreadId, projector, @event)");
+        StringAssert.Contains(runtimeSource, "@event => _ = PostAgentEventToActorAsync(actor, session.SessionId, projector, @event)");
         StringAssert.Contains(runtimeSource, "projector.Project(@event);");
-        StringAssert.Contains(runtimeSource, "var actor = _threadActors.GetOrCreate(threadId);");
-        StringAssert.Contains(runtimeSource, "var result = await _threadActors.GetOrCreate(thread.ThreadId).ExecuteAsync(");
+        StringAssert.Contains(runtimeSource, "var actor = _sessionActors.GetOrCreate(sessionId);");
+        StringAssert.Contains(runtimeSource, "var result = await _sessionActors.GetOrCreate(session.SessionId).ExecuteAsync(");
         StringAssert.Contains(runtimeSource, "return entry.Projector.ProjectHistory(history);");
     }
 
@@ -1087,7 +1141,7 @@ public sealed class ArchitectureGuardrailTests
         var matches = canonicalRoots
             .Where(Directory.Exists)
             .SelectMany(static root => Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
-            .Where(static file => File.ReadAllText(file).Contains("PluginDerivedThreadEvent", StringComparison.Ordinal))
+            .Where(static file => File.ReadAllText(file).Contains("PluginDerivedSessionEvent", StringComparison.Ordinal))
             .Select(file => Path.GetRelativePath(sourceRoot, file).Replace('\\', '/'))
             .OrderBy(static path => path, StringComparer.Ordinal)
             .ToArray();
@@ -1185,9 +1239,9 @@ public sealed class ArchitectureGuardrailTests
                     not "App/RuntimeEventPump.cs" and
                     not "App/ShellCatalogStateCoordinator.cs" and
                     not "App/SessionHistoryCoordinator.cs" and
-                    not "App/ThreadPromptDispatchCoordinator.cs" and
-                    not "App/ThreadPromptDraftPersistenceCoordinator.cs" and
-                    not "App/ThreadViewStateCoordinator.cs" and
+                    not "App/SessionPromptDispatchCoordinator.cs" and
+                    not "App/SessionPromptDraftPersistenceCoordinator.cs" and
+                    not "App/SessionViewStateCoordinator.cs" and
                     not "App/UiTaskDiagnostics.cs")
             .Select(static entry => entry.RelativePath)
             .OrderBy(static path => path, StringComparer.Ordinal)
@@ -1201,7 +1255,7 @@ public sealed class ArchitectureGuardrailTests
     {
         var controllerSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaShellController.cs"));
 
-        Assert.IsFalse(controllerSource.Contains("ThreadTimelinePresenter", StringComparison.Ordinal));
+        Assert.IsFalse(controllerSource.Contains("SessionTimelinePresenter", StringComparison.Ordinal));
         Assert.IsFalse(controllerSource.Contains("ToolCallPresenter", StringComparison.Ordinal));
         Assert.IsFalse(controllerSource.Contains("SessionUsagePresenter", StringComparison.Ordinal));
         Assert.IsFalse(controllerSource.Contains("DocumentFlow", StringComparison.Ordinal));
@@ -1224,7 +1278,7 @@ public sealed class ArchitectureGuardrailTests
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
         Assert.IsFalse(appSource.Contains("Dictionary<string, TabPage>", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("_threadTabControl", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("_sessionTabControl", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_sendPromptButton", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_chatBackendSelect", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("_chatModelSelect", StringComparison.Ordinal));
@@ -1238,8 +1292,8 @@ public sealed class ArchitectureGuardrailTests
         var codeAltaRoot = GetCodeAltaSourceRoot();
         var sourceFiles = Directory.EnumerateFiles(codeAltaRoot, "*.cs", SearchOption.AllDirectories).ToArray();
 
-        AssertSourceDoesNotContain(sourceFiles, "DraftThreadTitle");
-        AssertSourceDoesNotContain(sourceFiles, "Thread Title (optional)");
+        AssertSourceDoesNotContain(sourceFiles, "DraftSessionTitle");
+        AssertSourceDoesNotContain(sourceFiles, "Session Title (optional)");
     }
 
     [TestMethod]
@@ -1272,8 +1326,8 @@ public sealed class ArchitectureGuardrailTests
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
 
-        Assert.IsTrue(File.Exists(Path.Combine(codeAltaRoot, "App", "State", "OpenThreadState.cs")));
-        Assert.IsFalse(File.Exists(Path.Combine(codeAltaRoot, "Models", "OpenThreadState.cs")));
+        Assert.IsTrue(File.Exists(Path.Combine(codeAltaRoot, "App", "State", "OpenSessionState.cs")));
+        Assert.IsFalse(File.Exists(Path.Combine(codeAltaRoot, "Models", "OpenSessionState.cs")));
         Assert.IsTrue(File.Exists(Path.Combine(codeAltaRoot, "App", "SidebarCoordinator.cs")));
         Assert.IsFalse(File.Exists(Path.Combine(codeAltaRoot, "Views", "SidebarCoordinator.cs")));
         Assert.IsTrue(File.Exists(Path.Combine(codeAltaRoot, "Presentation", "Controls", "AnchoredPopupView.cs")));
@@ -1302,11 +1356,11 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsFalse(appSource.Contains("internal enum StatusTone", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal readonly record struct StatusSnapshot", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal enum OpenTabIndicatorKind", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("internal sealed record InitialThreadSelection", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal sealed record InitialSessionSelection", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal static StatusSnapshot ResolveSelectionStatus(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("internal static InitialThreadSelection ResolveInitialSelection(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("internal static string BuildThreadScopeSummary(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("internal static IReadOnlyList<SessionViewDescriptor> FilterThreadsForProject(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal static InitialSessionSelection ResolveInitialSelection(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal static string BuildSessionScopeSummary(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal static IReadOnlyList<SessionViewDescriptor> FilterSessionsForProject(", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -1325,24 +1379,24 @@ public sealed class ArchitectureGuardrailTests
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
-        Assert.IsTrue(appSource.Contains("_threadTabStripCoordinator.SyncControl()", StringComparison.Ordinal));
-        Assert.IsTrue(appSource.Contains("_threadTabStripCoordinator.OnSelectionChanged", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private ThreadTabStripProjection BuildThreadTabStripProjection(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private List<TabPage> BuildDesiredThreadTabPages(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private TabPage EnsureThreadTabPage(", StringComparison.Ordinal));
+        Assert.IsTrue(appSource.Contains("_sessionTabStripCoordinator.SyncControl()", StringComparison.Ordinal));
+        Assert.IsTrue(appSource.Contains("_sessionTabStripCoordinator.OnSelectionChanged", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private SessionTabStripProjection BuildSessionTabStripProjection(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private List<TabPage> BuildDesiredSessionTabPages(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private TabPage EnsureSessionTabPage(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private TabPage EnsureDraftTabPage(", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void CodeAltaApp_DelegatesThreadHistoryWorkflow()
+    public void CodeAltaApp_DelegatesSessionHistoryWorkflow()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
-        Assert.IsTrue(appSource.Contains("_threadHistoryCoordinator.EnsureLoadedAsync", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("internal static ThreadHistoryLoadPlan CreateInitialThreadHistoryLoadPlan(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("internal static int FindInitialThreadHistoryStartIndex(", StringComparison.Ordinal));
+        Assert.IsTrue(appSource.Contains("_sessionHistoryCoordinator.EnsureLoadedAsync", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal static SessionHistoryLoadPlan CreateInitialSessionHistoryLoadPlan(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("internal static int FindInitialSessionHistoryStartIndex(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal static int CountRenderableHistoryMessages(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private async Task LoadEarlierThreadHistoryAsync(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private async Task LoadEarlierSessionHistoryAsync(", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -1350,74 +1404,74 @@ public sealed class ArchitectureGuardrailTests
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
-        var runtimeSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadRuntimeEventCoordinator.cs"));
+        var runtimeSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "SessionRuntimeEventCoordinator.cs"));
 
-        Assert.IsTrue(appSource.Contains("_threadRuntimeEventCoordinator.ApplyRuntimeEvent", StringComparison.Ordinal));
-        Assert.IsTrue(compositionSource.Contains("new ThreadRuntimeEventCoordinator(", StringComparison.Ordinal));
-        Assert.IsTrue(runtimeSource.Contains("new ThreadRuntimeStateReducer()", StringComparison.Ordinal));
-        Assert.IsTrue(runtimeSource.Contains("new ThreadRuntimeTimelineRenderer(", StringComparison.Ordinal));
+        Assert.IsTrue(appSource.Contains("_sessionRuntimeEventCoordinator.ApplyRuntimeEvent", StringComparison.Ordinal));
+        Assert.IsTrue(compositionSource.Contains("new SessionRuntimeEventCoordinator(", StringComparison.Ordinal));
+        Assert.IsTrue(runtimeSource.Contains("new SessionRuntimeStateReducer()", StringComparison.Ordinal));
+        Assert.IsTrue(runtimeSource.Contains("new SessionRuntimeTimelineRenderer(", StringComparison.Ordinal));
         Assert.IsFalse(runtimeSource.Contains("SessionUsageAggregator.Merge(", StringComparison.Ordinal));
         Assert.IsFalse(runtimeSource.Contains("tab.Timeline.UpsertInteraction(", StringComparison.Ordinal));
         Assert.IsFalse(runtimeSource.Contains("tab.Timeline.AddStatus(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal static bool ShouldPromoteAgentEventToThinking(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal static bool ShouldApplyShellChromeProjectionAfterRuntimeEvent(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private void UpdateThreadFromAgentEvent(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private void UpdateThreadSummary(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private static string SummarizeThreadContent(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private void UpdateSessionFromAgentEvent(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private void UpdateSessionSummary(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private static string SummarizeSessionContent(", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void CodeAltaApp_UsesThreadCommandWorkflowWithoutLegacyDelegation()
+    public void CodeAltaApp_UsesSessionCommandWorkflowWithoutLegacyDelegation()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
-        var creationSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadCreationCoordinator.cs"));
+        var creationSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "SessionCreationCoordinator.cs"));
         var shellCommandSurfaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Frontend", "Commands", "ShellCommandSurfaceCoordinator.cs"));
-        var threadCommandSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadCommandCoordinator.cs"));
-        var executionOptionsSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadExecutionOptionsFactory.cs"));
+        var sessionCommandSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "SessionCommandCoordinator.cs"));
+        var executionOptionsSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "SessionExecutionOptionsFactory.cs"));
 
         Assert.IsTrue(appSource.Contains("CodeAltaFrontendComposition.Create(", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync", StringComparison.Ordinal));
-        Assert.IsTrue(compositionSource.Contains("new ThreadCommandCoordinator(", StringComparison.Ordinal));
+        Assert.IsTrue(compositionSource.Contains("new SessionCommandCoordinator(", StringComparison.Ordinal));
         Assert.IsTrue(shellCommandSurfaceSource.Contains("new ShellInputCoordinator(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("SubmitCurrentDelegationAsync", StringComparison.Ordinal));
-        Assert.IsFalse(shellCommandSurfaceSource.Contains("CodeAlta.Thread.Delegate", StringComparison.Ordinal));
-        Assert.IsFalse(threadCommandSource.Contains("GetThreadInput()", StringComparison.Ordinal));
-        Assert.IsFalse(threadCommandSource.Contains("/help", StringComparison.Ordinal));
-        Assert.IsFalse(threadCommandSource.Contains("AgentPermissionRequest", StringComparison.Ordinal));
-        Assert.IsFalse(threadCommandSource.Contains("AgentUserInputRequest", StringComparison.Ordinal));
-        Assert.IsFalse(threadCommandSource.Contains("new SessionExecutionOptions", StringComparison.Ordinal));
+        Assert.IsFalse(shellCommandSurfaceSource.Contains("CodeAlta.Session.Delegate", StringComparison.Ordinal));
+        Assert.IsFalse(sessionCommandSource.Contains("GetSessionInput()", StringComparison.Ordinal));
+        Assert.IsFalse(sessionCommandSource.Contains("/help", StringComparison.Ordinal));
+        Assert.IsFalse(sessionCommandSource.Contains("AgentPermissionRequest", StringComparison.Ordinal));
+        Assert.IsFalse(sessionCommandSource.Contains("AgentUserInputRequest", StringComparison.Ordinal));
+        Assert.IsFalse(sessionCommandSource.Contains("new SessionExecutionOptions(", StringComparison.Ordinal));
         Assert.IsTrue(creationSource.Contains("_buildPreferredExecutionOptions(", StringComparison.Ordinal));
-        Assert.IsFalse(threadCommandSource.Contains("DelegateThreadAsync", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private async Task<AgentPermissionDecision> HandleThreadPermissionRequestAsync(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private async Task<AgentUserInputResponse> HandleThreadUserInputRequestAsync(", StringComparison.Ordinal));
+        Assert.IsFalse(sessionCommandSource.Contains("DelegateSessionAsync", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private async Task<AgentPermissionDecision> HandleSessionPermissionRequestAsync(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private async Task<AgentUserInputResponse> HandleSessionUserInputRequestAsync(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private SessionExecutionOptions BuildExecutionOptions(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private SessionExecutionOptions BuildPreferredExecutionOptions(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private async Task<SessionViewDescriptor?> CreateGlobalThreadAsync(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private async Task<SessionViewDescriptor?> CreateProjectThreadAsync(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private static string CreateTransientThreadKey(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private async Task<SessionViewDescriptor?> CreateGlobalSessionAsync(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private async Task<SessionViewDescriptor?> CreateProjectSessionAsync(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private static string CreateTransientSessionKey(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private string ResolveWorkingDirectory(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private IReadOnlyList<string> ResolveProjectRoots(", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void CodeAltaApp_DelegatesThreadStateWorkflow()
+    public void CodeAltaApp_DelegatesSessionStateWorkflow()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
-        var threadStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ShellThreadStateCoordinator.cs"));
+        var sessionStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ShellSessionStateCoordinator.cs"));
 
         Assert.IsTrue(appSource.Contains("CodeAltaFrontendComposition.Create(", StringComparison.Ordinal));
-        Assert.IsTrue(appSource.Contains("_threadStateCoordinator.LoadInitialCatalogStateAsync", StringComparison.Ordinal));
+        Assert.IsTrue(appSource.Contains("_sessionStateCoordinator.LoadInitialCatalogStateAsync", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("TryResolveInitialCatalogState(cancellationToken)", StringComparison.Ordinal));
-        Assert.IsTrue(appSource.Contains("_threadStateCoordinator.ApplyRecoveredCatalogState", StringComparison.Ordinal));
-        Assert.IsTrue(appSource.Contains("_threadStateCoordinator.EnsureThreadTab", StringComparison.Ordinal));
-        Assert.IsTrue(compositionSource.Contains("new ShellThreadStateCoordinator(", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("new ShellThreadStateCoordinator(", StringComparison.Ordinal));
-        Assert.IsTrue(threadStateSource.Contains("new ShellCatalogStateCoordinator(", StringComparison.Ordinal));
-        Assert.IsFalse(threadStateSource.Contains("_projectCatalog.LoadAsync", StringComparison.Ordinal));
-        Assert.IsFalse(threadStateSource.Contains("_threadCatalog.LoadInternalAsync", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private readonly Dictionary<string, OpenThreadState>", StringComparison.Ordinal));
+        Assert.IsTrue(appSource.Contains("_sessionStateCoordinator.ApplyRecoveredCatalogState", StringComparison.Ordinal));
+        Assert.IsTrue(appSource.Contains("_sessionStateCoordinator.EnsureSessionTab", StringComparison.Ordinal));
+        Assert.IsTrue(compositionSource.Contains("new ShellSessionStateCoordinator(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("new ShellSessionStateCoordinator(", StringComparison.Ordinal));
+        Assert.IsTrue(sessionStateSource.Contains("new ShellCatalogStateCoordinator(", StringComparison.Ordinal));
+        Assert.IsFalse(sessionStateSource.Contains("_projectCatalog.LoadAsync", StringComparison.Ordinal));
+        Assert.IsFalse(sessionStateSource.Contains("_sessionCatalog.LoadInternalAsync", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private readonly Dictionary<string, OpenSessionState>", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private readonly ShellSelectionState", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private IReadOnlyList<ProjectDescriptor>", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private IReadOnlyList<SessionViewDescriptor>", StringComparison.Ordinal));
@@ -1452,7 +1506,7 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsTrue(source.Contains("Live logical tabs", StringComparison.Ordinal));
         Assert.IsTrue(source.Contains("Prompt draft text and images", StringComparison.Ordinal));
         Assert.IsTrue(source.Contains("Model-provider selection and runtime state", StringComparison.Ordinal));
-        Assert.IsTrue(source.Contains("Shell and thread status", StringComparison.Ordinal));
+        Assert.IsTrue(source.Contains("Shell and session status", StringComparison.Ordinal));
         Assert.IsTrue(source.Contains("File editor tabs", StringComparison.Ordinal));
         Assert.IsTrue(source.Contains("Plugin projections", StringComparison.Ordinal));
     }
@@ -1476,11 +1530,11 @@ public sealed class ArchitectureGuardrailTests
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
         Assert.IsTrue(appSource.Contains("_workspaceCoordinator.ApplyShellChromeProjection", StringComparison.Ordinal));
-        Assert.IsTrue(appSource.Contains("_workspaceCoordinator.SetThreadStatus", StringComparison.Ordinal));
+        Assert.IsTrue(appSource.Contains("_workspaceCoordinator.SetSessionStatus", StringComparison.Ordinal));
         Assert.IsTrue(appSource.Contains("_workspaceCoordinator.CreateComputedVisual", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private readonly State<int> _viewRefreshState", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private readonly State<int> _usageRefreshState", StringComparison.Ordinal));
-        Assert.IsFalse(appSource.Contains("private void RefreshThreadPaneContent(", StringComparison.Ordinal));
+        Assert.IsFalse(appSource.Contains("private void RefreshSessionPaneContent(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private void SyncSelectedSessionUsageViewModel(", StringComparison.Ordinal));
     }
 
@@ -1527,7 +1581,7 @@ public sealed class ArchitectureGuardrailTests
     public void WelcomePaneFactory_KeepsAnimatedAltaGradientStyle()
     {
         var welcomeSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Shell", "WelcomePaneFactory.cs"));
-        var tabStripSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Tabs", "ThreadTabStripCoordinator.cs"));
+        var tabStripSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Tabs", "SessionTabStripCoordinator.cs"));
 
         Assert.IsTrue(welcomeSource.Contains(".Style(() => BuildWelcomeAltaFigletStyle(altaFiglet!.GetTheme(), welcomeAnimationPhase01.Value))", StringComparison.Ordinal));
         Assert.IsTrue(tabStripSource.Contains("private readonly State<float> _welcomeAnimationPhase01", StringComparison.Ordinal));
@@ -1541,7 +1595,7 @@ public sealed class ArchitectureGuardrailTests
     public void CodeAltaApp_DoesNotConstructPromptEditorControls()
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
-        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ThreadWorkspaceView.cs"));
+        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "SessionWorkspaceView.cs"));
         var promptComposerSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "PromptComposerView.cs"));
 
         Assert.IsFalse(appSource.Contains("private ChatPromptEditor CreatePromptEditor(", StringComparison.Ordinal));
@@ -1552,19 +1606,19 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
-    public void ThreadWorkspaceView_ExpandedPromptDialog_UsesCloseCommandsWithoutDirectKeyHandler()
+    public void SessionWorkspaceView_ExpandedPromptDialog_UsesCloseCommandsWithoutDirectKeyHandler()
     {
-        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ThreadWorkspaceView.cs"));
+        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "SessionWorkspaceView.cs"));
         var promptComposerSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "PromptComposerView.cs"));
 
-        Assert.IsTrue(promptComposerSource.Contains("editor.AddCommand(CreateExpandedPromptDialogCloseCommand(\"CodeAlta.Thread.ExpandPrompt.Close\", new KeyGesture(TerminalKey.Escape)))", StringComparison.Ordinal));
-        Assert.IsTrue(promptComposerSource.Contains("dialog.AddCommand(CreateExpandedPromptDialogCloseCommand(\"CodeAlta.Thread.ExpandPrompt.CloseWithCtrlEnter\", new KeyGesture(TerminalKey.Enter, TerminalModifiers.Ctrl), CommandPresentation.None))", StringComparison.Ordinal));
+        Assert.IsTrue(promptComposerSource.Contains("editor.AddCommand(CreateExpandedPromptDialogCloseCommand(\"CodeAlta.Session.ExpandPrompt.Close\", new KeyGesture(TerminalKey.Escape)))", StringComparison.Ordinal));
+        Assert.IsTrue(promptComposerSource.Contains("dialog.AddCommand(CreateExpandedPromptDialogCloseCommand(\"CodeAlta.Session.ExpandPrompt.CloseWithCtrlEnter\", new KeyGesture(TerminalKey.Enter, TerminalModifiers.Ctrl), CommandPresentation.None))", StringComparison.Ordinal));
         Assert.IsFalse(workspaceSource.Contains("dialog.KeyDown(", StringComparison.Ordinal));
         Assert.IsFalse(promptComposerSource.Contains("dialog.KeyDown(", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void ThreadWorkspaceView_ExpandedPromptDialog_TransfersFocusOnOpenAndClose()
+    public void SessionWorkspaceView_ExpandedPromptDialog_TransfersFocusOnOpenAndClose()
     {
         var promptComposerSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "PromptComposerView.cs"));
 
@@ -1573,43 +1627,43 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
-    public void ThreadWorkspaceView_BottomBar_RightAlignsPromptActions_AndSendBecomesAbort()
+    public void SessionWorkspaceView_BottomBar_RightAlignsPromptActions_AndSendBecomesAbort()
     {
-        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ThreadWorkspaceView.cs"));
+        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "SessionWorkspaceView.cs"));
         var promptComposerSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "PromptComposerView.cs"));
         var normalizedSource = workspaceSource.Replace("\r\n", "\n", StringComparison.Ordinal);
 
         Assert.IsTrue(workspaceSource.Contains("promptComposerView.SendButton", StringComparison.Ordinal));
-        Assert.IsTrue(normalizedSource.Contains("usageIndicator,\n            threadInfoButton,\n            promptComposerView.ExpandButton,\n            promptComposerView.SendButton,", StringComparison.Ordinal));
+        Assert.IsTrue(normalizedSource.Contains("usageIndicator,\n            sessionInfoButton,\n            promptComposerView.ExpandButton,\n            promptComposerView.SendButton,", StringComparison.Ordinal));
         Assert.IsTrue(promptComposerSource.Contains("var icon = isAbort ? $\"{NerdFont.MdSquare}\" : $\"{NerdFont.MdSend}\";", StringComparison.Ordinal));
         Assert.IsTrue(promptComposerSource.Contains("var tone = isAbort ? ControlTone.Error : ControlTone.Success;", StringComparison.Ordinal));
         Assert.IsTrue(promptComposerSource.Contains("var tooltipText = isAbort ? \"Abort the selected session run.\" : \"Send the current prompt.\";", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void ThreadDraftPersistence_UsesMachineSavedPromptsAndDeleteHooks()
+    public void SessionDraftPersistence_UsesMachineSavedPromptsAndDeleteHooks()
     {
         var compositionSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaFrontendComposition.cs"));
         var catalogOptionsSource = File.ReadAllText(Path.GetFullPath(Path.Combine(GetCodeAltaSourceRoot(), "..", "CodeAlta.Catalog", "CatalogOptions.cs")));
         var promptDraftSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "PromptDraftUiCoordinator.cs"));
-        var persistenceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ThreadPromptDraftPersistenceCoordinator.cs"));
-        var threadStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ShellThreadStateCoordinator.cs"));
+        var persistenceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "SessionPromptDraftPersistenceCoordinator.cs"));
+        var sessionStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "ShellSessionStateCoordinator.cs"));
 
-        Assert.IsTrue(compositionSource.Contains("new ThreadPromptDraftService(frontend.LoadPromptDraft, frontend.DeletePromptDraft)", StringComparison.Ordinal));
-        Assert.IsFalse(File.Exists(Path.Combine(GetCodeAltaSourceRoot(), "App", "IThreadStateFrontendPort.cs")));
+        Assert.IsTrue(compositionSource.Contains("new SessionPromptDraftService(frontend.LoadPromptDraft, frontend.DeletePromptDraft)", StringComparison.Ordinal));
+        Assert.IsFalse(File.Exists(Path.Combine(GetCodeAltaSourceRoot(), "App", "ISessionStateFrontendPort.cs")));
         Assert.IsTrue(promptDraftSource.Contains("_promptDraftPersistence.ObservePromptDraft", StringComparison.Ordinal));
         Assert.IsTrue(catalogOptionsSource.Contains("saved_prompts", StringComparison.Ordinal));
         Assert.IsTrue(persistenceSource.Contains("PromptDraftsRoot", StringComparison.Ordinal));
         Assert.IsTrue(persistenceSource.Contains("saved_prompt_", StringComparison.Ordinal));
-        Assert.IsTrue(threadStateSource.Contains("_promptDrafts.DeletePromptDraft(threadId);", StringComparison.Ordinal));
+        Assert.IsTrue(sessionStateSource.Contains("_promptDrafts.DeletePromptDraft(sessionId);", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void ThreadActivityIndicators_UseEditedDraftStateAndDotsSpinners()
+    public void SessionActivityIndicators_UseEditedDraftStateAndDotsSpinners()
     {
-        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ThreadStatusLineView.cs"));
+        var workspaceSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "SessionStatusLineView.cs"));
         var sidebarHeaderSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "SidebarNodeHeaderView.cs"));
-        var tabSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Tabs", "ThreadTabVisualFactory.cs"));
+        var tabSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Tabs", "SessionTabVisualFactory.cs"));
         var statusSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Shell", "StatusVisualFormatter.cs"));
 
         Assert.IsTrue(workspaceSource.Contains("new Spinner().Style(SpinnerStyles.Dots)", StringComparison.Ordinal));
@@ -1621,27 +1675,27 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
-    public void ProjectThreadsDialog_ActionColumn_UsesDirectActivateButtonEditor()
+    public void ProjectSessionsDialog_ActionColumn_UsesDirectActivateButtonEditor()
     {
-        var dialogSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ProjectThreadsDialog.cs"));
+        var dialogSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "ProjectSessionsDialog.cs"));
 
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🧵 Session\")", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🤖 Provider\")", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🕒 Updated\")", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"💬 Messages\")", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("Header = new TextBlock(\"🚀 Open\")", StringComparison.Ordinal));
-        Assert.IsTrue(dialogSource.Contains("var row = (ProjectThreadsDialogRowViewModel)value.GetBinding().Owner;", StringComparison.Ordinal));
+        Assert.IsTrue(dialogSource.Contains("var row = (ProjectSessionsDialogRowViewModel)value.GetBinding().Owner;", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("return new TextBlock(() => row.LastUpdatedRelative)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains(".Tooltip(new TextBlock(() => row.LastUpdatedExact));", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("CellTemplate = new DataTemplate<string>(BuildBackendCell, null)", StringComparison.Ordinal));
-        Assert.IsTrue(dialogSource.Contains("SidebarThreadPresentation.BuildProviderMarkup(row.ProviderId, row.ProviderDisplayName, row.ThreadKind)", StringComparison.Ordinal));
+        Assert.IsTrue(dialogSource.Contains("SidebarSessionPresentation.BuildProviderMarkup(row.ProviderId, row.ProviderDisplayName, row.SessionKind)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains(".FilterRowVisible(_viewModel.Bind.FilterRowVisible)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("new CheckBox(\"Filter row\").IsChecked(_viewModel.Bind.FilterRowVisible)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("CellActivationMode = DataGridCellActivationMode.DirectActivate", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("CellTemplate = new DataTemplate<string>(BuildOpenButtonDisplay, null)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("CellEditorTemplate = new DataTemplate<string>(null, BuildOpenButtonEditor)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("IsHitTestVisible = false", StringComparison.Ordinal));
-        Assert.IsFalse(dialogSource.Contains("BindingAccessor<ProjectThreadsDialogRowViewModel>", StringComparison.Ordinal));
+        Assert.IsFalse(dialogSource.Contains("BindingAccessor<ProjectSessionsDialogRowViewModel>", StringComparison.Ordinal));
         Assert.IsFalse(dialogSource.Contains("TypedValueAccessor = rowAccessor", StringComparison.Ordinal));
         Assert.IsFalse(dialogSource.Contains("ReadOnly = true", StringComparison.Ordinal));
         Assert.IsFalse(dialogSource.Contains("Show Filter", StringComparison.Ordinal));
@@ -1649,14 +1703,14 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
-    public void SidebarGlobalScope_CanOpenGlobalThreadsDialog()
+    public void SidebarGlobalScope_CanOpenGlobalSessionsDialog()
     {
         var sidebarSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "SidebarView.cs"));
         var navigatorSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "NavigatorActionCoordinator.cs"));
 
-        Assert.IsTrue(sidebarSource.Contains("SidebarRowActionKind.OpenProjectThreads when target?.Kind == SidebarSelectionKind.GlobalScope", StringComparison.Ordinal));
+        Assert.IsTrue(sidebarSource.Contains("SidebarRowActionKind.OpenProjectSessions when target?.Kind == SidebarSelectionKind.GlobalScope", StringComparison.Ordinal));
         Assert.IsTrue(navigatorSource.Contains("if (string.IsNullOrWhiteSpace(projectId))", StringComparison.Ordinal));
-        Assert.IsTrue(navigatorSource.Contains("thread.Kind == WorkThreadKind.GlobalThread", StringComparison.Ordinal));
+        Assert.IsTrue(navigatorSource.Contains("session.Kind == SessionViewKind.GlobalSession", StringComparison.Ordinal));
         Assert.IsTrue(navigatorSource.Contains("CreateGlobalDialogProject()", StringComparison.Ordinal));
     }
 
@@ -1781,11 +1835,11 @@ public sealed class ArchitectureGuardrailTests
     {
         var controlsSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Controls", "AnchoredPopupView.cs"));
         var usageSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Usage", "SessionUsagePresenter.cs"));
-        var threadInfoSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Threads", "ThreadInfoPresenter.cs"));
+        var sessionInfoSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Presentation", "Sessions", "SessionInfoPresenter.cs"));
 
         Assert.IsTrue(controlsSource.Contains("_onClosed?.Invoke();", StringComparison.Ordinal));
         Assert.IsTrue(usageSource.Contains("new AnchoredPopupView(() => _createComputedVisual(BuildPopupContent), _focusPromptEditor)", StringComparison.Ordinal));
-        Assert.IsTrue(threadInfoSource.Contains("new AnchoredPopupView(() => _createComputedVisual(BuildPopupContent), _focusPromptEditor)", StringComparison.Ordinal));
+        Assert.IsTrue(sessionInfoSource.Contains("new AnchoredPopupView(() => _createComputedVisual(BuildPopupContent), _focusPromptEditor)", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -1828,30 +1882,30 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsTrue(selectionStateSource.Contains("ShellSelection Selection", StringComparison.Ordinal));
         Assert.IsFalse(selectionStateSource.Contains("bool DraftTabOpen", StringComparison.Ordinal));
         Assert.IsFalse(selectionStateSource.Contains("bool GlobalScopeSelected", StringComparison.Ordinal));
-        Assert.IsFalse(selectionStateSource.Contains("string? SelectedThreadId", StringComparison.Ordinal));
+        Assert.IsFalse(selectionStateSource.Contains("string? SelectedSessionId", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void ThreadSelectionContext_ExposesSelectionModelInsteadOfLegacySelectionBooleans()
+    public void SessionSelectionContext_ExposesSelectionModelInsteadOfLegacySelectionBooleans()
     {
-        var contextSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "Context", "ThreadSelectionContext.cs"));
+        var contextSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "Context", "SessionSelectionContext.cs"));
 
         Assert.IsTrue(contextSource.Contains("public ShellSelection Selection", StringComparison.Ordinal));
         Assert.IsTrue(contextSource.Contains("public WorkspaceTarget Target", StringComparison.Ordinal));
         Assert.IsFalse(contextSource.Contains("public bool DraftTabOpen", StringComparison.Ordinal));
         Assert.IsFalse(contextSource.Contains("public bool GlobalScopeSelected", StringComparison.Ordinal));
         Assert.IsFalse(contextSource.Contains("public string? SelectedProjectId", StringComparison.Ordinal));
-        Assert.IsFalse(contextSource.Contains("public string? SelectedThreadId", StringComparison.Ordinal));
+        Assert.IsFalse(contextSource.Contains("public string? SelectedSessionId", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void OpenThreadState_SplitsSessionWorkspaceAndTimelineLayers()
+    public void OpenSessionState_SplitsSessionWorkspaceAndTimelineLayers()
     {
-        var openThreadStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "State", "OpenThreadState.cs"));
+        var openSessionStateSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "State", "OpenSessionState.cs"));
 
-        Assert.IsTrue(openThreadStateSource.Contains("ThreadWorkspaceState Workspace", StringComparison.Ordinal));
-        Assert.IsTrue(openThreadStateSource.Contains("ThreadTimelineState TimelineState", StringComparison.Ordinal));
-        Assert.IsTrue(openThreadStateSource.Contains("ThreadSessionState Session", StringComparison.Ordinal));
+        Assert.IsTrue(openSessionStateSource.Contains("SessionWorkspaceState Workspace", StringComparison.Ordinal));
+        Assert.IsTrue(openSessionStateSource.Contains("SessionTimelineState TimelineState", StringComparison.Ordinal));
+        Assert.IsTrue(openSessionStateSource.Contains("SessionState Session", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -1863,10 +1917,10 @@ public sealed class ArchitectureGuardrailTests
 
         Assert.IsFalse(File.Exists(Path.Combine(codeAltaRoot, "App", "Context", "ChatSelectorUiContext.cs")));
         Assert.IsFalse(modelProviderSelectorStateStoreSource.Contains("public Select<", StringComparison.Ordinal));
-        Assert.IsFalse(modelProviderSelectorStateStoreSource.Contains("GetThreadInput()", StringComparison.Ordinal));
-        Assert.IsFalse(workspaceContextSource.Contains("GetThreadPaneLayout()", StringComparison.Ordinal));
-        Assert.IsFalse(workspaceContextSource.Contains("GetThreadBodySplitter()", StringComparison.Ordinal));
-        Assert.IsFalse(workspaceContextSource.Contains("GetThreadInput()", StringComparison.Ordinal));
+        Assert.IsFalse(modelProviderSelectorStateStoreSource.Contains("GetSessionInput()", StringComparison.Ordinal));
+        Assert.IsFalse(workspaceContextSource.Contains("GetSessionPaneLayout()", StringComparison.Ordinal));
+        Assert.IsFalse(workspaceContextSource.Contains("GetSessionBodySplitter()", StringComparison.Ordinal));
+        Assert.IsFalse(workspaceContextSource.Contains("GetSessionInput()", StringComparison.Ordinal));
     }
 
     [TestMethod]

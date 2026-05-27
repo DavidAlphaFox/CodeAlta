@@ -8,36 +8,36 @@ namespace CodeAlta.App;
 
 internal sealed class NavigatorSettingsCoordinator : INavigatorSettingsDialogService
 {
-    private readonly ShellThreadStateCoordinator _threadStateCoordinator;
+    private readonly ShellSessionStateCoordinator _sessionStateCoordinator;
     private readonly Func<Rectangle?> _getDialogBounds;
     private readonly Func<Visual?> _getFocusTarget;
-    private readonly Action _refreshCatalogAndThreadWorkspace;
+    private readonly Action _refreshCatalogAndSessionWorkspace;
     private readonly Action<string, bool, StatusTone> _setStatus;
 
     public NavigatorSettingsCoordinator(
-        ShellThreadStateCoordinator threadStateCoordinator,
+        ShellSessionStateCoordinator sessionStateCoordinator,
         Func<Rectangle?> getDialogBounds,
         Func<Visual?> getFocusTarget,
-        Action refreshCatalogAndThreadWorkspace,
+        Action refreshCatalogAndSessionWorkspace,
         Action<string, bool, StatusTone> setStatus)
     {
-        ArgumentNullException.ThrowIfNull(threadStateCoordinator);
+        ArgumentNullException.ThrowIfNull(sessionStateCoordinator);
         ArgumentNullException.ThrowIfNull(getDialogBounds);
         ArgumentNullException.ThrowIfNull(getFocusTarget);
-        ArgumentNullException.ThrowIfNull(refreshCatalogAndThreadWorkspace);
+        ArgumentNullException.ThrowIfNull(refreshCatalogAndSessionWorkspace);
         ArgumentNullException.ThrowIfNull(setStatus);
 
-        _threadStateCoordinator = threadStateCoordinator;
+        _sessionStateCoordinator = sessionStateCoordinator;
         _getDialogBounds = getDialogBounds;
         _getFocusTarget = getFocusTarget;
-        _refreshCatalogAndThreadWorkspace = refreshCatalogAndThreadWorkspace;
+        _refreshCatalogAndSessionWorkspace = refreshCatalogAndSessionWorkspace;
         _setStatus = setStatus;
     }
 
     public void Open()
     {
         new NavigatorSettingsDialog(
-            _threadStateCoordinator.GetNavigatorSettingsSnapshot(),
+            _sessionStateCoordinator.GetNavigatorSettingsSnapshot(),
             this)
             .Show();
     }
@@ -46,8 +46,8 @@ internal sealed class NavigatorSettingsCoordinator : INavigatorSettingsDialogSer
     {
         try
         {
-            await _threadStateCoordinator.SaveNavigatorSettingsAsync(settings);
-            _refreshCatalogAndThreadWorkspace();
+            await _sessionStateCoordinator.SaveNavigatorSettingsAsync(settings);
+            _refreshCatalogAndSessionWorkspace();
         }
         catch (Exception ex)
         {
@@ -62,10 +62,10 @@ internal sealed class NavigatorSettingsCoordinator : INavigatorSettingsDialogSer
         => _getFocusTarget();
 
     void INavigatorSettingsDialogService.PreviewNavigatorTheme(string? themeSchemeName)
-        => _threadStateCoordinator.PreviewNavigatorTheme(themeSchemeName);
+        => _sessionStateCoordinator.PreviewNavigatorTheme(themeSchemeName);
 
     void INavigatorSettingsDialogService.ClearNavigatorThemePreview()
-        => _threadStateCoordinator.ClearNavigatorThemePreview();
+        => _sessionStateCoordinator.ClearNavigatorThemePreview();
 
     Task INavigatorSettingsDialogService.SaveNavigatorSettingsAsync(NavigatorSettings settings)
         => SaveAsync(settings);

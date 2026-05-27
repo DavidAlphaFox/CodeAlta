@@ -13,7 +13,7 @@ public sealed class UiAllRegionsPlugin : PluginBase
                 await context.Ui.NotifyAsync("UI all-regions sample command executed.", cancellationToken).ConfigureAwait(false);
             }
 
-            return PluginCommandResult.Message("UI all-regions sample is active; check the command bar/thread footer for visible markers.");
+            return PluginCommandResult.Message("UI all-regions sample is active; check the command bar/session footer for visible markers.");
         });
     }
 
@@ -26,12 +26,12 @@ public sealed class UiAllRegionsPlugin : PluginBase
 
         yield return new PluginStatusContribution
         {
-            Region = PluginUiRegion.ThreadStatus,
-            Name = "thread-status",
+            Region = PluginUiRegion.SessionStatus,
+            Name = "session-status",
             GetStatus = static _ => new PluginStatusItem
             {
                 Label = "UI sample status",
-                Text = "thread status",
+                Text = "session status",
                 IconMarkup = "[green]●[/]",
                 Tone = PluginStatusTone.Success,
             },
@@ -39,12 +39,12 @@ public sealed class UiAllRegionsPlugin : PluginBase
 
         yield return new PluginStatusContribution
         {
-            Region = PluginUiRegion.ThreadFooter,
-            Name = "thread-footer-status",
+            Region = PluginUiRegion.SessionFooter,
+            Name = "session-footer-status",
             GetStatus = static _ => new PluginStatusItem
             {
                 Label = "UI sample footer",
-                Text = "thread footer",
+                Text = "session footer",
                 IconMarkup = "[blue]●[/]",
                 Tone = PluginStatusTone.Info,
             },

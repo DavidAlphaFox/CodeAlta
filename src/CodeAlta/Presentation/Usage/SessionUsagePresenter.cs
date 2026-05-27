@@ -58,7 +58,7 @@ internal sealed class SessionUsagePresenter
             Padding = Thickness.Zero,
         });
         button.Click(() => TogglePopup(button));
-        var buttonHost = button.Tooltip(new TextBlock($"Show context usage ({ThreadWorkspaceView.SessionUsageShortcutSequence})."));
+        var buttonHost = button.Tooltip(new TextBlock($"Show context usage ({SessionWorkspaceView.SessionUsageShortcutSequence})."));
         _indicatorAnchor = buttonHost;
         return buttonHost;
     }

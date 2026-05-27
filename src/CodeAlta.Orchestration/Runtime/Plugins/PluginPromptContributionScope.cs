@@ -3,7 +3,7 @@ using CodeAlta.Plugins.Abstractions;
 namespace CodeAlta.Orchestration.Runtime.Plugins;
 
 /// <summary>
-/// Tracks temporary plugin prompt contributions by orchestration thread/run scope.
+/// Tracks temporary plugin prompt contributions by orchestration session/run scope.
 /// </summary>
 public sealed class PluginPromptContributionScope
 {
@@ -48,13 +48,13 @@ public sealed class PluginPromptContributionScope
     }
 }
 
-/// <summary>Identifies temporary plugin prompt contributions for a thread and optional run.</summary>
-public readonly record struct PluginPromptContributionScopeKey(string ThreadId, string? RunId = null)
+/// <summary>Identifies temporary plugin prompt contributions for a session and optional run.</summary>
+public readonly record struct PluginPromptContributionScopeKey(string SessionId, string? RunId = null)
 {
     /// <summary>Validates that the scoped key can safely index pending prompt contributions.</summary>
-    /// <exception cref="ArgumentException">Thrown when the thread id is empty.</exception>
+    /// <exception cref="ArgumentException">Thrown when the session id is empty.</exception>
     public void Validate()
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ThreadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(SessionId);
     }
 }

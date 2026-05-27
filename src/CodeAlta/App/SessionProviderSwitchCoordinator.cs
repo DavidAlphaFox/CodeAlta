@@ -10,30 +10,30 @@ internal sealed class SessionProviderSwitchCoordinator
 {
     private readonly IReadOnlyDictionary<string, ModelProviderState> _modelProviderStates;
     private readonly IReadOnlyDictionary<string, LocalRuntimeBackendInfo> _localRuntimeBackends;
-    private readonly Func<OpenThreadState, Task> _applyThreadPreferenceAsync;
-    private readonly Func<string, Task<bool>> _detachThreadSessionAsync;
-    private readonly Action<SessionViewDescriptor> _updateThreadState;
+    private readonly Func<OpenSessionState, Task> _applySessionPreferenceAsync;
+    private readonly Func<string, Task<bool>> _detachRuntimeSessionAsync;
+    private readonly Action<SessionViewDescriptor> _updateSessionState;
     private readonly Func<Task> _persistViewStateAsync;
 
     public SessionProviderSwitchCoordinator(
         CodeAltaConfigStore configStore,
         IReadOnlyDictionary<string, ModelProviderState> modelProviderStates,
-        Func<OpenThreadState, Task> applyThreadPreferenceAsync,
-        Func<string, Task<bool>> detachThreadSessionAsync,
-        Action<SessionViewDescriptor> updateThreadState,
+        Func<OpenSessionState, Task> applySessionPreferenceAsync,
+        Func<string, Task<bool>> detachRuntimeSessionAsync,
+        Action<SessionViewDescriptor> updateSessionState,
         Func<Task> persistViewStateAsync)
     {
         ArgumentNullException.ThrowIfNull(configStore);
         ArgumentNullException.ThrowIfNull(modelProviderStates);
-        ArgumentNullException.ThrowIfNull(applyThreadPreferenceAsync);
-        ArgumentNullException.ThrowIfNull(detachThreadSessionAsync);
-        ArgumentNullException.ThrowIfNull(updateThreadState);
+        ArgumentNullException.ThrowIfNull(applySessionPreferenceAsync);
+        ArgumentNullException.ThrowIfNull(detachRuntimeSessionAsync);
+        ArgumentNullException.ThrowIfNull(updateSessionState);
         ArgumentNullException.ThrowIfNull(persistViewStateAsync);
 
         _modelProviderStates = modelProviderStates;
-        _applyThreadPreferenceAsync = applyThreadPreferenceAsync;
-        _detachThreadSessionAsync = detachThreadSessionAsync;
-        _updateThreadState = updateThreadState;
+        _applySessionPreferenceAsync = applySessionPreferenceAsync;
+        _detachRuntimeSessionAsync = detachRuntimeSessionAsync;
+        _updateSessionState = updateSessionState;
         _persistViewStateAsync = persistViewStateAsync;
         _localRuntimeBackends = configStore.LoadGlobalProviderDefinitions(includeDisabled: true)
             .Where(static definition => TryMapProtocolFamily(definition.ProviderType, out _))
@@ -50,62 +50,62 @@ internal sealed class SessionProviderSwitchCoordinator
             .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase);
     }
 
-    public bool CanSelectThreadProvider(SessionViewDescriptor thread, OpenThreadState tab)
+    public bool CanSelectSessionProvider(SessionViewDescriptor session, OpenSessionState tab)
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(tab);
 
         return !tab.StatusBusy &&
                tab.ActiveRunId is null &&
-               IsSwitchableSourceProvider(new ModelProviderId(thread.ProviderId));
+               IsSwitchableSourceProvider(new ModelProviderId(session.ProviderId));
     }
 
-    public bool CanSwitchThreadProvider(
-        SessionViewDescriptor thread,
-        OpenThreadState tab,
+    public bool CanSwitchSessionProvider(
+        SessionViewDescriptor session,
+        OpenSessionState tab,
         ModelProviderId targetProviderId)
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(tab);
 
-        return CanSelectThreadProvider(thread, tab) &&
-               !string.Equals(thread.ProviderId, targetProviderId.Value, StringComparison.OrdinalIgnoreCase) &&
+        return CanSelectSessionProvider(session, tab) &&
+               !string.Equals(session.ProviderId, targetProviderId.Value, StringComparison.OrdinalIgnoreCase) &&
                TryGetLocalRuntimeBackendInfo(targetProviderId, out _) &&
                _modelProviderStates.TryGetValue(targetProviderId.Value, out var targetState) &&
                targetState.Availability == ModelProviderAvailability.Ready;
     }
 
-    public async Task<bool> SwitchThreadProviderAsync(
-        SessionViewDescriptor thread,
-        OpenThreadState tab,
+    public async Task<bool> SwitchSessionProviderAsync(
+        SessionViewDescriptor session,
+        OpenSessionState tab,
         ModelProviderId targetProviderId,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(tab);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!CanSwitchThreadProvider(thread, tab, targetProviderId) ||
+        if (!CanSwitchSessionProvider(session, tab, targetProviderId) ||
             !TryGetLocalRuntimeBackendInfo(targetProviderId, out var targetBackend))
         {
             return false;
         }
 
         var timestamp = DateTimeOffset.UtcNow;
-        var oldThreadId = thread.ThreadId;
-        var oldThreadProviderId = thread.ProviderId;
-        var oldThreadProviderKey = thread.ProviderKey;
-        var oldThreadUpdatedAt = thread.UpdatedAt;
-        var oldThreadModelId = thread.ModelId;
-        var oldThreadReasoningEffort = thread.ReasoningEffort;
+        var oldSessionId = session.SessionId;
+        var oldSessionProviderId = session.ProviderId;
+        var oldSessionProviderKey = session.ProviderKey;
+        var oldSessionUpdatedAt = session.UpdatedAt;
+        var oldSessionModelId = session.ModelId;
+        var oldSessionReasoningEffort = session.ReasoningEffort;
         var oldTabProviderId = tab.ProviderId;
         var oldTabModelId = tab.ModelId;
         var oldTabReasoningEffort = tab.ReasoningEffort;
         var oldTabUsage = tab.Usage;
 
-        thread.ProviderId = targetBackend.ProviderId.Value;
-        thread.ProviderKey = targetBackend.ProviderKey;
-        thread.UpdatedAt = timestamp;
+        session.ProviderId = targetBackend.ProviderId.Value;
+        session.ProviderKey = targetBackend.ProviderKey;
+        session.UpdatedAt = timestamp;
 
         tab.ProviderId = targetBackend.ProviderId;
         tab.ModelId = null;
@@ -114,22 +114,22 @@ internal sealed class SessionProviderSwitchCoordinator
 
         try
         {
-            await _applyThreadPreferenceAsync(tab);
+            await _applySessionPreferenceAsync(tab);
             NormalizeTargetModelSelection(tab, targetBackend.ProviderId);
-            thread.ModelId = tab.ModelId;
-            thread.ReasoningEffort = tab.ReasoningEffort;
-            if (!string.IsNullOrWhiteSpace(oldThreadId))
+            session.ModelId = tab.ModelId;
+            session.ReasoningEffort = tab.ReasoningEffort;
+            if (!string.IsNullOrWhiteSpace(oldSessionId))
             {
-                await _detachThreadSessionAsync(oldThreadId);
+                await _detachRuntimeSessionAsync(oldSessionId);
             }
         }
         catch
         {
-            thread.ProviderId = oldThreadProviderId;
-            thread.ProviderKey = oldThreadProviderKey;
-            thread.UpdatedAt = oldThreadUpdatedAt;
-            thread.ModelId = oldThreadModelId;
-            thread.ReasoningEffort = oldThreadReasoningEffort;
+            session.ProviderId = oldSessionProviderId;
+            session.ProviderKey = oldSessionProviderKey;
+            session.UpdatedAt = oldSessionUpdatedAt;
+            session.ModelId = oldSessionModelId;
+            session.ReasoningEffort = oldSessionReasoningEffort;
             tab.ProviderId = oldTabProviderId;
             tab.ModelId = oldTabModelId;
             tab.ReasoningEffort = oldTabReasoningEffort;
@@ -137,7 +137,7 @@ internal sealed class SessionProviderSwitchCoordinator
             throw;
         }
 
-        _updateThreadState(thread);
+        _updateSessionState(session);
         await _persistViewStateAsync();
         return true;
     }
@@ -150,7 +150,7 @@ internal sealed class SessionProviderSwitchCoordinator
     private bool IsSwitchableSourceProvider(ModelProviderId providerId)
         => TryGetLocalRuntimeBackendInfo(providerId, out _) || IsNativeProvider(providerId);
 
-    private void NormalizeTargetModelSelection(OpenThreadState tab, ModelProviderId targetProviderId)
+    private void NormalizeTargetModelSelection(OpenSessionState tab, ModelProviderId targetProviderId)
     {
         if (!_modelProviderStates.TryGetValue(targetProviderId.Value, out var targetState) ||
             targetState.Models.Count == 0 ||

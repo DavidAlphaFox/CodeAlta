@@ -8,7 +8,7 @@ public sealed partial class NavigatorSettingsDialogViewModel
     public NavigatorSettingsDialogViewModel()
     {
         SortMode = NavigatorProjectSortMode.Name;
-        RecentThreadsPerProject = 3;
+        RecentSessionsPerProject = 3;
         ThemeSchemeName = string.Empty;
     }
 
@@ -16,7 +16,7 @@ public sealed partial class NavigatorSettingsDialogViewModel
     public partial NavigatorProjectSortMode SortMode { get; set; }
 
     [Bindable]
-    public partial int RecentThreadsPerProject { get; set; }
+    public partial int RecentSessionsPerProject { get; set; }
 
     [Bindable]
     public partial string ThemeSchemeName { get; set; }

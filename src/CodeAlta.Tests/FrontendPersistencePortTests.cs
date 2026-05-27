@@ -32,12 +32,12 @@ public sealed class FrontendPersistencePortTests
     }
 
     [TestMethod]
-    public async Task AsyncOperations_ForwardCancellationTokenAndThread()
+    public async Task AsyncOperations_ForwardCancellationTokenAndSession()
     {
         var cancellation = new CancellationTokenSource();
         var persistToken = default(CancellationToken);
         var registerToken = default(CancellationToken);
-        SessionViewDescriptor? registeredThread = null;
+        SessionViewDescriptor? registeredSession = null;
         var port = new FrontendPersistencePort(
             static _ => null,
             static _ => { },
@@ -46,20 +46,20 @@ public sealed class FrontendPersistencePortTests
                 persistToken = token;
                 return Task.CompletedTask;
             },
-            (thread, token) =>
+            (session, token) =>
             {
-                registeredThread = thread;
+                registeredSession = session;
                 registerToken = token;
                 return Task.CompletedTask;
             });
-        var descriptor = new SessionViewDescriptor { ThreadId = "thread-1", Title = "Thread" };
+        var descriptor = new SessionViewDescriptor { SessionId = "session-1", Title = "Session" };
 
         await port.PersistViewStateAsync(cancellation.Token);
-        await port.RegisterCreatedThreadAsync(descriptor, cancellation.Token);
+        await port.RegisterCreatedSessionAsync(descriptor, cancellation.Token);
 
         Assert.AreEqual(cancellation.Token, persistToken);
         Assert.AreEqual(cancellation.Token, registerToken);
-        Assert.AreSame(descriptor, registeredThread);
+        Assert.AreSame(descriptor, registeredSession);
     }
 
     [TestMethod]

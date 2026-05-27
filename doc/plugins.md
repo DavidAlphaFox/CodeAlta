@@ -39,7 +39,7 @@ public sealed class HelloPlugin : PluginBase
     public override IEnumerable<PluginUiContribution> GetUiContributions()
     {
         yield return PluginUi.Status("Hello", static _ => "hello plugin active");
-        yield return PluginUi.Visual(PluginUiRegion.ThreadFooter, static _ => new Markup("[dim]Hello plugin[/]"));
+        yield return PluginUi.Visual(PluginUiRegion.SessionFooter, static _ => new Markup("[dim]Hello plugin[/]"));
     }
 }
 ```
@@ -126,7 +126,7 @@ Open plugin management with `Ctrl+G Ctrl+N`, `/plugins`, `/plugin`, or the comma
 - normalized agent-event observers;
 - compaction hooks;
 - UI contributions such as status rows, visuals, dialogs, and renderers;
-- transient session/timeline projections (current APIs still use some legacy `Thread` names);
+- transient session/timeline projections (current APIs still use some legacy `Session` names);
 - resource roots for skills, system prompts, templates, themes, and MCP manifests;
 - plugin-lifetime background tasks through `IPluginTaskService`.
 
@@ -176,7 +176,7 @@ Relative paths are resolved from the plugin package directory. Project-scoped pl
 
 ## Session-event projections
 
-Plugins can contribute transient derived timeline cards through `GetThreadEventProjections()` (legacy API name). Projections are replayed from canonical normalized event history and can also run live as new events arrive. They may provide Markdown fallback content, XenoAtom visuals, collapsed detail sections, and dynamic content that starts with a placeholder and refreshes after background computation.
+Plugins can contribute transient derived timeline cards through `GetSessionEventProjections()` (legacy API name). Projections are replayed from canonical normalized event history and can also run live as new events arrive. They may provide Markdown fallback content, XenoAtom visuals, collapsed detail sections, and dynamic content that starts with a placeholder and refreshes after background computation.
 
 Projection output is not written to canonical conversation history. Store plugin-owned durable state through `IPluginStateStore` when a plugin needs persistence.
 

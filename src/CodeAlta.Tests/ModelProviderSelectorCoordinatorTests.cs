@@ -19,7 +19,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     [TestMethod]
     public void RefreshForDraftScope_SwitchingBackend_UpdatesModelOptionsAndSyncsSelectors()
     {
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         var backendStates = ModelProviderPresentation.CreateProviderStates();
 
@@ -51,14 +51,14 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _, _) => { },
             static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
-        var threadSelection = CreateThreadSelectionContext();
+        var sessionSelection = CreateSessionSelectionContext();
         var syncCallCount = 0;
         var coordinator = new ModelProviderSelectorCoordinator(
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
             selectorState,
-            threadSelection,
+            sessionSelection,
             preferences,
             workspaceRefresh,
             static _ => null,
@@ -89,7 +89,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     [TestMethod]
     public void GetPreferredModelProviderId_UsesConfiguredDefaultProvider()
     {
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -115,7 +115,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     [TestMethod]
     public void RefreshForDraftScope_RestoresPersistedDraftProviderBeforeConfiguredDefaultProvider()
     {
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -139,7 +139,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             selectorState,
-            CreateThreadSelectionContext(),
+            CreateSessionSelectionContext(),
             preferences,
             new WorkspaceRefreshContext(static _ => { }),
             static _ => "openai",
@@ -158,7 +158,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     [TestMethod]
     public void RefreshForDraftScope_DoesNotDisplayFirstModelWhenPersistedModelIsMissingFromCatalog()
     {
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -185,7 +185,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             selectorState,
-            CreateThreadSelectionContext(),
+            CreateSessionSelectionContext(),
             preferences,
             new WorkspaceRefreshContext(static _ => { }),
             static _ => null,
@@ -205,7 +205,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     [TestMethod]
     public void GetPreferredModelProviderId_FallsBackToFirstReadyProviderDeterministically()
     {
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -233,7 +233,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     [TestMethod]
     public void RefreshForDraftScope_UsesConfiguredProvidersForSummary()
     {
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -260,17 +260,17 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public void RefreshForThread_UsesThreadModelProviderSelectionCapability()
+    public void RefreshForSession_UsesSessionModelProviderSelectionCapability()
     {
         using var temp = TempDirectory.Create();
-        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionStateCoordinator = CreateSessionStateCoordinator(temp.Path, out var session);
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
-        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        var tab = sessionStateCoordinator.EnsureSessionTab(session);
 
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -294,34 +294,34 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             selectorState,
-            threadSelection,
+            sessionSelection,
             preferences,
             workspaceRefresh,
             static _ => null,
             static () => { },
             static (_, _) => true);
 
-        coordinator.RefreshForThread(tab);
+        coordinator.RefreshForSession(tab);
 
         Assert.IsTrue(workspaceViewModel.CanSelectModelProvider);
     }
 
     [TestMethod]
-    public void RefreshForThread_PreservesUnavailableThreadProviderSelection()
+    public void RefreshForSession_PreservesUnavailableSessionProviderSelection()
     {
         using var temp = TempDirectory.Create();
-        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
-        thread.ProviderId = "unavailable-provider";
-        thread.ProviderKey = "unavailable-provider";
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionStateCoordinator = CreateSessionStateCoordinator(temp.Path, out var session);
+        session.ProviderId = "unavailable-provider";
+        session.ProviderKey = "unavailable-provider";
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
-        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        var tab = sessionStateCoordinator.EnsureSessionTab(session);
         tab.ProviderId = new ModelProviderId("unavailable-provider");
         tab.ModelId = "gpt-4.1";
 
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -342,14 +342,14 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             selectorState,
-            threadSelection,
+            sessionSelection,
             preferences,
             new WorkspaceRefreshContext(static _ => { }),
             static _ => null,
             static () => { },
             static (_, _) => true);
 
-        coordinator.RefreshForThread(tab);
+        coordinator.RefreshForSession(tab);
 
         Assert.AreEqual(0, workspaceViewModel.SelectedModelProviderIndex);
         Assert.AreEqual("unavailable-provider", workspaceViewModel.ModelProviderOptions[0].ProviderId.Value);
@@ -366,17 +366,17 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public void ApplyPromptAvailabilityProjection_RefreshesThreadModelProviderSelectionCapability()
+    public void ApplyPromptAvailabilityProjection_RefreshesSessionModelProviderSelectionCapability()
     {
         using var temp = TempDirectory.Create();
-        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionStateCoordinator = CreateSessionStateCoordinator(temp.Path, out var session);
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
-        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        var tab = sessionStateCoordinator.EnsureSessionTab(session);
 
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -400,14 +400,14 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             selectorState,
-            threadSelection,
+            sessionSelection,
             preferences,
             workspaceRefresh,
             static _ => null,
             static () => { },
             static (_, selectedTab) => !selectedTab.StatusBusy);
 
-        coordinator.RefreshForThread(tab);
+        coordinator.RefreshForSession(tab);
         Assert.IsTrue(workspaceViewModel.CanSelectModelProvider);
 
         tab.StatusBusy = true;
@@ -421,17 +421,17 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public async Task OnModelProviderSelectionChangedAsync_UsesSwitchCallbackForSelectedThread()
+    public async Task OnModelProviderSelectionChangedAsync_UsesSwitchCallbackForSelectedSession()
     {
         using var temp = TempDirectory.Create();
-        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionStateCoordinator = CreateSessionStateCoordinator(temp.Path, out var session);
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
-        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        var tab = sessionStateCoordinator.EnsureSessionTab(session);
 
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -457,15 +457,15 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             selectorState,
-            threadSelection,
+            sessionSelection,
             preferences,
             workspaceRefresh,
             static _ => null,
             static () => { },
             static (_, _) => true,
-            (selectedThread, selectedTab, targetProviderId) =>
+            (selectedSession, selectedTab, targetProviderId) =>
             {
-                Assert.AreSame(thread, selectedThread);
+                Assert.AreSame(session, selectedSession);
                 Assert.AreSame(tab, selectedTab);
                 Assert.AreEqual("anthropic", targetProviderId.Value);
                 switchCallCount++;
@@ -473,7 +473,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             },
             () => refreshedSelectionCount++);
 
-        coordinator.RefreshForThread(tab);
+        coordinator.RefreshForSession(tab);
         await coordinator.OnModelProviderSelectionChangedAsync(newIndex: 1);
 
         Assert.AreEqual(1, switchCallCount);
@@ -484,14 +484,14 @@ public sealed class ModelProviderSelectorCoordinatorTests
     public async Task OnModelProviderSelectionChangedAsync_UpdatesSelectedIndexBeforeSwitchCompletes()
     {
         using var temp = TempDirectory.Create();
-        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionStateCoordinator = CreateSessionStateCoordinator(temp.Path, out var session);
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
-        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        var tab = sessionStateCoordinator.EnsureSessionTab(session);
 
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -516,7 +516,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             selectorState,
-            threadSelection,
+            sessionSelection,
             preferences,
             workspaceRefresh,
             static _ => null,
@@ -524,12 +524,12 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _) => true,
             (_, selectedTab, targetProviderId) =>
             {
-                thread.ProviderId = targetProviderId.Value;
+                session.ProviderId = targetProviderId.Value;
                 selectedTab.ProviderId = new ModelProviderId(targetProviderId.Value);
                 return switchCompletion.Task;
             });
 
-        coordinator.RefreshForThread(tab);
+        coordinator.RefreshForSession(tab);
 
         var selectionChanged = coordinator.OnModelProviderSelectionChangedAsync(newIndex: 1);
 
@@ -541,9 +541,9 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public void ThreadWorkspaceViewModel_SelectedIndexChangesNotifyConfiguredHandlers()
+    public void SessionWorkspaceViewModel_SelectedIndexChangesNotifyConfiguredHandlers()
     {
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var providerChanges = new List<int>();
         var modelChanges = new List<int>();
         var reasoningChanges = new List<int>();
@@ -568,17 +568,17 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public void OnModelSelectionChanged_ImmediatelyUpdatesSelectedIndexForOpenThread()
+    public void OnModelSelectionChanged_ImmediatelyUpdatesSelectedIndexForOpenSession()
     {
         using var temp = TempDirectory.Create();
-        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionStateCoordinator = CreateSessionStateCoordinator(temp.Path, out var session);
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
-        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        var tab = sessionStateCoordinator.EnsureSessionTab(session);
 
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -602,14 +602,14 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             selectorState,
-            threadSelection,
+            sessionSelection,
             preferences,
             workspaceRefresh,
             static _ => null,
             static () => { },
             static (_, _) => true);
 
-        coordinator.RefreshForThread(tab);
+        coordinator.RefreshForSession(tab);
         coordinator.OnModelSelectionChanged(newIndex: 1);
 
         Assert.AreEqual(1, workspaceViewModel.SelectedModelIndex);
@@ -619,7 +619,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     [TestMethod]
     public void OnModelSelectionChanged_DraftScope_DoesNotReapplyDefaultsOverExplicitSelection()
     {
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -652,7 +652,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             selectorState,
-            CreateThreadSelectionContext(),
+            CreateSessionSelectionContext(),
             preferences,
             workspaceRefresh,
             static _ => null,
@@ -667,20 +667,20 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public void RefreshForDraftScope_DoesNotUsePreviousThreadProviderSelection()
+    public void RefreshForDraftScope_DoesNotUsePreviousSessionProviderSelection()
     {
         using var temp = TempDirectory.Create();
-        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionStateCoordinator = CreateSessionStateCoordinator(temp.Path, out var session);
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
-        thread.ProviderId = "anthropic";
-        thread.ProviderKey = "anthropic";
-        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        session.ProviderId = "anthropic";
+        session.ProviderKey = "anthropic";
+        var tab = sessionStateCoordinator.EnsureSessionTab(session);
         tab.ProviderId = new ModelProviderId("anthropic");
 
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -699,18 +699,18 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             static _ => null,
-            threadSelection: threadSelection,
-            applyThreadModelProviderPreference: static _ => { });
+            sessionSelection: sessionSelection,
+            applySessionModelProviderPreference: static _ => { });
 
-        threadStateCoordinator.SelectProjectScope("project-1");
+        sessionStateCoordinator.SelectProjectScope("project-1");
         coordinator.RefreshForDraftScope(new ModelProviderId("openai"));
         Assert.AreEqual(0, workspaceViewModel.SelectedModelProviderIndex);
 
-        threadStateCoordinator.OpenThread(thread.ThreadId);
-        coordinator.RefreshForThread(tab);
+        sessionStateCoordinator.OpenSession(session.SessionId);
+        coordinator.RefreshForSession(tab);
         Assert.AreEqual(1, workspaceViewModel.SelectedModelProviderIndex);
 
-        threadStateCoordinator.SelectProjectScope("project-1");
+        sessionStateCoordinator.SelectProjectScope("project-1");
         coordinator.RefreshForDraftScope();
 
         Assert.AreEqual(0, workspaceViewModel.SelectedModelProviderIndex);
@@ -720,13 +720,13 @@ public sealed class ModelProviderSelectorCoordinatorTests
     public void RefreshForDraftScope_RemembersDraftProviderPerScope()
     {
         using var temp = TempDirectory.Create();
-        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out _);
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionStateCoordinator = CreateSessionStateCoordinator(temp.Path, out _);
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
 
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -745,35 +745,35 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             static _ => null,
-            threadSelection: threadSelection,
-            applyThreadModelProviderPreference: static _ => { });
+            sessionSelection: sessionSelection,
+            applySessionModelProviderPreference: static _ => { });
 
-        threadStateCoordinator.SelectProjectScope("project-1");
+        sessionStateCoordinator.SelectProjectScope("project-1");
         coordinator.RefreshForDraftScope(new ModelProviderId("anthropic"));
         Assert.AreEqual(1, workspaceViewModel.SelectedModelProviderIndex);
 
-        threadStateCoordinator.SelectGlobalScope();
+        sessionStateCoordinator.SelectGlobalScope();
         coordinator.RefreshForDraftScope(new ModelProviderId("openai"));
         Assert.AreEqual(0, workspaceViewModel.SelectedModelProviderIndex);
 
-        threadStateCoordinator.SelectProjectScope("project-1");
+        sessionStateCoordinator.SelectProjectScope("project-1");
         coordinator.RefreshForDraftScope();
 
         Assert.AreEqual(1, workspaceViewModel.SelectedModelProviderIndex);
     }
 
     [TestMethod]
-    public void RefreshForDraftScope_DoesNotUsePreviousThreadModelSelection()
+    public void RefreshForDraftScope_DoesNotUsePreviousSessionModelSelection()
     {
         using var temp = TempDirectory.Create();
-        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionStateCoordinator = CreateSessionStateCoordinator(temp.Path, out var session);
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
-        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        var tab = sessionStateCoordinator.EnsureSessionTab(session);
 
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -791,20 +791,20 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             static _ => null,
-            threadSelection: threadSelection,
-            applyThreadModelProviderPreference: static _ => { });
+            sessionSelection: sessionSelection,
+            applySessionModelProviderPreference: static _ => { });
 
-        threadStateCoordinator.SelectProjectScope("project-1");
+        sessionStateCoordinator.SelectProjectScope("project-1");
         coordinator.RefreshForDraftScope(new ModelProviderId("openai"));
         coordinator.OnModelSelectionChanged(newIndex: 1);
         Assert.AreEqual("gpt-5.4-mini", backendState.SelectedModelId);
 
-        threadStateCoordinator.OpenThread(thread.ThreadId);
-        coordinator.RefreshForThread(tab);
+        sessionStateCoordinator.OpenSession(session.SessionId);
+        coordinator.RefreshForSession(tab);
         coordinator.OnModelSelectionChanged(newIndex: 0);
         Assert.AreEqual("gpt-5.4", tab.ModelId);
 
-        threadStateCoordinator.SelectProjectScope("project-1");
+        sessionStateCoordinator.SelectProjectScope("project-1");
         coordinator.RefreshForDraftScope();
 
         Assert.AreEqual(1, workspaceViewModel.SelectedModelIndex);
@@ -812,17 +812,17 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public void OnReasoningSelectionChanged_ImmediatelyUpdatesSelectedIndexForOpenThread()
+    public void OnReasoningSelectionChanged_ImmediatelyUpdatesSelectedIndexForOpenSession()
     {
         using var temp = TempDirectory.Create();
-        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionStateCoordinator = CreateSessionStateCoordinator(temp.Path, out var session);
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
-        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        var tab = sessionStateCoordinator.EnsureSessionTab(session);
 
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -849,14 +849,14 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             selectorState,
-            threadSelection,
+            sessionSelection,
             preferences,
             workspaceRefresh,
             static _ => null,
             static () => { },
             static (_, _) => true);
 
-        coordinator.RefreshForThread(tab);
+        coordinator.RefreshForSession(tab);
         coordinator.OnReasoningSelectionChanged(newIndex: 1);
 
         Assert.AreEqual(1, workspaceViewModel.SelectedReasoningIndex);
@@ -866,7 +866,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     [TestMethod]
     public async Task SelectProviderModelAsync_DraftScope_SelectsRequestedModel()
     {
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -893,17 +893,17 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     [TestMethod]
-    public async Task SelectProviderModelAsync_OpenThread_SelectsRequestedModel()
+    public async Task SelectProviderModelAsync_OpenSession_SelectsRequestedModel()
     {
         using var temp = TempDirectory.Create();
-        var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
-        var threadSelection = new ThreadSelectionContext(
-            threadStateCoordinator,
+        var sessionStateCoordinator = CreateSessionStateCoordinator(temp.Path, out var session);
+        var sessionSelection = new SessionSelectionContext(
+            sessionStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
-        var tab = threadStateCoordinator.EnsureThreadTab(thread);
+        var tab = sessionStateCoordinator.EnsureSessionTab(session);
 
-        var workspaceViewModel = new ThreadWorkspaceViewModel();
+        var workspaceViewModel = new SessionWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         ModelProviderDescriptor[] providerDescriptors =
         [
@@ -920,8 +920,8 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             static _ => null,
-            threadSelection: threadSelection,
-            applyThreadModelProviderPreference: static _ => { });
+            sessionSelection: sessionSelection,
+            applySessionModelProviderPreference: static _ => { });
 
         var selected = await coordinator.SelectProviderModelAsync(new ModelProviderId("openai"), "gpt-5.4-mini");
 
@@ -932,18 +932,18 @@ public sealed class ModelProviderSelectorCoordinatorTests
 
     private static ModelProviderSelectorCoordinator CreateCoordinator(
         IReadOnlyList<ModelProviderDescriptor> providerDescriptors,
-        ThreadWorkspaceViewModel workspaceViewModel,
+        SessionWorkspaceViewModel workspaceViewModel,
         PromptComposerViewModel promptComposerViewModel,
         Dictionary<string, ModelProviderState> backendStates,
         Func<string?, string?> getEffectiveDefaultProviderKey,
         Func<IReadOnlyList<string>>? getConfiguredProviderKeys = null,
-        ThreadSelectionContext? threadSelection = null,
-        Action<OpenThreadState>? applyThreadModelProviderPreference = null)
+        SessionSelectionContext? sessionSelection = null,
+        Action<OpenSessionState>? applySessionModelProviderPreference = null)
     {
         var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
         var preferences = new FrontendModelProviderPreferencePort(
             ApplyDraftModelProviderPreference,
-            applyThreadModelProviderPreference ?? (static _ => throw new NotSupportedException()),
+            applySessionModelProviderPreference ?? (static _ => throw new NotSupportedException()),
             static (_, _, _) => { },
             static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
@@ -953,7 +953,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             promptComposerViewModel,
             backendStates,
             selectorState,
-            threadSelection ?? CreateThreadSelectionContext(),
+            sessionSelection ?? CreateSessionSelectionContext(),
             preferences,
             workspaceRefresh,
             getEffectiveDefaultProviderKey,
@@ -961,24 +961,24 @@ public sealed class ModelProviderSelectorCoordinatorTests
             getConfiguredProviderKeys: getConfiguredProviderKeys);
     }
 
-    private static ThreadSelectionContext CreateThreadSelectionContext()
+    private static SessionSelectionContext CreateSessionSelectionContext()
     {
-        var coordinator = (ShellThreadStateCoordinator)RuntimeHelpers.GetUninitializedObject(typeof(ShellThreadStateCoordinator));
-        var selectionCoordinatorField = typeof(ShellThreadStateCoordinator).GetField("_selectionCoordinator", BindingFlags.Instance | BindingFlags.NonPublic);
+        var coordinator = (ShellSessionStateCoordinator)RuntimeHelpers.GetUninitializedObject(typeof(ShellSessionStateCoordinator));
+        var selectionCoordinatorField = typeof(ShellSessionStateCoordinator).GetField("_selectionCoordinator", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.IsNotNull(selectionCoordinatorField);
         selectionCoordinatorField.SetValue(coordinator, new ShellSelectionCoordinator());
-        return new ThreadSelectionContext(
+        return new SessionSelectionContext(
             coordinator,
             static (_, _) => Task.CompletedTask,
             static _ => false);
     }
 
-    private static ShellThreadStateCoordinator CreateThreadStateCoordinator(string rootPath, out SessionViewDescriptor thread)
+    private static ShellSessionStateCoordinator CreateSessionStateCoordinator(string rootPath, out SessionViewDescriptor session)
     {
         var options = new CatalogOptions { GlobalRoot = rootPath };
-        var coordinator = TestThreadStateServices.CreateCoordinator(
+        var coordinator = TestSessionStateServices.CreateCoordinator(
             new ProjectCatalog(options),
-            new WorkThreadCatalog(options),
+            new SessionViewCatalog(options),
             new InlineUiDispatcher(),
             new ShellStateStore(new InlineUiDispatcher()));
 
@@ -991,24 +991,24 @@ public sealed class ModelProviderSelectorCoordinatorTests
             ProjectPath = Path.Combine(rootPath, "project-1"),
             DefaultBranch = "main",
         };
-        thread = new SessionViewDescriptor
+        session = new SessionViewDescriptor
         {
-            ThreadId = "openai:session-1",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "openai:session-1",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = "openai",
             ProviderKey = "openai",
             ProjectRef = project.Id,
             WorkingDirectory = project.ProjectPath,
             Title = "Review startup",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"),
             UpdatedAt = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"),
             LastActiveAt = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"),
             StartedAt = DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"),
         };
 
-        coordinator.ApplyRecoveredCatalogState([project], [thread]);
-        coordinator.OpenThread(thread.ThreadId);
+        coordinator.ApplyRecoveredCatalogState([project], [session]);
+        coordinator.OpenSession(session.SessionId);
         return coordinator;
     }
 

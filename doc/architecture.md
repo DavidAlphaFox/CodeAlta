@@ -26,7 +26,7 @@ sequenceDiagram
 
 `CodeAltaOwnedServices.CreateAsync` owns process concerns: the default `~/.alta` root, logging, model-catalog refresh, global config, and configured model-provider registration. It calls `CodeAltaHost.CreateAsync`, which composes reusable runtime services:
 
-- `ProjectCatalog`, `WorkThreadCatalog`, `AgentSessionCatalog`, and `SkillCatalog` from catalog/runtime stores;
+- `ProjectCatalog`, `SessionViewCatalog`, `AgentSessionCatalog`, and `SkillCatalog` from catalog/runtime stores;
 - `PluginRuntimeManager` and plugin resource adapters;
 - `ModelProviderRegistry`/`IModelProviderRegistry` and `IModelProviderInitializationService`;
 - `AgentHub` and `SessionRuntimeService`;
@@ -87,7 +87,7 @@ flowchart LR
     Commands[Shell command surface]
     App[CodeAltaApp - composition facade]
     Composition[CodeAltaFrontendComposition]
-    State[ShellStateStore - UI-thread snapshot]
+    State[ShellStateStore - UI-session snapshot]
     Events[Frontend events]
     Controllers[Coordinators/controllers]
     RuntimeAdapter[Runtime adapter - session commands + event pump]
@@ -117,7 +117,7 @@ Key frontend pieces:
 - `CodeAltaApp` is the TUI composition facade and compatibility surface for existing view integration. New behavior should move into command handlers, coordinators, presenters, or adapters when doing so shortens call paths.
 - `CodeAltaFrontendComposition.Create` wires view models, `ShellStateStore`, frontend events, model-provider state, shell controllers, prompt/session coordinators, project-file search, plugin bridges, and the `alta` dispatcher.
 - `CodeAltaShellController` owns startup catalog loading, project/session open operations, recoverable-session discovery, and runtime-event queuing/draining. Runtime-event mutations are marshalled through `IUiDispatcher`.
-- `ShellStateStore` is an immutable UI-thread-owned projection snapshot for selection, tabs, and prompt sessions. It is not the owner of all runtime state.
+- `ShellStateStore` is an immutable UI-session-owned projection snapshot for selection, tabs, and prompt sessions. It is not the owner of all runtime state.
 - `RuntimeEventPump` is the frontend consumer of the orchestration runtime event stream and projects events into the shell controller.
 - The command palette, slash commands, key bindings, and command bar are backed by shared shell command metadata and dispatch paths.
 
@@ -140,7 +140,7 @@ flowchart TD
     Session[IAgentSession]
     Catalog[AgentSessionCatalog]
     Events[AgentEvent stream]
-    RuntimeEvents[WorkThreadRuntimeEvent stream]
+    RuntimeEvents[SessionRuntimeEvent stream]
     Journal[Session JSONL journal]
 
     Request --> SRS
@@ -192,7 +192,7 @@ Extensions do not own canonical transcript persistence. Plugin-derived timeline 
 2. `SessionRuntimeService` resolves the model provider, project roots, instructions, tools, and skill advertisements.
 3. `AgentHub` starts or resumes the CodeAlta session with the selected provider runtime.
 4. The session receives a prompt through `IAgentSession.SendAsync` or an accepted steering request through `SteerAsync` when supported.
-5. Provider/tool events are normalized to `AgentEvent` values and projected to `WorkThreadRuntimeEvent` values.
+5. Provider/tool events are normalized to `AgentEvent` values and projected to `SessionRuntimeEvent` values.
 6. Local-runtime sessions append normalized events plus legacy session-view headers/state to the sharded JSONL journal.
 7. The frontend event pump projects runtime events into tabs, timelines, sidebars, usage indicators, and plugin projections.
 8. Idle sessions can drain one queued prompt, switch providers when the local-runtime history can be replayed safely, or compact when supported.

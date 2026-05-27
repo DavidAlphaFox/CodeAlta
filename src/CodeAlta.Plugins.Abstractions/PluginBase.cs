@@ -165,10 +165,10 @@ public abstract class PluginBase : IAsyncDisposable
     public virtual IEnumerable<PluginUiContribution> GetUiContributions() => [];
 
     /// <summary>
-    /// Gets transient thread event projection contributions.
+    /// Gets transient session event projection contributions.
     /// </summary>
-    /// <returns>Thread event projection contributions.</returns>
-    public virtual IEnumerable<PluginThreadEventProjectionContribution> GetThreadEventProjections() => [];
+    /// <returns>Session event projection contributions.</returns>
+    public virtual IEnumerable<PluginSessionEventProjectionContribution> GetSessionEventProjections() => [];
 
     /// <summary>
     /// Gets resource root contributions.

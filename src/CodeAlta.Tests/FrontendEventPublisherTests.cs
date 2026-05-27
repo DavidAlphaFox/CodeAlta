@@ -7,7 +7,7 @@ namespace CodeAlta.Tests;
 public sealed class FrontendEventPublisherTests
 {
     [TestMethod]
-    public void Publish_PostsThroughUiDispatcherWhenCalledOffUiThread()
+    public void Publish_PostsThroughUiDispatcherWhenCalledOffUiSession()
     {
         var uiDispatcher = new CapturingUiDispatcher(hasAccess: false);
         var publisher = new FrontendEventPublisher(uiDispatcher);
@@ -21,7 +21,7 @@ public sealed class FrontendEventPublisherTests
     }
 
     [TestMethod]
-    public void Publish_NotifiesSubscribersInlineWhenCalledOnUiThread()
+    public void Publish_NotifiesSubscribersInlineWhenCalledOnUiSession()
     {
         var uiDispatcher = new CapturingUiDispatcher(hasAccess: true);
         var publisher = new FrontendEventPublisher(uiDispatcher);

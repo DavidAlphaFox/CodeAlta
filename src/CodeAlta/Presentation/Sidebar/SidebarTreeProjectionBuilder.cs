@@ -1,7 +1,7 @@
 using CodeAlta.Catalog;
 using CodeAlta.Models;
 using CodeAlta.Presentation.Styling;
-using CodeAlta.Presentation.Threads;
+using CodeAlta.Presentation.Sessions;
 using XenoAtom.Terminal.UI;
 
 namespace CodeAlta.Presentation.Sidebar;
@@ -10,59 +10,59 @@ internal static class SidebarTreeProjectionBuilder
 {
     public static SidebarTreeProjection Build(
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads,
+        IReadOnlyList<SessionViewDescriptor> sessions,
         string globalRoot,
         IReadOnlyCollection<string> expandedProjectIds,
         NavigatorSettings settings,
-        Func<string, ThreadVisualState> getThreadVisualState,
+        Func<string, SessionVisualState> getSessionVisualState,
         Func<string?, bool, bool> hasDraftPrompt,
         Func<string, SidebarNodeKind, SidebarSelectionTarget?, SidebarNodeViewModel> getOrCreateRow,
         DateTimeOffset nowUtc)
     {
         ArgumentNullException.ThrowIfNull(projects);
-        ArgumentNullException.ThrowIfNull(threads);
+        ArgumentNullException.ThrowIfNull(sessions);
         ArgumentException.ThrowIfNullOrWhiteSpace(globalRoot);
         ArgumentNullException.ThrowIfNull(expandedProjectIds);
         ArgumentNullException.ThrowIfNull(settings);
-        ArgumentNullException.ThrowIfNull(getThreadVisualState);
+        ArgumentNullException.ThrowIfNull(getSessionVisualState);
         ArgumentNullException.ThrowIfNull(hasDraftPrompt);
         ArgumentNullException.ThrowIfNull(getOrCreateRow);
 
         return new SidebarTreeProjection(
             [
-                CreateGlobalNode(threads, settings, getThreadVisualState, hasDraftPrompt, getOrCreateRow, nowUtc),
-                CreateProjectsNode(projects, threads, expandedProjectIds, settings, getThreadVisualState, hasDraftPrompt, getOrCreateRow, nowUtc),
+                CreateGlobalNode(sessions, settings, getSessionVisualState, hasDraftPrompt, getOrCreateRow, nowUtc),
+                CreateProjectsNode(projects, sessions, expandedProjectIds, settings, getSessionVisualState, hasDraftPrompt, getOrCreateRow, nowUtc),
             ]);
     }
 
     private static SidebarTreeNodeProjection CreateGlobalNode(
-        IReadOnlyList<SessionViewDescriptor> threads,
+        IReadOnlyList<SessionViewDescriptor> sessions,
         NavigatorSettings settings,
-        Func<string, ThreadVisualState> getThreadVisualState,
+        Func<string, SessionVisualState> getSessionVisualState,
         Func<string?, bool, bool> hasDraftPrompt,
         Func<string, SidebarNodeKind, SidebarSelectionTarget?, SidebarNodeViewModel> getOrCreateRow,
         DateTimeOffset nowUtc)
     {
-        var visibleThreads = threads
-            .Where(static item => item.Status != WorkThreadStatus.Archived)
-            .Where(static item => item.Kind == WorkThreadKind.GlobalThread)
+        var visibleSessions = sessions
+            .Where(static item => item.Status != SessionViewStatus.Archived)
+            .Where(static item => item.Kind == SessionViewKind.GlobalSession)
             .OrderByDescending(static item => item.LastActiveAt)
             .ToArray();
         var row = getOrCreateRow("global", SidebarNodeKind.Global, SidebarSelectionTarget.Global());
         row.UpdateTitle("Global");
-        row.UpdateActivity(visibleThreads.FirstOrDefault()?.LastActiveAt, nowUtc);
-        var hasRunningThread = visibleThreads.Any(thread => getThreadVisualState(thread.ThreadId).IsRunning);
+        row.UpdateActivity(visibleSessions.FirstOrDefault()?.LastActiveAt, nowUtc);
+        var hasRunningSession = visibleSessions.Any(session => getSessionVisualState(session.SessionId).IsRunning);
         var hasGlobalDraft = hasDraftPrompt(null, true);
         row.UpdateStateIndicator(
-            hasRunningThread ? null : BuildDraftStateIconMarkup(hasGlobalDraft, SidebarAccent.Global),
-            hasRunningThread,
-            hasRunningThread ? null : ResolveDraftStateTooltip(hasGlobalDraft, isGlobal: true));
+            hasRunningSession ? null : BuildDraftStateIconMarkup(hasGlobalDraft, SidebarAccent.Global),
+            hasRunningSession,
+            hasRunningSession ? null : ResolveDraftStateTooltip(hasGlobalDraft, isGlobal: true));
 
-        var children = visibleThreads
-            .CreateThreadHierarchy(
-                settings.RecentThreadsPerProject,
-                threads.Where(static thread => thread.Status != WorkThreadStatus.Archived).ToArray())
-            .Select(node => CreateThreadNode(node, getThreadVisualState, getOrCreateRow, nowUtc))
+        var children = visibleSessions
+            .CreateSessionHierarchy(
+                settings.RecentSessionsPerProject,
+                sessions.Where(static session => session.Status != SessionViewStatus.Archived).ToArray())
+            .Select(node => CreateSessionNode(node, getSessionVisualState, getOrCreateRow, nowUtc))
             .ToArray();
 
         return new SidebarTreeNodeProjection(
@@ -79,10 +79,10 @@ internal static class SidebarTreeProjectionBuilder
 
     private static SidebarTreeNodeProjection CreateProjectsNode(
         IReadOnlyList<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads,
+        IReadOnlyList<SessionViewDescriptor> sessions,
         IReadOnlyCollection<string> expandedProjectIds,
         NavigatorSettings settings,
-        Func<string, ThreadVisualState> getThreadVisualState,
+        Func<string, SessionVisualState> getSessionVisualState,
         Func<string?, bool, bool> hasDraftPrompt,
         Func<string, SidebarNodeKind, SidebarSelectionTarget?, SidebarNodeViewModel> getOrCreateRow,
         DateTimeOffset nowUtc)
@@ -95,11 +95,11 @@ internal static class SidebarTreeProjectionBuilder
             .Where(static project => !project.Archived)
             .ToArray();
         var orderedProjects = settings.SortMode == NavigatorProjectSortMode.Date
-            ? OrderProjectsByDate(visibleProjects, threads)
+            ? OrderProjectsByDate(visibleProjects, sessions)
             : OrderProjectsByName(visibleProjects);
 
         var children = orderedProjects
-            .Select(project => CreateProjectNode(project, threads, expandedProjectIds, settings, getThreadVisualState, hasDraftPrompt, getOrCreateRow, nowUtc))
+            .Select(project => CreateProjectNode(project, sessions, expandedProjectIds, settings, getSessionVisualState, hasDraftPrompt, getOrCreateRow, nowUtc))
             .ToArray();
 
         return new SidebarTreeNodeProjection(
@@ -116,32 +116,32 @@ internal static class SidebarTreeProjectionBuilder
 
     private static SidebarTreeNodeProjection CreateProjectNode(
         ProjectDescriptor project,
-        IReadOnlyList<SessionViewDescriptor> threads,
+        IReadOnlyList<SessionViewDescriptor> sessions,
         IReadOnlyCollection<string> expandedProjectIds,
         NavigatorSettings settings,
-        Func<string, ThreadVisualState> getThreadVisualState,
+        Func<string, SessionVisualState> getSessionVisualState,
         Func<string?, bool, bool> hasDraftPrompt,
         Func<string, SidebarNodeKind, SidebarSelectionTarget?, SidebarNodeViewModel> getOrCreateRow,
         DateTimeOffset nowUtc)
     {
-        var projectThreads = ThreadScopePresentation.FilterThreadsForProject(threads, project.Id, includeInternal: true)
-            .Where(static thread => thread.Status != WorkThreadStatus.Archived)
+        var projectSessions = SessionScopePresentation.FilterSessionsForProject(sessions, project.Id, includeInternal: true)
+            .Where(static session => session.Status != SessionViewStatus.Archived)
             .ToArray();
         var row = getOrCreateRow($"project:{project.Id}", SidebarNodeKind.Project, SidebarSelectionTarget.Project(project.Id));
         row.UpdateTitle(project.DisplayName);
-        row.UpdateActivity(projectThreads.OrderByDescending(static thread => thread.LastActiveAt).FirstOrDefault()?.LastActiveAt, nowUtc);
-        var hasRunningThread = projectThreads.Any(thread => getThreadVisualState(thread.ThreadId).IsRunning);
+        row.UpdateActivity(projectSessions.OrderByDescending(static session => session.LastActiveAt).FirstOrDefault()?.LastActiveAt, nowUtc);
+        var hasRunningSession = projectSessions.Any(session => getSessionVisualState(session.SessionId).IsRunning);
         var hasProjectDraft = hasDraftPrompt(project.Id, false);
         row.UpdateStateIndicator(
-            hasRunningThread ? null : BuildDraftStateIconMarkup(hasProjectDraft, SidebarAccent.Projects),
-            hasRunningThread,
-            hasRunningThread ? null : ResolveDraftStateTooltip(hasProjectDraft, isGlobal: false));
+            hasRunningSession ? null : BuildDraftStateIconMarkup(hasProjectDraft, SidebarAccent.Projects),
+            hasRunningSession,
+            hasRunningSession ? null : ResolveDraftStateTooltip(hasProjectDraft, isGlobal: false));
 
-        var children = projectThreads
-            .CreateThreadHierarchy(
-                settings.RecentThreadsPerProject,
-                threads.Where(static thread => thread.Status != WorkThreadStatus.Archived).ToArray())
-            .Select(node => CreateThreadNode(node, getThreadVisualState, getOrCreateRow, nowUtc))
+        var children = projectSessions
+            .CreateSessionHierarchy(
+                settings.RecentSessionsPerProject,
+                sessions.Where(static session => session.Status != SessionViewStatus.Archived).ToArray())
+            .Select(node => CreateSessionNode(node, getSessionVisualState, getOrCreateRow, nowUtc))
             .ToArray();
 
         return new SidebarTreeNodeProjection(
@@ -156,75 +156,75 @@ internal static class SidebarTreeProjectionBuilder
             children);
     }
 
-    private static SidebarTreeNodeProjection CreateThreadNode(
-        ThreadHierarchyNode node,
-        Func<string, ThreadVisualState> getThreadVisualState,
+    private static SidebarTreeNodeProjection CreateSessionNode(
+        SessionHierarchyNode node,
+        Func<string, SessionVisualState> getSessionVisualState,
         Func<string, SidebarNodeKind, SidebarSelectionTarget?, SidebarNodeViewModel> getOrCreateRow,
         DateTimeOffset nowUtc)
     {
-        var thread = node.Thread;
-        ArgumentNullException.ThrowIfNull(thread);
-        ArgumentNullException.ThrowIfNull(getThreadVisualState);
+        var session = node.Session;
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(getSessionVisualState);
         ArgumentNullException.ThrowIfNull(getOrCreateRow);
 
-        var icon = thread.Kind switch
+        var icon = session.Kind switch
         {
-            WorkThreadKind.GlobalThread => NerdFont.MdHomeOutline,
-            WorkThreadKind.ProjectThread => NerdFont.MdChatProcessingOutline,
-            WorkThreadKind.InternalThread => NerdFont.MdAccountCogOutline,
+            SessionViewKind.GlobalSession => NerdFont.MdHomeOutline,
+            SessionViewKind.ProjectSession => NerdFont.MdChatProcessingOutline,
+            SessionViewKind.InternalSession => NerdFont.MdAccountCogOutline,
             _ => NerdFont.MdChatProcessingOutline,
         };
-        var row = getOrCreateRow($"thread:{thread.ThreadId}", SidebarNodeKind.Thread, SidebarSelectionTarget.Thread(thread.ThreadId));
-        row.UpdateTitle(thread.Title);
-        row.UpdateActivity(thread.LastActiveAt, nowUtc);
-        var visualState = getThreadVisualState(thread.ThreadId);
-        var accent = SidebarThreadPresentation.ResolveThreadAccent(thread.ProviderId, thread.Kind);
-        var stateTooltip = ResolveLineageDiagnosticTooltip(node.LineageDiagnostic, thread);
+        var row = getOrCreateRow($"session:{session.SessionId}", SidebarNodeKind.Session, SidebarSelectionTarget.Session(session.SessionId));
+        row.UpdateTitle(session.Title);
+        row.UpdateActivity(session.LastActiveAt, nowUtc);
+        var visualState = getSessionVisualState(session.SessionId);
+        var accent = SidebarSessionPresentation.ResolveSessionAccent(session.ProviderId, session.Kind);
+        var stateTooltip = ResolveLineageDiagnosticTooltip(node.LineageDiagnostic, session);
         row.UpdateStateIndicator(
             visualState.IsRunning
                 ? null
-                : BuildThreadStateIconMarkup(visualState, accent, node.LineageDiagnostic),
+                : BuildSessionStateIconMarkup(visualState, accent, node.LineageDiagnostic),
             visualState.IsRunning,
             visualState.IsRunning ? null : stateTooltip);
 
         var childNodes = node.Children
-            .Select(child => CreateThreadNode(child, getThreadVisualState, getOrCreateRow, nowUtc))
+            .Select(child => CreateSessionNode(child, getSessionVisualState, getOrCreateRow, nowUtc))
             .ToArray();
 
         return new SidebarTreeNodeProjection(
             row.NodeId,
-            SidebarNodeKind.Thread,
+            SidebarNodeKind.Session,
             row,
             icon,
             accent,
-            SidebarSelectionTarget.Thread(thread.ThreadId),
+            SidebarSelectionTarget.Session(session.SessionId),
             childNodes.Length > 0,
-            CreateThreadActions(),
+            CreateSessionActions(),
             childNodes);
     }
 
-    private static IReadOnlyList<ThreadHierarchyNode> CreateThreadHierarchy(
-        this IReadOnlyList<SessionViewDescriptor> threads,
+    private static IReadOnlyList<SessionHierarchyNode> CreateSessionHierarchy(
+        this IReadOnlyList<SessionViewDescriptor> sessions,
         int rootLimit,
-        IReadOnlyList<SessionViewDescriptor> lineageThreads)
+        IReadOnlyList<SessionViewDescriptor> lineageSessions)
     {
-        ArgumentNullException.ThrowIfNull(lineageThreads);
+        ArgumentNullException.ThrowIfNull(lineageSessions);
 
-        var byId = threads
-            .Where(static thread => !string.IsNullOrWhiteSpace(thread.ThreadId))
-            .GroupBy(static thread => thread.ThreadId, StringComparer.OrdinalIgnoreCase)
+        var byId = sessions
+            .Where(static session => !string.IsNullOrWhiteSpace(session.SessionId))
+            .GroupBy(static session => session.SessionId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
-        var lineageById = lineageThreads
-            .Where(static thread => !string.IsNullOrWhiteSpace(thread.ThreadId))
-            .GroupBy(static thread => thread.ThreadId, StringComparer.OrdinalIgnoreCase)
+        var lineageById = lineageSessions
+            .Where(static session => !string.IsNullOrWhiteSpace(session.SessionId))
+            .GroupBy(static session => session.SessionId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
         var diagnosticsById = byId.ToDictionary(
             static pair => pair.Key,
             pair => GetLineageDiagnostic(pair.Value, lineageById),
             StringComparer.OrdinalIgnoreCase);
-        var children = threads
-            .Where(thread => IsHierarchyChild(thread, diagnosticsById))
-            .GroupBy(static thread => thread.ParentThreadId!, StringComparer.OrdinalIgnoreCase)
+        var children = sessions
+            .Where(session => IsHierarchyChild(session, diagnosticsById))
+            .GroupBy(static session => session.ParentSessionId!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 static group => group.Key,
                 group => group
@@ -233,91 +233,91 @@ internal static class SidebarTreeProjectionBuilder
                     .ToArray(),
                 StringComparer.OrdinalIgnoreCase);
 
-        return threads
-            .Where(thread => !IsHierarchyChild(thread, diagnosticsById))
-            .OrderByDescending(thread => GetSubtreeLastActiveAt(thread, byId, diagnosticsById))
-            .ThenBy(static thread => thread.Title, StringComparer.OrdinalIgnoreCase)
+        return sessions
+            .Where(session => !IsHierarchyChild(session, diagnosticsById))
+            .OrderByDescending(session => GetSubtreeLastActiveAt(session, byId, diagnosticsById))
+            .ThenBy(static session => session.Title, StringComparer.OrdinalIgnoreCase)
             .Take(rootLimit)
-            .Select(thread => BuildHierarchyNode(thread, children, diagnosticsById, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
+            .Select(session => BuildHierarchyNode(session, children, diagnosticsById, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
             .ToArray();
     }
 
-    private static ThreadHierarchyNode BuildHierarchyNode(
-        SessionViewDescriptor thread,
+    private static SessionHierarchyNode BuildHierarchyNode(
+        SessionViewDescriptor session,
         IReadOnlyDictionary<string, SessionViewDescriptor[]> children,
-        IReadOnlyDictionary<string, ThreadLineageDiagnostic> diagnosticsById,
+        IReadOnlyDictionary<string, SessionLineageDiagnostic> diagnosticsById,
         HashSet<string> visiting)
     {
-        if (!visiting.Add(thread.ThreadId))
+        if (!visiting.Add(session.SessionId))
         {
-            return new ThreadHierarchyNode(thread, [], ThreadLineageDiagnostic.Cycle);
+            return new SessionHierarchyNode(session, [], SessionLineageDiagnostic.Cycle);
         }
 
-        var childNodes = children.TryGetValue(thread.ThreadId, out var directChildren)
+        var childNodes = children.TryGetValue(session.SessionId, out var directChildren)
             ? directChildren
                 .Select(child => BuildHierarchyNode(child, children, diagnosticsById, visiting))
                 .ToArray()
             : [];
-        visiting.Remove(thread.ThreadId);
-        return new ThreadHierarchyNode(thread, childNodes, diagnosticsById.GetValueOrDefault(thread.ThreadId));
+        visiting.Remove(session.SessionId);
+        return new SessionHierarchyNode(session, childNodes, diagnosticsById.GetValueOrDefault(session.SessionId));
     }
 
     private static bool IsHierarchyChild(
-        SessionViewDescriptor thread,
-        IReadOnlyDictionary<string, ThreadLineageDiagnostic> diagnosticsById)
-        => !string.IsNullOrWhiteSpace(thread.ParentThreadId) &&
-           diagnosticsById.TryGetValue(thread.ThreadId, out var diagnostic) &&
-           diagnostic == ThreadLineageDiagnostic.None;
+        SessionViewDescriptor session,
+        IReadOnlyDictionary<string, SessionLineageDiagnostic> diagnosticsById)
+        => !string.IsNullOrWhiteSpace(session.ParentSessionId) &&
+           diagnosticsById.TryGetValue(session.SessionId, out var diagnostic) &&
+           diagnostic == SessionLineageDiagnostic.None;
 
-    private static ThreadLineageDiagnostic GetLineageDiagnostic(
-        SessionViewDescriptor thread,
+    private static SessionLineageDiagnostic GetLineageDiagnostic(
+        SessionViewDescriptor session,
         IReadOnlyDictionary<string, SessionViewDescriptor> byId)
     {
-        if (string.IsNullOrWhiteSpace(thread.ParentThreadId))
+        if (string.IsNullOrWhiteSpace(session.ParentSessionId))
         {
-            return ThreadLineageDiagnostic.None;
+            return SessionLineageDiagnostic.None;
         }
 
-        if (!byId.TryGetValue(thread.ParentThreadId, out var parent))
+        if (!byId.TryGetValue(session.ParentSessionId, out var parent))
         {
-            return ThreadLineageDiagnostic.MissingParent;
+            return SessionLineageDiagnostic.MissingParent;
         }
 
-        if (!string.Equals(parent.ProjectRef, thread.ProjectRef, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(parent.ProjectRef, session.ProjectRef, StringComparison.OrdinalIgnoreCase))
         {
-            return ThreadLineageDiagnostic.CrossProjectParent;
+            return SessionLineageDiagnostic.CrossProjectParent;
         }
 
-        return HasLineageCycle(thread, byId) ? ThreadLineageDiagnostic.Cycle : ThreadLineageDiagnostic.None;
+        return HasLineageCycle(session, byId) ? SessionLineageDiagnostic.Cycle : SessionLineageDiagnostic.None;
     }
 
     private static bool HasLineageCycle(
-        SessionViewDescriptor thread,
+        SessionViewDescriptor session,
         IReadOnlyDictionary<string, SessionViewDescriptor> byId)
     {
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { thread.ThreadId };
-        var current = thread.ParentThreadId;
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { session.SessionId };
+        var current = session.ParentSessionId;
         while (!string.IsNullOrWhiteSpace(current) && byId.TryGetValue(current, out var parent))
         {
-            if (!visited.Add(parent.ThreadId))
+            if (!visited.Add(parent.SessionId))
             {
                 return true;
             }
 
-            current = parent.ParentThreadId;
+            current = parent.ParentSessionId;
         }
 
         return false;
     }
 
     private static DateTimeOffset GetSubtreeLastActiveAt(
-        SessionViewDescriptor thread,
+        SessionViewDescriptor session,
         IReadOnlyDictionary<string, SessionViewDescriptor> byId,
-        IReadOnlyDictionary<string, ThreadLineageDiagnostic> diagnosticsById)
+        IReadOnlyDictionary<string, SessionLineageDiagnostic> diagnosticsById)
     {
-        var latest = thread.LastActiveAt;
+        var latest = session.LastActiveAt;
         foreach (var child in byId.Values.Where(candidate =>
-                     string.Equals(candidate.ParentThreadId, thread.ThreadId, StringComparison.OrdinalIgnoreCase) &&
+                     string.Equals(candidate.ParentSessionId, session.SessionId, StringComparison.OrdinalIgnoreCase) &&
                      IsHierarchyChild(candidate, diagnosticsById)))
         {
             var childLatest = GetSubtreeLastActiveAt(child, byId, diagnosticsById);
@@ -330,23 +330,23 @@ internal static class SidebarTreeProjectionBuilder
         return latest;
     }
 
-    private static string? BuildThreadStateIconMarkup(
-        ThreadVisualState visualState,
+    private static string? BuildSessionStateIconMarkup(
+        SessionVisualState visualState,
         SidebarAccent accent,
-        ThreadLineageDiagnostic lineageDiagnostic)
+        SessionLineageDiagnostic lineageDiagnostic)
     {
-        if (lineageDiagnostic != ThreadLineageDiagnostic.None)
+        if (lineageDiagnostic != SessionLineageDiagnostic.None)
         {
             return BuildLineageDiagnosticIconMarkup();
         }
 
         return visualState.HasPromptDraft
-            ? SidebarThreadPresentation.BuildEditedPromptIconMarkup(accent)
+            ? SidebarSessionPresentation.BuildEditedPromptIconMarkup(accent)
             : null;
     }
 
     private static string? BuildDraftStateIconMarkup(bool hasPromptDraft, SidebarAccent accent)
-        => hasPromptDraft ? SidebarThreadPresentation.BuildEditedPromptIconMarkup(accent) : null;
+        => hasPromptDraft ? SidebarSessionPresentation.BuildEditedPromptIconMarkup(accent) : null;
 
     private static string? ResolveDraftStateTooltip(bool hasPromptDraft, bool isGlobal)
         => hasPromptDraft
@@ -356,18 +356,18 @@ internal static class SidebarTreeProjectionBuilder
     private static string BuildLineageDiagnosticIconMarkup()
         => $"[{UiPalette.GetStatusToneMarkup(StatusTone.Warning)}]{NerdFont.MdAlertCircleOutline}[/]";
 
-    private static string? ResolveLineageDiagnosticTooltip(ThreadLineageDiagnostic diagnostic, SessionViewDescriptor thread)
+    private static string? ResolveLineageDiagnosticTooltip(SessionLineageDiagnostic diagnostic, SessionViewDescriptor session)
     {
         return diagnostic switch
         {
-            ThreadLineageDiagnostic.MissingParent => $"Parent session '{thread.ParentThreadId}' is missing; rendering this session at the project root.",
-            ThreadLineageDiagnostic.CrossProjectParent => $"Parent session '{thread.ParentThreadId}' belongs to another scope; rendering this session at the project root while preserving provenance.",
-            ThreadLineageDiagnostic.Cycle => "Session parent lineage contains a cycle; rendering this session at the project root.",
+            SessionLineageDiagnostic.MissingParent => $"Parent session '{session.ParentSessionId}' is missing; rendering this session at the project root.",
+            SessionLineageDiagnostic.CrossProjectParent => $"Parent session '{session.ParentSessionId}' belongs to another scope; rendering this session at the project root while preserving provenance.",
+            SessionLineageDiagnostic.Cycle => "Session parent lineage contains a cycle; rendering this session at the project root.",
             _ => null,
         };
     }
 
-    private enum ThreadLineageDiagnostic
+    private enum SessionLineageDiagnostic
     {
         None,
         MissingParent,
@@ -375,12 +375,12 @@ internal static class SidebarTreeProjectionBuilder
         Cycle,
     }
 
-    private sealed record ThreadHierarchyNode(SessionViewDescriptor Thread, IReadOnlyList<ThreadHierarchyNode> Children, ThreadLineageDiagnostic LineageDiagnostic);
+    private sealed record SessionHierarchyNode(SessionViewDescriptor Session, IReadOnlyList<SessionHierarchyNode> Children, SessionLineageDiagnostic LineageDiagnostic);
 
     private static IReadOnlyList<SidebarRowActionDescriptor> CreateProjectActions()
         =>
         [
-            new SidebarRowActionDescriptor(SidebarRowActionKind.OpenProjectThreads, NerdFont.MdFormatListBulleted, "Show all project sessions"),
+            new SidebarRowActionDescriptor(SidebarRowActionKind.OpenProjectSessions, NerdFont.MdFormatListBulleted, "Show all project sessions"),
             new SidebarRowActionDescriptor(SidebarRowActionKind.OpenProjectDetails, NerdFont.MdInformationOutline, "Show project details"),
             new SidebarRowActionDescriptor(SidebarRowActionKind.DeleteProject, NerdFont.MdTrashCanOutline, "Delete project"),
         ];
@@ -389,10 +389,10 @@ internal static class SidebarTreeProjectionBuilder
         => [new SidebarRowActionDescriptor(SidebarRowActionKind.OpenFolder, NerdFont.MdPlus, "Open folder", SidebarRowActionVisibility.Always)];
 
     private static IReadOnlyList<SidebarRowActionDescriptor> CreateGlobalActions()
-        => [new SidebarRowActionDescriptor(SidebarRowActionKind.OpenProjectThreads, NerdFont.MdFormatListBulleted, "Show all global sessions")];
+        => [new SidebarRowActionDescriptor(SidebarRowActionKind.OpenProjectSessions, NerdFont.MdFormatListBulleted, "Show all global sessions")];
 
-    private static IReadOnlyList<SidebarRowActionDescriptor> CreateThreadActions()
-        => [new SidebarRowActionDescriptor(SidebarRowActionKind.DeleteThread, NerdFont.MdTrashCanOutline, "Delete session")];
+    private static IReadOnlyList<SidebarRowActionDescriptor> CreateSessionActions()
+        => [new SidebarRowActionDescriptor(SidebarRowActionKind.DeleteSession, NerdFont.MdTrashCanOutline, "Delete session")];
 
     private static IEnumerable<ProjectDescriptor> OrderProjectsByName(IEnumerable<ProjectDescriptor> projects)
     {
@@ -404,19 +404,19 @@ internal static class SidebarTreeProjectionBuilder
 
     private static IEnumerable<ProjectDescriptor> OrderProjectsByDate(
         IEnumerable<ProjectDescriptor> projects,
-        IReadOnlyList<SessionViewDescriptor> threads,
+        IReadOnlyList<SessionViewDescriptor> sessions,
         bool includeInternal = true)
     {
         ArgumentNullException.ThrowIfNull(projects);
-        ArgumentNullException.ThrowIfNull(threads);
+        ArgumentNullException.ThrowIfNull(sessions);
 
         return projects
             .Select(project => new
             {
                 Project = project,
-                LastActiveAt = ThreadScopePresentation.FilterThreadsForProject(threads, project.Id, includeInternal)
-                    .Where(static thread => thread.Status != WorkThreadStatus.Archived)
-                    .Select(static thread => (DateTimeOffset?)thread.LastActiveAt)
+                LastActiveAt = SessionScopePresentation.FilterSessionsForProject(sessions, project.Id, includeInternal)
+                    .Where(static session => session.Status != SessionViewStatus.Archived)
+                    .Select(static session => (DateTimeOffset?)session.LastActiveAt)
                     .Max(),
             })
             .OrderByDescending(static item => item.LastActiveAt.HasValue)

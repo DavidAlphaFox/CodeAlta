@@ -6,7 +6,7 @@ internal sealed class CodeAltaShellSurface
 {
     private readonly Visual _dialogFallback;
 
-    public CodeAltaShellSurface(CodeAltaShellView shellView, ThreadWorkspaceView workspaceView, Visual dialogFallback)
+    public CodeAltaShellSurface(CodeAltaShellView shellView, SessionWorkspaceView workspaceView, Visual dialogFallback)
     {
         ArgumentNullException.ThrowIfNull(shellView);
         ArgumentNullException.ThrowIfNull(workspaceView);
@@ -19,11 +19,11 @@ internal sealed class CodeAltaShellSurface
 
     public CodeAltaShellView ShellView { get; }
 
-    public ThreadWorkspaceView WorkspaceView { get; }
+    public SessionWorkspaceView WorkspaceView { get; }
 
     public Visual Root => ShellView.Root;
 
     public Visual DialogAnchor => PromptFocusTarget ?? _dialogFallback;
 
-    public Visual? PromptFocusTarget => WorkspaceView.ThreadInput;
+    public Visual? PromptFocusTarget => WorkspaceView.SessionInput;
 }

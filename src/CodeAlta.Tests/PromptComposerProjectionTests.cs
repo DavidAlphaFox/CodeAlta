@@ -9,12 +9,12 @@ namespace CodeAlta.Tests;
 public sealed class PromptComposerProjectionTests
 {
     [TestMethod]
-    public void Build_UsesUnavailableStateForConnectingThread()
+    public void Build_UsesUnavailableStateForConnectingSession()
     {
-        var thread = CreateThread("Review startup");
+        var session = CreateSession("Review startup");
 
         var projection = PromptComposerProjectionBuilder.Build(
-            thread,
+            session,
             selectedProject: null,
             globalScopeSelected: false,
             providerDisplayName: "Codex",
@@ -22,11 +22,11 @@ public sealed class PromptComposerProjectionTests
             anyBackendReady: false,
             draftTabOpen: false,
             openTabCount: 1,
-            selectedThreadId: thread.ThreadId,
-            selectedThreadHasQueuedPrompts: false,
-            selectedThreadCanAlwaysEnqueue: true,
-            selectedThreadCanCompact: false,
-            selectedThreadCanAbort: true);
+            selectedSessionId: session.SessionId,
+            selectedSessionHasQueuedPrompts: false,
+            selectedSessionCanAlwaysEnqueue: true,
+            selectedSessionCanCompact: false,
+            selectedSessionCanAbort: true);
 
         Assert.AreEqual("Waiting for Codex to reconnect...", projection.Placeholder);
         Assert.IsFalse(projection.IsEnabled);
@@ -53,7 +53,7 @@ public sealed class PromptComposerProjectionTests
         };
 
         var projection = PromptComposerProjectionBuilder.Build(
-            selectedThread: null,
+            selectedSession: null,
             selectedProject: project,
             globalScopeSelected: false,
             providerDisplayName: "Codex",
@@ -61,11 +61,11 @@ public sealed class PromptComposerProjectionTests
             anyBackendReady: true,
             draftTabOpen: true,
             openTabCount: 1,
-            selectedThreadId: null,
-            selectedThreadHasQueuedPrompts: false,
-            selectedThreadCanAlwaysEnqueue: false,
-            selectedThreadCanCompact: false,
-            selectedThreadCanAbort: false);
+            selectedSessionId: null,
+            selectedSessionHasQueuedPrompts: false,
+            selectedSessionCanAlwaysEnqueue: false,
+            selectedSessionCanCompact: false,
+            selectedSessionCanAbort: false);
 
         Assert.AreEqual(
             "Start a session. [/] commands, [?] help, [@] to reference a project file, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
@@ -94,7 +94,7 @@ public sealed class PromptComposerProjectionTests
         var placeholderContributions = new[] { "[#] to reference a GitHub issue" };
 
         var draftProjection = PromptComposerProjectionBuilder.Build(
-            selectedThread: null,
+            selectedSession: null,
             selectedProject: project,
             globalScopeSelected: false,
             providerDisplayName: "Codex",
@@ -102,14 +102,14 @@ public sealed class PromptComposerProjectionTests
             anyBackendReady: true,
             draftTabOpen: true,
             openTabCount: 1,
-            selectedThreadId: null,
-            selectedThreadHasQueuedPrompts: false,
-            selectedThreadCanAlwaysEnqueue: false,
-            selectedThreadCanCompact: false,
-            selectedThreadCanAbort: false,
+            selectedSessionId: null,
+            selectedSessionHasQueuedPrompts: false,
+            selectedSessionCanAlwaysEnqueue: false,
+            selectedSessionCanCompact: false,
+            selectedSessionCanAbort: false,
             promptPlaceholderContributions: placeholderContributions);
-        var threadProjection = PromptComposerProjectionBuilder.Build(
-            CreateThread("Review startup"),
+        var sessionProjection = PromptComposerProjectionBuilder.Build(
+            CreateSession("Review startup"),
             selectedProject: null,
             globalScopeSelected: false,
             providerDisplayName: "Codex",
@@ -117,11 +117,11 @@ public sealed class PromptComposerProjectionTests
             anyBackendReady: true,
             draftTabOpen: false,
             openTabCount: 1,
-            selectedThreadId: "thread-1",
-            selectedThreadHasQueuedPrompts: false,
-            selectedThreadCanAlwaysEnqueue: true,
-            selectedThreadCanCompact: true,
-            selectedThreadCanAbort: false,
+            selectedSessionId: "session-1",
+            selectedSessionHasQueuedPrompts: false,
+            selectedSessionCanAlwaysEnqueue: true,
+            selectedSessionCanCompact: true,
+            selectedSessionCanAbort: false,
             promptPlaceholderContributions: placeholderContributions);
 
         Assert.AreEqual(
@@ -129,14 +129,14 @@ public sealed class PromptComposerProjectionTests
             draftProjection.Placeholder);
         Assert.AreEqual(
             "Continue the selected session. [/] commands, [?] help, [@] to reference a project file, [#] to reference a GitHub issue, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
-            threadProjection.Placeholder);
+            sessionProjection.Placeholder);
     }
 
     [TestMethod]
     public void Build_UsesMissingProviderMessagingWhenNoProviderIsReady()
     {
         var projection = PromptComposerProjectionBuilder.Build(
-            selectedThread: null,
+            selectedSession: null,
             selectedProject: null,
             globalScopeSelected: true,
             providerDisplayName: "Codex",
@@ -144,11 +144,11 @@ public sealed class PromptComposerProjectionTests
             anyBackendReady: false,
             draftTabOpen: true,
             openTabCount: 1,
-            selectedThreadId: null,
-            selectedThreadHasQueuedPrompts: false,
-            selectedThreadCanAlwaysEnqueue: false,
-            selectedThreadCanCompact: false,
-            selectedThreadCanAbort: false);
+            selectedSessionId: null,
+            selectedSessionHasQueuedPrompts: false,
+            selectedSessionCanAlwaysEnqueue: false,
+            selectedSessionCanCompact: false,
+            selectedSessionCanAbort: false);
 
         Assert.AreEqual("Configure model providers (Ctrl+G Ctrl+R) to start a session...", projection.Placeholder);
         Assert.IsTrue(projection.HasUnavailableStatus);
@@ -157,12 +157,12 @@ public sealed class PromptComposerProjectionTests
     }
 
     [TestMethod]
-    public void Build_EnablesClearQueueForQueuedSelectedThread()
+    public void Build_EnablesClearQueueForQueuedSelectedSession()
     {
-        var thread = CreateThread("Review startup");
+        var session = CreateSession("Review startup");
 
         var projection = PromptComposerProjectionBuilder.Build(
-            thread,
+            session,
             selectedProject: null,
             globalScopeSelected: false,
             providerDisplayName: "Codex",
@@ -170,11 +170,11 @@ public sealed class PromptComposerProjectionTests
             anyBackendReady: true,
             draftTabOpen: false,
             openTabCount: 1,
-            selectedThreadId: thread.ThreadId,
-            selectedThreadHasQueuedPrompts: true,
-            selectedThreadCanAlwaysEnqueue: true,
-            selectedThreadCanCompact: true,
-            selectedThreadCanAbort: false);
+            selectedSessionId: session.SessionId,
+            selectedSessionHasQueuedPrompts: true,
+            selectedSessionCanAlwaysEnqueue: true,
+            selectedSessionCanCompact: true,
+            selectedSessionCanAbort: false);
 
         Assert.AreEqual(
             "Continue the selected session. [/] commands, [?] help, [@] to reference a project file, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
@@ -188,12 +188,12 @@ public sealed class PromptComposerProjectionTests
     }
 
     [TestMethod]
-    public void Build_DisablesCompactWhenSelectedThreadCannotCompact()
+    public void Build_DisablesCompactWhenSelectedSessionCannotCompact()
     {
-        var thread = CreateThread("Review startup");
+        var session = CreateSession("Review startup");
 
         var projection = PromptComposerProjectionBuilder.Build(
-            thread,
+            session,
             selectedProject: null,
             globalScopeSelected: false,
             providerDisplayName: "Codex",
@@ -201,22 +201,22 @@ public sealed class PromptComposerProjectionTests
             anyBackendReady: true,
             draftTabOpen: false,
             openTabCount: 1,
-            selectedThreadId: thread.ThreadId,
-            selectedThreadHasQueuedPrompts: false,
-            selectedThreadCanAlwaysEnqueue: true,
-            selectedThreadCanCompact: false,
-            selectedThreadCanAbort: false);
+            selectedSessionId: session.SessionId,
+            selectedSessionHasQueuedPrompts: false,
+            selectedSessionCanAlwaysEnqueue: true,
+            selectedSessionCanCompact: false,
+            selectedSessionCanAbort: false);
 
         Assert.IsFalse(projection.CanCompact);
     }
 
     [TestMethod]
-    public void Build_EnablesAbortOnlyWhenSelectedThreadIsRunning()
+    public void Build_EnablesAbortOnlyWhenSelectedSessionIsRunning()
     {
-        var thread = CreateThread("Review startup");
+        var session = CreateSession("Review startup");
 
         var idleProjection = PromptComposerProjectionBuilder.Build(
-            thread,
+            session,
             selectedProject: null,
             globalScopeSelected: false,
             providerDisplayName: "Codex",
@@ -224,13 +224,13 @@ public sealed class PromptComposerProjectionTests
             anyBackendReady: true,
             draftTabOpen: false,
             openTabCount: 1,
-            selectedThreadId: thread.ThreadId,
-            selectedThreadHasQueuedPrompts: false,
-            selectedThreadCanAlwaysEnqueue: true,
-            selectedThreadCanCompact: true,
-            selectedThreadCanAbort: false);
+            selectedSessionId: session.SessionId,
+            selectedSessionHasQueuedPrompts: false,
+            selectedSessionCanAlwaysEnqueue: true,
+            selectedSessionCanCompact: true,
+            selectedSessionCanAbort: false);
         var runningProjection = PromptComposerProjectionBuilder.Build(
-            thread,
+            session,
             selectedProject: null,
             globalScopeSelected: false,
             providerDisplayName: "Codex",
@@ -238,11 +238,11 @@ public sealed class PromptComposerProjectionTests
             anyBackendReady: true,
             draftTabOpen: false,
             openTabCount: 1,
-            selectedThreadId: thread.ThreadId,
-            selectedThreadHasQueuedPrompts: false,
-            selectedThreadCanAlwaysEnqueue: true,
-            selectedThreadCanCompact: false,
-            selectedThreadCanAbort: true);
+            selectedSessionId: session.SessionId,
+            selectedSessionHasQueuedPrompts: false,
+            selectedSessionCanAlwaysEnqueue: true,
+            selectedSessionCanCompact: false,
+            selectedSessionCanAbort: true);
 
         Assert.IsFalse(idleProjection.CanAbort);
         Assert.IsTrue(runningProjection.CanAbort);
@@ -252,7 +252,7 @@ public sealed class PromptComposerProjectionTests
     public void Build_EnablesDraftCloseWhenAnotherTabIsOpen()
     {
         var projection = PromptComposerProjectionBuilder.Build(
-            selectedThread: null,
+            selectedSession: null,
             selectedProject: null,
             globalScopeSelected: true,
             providerDisplayName: "Codex",
@@ -260,11 +260,11 @@ public sealed class PromptComposerProjectionTests
             anyBackendReady: true,
             draftTabOpen: true,
             openTabCount: 2,
-            selectedThreadId: null,
-            selectedThreadHasQueuedPrompts: false,
-            selectedThreadCanAlwaysEnqueue: false,
-            selectedThreadCanCompact: false,
-            selectedThreadCanAbort: false);
+            selectedSessionId: null,
+            selectedSessionHasQueuedPrompts: false,
+            selectedSessionCanAlwaysEnqueue: false,
+            selectedSessionCanCompact: false,
+            selectedSessionCanAbort: false);
 
         Assert.AreEqual(
             "Start a session. [/] commands, [?] help, [ENTER] to send, [SHIFT+ENTER] for new line, [CTRL+ENTER] to steer.",
@@ -272,17 +272,17 @@ public sealed class PromptComposerProjectionTests
         Assert.IsTrue(projection.CanCloseTab);
     }
 
-    private static SessionViewDescriptor CreateThread(string title)
+    private static SessionViewDescriptor CreateSession(string title)
     {
         return new SessionViewDescriptor
         {
-            ThreadId = "thread-1",
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = "session-1",
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = title,
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             LastActiveAt = DateTimeOffset.UtcNow,

@@ -10,8 +10,8 @@ public sealed record AltaCallerIdentity
     /// <summary>Gets the caller kind: <c>cli</c>, <c>agent</c>, <c>host</c>, or <c>plugin</c>.</summary>
     public required string Kind { get; init; }
 
-    /// <summary>Gets the source CodeAlta thread id, when the caller is associated with one.</summary>
-    public string? SourceThreadId { get; init; }
+    /// <summary>Gets the source CodeAlta session id, when the caller is associated with one.</summary>
+    public string? SourceSessionId { get; init; }
 
     /// <summary>Gets the source agent id, when known.</summary>
     public string? SourceAgentId { get; init; }

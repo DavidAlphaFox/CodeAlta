@@ -220,7 +220,7 @@ internal sealed class PluginRuntimeServices : IPluginServices
 
     public IPluginWorkspaceService Workspace => _inner.Workspace;
 
-    public IPluginThreadService Threads => _inner.Threads;
+    public IPluginSessionService Sessions => _inner.Sessions;
 
     public IPluginPromptService Prompts => _inner.Prompts;
 

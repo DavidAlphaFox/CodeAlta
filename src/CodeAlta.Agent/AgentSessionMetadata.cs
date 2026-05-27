@@ -49,13 +49,13 @@ public abstract record AgentSessionMetadataDetails;
 /// <param name="Source">The provider-reported origin for the session.</param>
 /// <param name="Status">The provider-reported runtime status.</param>
 /// <param name="IsEphemeral">Whether the provider-reported session is ephemeral.</param>
-/// <param name="ThreadName">The optional legacy provider title reported by Codex.</param>
+/// <param name="SessionName">The optional legacy provider title reported by Codex.</param>
 public sealed record CodexSessionMetadataDetails(
     string? ModelProvider = null,
     string? Source = null,
     string? Status = null,
     bool IsEphemeral = false,
-    string? ThreadName = null)
+    string? SessionName = null)
     : AgentSessionMetadataDetails;
 
 /// <summary>

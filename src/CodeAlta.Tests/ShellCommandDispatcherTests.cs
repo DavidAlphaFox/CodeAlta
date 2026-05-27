@@ -13,18 +13,18 @@ public sealed class ShellCommandDispatcherTests
         var registry = new ShellCommandRegistry();
         registry.Register<OpenHelpCommand>((command, _) =>
         {
-            handled = command.FilterText == "threads";
+            handled = command.FilterText == "sessions";
             return ValueTask.CompletedTask;
         });
         var dispatcher = new ShellCommandDispatcher(registry);
 
-        await dispatcher.DispatchAsync(new OpenHelpCommand("threads"));
+        await dispatcher.DispatchAsync(new OpenHelpCommand("sessions"));
 
         Assert.IsTrue(handled);
     }
 
     [TestMethod]
-    public async Task DispatchAsync_UsesUiDispatcherWhenCurrentThreadDoesNotOwnUi()
+    public async Task DispatchAsync_UsesUiDispatcherWhenCurrentSessionDoesNotOwnUi()
     {
         var uiDispatcher = new CapturingUiDispatcher(hasAccess: false);
         var handlerRanInsideDispatcher = false;

@@ -16,85 +16,85 @@ namespace CodeAlta.App;
 internal sealed class SessionHistoryCoordinator
 {
     private readonly SessionRuntimeService _runtimeService;
-    private readonly Func<SessionViewDescriptor, OpenThreadState> _ensureThreadTab;
-    private readonly Func<string, SessionViewDescriptor?> _findThread;
-    private readonly Func<string, OpenThreadState?> _findOpenThread;
+    private readonly Func<SessionViewDescriptor, OpenSessionState> _ensureSessionTab;
+    private readonly Func<string, SessionViewDescriptor?> _findSession;
+    private readonly Func<string, OpenSessionState?> _findOpenSession;
     private readonly Func<SessionViewDescriptor, bool> _canLoadHistory;
-    private readonly Func<SessionViewDescriptor, OpenThreadState, SessionExecutionOptions> _buildExecutionOptions;
-    private readonly Action<OpenThreadState, string, bool, StatusTone> _setThreadStatus;
-    private readonly Action<OpenThreadState> _clearThreadStatus;
-    private readonly Action<OpenThreadState> _resetThreadTab;
-    private readonly Func<SessionViewDescriptor, OpenThreadState, AgentEvent, Task> _handleAgentEventAsync;
-    private readonly Func<SessionViewDescriptor, Task> _persistThreadLocalStateAsync;
-    private readonly Action<OpenThreadState> _notifySessionUsageChanged;
-    private readonly Action<SessionViewDescriptor, OpenThreadState, IReadOnlyList<AgentEvent>> _projectLoadedHistory;
+    private readonly Func<SessionViewDescriptor, OpenSessionState, SessionExecutionOptions> _buildExecutionOptions;
+    private readonly Action<OpenSessionState, string, bool, StatusTone> _setSessionStatus;
+    private readonly Action<OpenSessionState> _clearSessionStatus;
+    private readonly Action<OpenSessionState> _resetSessionTab;
+    private readonly Func<SessionViewDescriptor, OpenSessionState, AgentEvent, Task> _handleAgentEventAsync;
+    private readonly Func<SessionViewDescriptor, Task> _persistSessionLocalStateAsync;
+    private readonly Action<OpenSessionState> _notifySessionUsageChanged;
+    private readonly Action<SessionViewDescriptor, OpenSessionState, IReadOnlyList<AgentEvent>> _projectLoadedHistory;
     private readonly Func<Func<Task>, Task> _dispatchToUiAsync;
 
     public SessionHistoryCoordinator(
         SessionRuntimeService runtimeService,
-        Func<SessionViewDescriptor, OpenThreadState> ensureThreadTab,
-        Func<string, SessionViewDescriptor?> findThread,
-        Func<string, OpenThreadState?> findOpenThread,
+        Func<SessionViewDescriptor, OpenSessionState> ensureSessionTab,
+        Func<string, SessionViewDescriptor?> findSession,
+        Func<string, OpenSessionState?> findOpenSession,
         Func<SessionViewDescriptor, bool> canLoadHistory,
-        Func<SessionViewDescriptor, OpenThreadState, SessionExecutionOptions> buildExecutionOptions,
-        Action<OpenThreadState, string, bool, StatusTone> setThreadStatus,
-        Action<OpenThreadState> clearThreadStatus,
-        Action<OpenThreadState> resetThreadTab,
-        Func<SessionViewDescriptor, OpenThreadState, AgentEvent, Task> handleAgentEventAsync,
-        Func<SessionViewDescriptor, Task> persistThreadLocalStateAsync,
-        Action<OpenThreadState>? notifySessionUsageChanged = null,
-        Action<SessionViewDescriptor, OpenThreadState, IReadOnlyList<AgentEvent>>? projectLoadedHistory = null,
+        Func<SessionViewDescriptor, OpenSessionState, SessionExecutionOptions> buildExecutionOptions,
+        Action<OpenSessionState, string, bool, StatusTone> setSessionStatus,
+        Action<OpenSessionState> clearSessionStatus,
+        Action<OpenSessionState> resetSessionTab,
+        Func<SessionViewDescriptor, OpenSessionState, AgentEvent, Task> handleAgentEventAsync,
+        Func<SessionViewDescriptor, Task> persistSessionLocalStateAsync,
+        Action<OpenSessionState>? notifySessionUsageChanged = null,
+        Action<SessionViewDescriptor, OpenSessionState, IReadOnlyList<AgentEvent>>? projectLoadedHistory = null,
         Func<Func<Task>, Task>? dispatchToUiAsync = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
-        ArgumentNullException.ThrowIfNull(ensureThreadTab);
-        ArgumentNullException.ThrowIfNull(findThread);
-        ArgumentNullException.ThrowIfNull(findOpenThread);
+        ArgumentNullException.ThrowIfNull(ensureSessionTab);
+        ArgumentNullException.ThrowIfNull(findSession);
+        ArgumentNullException.ThrowIfNull(findOpenSession);
         ArgumentNullException.ThrowIfNull(canLoadHistory);
         ArgumentNullException.ThrowIfNull(buildExecutionOptions);
-        ArgumentNullException.ThrowIfNull(setThreadStatus);
-        ArgumentNullException.ThrowIfNull(clearThreadStatus);
-        ArgumentNullException.ThrowIfNull(resetThreadTab);
+        ArgumentNullException.ThrowIfNull(setSessionStatus);
+        ArgumentNullException.ThrowIfNull(clearSessionStatus);
+        ArgumentNullException.ThrowIfNull(resetSessionTab);
         ArgumentNullException.ThrowIfNull(handleAgentEventAsync);
-        ArgumentNullException.ThrowIfNull(persistThreadLocalStateAsync);
+        ArgumentNullException.ThrowIfNull(persistSessionLocalStateAsync);
 
         _runtimeService = runtimeService;
-        _ensureThreadTab = ensureThreadTab;
-        _findThread = findThread;
-        _findOpenThread = findOpenThread;
+        _ensureSessionTab = ensureSessionTab;
+        _findSession = findSession;
+        _findOpenSession = findOpenSession;
         _canLoadHistory = canLoadHistory;
         _buildExecutionOptions = buildExecutionOptions;
-        _setThreadStatus = setThreadStatus;
-        _clearThreadStatus = clearThreadStatus;
-        _resetThreadTab = resetThreadTab;
+        _setSessionStatus = setSessionStatus;
+        _clearSessionStatus = clearSessionStatus;
+        _resetSessionTab = resetSessionTab;
         _handleAgentEventAsync = handleAgentEventAsync;
-        _persistThreadLocalStateAsync = persistThreadLocalStateAsync;
+        _persistSessionLocalStateAsync = persistSessionLocalStateAsync;
         _notifySessionUsageChanged = notifySessionUsageChanged ?? (static _ => { });
         _projectLoadedHistory = projectLoadedHistory ?? (static (_, _, _) => { });
         _dispatchToUiAsync = dispatchToUiAsync ?? (static action => action());
     }
 
-    public async Task EnsureLoadedAsync(SessionViewDescriptor thread, CancellationToken cancellationToken = default)
+    public async Task EnsureLoadedAsync(SessionViewDescriptor session, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
 
-        if (!_canLoadHistory(thread))
+        if (!_canLoadHistory(session))
         {
             return;
         }
 
-        var tab = _ensureThreadTab(thread);
-        var loadTask = GetOrStartLoadTask(tab, thread, cancellationToken);
+        var tab = _ensureSessionTab(session);
+        var loadTask = GetOrStartLoadTask(tab, session, cancellationToken);
         await loadTask;
     }
 
-    public async Task LoadEarlierAsync(string threadId)
+    public async Task LoadEarlierAsync(string sessionId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
-        var thread = _findThread(threadId);
-        var tab = _findOpenThread(threadId);
-        if (thread is null || tab is null || !tab.Timeline.HasLoadableTruncatedHistory)
+        var session = _findSession(sessionId);
+        var tab = _findOpenSession(sessionId);
+        if (session is null || tab is null || !tab.Timeline.HasLoadableTruncatedHistory)
         {
             return;
         }
@@ -102,34 +102,34 @@ internal sealed class SessionHistoryCoordinator
         tab.Timeline.ReplaceTruncatedHistoryLoadButton();
         await Task.Run(
             () => RebuildAsync(
-                thread,
+                session,
                 tab,
                 loadOnlyFromLastUserPrompt: false,
                 preferCachedHistory: true,
                 CancellationToken.None));
     }
 
-    public static bool CanLoadThreadHistory(SessionViewDescriptor thread)
+    public static bool CanLoadSessionHistory(SessionViewDescriptor session)
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
 
-        if (thread.StartedAt is not null)
+        if (session.StartedAt is not null)
         {
             return true;
         }
 
-        return thread.Status != WorkThreadStatus.Draft &&
-               !string.IsNullOrWhiteSpace(thread.ThreadId);
+        return session.Status != SessionViewStatus.Draft &&
+               !string.IsNullOrWhiteSpace(session.SessionId);
     }
 
-    public static ThreadHistoryLoadPlan CreateInitialLoadPlan(IReadOnlyList<AgentEvent> history)
+    public static SessionHistoryLoadPlan CreateInitialLoadPlan(IReadOnlyList<AgentEvent> history)
     {
         ArgumentNullException.ThrowIfNull(history);
 
         var startIndex = FindInitialStartIndex(history);
         if (startIndex <= 0 || startIndex >= history.Count)
         {
-            return new ThreadHistoryLoadPlan(history, OmittedMessageCount: 0);
+            return new SessionHistoryLoadPlan(history, OmittedMessageCount: 0);
         }
 
         var pinnedPrefixIndexes = FindPinnedPrefixEventIndexes(history, startIndex);
@@ -138,7 +138,7 @@ internal sealed class SessionHistoryCoordinator
             .Select(index => history[index])
             .Concat(history.Skip(startIndex))
             .ToArray();
-        return new ThreadHistoryLoadPlan(
+        return new SessionHistoryLoadPlan(
             eventsToRender,
             CountRenderableMessages(history.Take(startIndex).Where((_, index) => !pinnedPrefixIndexSet.Contains(index))));
     }
@@ -179,11 +179,11 @@ internal sealed class SessionHistoryCoordinator
     }
 
     private static bool ApplyRecoveredModelProviderPreference(
-        SessionViewDescriptor thread,
-        OpenThreadState tab,
+        SessionViewDescriptor session,
+        OpenSessionState tab,
         ModelProviderPreference? preference)
     {
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(tab);
 
         if (preference is null)
@@ -199,11 +199,11 @@ internal sealed class SessionHistoryCoordinator
             changed = true;
         }
 
-        if (!string.Equals(thread.ProviderKey, normalized.ModelProviderId.Value, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(thread.ProviderId, normalized.ModelProviderId.Value, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(session.ProviderKey, normalized.ModelProviderId.Value, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(session.ProviderId, normalized.ModelProviderId.Value, StringComparison.OrdinalIgnoreCase))
         {
-            thread.ProviderKey = normalized.ModelProviderId.Value;
-            thread.ProviderId = normalized.ModelProviderId.Value;
+            session.ProviderKey = normalized.ModelProviderId.Value;
+            session.ProviderId = normalized.ModelProviderId.Value;
             changed = true;
         }
 
@@ -213,9 +213,9 @@ internal sealed class SessionHistoryCoordinator
             changed = true;
         }
 
-        if (!string.Equals(thread.ModelId, normalized.ModelId, StringComparison.Ordinal))
+        if (!string.Equals(session.ModelId, normalized.ModelId, StringComparison.Ordinal))
         {
-            thread.ModelId = normalized.ModelId;
+            session.ModelId = normalized.ModelId;
             changed = true;
         }
 
@@ -225,9 +225,9 @@ internal sealed class SessionHistoryCoordinator
             changed = true;
         }
 
-        if (thread.ReasoningEffort != normalized.ReasoningEffort)
+        if (session.ReasoningEffort != normalized.ReasoningEffort)
         {
-            thread.ReasoningEffort = normalized.ReasoningEffort;
+            session.ReasoningEffort = normalized.ReasoningEffort;
             changed = true;
         }
 
@@ -458,12 +458,12 @@ internal sealed class SessionHistoryCoordinator
     }
 
     private Task GetOrStartLoadTask(
-        OpenThreadState tab,
-        SessionViewDescriptor thread,
+        OpenSessionState tab,
+        SessionViewDescriptor session,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(session);
 
         if (tab.HistoryLoaded)
         {
@@ -475,18 +475,18 @@ internal sealed class SessionHistoryCoordinator
             return existingTask.WaitAsync(cancellationToken);
         }
 
-        var loadTask = Task.Run(() => LoadCoreAsync(thread, tab, cancellationToken));
+        var loadTask = Task.Run(() => LoadCoreAsync(session, tab, cancellationToken));
         tab.HistoryLoadTask = loadTask;
         return loadTask.WaitAsync(cancellationToken);
     }
 
     private async Task LoadCoreAsync(
-        SessionViewDescriptor thread,
-        OpenThreadState tab,
+        SessionViewDescriptor session,
+        OpenSessionState tab,
         CancellationToken cancellationToken)
     {
         await RebuildAsync(
-                thread,
+                session,
                 tab,
                 loadOnlyFromLastUserPrompt: true,
                 preferCachedHistory: false,
@@ -495,8 +495,8 @@ internal sealed class SessionHistoryCoordinator
     }
 
     private async Task RebuildAsync(
-        SessionViewDescriptor thread,
-        OpenThreadState tab,
+        SessionViewDescriptor session,
+        OpenSessionState tab,
         bool loadOnlyFromLastUserPrompt,
         bool preferCachedHistory,
         CancellationToken cancellationToken)
@@ -509,11 +509,11 @@ internal sealed class SessionHistoryCoordinator
                     () =>
                     {
                         tab.HistoryLoading = true;
-                        _setThreadStatus(
+                        _setSessionStatus(
                             tab,
                             loadOnlyFromLastUserPrompt
-                                ? $"Loading session '{thread.Title}'..."
-                                : $"Loading previous messages from '{thread.Title}'...",
+                                ? $"Loading session '{session.Title}'..."
+                                : $"Loading previous messages from '{session.Title}'...",
                             true,
                             StatusTone.Info);
                         if (preferCachedHistory && tab.HistoryEvents is { Count: > 0 } historyEvents)
@@ -521,27 +521,27 @@ internal sealed class SessionHistoryCoordinator
                             cachedHistory = historyEvents.ToList();
                         }
 
-                        executionOptions = _buildExecutionOptions(thread, tab);
+                        executionOptions = _buildExecutionOptions(session, tab);
                         return Task.CompletedTask;
                     })
                 .ConfigureAwait(false);
 
-            var history = await GetHistoryAsync(thread, cachedHistory, executionOptions!, cancellationToken).ConfigureAwait(false);
-            thread.MessageCount = CountRenderableMessages(history);
-            await _persistThreadLocalStateAsync(thread).ConfigureAwait(false);
+            var history = await GetHistoryAsync(session, cachedHistory, executionOptions!, cancellationToken).ConfigureAwait(false);
+            session.MessageCount = CountRenderableMessages(history);
+            await _persistSessionLocalStateAsync(session).ConfigureAwait(false);
             var recoveredUsage = RecoverUsageFromHistory(history);
             var recoveredModelPreference = RecoverModelProviderPreferenceFromHistory(history);
             var plan = loadOnlyFromLastUserPrompt
                 ? CreateInitialLoadPlan(history)
-                : new ThreadHistoryLoadPlan(history, OmittedMessageCount: 0);
+                : new SessionHistoryLoadPlan(history, OmittedMessageCount: 0);
             var recoveredModelPreferenceChanged = false;
             await _dispatchToUiAsync(
                     async () =>
                     {
-                        recoveredModelPreferenceChanged = ApplyRecoveredModelProviderPreference(thread, tab, recoveredModelPreference);
+                        recoveredModelPreferenceChanged = ApplyRecoveredModelProviderPreference(session, tab, recoveredModelPreference);
                         tab.HistoryEvents = history.ToList();
                         var previousUsage = tab.Usage;
-                        _resetThreadTab(tab);
+                        _resetSessionTab(tab);
                         tab.Usage = recoveredUsage;
                         var usageChanged = !Equals(previousUsage, recoveredUsage);
 
@@ -551,14 +551,14 @@ internal sealed class SessionHistoryCoordinator
                         {
                             truncatedHistoryItem = tab.Timeline.CreateTruncatedHistoryItem(
                                 plan.OmittedMessageCount,
-                                () => _ = LoadEarlierAsync(thread.ThreadId));
+                                () => _ = LoadEarlierAsync(session.SessionId));
                         }
 
                         tab.Timeline.BeginBufferedHistoryLoad();
                         var renderedEventCount = 0;
                         foreach (var @event in plan.EventsToRender)
                         {
-                            await _handleAgentEventAsync(thread, tab, @event);
+                            await _handleAgentEventAsync(session, tab, @event);
                             renderedEventCount++;
                             if (renderedEventCount % 25 == 0)
                             {
@@ -574,27 +574,27 @@ internal sealed class SessionHistoryCoordinator
                             _notifySessionUsageChanged(tab);
                         }
 
-                        _clearThreadStatus(tab);
+                        _clearSessionStatus(tab);
                     })
                 .ConfigureAwait(false);
             if (recoveredModelPreferenceChanged)
             {
-                await _persistThreadLocalStateAsync(thread).ConfigureAwait(false);
+                await _persistSessionLocalStateAsync(session).ConfigureAwait(false);
             }
 
-            _projectLoadedHistory(thread, tab, plan.EventsToRender);
+            _projectLoadedHistory(session, tab, plan.EventsToRender);
         }
         catch (Exception ex)
         {
-            CodeAltaApp.UiLogger.Error(ex, $"Failed to load history for thread {thread.ThreadId}");
+            CodeAltaApp.UiLogger.Error(ex, $"Failed to load history for session {session.SessionId}");
 
             await _dispatchToUiAsync(
                     () =>
                     {
-                        _resetThreadTab(tab);
+                        _resetSessionTab(tab);
                         tab.Timeline.FlushBufferedHistoryItems();
                         tab.Timeline.RenderFailure($"Failed to load history: {ex.Message}");
-                        _setThreadStatus(tab, $"Failed to load '{thread.Title}': {ex.Message}", false, StatusTone.Error);
+                        _setSessionStatus(tab, $"Failed to load '{session.Title}': {ex.Message}", false, StatusTone.Error);
                         return Task.CompletedTask;
                     })
                 .ConfigureAwait(false);
@@ -614,7 +614,7 @@ internal sealed class SessionHistoryCoordinator
     }
 
     private async Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(
-        SessionViewDescriptor thread,
+        SessionViewDescriptor session,
         IReadOnlyList<AgentEvent>? cachedHistory,
         SessionExecutionOptions executionOptions,
         CancellationToken cancellationToken)
@@ -627,8 +627,8 @@ internal sealed class SessionHistoryCoordinator
         ArgumentNullException.ThrowIfNull(executionOptions);
         try
         {
-            await _runtimeService.EnsureCoordinatorSessionAsync(thread, executionOptions, cancellationToken).ConfigureAwait(false);
-            return (await _runtimeService.GetHistoryAsync(thread.ThreadId, cancellationToken).ConfigureAwait(false)).ToList();
+            await _runtimeService.EnsureCoordinatorSessionAsync(session, executionOptions, cancellationToken).ConfigureAwait(false);
+            return (await _runtimeService.GetHistoryAsync(session.SessionId, cancellationToken).ConfigureAwait(false)).ToList();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -636,7 +636,7 @@ internal sealed class SessionHistoryCoordinator
         }
         catch (KeyNotFoundException)
         {
-            if (await _runtimeService.TryReadStoredHistoryAsync(thread, cancellationToken).ConfigureAwait(false) is { } storedHistory)
+            if (await _runtimeService.TryReadStoredHistoryAsync(session, cancellationToken).ConfigureAwait(false) is { } storedHistory)
             {
                 return storedHistory.ToList();
             }

@@ -9,7 +9,7 @@ Read the documents in this order when onboarding or reviewing architecture-sensi
 | Step | Document | Purpose |
 | --- | --- | --- |
 | 1 | [Architecture overview](architecture.md) | Process composition, project layering, frontend/runtime boundaries, and the main data flow. |
-| 2 | [Catalog, configuration, and state](catalog-and-config.md) | `~/.alta` layout, project-local state, TOML configuration, projects, sessions, legacy thread metadata, and prompt drafts. |
+| 2 | [Catalog, configuration, and state](catalog-and-config.md) | `~/.alta` layout, project-local state, TOML configuration, projects, sessions, legacy session metadata, and prompt drafts. |
 | 3 | [Runtime and agent sessions](runtime.md) | `AgentHub`, `SessionRuntimeService`, active sessions, provider runtime adapters, system prompts, tools, compaction, and journals. |
 | 4 | [Model providers](providers.md) | Provider registration, configured provider types, local-runtime adapters, model metadata, credentials, and protocol tracing. |
 | 5 | [`alta` live tool](live-tool.md) | In-process command registry, JSONL output contract, session control commands, queueing, delegated work, and plugin commands. |

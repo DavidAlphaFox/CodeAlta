@@ -24,9 +24,9 @@ public sealed class ShellCommandHelpTests
         var toggleNavigatorCommand = ShellCommandCatalog.Get("CodeAlta.Shell.ToggleNavigator");
         var goToPromptCommand = ShellCommandCatalog.Get("CodeAlta.Shell.FocusPrompt");
         var modelCommand = ShellCommandCatalog.Get("CodeAlta.Shell.FocusModelProvider");
-        var fullPromptCommand = ShellCommandCatalog.Get("CodeAlta.Thread.ExpandPrompt");
-        var sendCommand = ShellCommandCatalog.Get("CodeAlta.Thread.Send");
-        var compactCommand = ShellCommandCatalog.Get("CodeAlta.Thread.Compact");
+        var fullPromptCommand = ShellCommandCatalog.Get("CodeAlta.Session.ExpandPrompt");
+        var sendCommand = ShellCommandCatalog.Get("CodeAlta.Session.Send");
+        var compactCommand = ShellCommandCatalog.Get("CodeAlta.Session.Compact");
 
         var sections = ShellHelpContentBuilder.BuildSections();
         var entry = sections
@@ -184,13 +184,13 @@ public sealed class ShellCommandHelpTests
     [TestMethod]
     public void ShellCommandMetadata_UsesCommandStyleIdentifiers()
     {
-        var fullPromptCommand = ShellCommandCatalog.Get("CodeAlta.Thread.ExpandPrompt");
-        var closeTabCommand = ShellCommandCatalog.Get("CodeAlta.Thread.CloseTab");
+        var fullPromptCommand = ShellCommandCatalog.Get("CodeAlta.Session.ExpandPrompt");
+        var closeTabCommand = ShellCommandCatalog.Get("CodeAlta.Session.CloseTab");
         var openFolderCommand = ShellCommandCatalog.Get("CodeAlta.Project.OpenFolder");
         var skillsCommand = ShellCommandCatalog.Get("CodeAlta.Skills.Manage");
-        var tabLeftCommand = ShellCommandCatalog.Get("CodeAlta.Thread.TabLeft");
-        var tabRightCommand = ShellCommandCatalog.Get("CodeAlta.Thread.TabRight");
-        var steerCommand = ShellCommandCatalog.Get("CodeAlta.Thread.Steer");
+        var tabLeftCommand = ShellCommandCatalog.Get("CodeAlta.Session.TabLeft");
+        var tabRightCommand = ShellCommandCatalog.Get("CodeAlta.Session.TabRight");
+        var steerCommand = ShellCommandCatalog.Get("CodeAlta.Session.Steer");
         var exitCommand = ShellCommandCatalog.Get("CodeAlta.Shell.Exit");
 
         Assert.AreEqual("full_prompt", fullPromptCommand.CommandName);

@@ -10,9 +10,9 @@ internal enum SidebarRowActionVisibility
 
 internal enum SidebarRowActionKind
 {
-    DeleteThread = 0,
+    DeleteSession = 0,
     DeleteProject = 1,
-    OpenProjectThreads = 2,
+    OpenProjectSessions = 2,
     OpenProjectDetails = 3,
     OpenFolder = 4,
 }

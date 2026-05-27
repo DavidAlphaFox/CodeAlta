@@ -11,14 +11,14 @@ namespace CodeAlta.Tests;
 public sealed class SessionProviderSwitchCoordinatorTests
 {
     [TestMethod]
-    public async Task SwitchThreadProviderAsync_UpdatesProviderWithoutRekeyingThreadOrTouchingSessionStore()
+    public async Task SwitchSessionProviderAsync_UpdatesProviderWithoutRekeyingSessionOrTouchingSessionStore()
     {
         using var temp = TempDirectory.Create();
         WriteProviderConfig(temp.Path);
         var options = new CatalogOptions { GlobalRoot = temp.Path };
         var backendStates = CreateProviderStates();
-        var updatedThreads = new List<SessionViewDescriptor>();
-        var detachedThreadIds = new List<string>();
+        var updatedSessions = new List<SessionViewDescriptor>();
+        var detachedSessionIds = new List<string>();
         var persisted = false;
         var coordinator = new SessionProviderSwitchCoordinator(
             new CodeAltaConfigStore(options),
@@ -29,41 +29,41 @@ public sealed class SessionProviderSwitchCoordinatorTests
                 tab.ReasoningEffort = AgentReasoningEffort.High;
                 return Task.CompletedTask;
             },
-            threadId =>
+            sessionId =>
             {
-                detachedThreadIds.Add(threadId);
+                detachedSessionIds.Add(sessionId);
                 return Task.FromResult(true);
             },
-            updatedThreads.Add,
+            updatedSessions.Add,
             () =>
             {
                 persisted = true;
                 return Task.CompletedTask;
             });
         var createdAt = DateTimeOffset.Parse("2026-04-19T10:00:00+00:00");
-        var thread = CreateThread("019e1584", "codex", createdAt);
-        var tabState = CreateTabState(thread, "codex", "gpt-5.5");
+        var session = CreateSession("019e1584", "codex", createdAt);
+        var tabState = CreateTabState(session, "codex", "gpt-5.5");
 
-        var switched = await coordinator.SwitchThreadProviderAsync(
-            thread,
+        var switched = await coordinator.SwitchSessionProviderAsync(
+            session,
             tabState,
             new ModelProviderId("anthropic")).ConfigureAwait(false);
 
         Assert.IsTrue(switched);
-        Assert.AreEqual("019e1584", thread.ThreadId, "Switching providers must not rekey the open thread/tab.");
-        Assert.AreEqual("anthropic", thread.ProviderId);
-        Assert.AreEqual("anthropic", thread.ProviderKey);
+        Assert.AreEqual("019e1584", session.SessionId, "Switching providers must not rekey the open session/tab.");
+        Assert.AreEqual("anthropic", session.ProviderId);
+        Assert.AreEqual("anthropic", session.ProviderKey);
         Assert.AreEqual("anthropic", tabState.ProviderId.Value);
         Assert.AreEqual("claude-sonnet-4", tabState.ModelId);
         Assert.AreEqual(AgentReasoningEffort.High, tabState.ReasoningEffort);
         Assert.IsNull(tabState.Usage);
-        CollectionAssert.AreEqual(new[] { "019e1584" }, detachedThreadIds);
-        CollectionAssert.AreEqual(new[] { thread }, updatedThreads);
+        CollectionAssert.AreEqual(new[] { "019e1584" }, detachedSessionIds);
+        CollectionAssert.AreEqual(new[] { session }, updatedSessions);
         Assert.IsTrue(persisted);
     }
 
     [TestMethod]
-    public async Task SwitchThreadProviderAsync_AllowsNativeSourceWithoutReadingHistory()
+    public async Task SwitchSessionProviderAsync_AllowsNativeSourceWithoutReadingHistory()
     {
         using var temp = TempDirectory.Create();
         WriteProviderConfig(temp.Path);
@@ -80,29 +80,29 @@ public sealed class SessionProviderSwitchCoordinatorTests
             static _ => { },
             static () => Task.CompletedTask);
         var createdAt = DateTimeOffset.Parse("2026-04-19T10:00:00+00:00");
-        var thread = CreateThread("native-session", ModelProviderIds.Codex.Value, createdAt);
-        var tabState = CreateTabState(thread, ModelProviderIds.Codex.Value, "gpt-5");
+        var session = CreateSession("native-session", ModelProviderIds.Codex.Value, createdAt);
+        var tabState = CreateTabState(session, ModelProviderIds.Codex.Value, "gpt-5");
 
-        var switched = await coordinator.SwitchThreadProviderAsync(
-            thread,
+        var switched = await coordinator.SwitchSessionProviderAsync(
+            session,
             tabState,
             new ModelProviderId("anthropic")).ConfigureAwait(false);
 
         Assert.IsTrue(switched);
-        Assert.AreEqual("native-session", thread.ThreadId);
-        Assert.AreEqual("anthropic", thread.ProviderId);
+        Assert.AreEqual("native-session", session.SessionId);
+        Assert.AreEqual("anthropic", session.ProviderId);
         Assert.AreEqual("anthropic", tabState.ProviderId.Value);
     }
 
     [TestMethod]
-    public async Task SwitchThreadProviderAsync_UpdatesVisibleProviderBeforeDetachingSession()
+    public async Task SwitchSessionProviderAsync_UpdatesVisibleProviderBeforeDetachingSession()
     {
         using var temp = TempDirectory.Create();
         WriteProviderConfig(temp.Path);
         var options = new CatalogOptions { GlobalRoot = temp.Path };
         var createdAt = DateTimeOffset.Parse("2026-04-19T10:00:00+00:00");
-        var thread = CreateThread("session-1", "openai", createdAt);
-        var tabState = CreateTabState(thread, "openai", "gpt-4.1");
+        var session = CreateSession("session-1", "openai", createdAt);
+        var tabState = CreateTabState(session, "openai", "gpt-4.1");
         var observedTargetDuringDetach = false;
         var coordinator = new SessionProviderSwitchCoordinator(
             new CodeAltaConfigStore(options),
@@ -111,15 +111,15 @@ public sealed class SessionProviderSwitchCoordinatorTests
             _ =>
             {
                 observedTargetDuringDetach =
-                    string.Equals(thread.ProviderId, "anthropic", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(session.ProviderId, "anthropic", StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(tabState.ProviderId.Value, "anthropic", StringComparison.OrdinalIgnoreCase);
                 return Task.FromResult(true);
             },
             static _ => { },
             static () => Task.CompletedTask);
 
-        var switched = await coordinator.SwitchThreadProviderAsync(
-            thread,
+        var switched = await coordinator.SwitchSessionProviderAsync(
+            session,
             tabState,
             new ModelProviderId("anthropic")).ConfigureAwait(false);
 
@@ -128,15 +128,15 @@ public sealed class SessionProviderSwitchCoordinatorTests
     }
 
     [TestMethod]
-    public async Task SwitchThreadProviderAsync_DropsPreviousProviderModelSelection()
+    public async Task SwitchSessionProviderAsync_DropsPreviousProviderModelSelection()
     {
         using var temp = TempDirectory.Create();
         WriteProviderConfig(temp.Path);
         var options = new CatalogOptions { GlobalRoot = temp.Path };
         var createdAt = DateTimeOffset.Parse("2026-04-19T10:00:00+00:00");
-        var thread = CreateThread("session-1", "openai", createdAt);
-        thread.ModelId = "gpt-4.1";
-        var tabState = CreateTabState(thread, "openai", "gpt-4.1");
+        var session = CreateSession("session-1", "openai", createdAt);
+        session.ModelId = "gpt-4.1";
+        var tabState = CreateTabState(session, "openai", "gpt-4.1");
         var coordinator = new SessionProviderSwitchCoordinator(
             new CodeAltaConfigStore(options),
             CreateProviderStates(),
@@ -150,20 +150,20 @@ public sealed class SessionProviderSwitchCoordinatorTests
             static _ => { },
             static () => Task.CompletedTask);
 
-        var switched = await coordinator.SwitchThreadProviderAsync(
-            thread,
+        var switched = await coordinator.SwitchSessionProviderAsync(
+            session,
             tabState,
             new ModelProviderId("anthropic")).ConfigureAwait(false);
 
         Assert.IsTrue(switched);
         Assert.AreEqual("claude-sonnet-4", tabState.ModelId);
-        Assert.AreEqual("claude-sonnet-4", thread.ModelId);
+        Assert.AreEqual("claude-sonnet-4", session.ModelId);
         Assert.AreEqual(AgentReasoningEffort.Medium, tabState.ReasoningEffort);
-        Assert.AreEqual(AgentReasoningEffort.Medium, thread.ReasoningEffort);
+        Assert.AreEqual(AgentReasoningEffort.Medium, session.ReasoningEffort);
     }
 
     [TestMethod]
-    public void CanSwitchThreadProvider_AllowsDirectCodexTarget()
+    public void CanSwitchSessionProvider_AllowsDirectCodexTarget()
     {
         using var temp = TempDirectory.Create();
         WriteProviderConfig(temp.Path);
@@ -174,11 +174,11 @@ public sealed class SessionProviderSwitchCoordinatorTests
             static _ => Task.FromResult(true),
             static _ => { },
             static () => Task.CompletedTask);
-        var thread = CreateThread("session-1", "openai", DateTimeOffset.UtcNow);
-        var tabState = CreateTabState(thread, "openai", "gpt-4.1");
+        var session = CreateSession("session-1", "openai", DateTimeOffset.UtcNow);
+        var tabState = CreateTabState(session, "openai", "gpt-4.1");
 
-        Assert.IsTrue(coordinator.CanSelectThreadProvider(thread, tabState));
-        Assert.IsTrue(coordinator.CanSwitchThreadProvider(thread, tabState, ModelProviderIds.Codex));
+        Assert.IsTrue(coordinator.CanSelectSessionProvider(session, tabState));
+        Assert.IsTrue(coordinator.CanSwitchSessionProvider(session, tabState, ModelProviderIds.Codex));
     }
 
     private static void WriteProviderConfig(string root)
@@ -239,25 +239,25 @@ public sealed class SessionProviderSwitchCoordinatorTests
         return state;
     }
 
-    private static SessionViewDescriptor CreateThread(string threadId, string ProviderId, DateTimeOffset timestamp)
+    private static SessionViewDescriptor CreateSession(string sessionId, string ProviderId, DateTimeOffset timestamp)
         => new()
         {
-            ThreadId = threadId,
-            Kind = WorkThreadKind.ProjectThread,
+            SessionId = sessionId,
+            Kind = SessionViewKind.ProjectSession,
             ProviderId = ProviderId,
             ProviderKey = ProviderId,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\repo",
             Title = "Review startup",
-            Status = WorkThreadStatus.Active,
+            Status = SessionViewStatus.Active,
             CreatedAt = timestamp,
             UpdatedAt = timestamp,
             LastActiveAt = timestamp,
             StartedAt = timestamp,
         };
 
-    private static OpenThreadState CreateTabState(SessionViewDescriptor thread, string ProviderId, string modelId)
-        => new(thread, new Presentation.Timeline.ThreadTimelinePresenter(
+    private static OpenSessionState CreateTabState(SessionViewDescriptor session, string ProviderId, string modelId)
+        => new(session, new Presentation.Timeline.SessionTimelinePresenter(
             new InlineUiDispatcher(),
             static () => null,
             localFileRootPath: null))
@@ -266,7 +266,7 @@ public sealed class SessionProviderSwitchCoordinatorTests
             ModelId = modelId,
             Usage = new AgentSessionUsage(
                 Window: new AgentWindowUsageSnapshot(1200, 8000, 3, "Old usage"),
-                Scope: AgentUsageScope.ThreadTotal,
+                Scope: AgentUsageScope.SessionTotal,
                 Source: AgentUsageSource.RecoveredHistory,
                 UpdatedAt: DateTimeOffset.UtcNow,
                 Details: null),

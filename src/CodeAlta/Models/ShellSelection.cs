@@ -11,10 +11,10 @@ internal sealed record ShellSelection(ShellSurface Surface, WorkspaceTarget Targ
         return new ShellSelection(ShellSurface.DraftWorkspace, new WorkspaceTarget.Draft(projectId, IsGlobal: false));
     }
 
-    public static ShellSelection Thread(string threadId, string? projectId)
+    public static ShellSelection Session(string sessionId, string? projectId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
-        return new ShellSelection(ShellSurface.ThreadWorkspace, new WorkspaceTarget.Thread(threadId, projectId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        return new ShellSelection(ShellSurface.SessionWorkspace, new WorkspaceTarget.Session(sessionId, projectId));
     }
 
     public bool DraftTabOpen => Surface == ShellSurface.DraftWorkspace;
@@ -24,9 +24,9 @@ internal sealed record ShellSelection(ShellSurface Surface, WorkspaceTarget Targ
     public string? SelectedProjectId => Target switch
     {
         WorkspaceTarget.Draft draft => draft.ProjectId,
-        WorkspaceTarget.Thread thread => thread.ProjectId,
+        WorkspaceTarget.Session session => session.ProjectId,
         _ => null,
     };
 
-    public string? SelectedThreadId => Target is WorkspaceTarget.Thread thread ? thread.ThreadId : null;
+    public string? SelectedSessionId => Target is WorkspaceTarget.Session session ? session.SessionId : null;
 }

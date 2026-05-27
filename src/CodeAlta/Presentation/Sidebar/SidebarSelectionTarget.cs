@@ -4,13 +4,13 @@ namespace CodeAlta.Presentation.Sidebar
     {
         GlobalScope,
         ProjectScope,
-        Thread,
+        Session,
     }
 
     internal readonly record struct SidebarSelectionTarget(
         SidebarSelectionKind Kind,
         string? ProjectId,
-        string? ThreadId)
+        string? SessionId)
     {
         public static SidebarSelectionTarget Global()
             => new(SidebarSelectionKind.GlobalScope, null, null);
@@ -18,7 +18,7 @@ namespace CodeAlta.Presentation.Sidebar
         public static SidebarSelectionTarget Project(string projectId)
             => new(SidebarSelectionKind.ProjectScope, projectId, null);
 
-        public static SidebarSelectionTarget Thread(string threadId)
-            => new(SidebarSelectionKind.Thread, null, threadId);
+        public static SidebarSelectionTarget Session(string sessionId)
+            => new(SidebarSelectionKind.Session, null, sessionId);
     }
 }

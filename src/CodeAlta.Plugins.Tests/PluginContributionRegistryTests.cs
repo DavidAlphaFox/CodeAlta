@@ -169,7 +169,7 @@ public sealed class PluginContributionRegistryTests
         [
             new PluginStatusContribution
             {
-                Region = PluginUiRegion.ThreadStatus,
+                Region = PluginUiRegion.SessionStatus,
                 Name = "same-status",
                 GetStatus = static _ => new PluginStatusItem { Label = "same", Text = "same" },
             },

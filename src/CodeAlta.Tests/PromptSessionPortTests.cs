@@ -91,7 +91,7 @@ public sealed class PromptSessionPortTests
         => new(
             promptSessionId,
             ProjectId.NewVersion7(),
-            new ShellThreadRef.Draft(new ThreadDraftId("draft-1")),
+            new ShellSessionRef.Draft(new SessionDraftId("draft-1")),
             new ModelProviderId("provider-1"));
 
     private sealed class RecordingUiDispatcher : IUiDispatcher

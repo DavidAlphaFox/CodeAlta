@@ -6,11 +6,11 @@ namespace CodeAlta.App.State;
 
 internal sealed class ModelProviderSelectorStateStore
 {
-    private readonly ThreadWorkspaceViewModel _workspaceViewModel;
+    private readonly SessionWorkspaceViewModel _workspaceViewModel;
     private readonly IUiDispatcher _uiDispatcher;
 
     public ModelProviderSelectorStateStore(
-        ThreadWorkspaceViewModel workspaceViewModel,
+        SessionWorkspaceViewModel workspaceViewModel,
         IUiDispatcher uiDispatcher)
     {
         ArgumentNullException.ThrowIfNull(workspaceViewModel);

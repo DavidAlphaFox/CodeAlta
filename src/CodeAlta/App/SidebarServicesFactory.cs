@@ -12,27 +12,27 @@ internal static class SidebarServicesFactory
         SidebarViewModel viewModel,
         CatalogOptions catalogOptions,
         CodeAltaShellController shellController,
-        ShellThreadStateCoordinator threadStateCoordinator,
+        ShellSessionStateCoordinator sessionStateCoordinator,
         Func<string?, string> resolveProviderDisplayName,
         Func<Visual?> getPromptFocusTarget,
-        Action refreshCatalogAndThreadWorkspace,
+        Action refreshCatalogAndSessionWorkspace,
         Action<string, bool, StatusTone> setStatus,
         Action setReadyStatusForCurrentSelection)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(shellController);
-        ArgumentNullException.ThrowIfNull(threadStateCoordinator);
+        ArgumentNullException.ThrowIfNull(sessionStateCoordinator);
         ArgumentNullException.ThrowIfNull(resolveProviderDisplayName);
         ArgumentNullException.ThrowIfNull(getPromptFocusTarget);
-        ArgumentNullException.ThrowIfNull(refreshCatalogAndThreadWorkspace);
+        ArgumentNullException.ThrowIfNull(refreshCatalogAndSessionWorkspace);
         ArgumentNullException.ThrowIfNull(setStatus);
         ArgumentNullException.ThrowIfNull(setReadyStatusForCurrentSelection);
 
         SidebarCoordinator? sidebar = null;
         var navigatorActions = new NavigatorActionCoordinator(
             shellController,
-            threadStateCoordinator,
+            sessionStateCoordinator,
             resolveProviderDisplayName,
             () => GetSidebarDialogBounds(sidebar),
             () => GetSidebarFocusTarget(sidebar),
@@ -40,10 +40,10 @@ internal static class SidebarServicesFactory
             setStatus,
             setReadyStatusForCurrentSelection);
         var navigatorSettings = new NavigatorSettingsCoordinator(
-            threadStateCoordinator,
+            sessionStateCoordinator,
             () => GetSidebarDialogBounds(sidebar),
             () => GetSidebarFocusTarget(sidebar),
-            refreshCatalogAndThreadWorkspace,
+            refreshCatalogAndSessionWorkspace,
             setStatus);
         var applicationLogs = new ApplicationLogsCoordinator(
             () => GetSidebarDialogBounds(sidebar),
@@ -52,7 +52,7 @@ internal static class SidebarServicesFactory
             viewModel,
             catalogOptions,
             shellController,
-            () => _ = ToggleSortModeAsync(threadStateCoordinator, refreshCatalogAndThreadWorkspace),
+            () => _ = ToggleSortModeAsync(sessionStateCoordinator, refreshCatalogAndSessionWorkspace),
             navigatorSettings.Open,
             navigatorActions.RenameProjectDisplayNameAsync,
             new SidebarRowCommandDispatcher(navigatorActions),
@@ -61,15 +61,15 @@ internal static class SidebarServicesFactory
     }
 
     private static async Task ToggleSortModeAsync(
-        ShellThreadStateCoordinator threadStateCoordinator,
-        Action refreshCatalogAndThreadWorkspace)
+        ShellSessionStateCoordinator sessionStateCoordinator,
+        Action refreshCatalogAndSessionWorkspace)
     {
-        var settings = threadStateCoordinator.GetNavigatorSettingsSnapshot();
+        var settings = sessionStateCoordinator.GetNavigatorSettingsSnapshot();
         settings.SortMode = settings.SortMode == NavigatorProjectSortMode.Name
             ? NavigatorProjectSortMode.Date
             : NavigatorProjectSortMode.Name;
-        await threadStateCoordinator.SaveNavigatorSettingsAsync(settings);
-        refreshCatalogAndThreadWorkspace();
+        await sessionStateCoordinator.SaveNavigatorSettingsAsync(settings);
+        refreshCatalogAndSessionWorkspace();
     }
 
     private static Rectangle? GetSidebarDialogBounds(SidebarCoordinator? sidebar)

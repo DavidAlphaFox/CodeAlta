@@ -124,7 +124,7 @@ public sealed class PluginAbstractionsTests
             static _ => new ValueTask<PluginCommandResult>(PluginCommandResult.Handled),
             ["hello"]);
         var prompt = Prompt.Developer("Always mention the plugin.");
-        var visual = PluginUi.Visual(PluginUiRegion.ThreadFooter, new Markup("hello"));
+        var visual = PluginUi.Visual(PluginUiRegion.SessionFooter, new Markup("hello"));
         var visualFactory = PluginUi.Visual(PluginUiRegion.CommandBar, static _ => new Markup("dynamic"));
         var status = PluginUi.Status("Plugin", static _ => "ready");
         var inputDialog = PluginUi.InputDialog("Input", "seed");
@@ -209,8 +209,8 @@ public sealed class PluginAbstractionsTests
         await services.State.DeleteAsync(PluginStateScope.User, "state");
         Assert.IsNull(services.Workspace.GetSelectedProjectPath("file.txt"));
         Assert.IsFalse(services.Workspace.IsInsideSelectedProject("file.txt"));
-        await services.Threads.SendPromptAsync("hello");
-        Assert.IsFalse(await services.Threads.TrySteerAsync("stop"));
+        await services.Sessions.SendPromptAsync("hello");
+        Assert.IsFalse(await services.Sessions.TrySteerAsync("stop"));
         await services.Prompts.SetDraftTextAsync("draft");
         await services.Prompts.AddAttachmentAsync(new PluginPromptAttachment { Kind = PluginPromptAttachmentKind.File, Path = "file.txt" });
         Assert.AreEqual(0, (await services.Prompts.GetAttachmentsAsync()).Count);
@@ -255,7 +255,7 @@ public sealed class PluginAbstractionsTests
             ScopeProjectId = "project",
             Event = new AgentRawEvent(new ModelProviderId("fake"), "session", DateTimeOffset.UtcNow, "raw", document.RootElement.Clone()),
             ProjectId = "project",
-            ThreadId = "thread",
+            SessionId = "session",
         };
 
         Assert.AreEqual("project", context.ProjectId);

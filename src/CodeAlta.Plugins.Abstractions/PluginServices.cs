@@ -21,8 +21,8 @@ public interface IPluginServices
     /// <summary>Gets workspace services.</summary>
     IPluginWorkspaceService Workspace { get; }
 
-    /// <summary>Gets thread services.</summary>
-    IPluginThreadService Threads { get; }
+    /// <summary>Gets session services.</summary>
+    IPluginSessionService Sessions { get; }
 
     /// <summary>Gets prompt services.</summary>
     IPluginPromptService Prompts { get; }
@@ -255,35 +255,35 @@ public interface IPluginWorkspaceService
 }
 
 /// <summary>
-/// Provides selected-thread operations for plugins.
+/// Provides selected-session operations for plugins.
 /// </summary>
-public interface IPluginThreadService
+public interface IPluginSessionService
 {
-    /// <summary>Gets the selected thread identifier, when known.</summary>
-    string? SelectedThreadId { get; }
+    /// <summary>Gets the selected session identifier, when known.</summary>
+    string? SelectedSessionId { get; }
 
-    /// <summary>Gets a value indicating whether the selected thread is busy.</summary>
-    bool IsSelectedThreadBusy { get; }
+    /// <summary>Gets a value indicating whether the selected session is busy.</summary>
+    bool IsSelectedSessionBusy { get; }
 
-    /// <summary>Sends a prompt to the selected thread.</summary>
+    /// <summary>Sends a prompt to the selected session.</summary>
     /// <param name="text">The prompt text.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task representing asynchronous send work.</returns>
     ValueTask SendPromptAsync(string text, CancellationToken cancellationToken = default);
 
-    /// <summary>Enqueues a prompt for the selected thread.</summary>
+    /// <summary>Enqueues a prompt for the selected session.</summary>
     /// <param name="text">The prompt text.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task representing asynchronous enqueue work.</returns>
     ValueTask EnqueuePromptAsync(string text, CancellationToken cancellationToken = default);
 
-    /// <summary>Attempts to steer an active thread.</summary>
+    /// <summary>Attempts to steer an active session.</summary>
     /// <param name="text">The steering text.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns><see langword="true"/> when steering was accepted.</returns>
     ValueTask<bool> TrySteerAsync(string text, CancellationToken cancellationToken = default);
 
-    /// <summary>Requests compaction for the selected thread.</summary>
+    /// <summary>Requests compaction for the selected session.</summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns><see langword="true"/> when compaction was requested.</returns>
     ValueTask<bool> RequestCompactionAsync(CancellationToken cancellationToken = default);
@@ -349,8 +349,8 @@ public enum PluginStateScope
     /// <summary>Project-scoped plugin state.</summary>
     Project,
 
-    /// <summary>Thread-scoped plugin state.</summary>
-    Thread,
+    /// <summary>Session-scoped plugin state.</summary>
+    Session,
 }
 
 /// <summary>

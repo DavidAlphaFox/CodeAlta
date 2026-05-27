@@ -263,7 +263,7 @@ public sealed class FileSystemLocalAgentSessionStoreTests
         Directory.CreateDirectory(Path.GetDirectoryName(sessionFile)!);
         await File.WriteAllTextAsync(
                 sessionFile,
-                $"{{\"$type\":\"raw\",\"backendEventType\":\"codealta.threadHeader\",\"raw\":{{\"thread_id\":\"{session.SessionId}\"}}}}{Environment.NewLine}")
+                $"{{\"$type\":\"raw\",\"backendEventType\":\"codealta.sessionHeader\",\"raw\":{{\"session_id\":\"{session.SessionId}\"}}}}{Environment.NewLine}")
             .ConfigureAwait(false);
         await store.UpsertSessionAsync(session).ConfigureAwait(false);
 

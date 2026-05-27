@@ -56,15 +56,15 @@ public sealed class ShellProjectionCoordinatorTests
     }
 
     [TestMethod]
-    public void Publish_ThreadStatusChanged_RefreshesChromeAndPromptAvailability()
+    public void Publish_SessionStatusChanged_RefreshesChromeAndPromptAvailability()
     {
         var projections = new CapturingProjectionControllers();
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
         using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
-        publisher.Publish(new ThreadStatusChangedEvent("thread-1"));
+        publisher.Publish(new SessionStatusChangedEvent("session-1"));
 
-        CollectionAssert.AreEqual(new[] { "thread-status", "prompt" }, projections.Calls);
+        CollectionAssert.AreEqual(new[] { "session-status", "prompt" }, projections.Calls);
     }
 
     [TestMethod]
@@ -86,7 +86,7 @@ public sealed class ShellProjectionCoordinatorTests
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
         using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
-        publisher.Publish(new PromptDraftChangedEvent("thread-1"));
+        publisher.Publish(new PromptDraftChangedEvent("session-1"));
 
         CollectionAssert.AreEqual(new[] { "prompt-draft", "prompt" }, projections.Calls);
     }
@@ -110,7 +110,7 @@ public sealed class ShellProjectionCoordinatorTests
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
         using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
-        publisher.Publish(new QueuedPromptListChangedEvent("thread-1"));
+        publisher.Publish(new QueuedPromptListChangedEvent("session-1"));
 
         CollectionAssert.AreEqual(new[] { "queue", "prompt" }, projections.Calls);
     }
@@ -134,7 +134,7 @@ public sealed class ShellProjectionCoordinatorTests
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
         using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
-        publisher.Publish(new SessionUsageChangedEvent("thread-1"));
+        publisher.Publish(new SessionUsageChangedEvent("session-1"));
 
         CollectionAssert.AreEqual(new[] { "usage" }, projections.Calls);
     }
@@ -146,7 +146,7 @@ public sealed class ShellProjectionCoordinatorTests
         var publisher = new FrontendEventPublisher(new InlineUiDispatcher());
         using var coordinator = new ShellProjectionCoordinator(publisher, projections, projections, projections);
 
-        publisher.Publish(new RuntimeTimelineChangedEvent("thread-1"));
+        publisher.Publish(new RuntimeTimelineChangedEvent("session-1"));
 
         CollectionAssert.AreEqual(new[] { "timeline" }, projections.Calls);
     }
@@ -170,7 +170,7 @@ public sealed class ShellProjectionCoordinatorTests
 
         public void ApplyTabProjection() => Calls.Add("tabs");
 
-        public void ApplyThreadStatusProjection() => Calls.Add("thread-status");
+        public void ApplySessionStatusProjection() => Calls.Add("session-status");
 
         public void ApplyPromptDraftProjection() => Calls.Add("prompt-draft");
 

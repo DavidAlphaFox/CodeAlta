@@ -20,7 +20,7 @@ internal static class CodeAltaShellViewFactory
         ArgumentNullException.ThrowIfNull(options.PromptComposerController);
         ArgumentNullException.ThrowIfNull(options.QueuedPromptController);
         ArgumentNullException.ThrowIfNull(options.ModelProviderSelectorController);
-        ArgumentNullException.ThrowIfNull(options.ThreadTabHostController);
+        ArgumentNullException.ThrowIfNull(options.SessionTabHostController);
         ArgumentNullException.ThrowIfNull(options.ProjectFileSearchService);
         ArgumentNullException.ThrowIfNull(options.GetPromptReferenceProjectRoot);
         ArgumentNullException.ThrowIfNull(options.GetPromptComposerSession);
@@ -31,7 +31,7 @@ internal static class CodeAltaShellViewFactory
         ArgumentNullException.ThrowIfNull(options.ToggleNavigator);
         ArgumentNullException.ThrowIfNull(options.CanUseCommandPalette);
 
-        var workspaceView = new ThreadWorkspaceView(
+        var workspaceView = new SessionWorkspaceView(
             options.ShellViewModel,
             options.WorkspaceViewModel,
             options.PromptComposerViewModel,
@@ -40,33 +40,33 @@ internal static class CodeAltaShellViewFactory
             options.PromptComposerController,
             options.QueuedPromptController,
             options.ModelProviderSelectorController,
-            options.ThreadTabHostController,
+            options.SessionTabHostController,
             options.ProjectFileSearchService,
             options.GetPromptReferenceProjectRoot,
             options.PromptEditorContributions,
             options.GetPromptComposerSession,
             options.ThinkingAnimationPhase01,
             options.PromptImageCallbacks);
-        workspaceView.ThreadCommandBar.MultiLine = options.CommandBarMultiLine;
+        workspaceView.SessionCommandBar.MultiLine = options.CommandBarMultiLine;
 
         var shellView = Create(
             options.Sidebar,
             workspaceView.Root,
-            workspaceView.ThreadCommandBar,
+            workspaceView.SessionCommandBar,
             options.ShellCommandSurfaceCoordinator,
             options.ToggleTerminalLoopCallback,
             options.ToggleNavigator,
             options.CanUseCommandPalette,
-            () => workspaceView.ThreadCommandBar.MultiLine,
-            options.ComposePluginFooter?.Invoke(workspaceView.ThreadCommandBar));
+            () => workspaceView.SessionCommandBar.MultiLine,
+            options.ComposePluginFooter?.Invoke(workspaceView.SessionCommandBar));
 
         return new CodeAltaShellSurface(shellView, workspaceView, options.Sidebar);
     }
 
     public static CodeAltaShellView Create(
         Visual sidebar,
-        Visual threadWorkspace,
-        Visual threadCommandBar,
+        Visual sessionWorkspace,
+        Visual sessionCommandBar,
         ShellCommandSurfaceCoordinator shellCommandSurfaceCoordinator,
         Action toggleTerminalLoopCallback,
         Action toggleNavigator,
@@ -75,8 +75,8 @@ internal static class CodeAltaShellViewFactory
         Visual? pluginFooter = null)
     {
         ArgumentNullException.ThrowIfNull(sidebar);
-        ArgumentNullException.ThrowIfNull(threadWorkspace);
-        ArgumentNullException.ThrowIfNull(threadCommandBar);
+        ArgumentNullException.ThrowIfNull(sessionWorkspace);
+        ArgumentNullException.ThrowIfNull(sessionCommandBar);
         ArgumentNullException.ThrowIfNull(shellCommandSurfaceCoordinator);
         ArgumentNullException.ThrowIfNull(toggleTerminalLoopCallback);
         ArgumentNullException.ThrowIfNull(toggleNavigator);
@@ -85,8 +85,8 @@ internal static class CodeAltaShellViewFactory
 
         var shellView = new CodeAltaShellView(
             sidebar,
-            threadWorkspace,
-            pluginFooter ?? threadCommandBar,
+            sessionWorkspace,
+            pluginFooter ?? sessionCommandBar,
             CodeAltaGlobalCommandConfigurator.Configure);
         shellView.Root.AddCommand(new XenoAtom.Terminal.UI.Commands.Command
         {

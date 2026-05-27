@@ -3,7 +3,7 @@ using CodeAlta.Agent;
 namespace CodeAlta.Orchestration.Runtime;
 
 /// <summary>
-/// Options used when creating or reusing a thread coordinator session.
+/// Options used when creating or reusing a session coordinator session.
 /// </summary>
 public sealed class SessionExecutionOptions
 {

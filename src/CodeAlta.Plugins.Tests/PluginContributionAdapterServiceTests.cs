@@ -19,7 +19,7 @@ public sealed class PluginContributionAdapterServiceTests
             "sample_alias",
             ["one", "two"],
             "/sample one two",
-            new PluginAdapterOperationOptions { ProjectId = "project", ProjectPath = Environment.CurrentDirectory, ThreadId = "thread" });
+            new PluginAdapterOperationOptions { ProjectId = "project", ProjectPath = Environment.CurrentDirectory, SessionId = "session" });
 
         Assert.AreEqual(0, diagnostics.Count, string.Join(Environment.NewLine, diagnostics.Select(static diagnostic => diagnostic.Message)));
         Assert.AreEqual(PluginCommandDisposition.Handled, result.Disposition);
@@ -85,7 +85,7 @@ public sealed class PluginContributionAdapterServiceTests
         var tools = adapter.GetAgentTools(managedOptions);
         var resources = adapter.GetResources([active]);
         var status = adapter.GetStatusItems([active], managedOptions);
-        var (renderResults, renderDiagnostics) = await adapter.RenderAsync([active], PluginUiRegion.ThreadFooter, "sample", new { value = 1 }, managedOptions);
+        var (renderResults, renderDiagnostics) = await adapter.RenderAsync([active], PluginUiRegion.SessionFooter, "sample", new { value = 1 }, managedOptions);
         var compaction = await adapter.RunCompactionAsync(
             before: CreateBeforeCompactionTemplate(active),
             instructions: CreateInstructionTemplate(active),
@@ -122,7 +122,7 @@ public sealed class PluginContributionAdapterServiceTests
 
         var status = adapter.GetStatusItems([active], headlessOptions);
         var visuals = adapter.CreateVisuals([active], PluginUiRegion.CommandBar, headlessOptions);
-        var (renderResults, renderDiagnostics) = await adapter.RenderAsync([active], PluginUiRegion.ThreadFooter, "sample", new { value = 1 }, headlessOptions);
+        var (renderResults, renderDiagnostics) = await adapter.RenderAsync([active], PluginUiRegion.SessionFooter, "sample", new { value = 1 }, headlessOptions);
 
         Assert.AreEqual(0, status.Count);
         Assert.AreEqual(0, visuals.Count);
@@ -404,12 +404,12 @@ public sealed class PluginContributionAdapterServiceTests
         {
             yield return new PluginStatusContribution
             {
-                Region = PluginUiRegion.ThreadStatus,
+                Region = PluginUiRegion.SessionStatus,
                 GetStatus = static _ => new PluginStatusItem { Label = "sample", Text = "ready", Tone = PluginStatusTone.Success },
             };
             yield return new PluginRendererContribution
             {
-                Region = PluginUiRegion.ThreadFooter,
+                Region = PluginUiRegion.SessionFooter,
                 Target = "sample",
                 Renderer = static (_, _) => ValueTask.FromResult<PluginRenderResult?>(PluginRenderResult.FromMarkdown("rendered")),
             };
@@ -510,7 +510,7 @@ public sealed class PluginContributionAdapterServiceTests
 
         public IPluginWorkspaceService Workspace => _inner.Workspace;
 
-        public IPluginThreadService Threads => _inner.Threads;
+        public IPluginSessionService Sessions => _inner.Sessions;
 
         public IPluginPromptService Prompts => _inner.Prompts;
 

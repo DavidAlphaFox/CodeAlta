@@ -27,11 +27,11 @@ internal sealed class ShellInputCoordinator
     public Task SubmitCurrentPromptAsync(bool steer, CancellationToken cancellationToken = default)
         => HandleInputAsync(_getPromptText(), steer, cancellationToken);
 
-    public Task AbortSelectedThreadAsync(CancellationToken cancellationToken = default)
-        => DispatchAsync(new AbortSelectedThreadCommand(), cancellationToken);
+    public Task AbortSelectedSessionAsync(CancellationToken cancellationToken = default)
+        => DispatchAsync(new AbortSelectedSessionCommand(), cancellationToken);
 
-    public Task CompactSelectedThreadAsync(CancellationToken cancellationToken = default)
-        => DispatchAsync(new CompactSelectedThreadCommand(), cancellationToken);
+    public Task CompactSelectedSessionAsync(CancellationToken cancellationToken = default)
+        => DispatchAsync(new CompactSelectedSessionCommand(), cancellationToken);
 
     public Task ShowHelpAsync(string? filterText = null, CancellationToken cancellationToken = default)
         => DispatchAsync(new OpenHelpCommand(filterText), cancellationToken);
@@ -64,15 +64,15 @@ internal sealed class ShellInputCoordinator
             EmptyShellInputIntent => null,
             SendPromptIntent send => new SubmitPromptCommand(send.PromptText, Steer: false),
             SteerPromptIntent steer => new SubmitPromptCommand(steer.PromptText, Steer: true),
-            AbortThreadIntent => new AbortSelectedThreadCommand(),
-            CompactThreadIntent => new CompactSelectedThreadCommand(),
+            AbortSessionIntent => new AbortSelectedSessionCommand(),
+            CompactSessionIntent => new CompactSelectedSessionCommand(),
             CloseTabIntent => new CloseCurrentTabCommand(),
             TabLeftIntent => new SelectRelativeTabCommand(-1),
             TabRightIntent => new SelectRelativeTabCommand(1),
-            MessagePreviousIntent => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Previous),
-            MessageNextIntent => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Next),
-            MessageFirstIntent => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.First),
-            MessageLastIntent => new ScrollSelectedThreadMessageCommand(ThreadMessageScrollTarget.Last),
+            MessagePreviousIntent => new ScrollSelectedSessionMessageCommand(SessionMessageScrollTarget.Previous),
+            MessageNextIntent => new ScrollSelectedSessionMessageCommand(SessionMessageScrollTarget.Next),
+            MessageFirstIntent => new ScrollSelectedSessionMessageCommand(SessionMessageScrollTarget.First),
+            MessageLastIntent => new ScrollSelectedSessionMessageCommand(SessionMessageScrollTarget.Last),
             OpenHelpIntent help => new OpenHelpCommand(help.FilterText),
             OpenCommandPaletteIntent => new OpenCommandPaletteCommand(),
             ExitAppIntent => new ExitAppCommand(),
@@ -90,10 +90,10 @@ internal sealed class ShellInputCoordinator
             FocusPromptIntent => new FocusPromptCommand(),
             FocusModelProviderIntent => new FocusModelProviderCommand(),
             OpenSessionUsageIntent => new OpenSessionUsageCommand(),
-            OpenThreadInfoIntent => new OpenThreadInfoCommand(),
+            OpenSessionInfoIntent => new OpenSessionInfoCommand(),
             OpenExpandedPromptIntent => new OpenExpandedPromptCommand(),
             UnknownTextCommandIntent unknown => new ExecutePluginTextCommand(unknown.CommandName, unknown.Arguments),
-            ClearQueueIntent => new ClearSelectedThreadQueueCommand(),
+            ClearQueueIntent => new ClearSelectedSessionQueueCommand(),
             _ => throw new InvalidOperationException($"Unsupported shell input intent: {intent.GetType().Name}"),
         };
 

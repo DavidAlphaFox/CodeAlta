@@ -28,8 +28,8 @@ public sealed record AltaModelSelectionRequest
     /// <summary>Gets an explicit compact model ref.</summary>
     public string? ModelRef { get; init; }
 
-    /// <summary>Gets a thread id whose model should be inherited.</summary>
-    public string? SameModelAsThreadId { get; init; }
+    /// <summary>Gets a session id whose model should be inherited.</summary>
+    public string? SameModelAsSessionId { get; init; }
 
     /// <summary>Gets an explicit provider override.</summary>
     public string? ProviderKey { get; init; }

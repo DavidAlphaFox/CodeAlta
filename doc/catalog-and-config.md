@@ -19,7 +19,7 @@ CodeAlta keeps user-owned durable state under a global root and project-local `.
 | `ui-state.yaml` | Frontend view-state service | Open/selected tabs, session/model preferences, theme, and shell view state. |
 | `plugins/` | Plugin runtime | User-scoped source plugin packages. |
 | `skills/` | Skill catalog | User-scoped CodeAlta skill roots. |
-| `threads/internal/` | Work-thread catalog | Internal thread linkage descriptors still read by the catalog. |
+| `sessions/internal/` | Work-session catalog | Internal session linkage descriptors still read by the catalog. |
 
 The runtime creates directories as needed. Provider auth managers also write under `~/.alta/auth/`, for example subscription credentials and direct-provider token caches. Protocol traces, session journals, auth files, and provider caches can contain prompts, tool arguments, model output, file paths, command output, or credentials; treat them as private user data.
 
@@ -83,10 +83,10 @@ A project descriptor includes stable id, slug, display name, project path, archi
 
 CodeAlta uses two related records for active work:
 
-- **Session-view descriptors** are catalog/runtime metadata for global, project, and internal session views. They carry title, project reference, provider/model/reasoning preferences, parent/created-by attribution, and last-active timestamps. Some persisted readers and file names still use `WorkThread`/`ThreadId` for legacy compatibility.
-- **Agent session journals** are CodeAlta-owned JSONL files under `~/.alta/sessions/yyyy/MM/dd/<session-id>.jsonl`. They contain replayable normalized `AgentEvent` records plus raw snapshot events for `local.sessionSummary`, `local.sessionState`, `codealta.threadHeader`, and `codealta.threadState`.
+- **Session-view descriptors** are catalog/runtime metadata for global, project, and internal session views. They carry title, project reference, provider/model/reasoning preferences, parent/created-by attribution, and last-active timestamps. Some persisted readers and file names still use `SessionView`/`SessionId` for legacy compatibility.
+- **Agent session journals** are CodeAlta-owned JSONL files under `~/.alta/sessions/yyyy/MM/dd/<session-id>.jsonl`. They contain replayable normalized `AgentEvent` records plus raw snapshot events for `local.sessionSummary`, `local.sessionState`, `codealta.sessionHeader`, and `codealta.sessionState`.
 
-`WorkThreadJournalStore` still reads and writes the legacy header/state event names in the same journal used by the local agent runtime. This avoids maintaining separate provider-bound state files for the same session while preserving existing user data.
+`SessionViewJournalStore` still reads and writes the legacy header/state event names in the same journal used by the local agent runtime. This avoids maintaining separate provider-bound state files for the same session while preserving existing user data.
 
 Optional protocol traces are written to `~/.alta/sessions/traces/<session-id>.trace` only when a provider has tracing enabled. Credential headers are redacted, but trace files can still contain sensitive prompts, outputs, tool arguments, and streamed protocol updates.
 
@@ -94,7 +94,7 @@ Optional protocol traces are written to `~/.alta/sessions/traces/<session-id>.tr
 
 Unsent per-session prompts are stored under `~/.alta/saved_prompts/` so closing a tab or restarting the app does not discard edited drafts. The frontend stores view state in `~/.alta/ui-state.yaml`, including open/selected tabs, theme and navigator settings, and session-specific model preferences.
 
-`ShellStateStore` is a UI-thread projection of currently open shell state; it is not a replacement for the durable catalog, session journals, or runtime-owned session state.
+`ShellStateStore` is a UI-session projection of currently open shell state; it is not a replacement for the durable catalog, session journals, or runtime-owned session state.
 
 ## Plugin and skill state
 
