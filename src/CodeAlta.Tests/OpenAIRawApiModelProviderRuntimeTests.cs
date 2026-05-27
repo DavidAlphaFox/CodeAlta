@@ -20,10 +20,10 @@ using OpenAI.Responses;
 namespace CodeAlta.Tests;
 
 [TestClass]
-public sealed class OpenAIRawApiAgentBackendTests
+public sealed class OpenAIRawApiModelProviderRuntimeTests
 {
     [TestMethod]
-    public async Task OpenAIResponsesAgentBackend_UsesLocalReplayAndDoesNotSetPreviousResponseId()
+    public async Task OpenAIResponsesModelProviderRuntime_UsesLocalReplayAndDoesNotSetPreviousResponseId()
     {
         using var temp = TestTempDirectory.Create();
         var responsesClient = new RecordingOpenAIResponseClient(
@@ -49,7 +49,7 @@ public sealed class OpenAIRawApiAgentBackendTests
                 ],
             ]);
 
-        await using var backend = new OpenAIResponsesAgentBackend(new OpenAIResponsesAgentBackendOptions
+        await using var backend = new OpenAIResponsesModelProviderRuntime(new OpenAIResponsesModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -130,7 +130,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIChatAgentBackend_MergesDeveloperInstructionsWhenProfileDisablesDeveloperRole()
+    public async Task OpenAIChatModelProviderRuntime_MergesDeveloperInstructionsWhenProfileDisablesDeveloperRole()
     {
         using var temp = TestTempDirectory.Create();
         var chatClient = new RecordingOpenAIChatClient(
@@ -147,7 +147,7 @@ public sealed class OpenAIRawApiAgentBackendTests
                         inputTokenDetails: OpenAIChatModelFactory.ChatInputTokenUsageDetails(cachedTokenCount: 3))),
             ]);
 
-        await using var backend = new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
+        await using var backend = new OpenAIChatModelProviderRuntime(new OpenAIChatModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -220,7 +220,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIChatAgentBackend_OmitsReasoningEffortWhenSetToNone()
+    public async Task OpenAIChatModelProviderRuntime_OmitsReasoningEffortWhenSetToNone()
     {
         using var temp = TestTempDirectory.Create();
         var chatClient = new RecordingOpenAIChatClient(
@@ -231,7 +231,7 @@ public sealed class OpenAIRawApiAgentBackendTests
                     model: "gpt-chat-test"),
             ]);
 
-        await using var backend = new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
+        await using var backend = new OpenAIChatModelProviderRuntime(new OpenAIChatModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -309,7 +309,7 @@ public sealed class OpenAIRawApiAgentBackendTests
                         TransportKind = LocalAgentTransportKind.OpenAIChatCompletions,
                         Profile = profile,
                     },
-                    BackendId = new AgentBackendId("alibaba"),
+                    ProviderId = new ModelProviderId("alibaba"),
                     SessionId = "session-1",
                     RunId = new AgentRunId("run-1"),
                     ModelId = "qwen-test",
@@ -376,7 +376,7 @@ public sealed class OpenAIRawApiAgentBackendTests
                         DisplayName = "OpenAI",
                         TransportKind = LocalAgentTransportKind.OpenAIChatCompletions,
                     },
-                    BackendId = new AgentBackendId("openai"),
+                    ProviderId = new ModelProviderId("openai"),
                     SessionId = "session-1",
                     RunId = new AgentRunId("run-1"),
                     ModelId = "gpt-test",
@@ -411,7 +411,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIChatAgentBackend_ProtocolTracing_WritesSessionTrace()
+    public async Task OpenAIChatModelProviderRuntime_ProtocolTracing_WritesSessionTrace()
     {
         using var temp = TestTempDirectory.Create();
         var chatClient = new RecordingOpenAIChatClient(
@@ -422,7 +422,7 @@ public sealed class OpenAIRawApiAgentBackendTests
                 model: "gpt-chat-test"),
         ]);
 
-        await using var backend = new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
+        await using var backend = new OpenAIChatModelProviderRuntime(new OpenAIChatModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -463,7 +463,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIChatAgentBackend_MapsRefusalUpdatesToAssistantContent()
+    public async Task OpenAIChatModelProviderRuntime_MapsRefusalUpdatesToAssistantContent()
     {
         using var temp = TestTempDirectory.Create();
         var chatClient = new RecordingOpenAIChatClient(
@@ -474,7 +474,7 @@ public sealed class OpenAIRawApiAgentBackendTests
                 model: "gpt-chat-test"),
         ]);
 
-        await using var backend = new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
+        await using var backend = new OpenAIChatModelProviderRuntime(new OpenAIChatModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -507,7 +507,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIChatAgentBackend_MapsReasoningDeltasFromPatch()
+    public async Task OpenAIChatModelProviderRuntime_MapsReasoningDeltasFromPatch()
     {
         using var temp = TestTempDirectory.Create();
         var chatClient = new RecordingOpenAIChatClient(
@@ -531,7 +531,7 @@ public sealed class OpenAIRawApiAgentBackendTests
                 """),
         ]);
 
-        await using var backend = new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
+        await using var backend = new OpenAIChatModelProviderRuntime(new OpenAIChatModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -564,7 +564,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIChatAgentBackend_ReplaysConfiguredReasoningInputFieldForToolCalls()
+    public async Task OpenAIChatModelProviderRuntime_ReplaysConfiguredReasoningInputFieldForToolCalls()
     {
         using var temp = TestTempDirectory.Create();
         var chatClient = RecordingOpenAIChatClient.ForBatches(
@@ -649,7 +649,7 @@ public sealed class OpenAIRawApiAgentBackendTests
             ],
         ]);
 
-        await using var backend = new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
+        await using var backend = new OpenAIChatModelProviderRuntime(new OpenAIChatModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -717,7 +717,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIChatAgentBackend_AppliesExtraBodyAndParsesCumulativeReasoningDetails()
+    public async Task OpenAIChatModelProviderRuntime_AppliesExtraBodyAndParsesCumulativeReasoningDetails()
     {
         using var temp = TestTempDirectory.Create();
         var chatClient = new RecordingOpenAIChatClient(
@@ -779,7 +779,7 @@ public sealed class OpenAIRawApiAgentBackendTests
                 """),
         ]);
 
-        await using var backend = new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
+        await using var backend = new OpenAIChatModelProviderRuntime(new OpenAIChatModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -1095,7 +1095,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIResponsesAgentBackend_AppliesConfiguredExtraBody()
+    public async Task OpenAIResponsesModelProviderRuntime_AppliesConfiguredExtraBody()
     {
         using var temp = TestTempDirectory.Create();
         var responsesClient = new RecordingOpenAIResponseClient(
@@ -1110,7 +1110,7 @@ public sealed class OpenAIRawApiAgentBackendTests
             ],
         ]);
 
-        await using var backend = new OpenAIResponsesAgentBackend(new OpenAIResponsesAgentBackendOptions
+        await using var backend = new OpenAIResponsesModelProviderRuntime(new OpenAIResponsesModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -1381,7 +1381,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIResponsesAgentBackend_CodexModelDiscoveryHttpFailureUsesStaticFallback()
+    public async Task OpenAIResponsesModelProviderRuntime_CodexModelDiscoveryHttpFailureUsesStaticFallback()
     {
         using var temp = TestTempDirectory.Create();
         var credentialStore = new FileOpenAICodexSubscriptionCredentialStore(temp.Path);
@@ -1397,7 +1397,7 @@ public sealed class OpenAIRawApiAgentBackendTests
             Content = new StringContent("""{"detail":"model discovery is temporarily unavailable"}"""),
         });
 
-        await using var backend = new OpenAIResponsesAgentBackend(new OpenAIResponsesAgentBackendOptions
+        await using var backend = new OpenAIResponsesModelProviderRuntime(new OpenAIResponsesModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -1529,7 +1529,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIResponsesAgentBackend_CodexUsesLocalToolBridgeSequentially()
+    public async Task OpenAIResponsesModelProviderRuntime_CodexUsesLocalToolBridgeSequentially()
     {
         using var temp = TestTempDirectory.Create();
         var responsesClient = new RecordingOpenAIResponseClient(
@@ -1562,7 +1562,7 @@ public sealed class OpenAIRawApiAgentBackendTests
         ]);
         var sequence = new List<string>();
 
-        await using var backend = new OpenAIResponsesAgentBackend(new OpenAIResponsesAgentBackendOptions
+        await using var backend = new OpenAIResponsesModelProviderRuntime(new OpenAIResponsesModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -1654,7 +1654,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIResponsesAgentBackend_CodexSessionResumeReplaysLocalHistory()
+    public async Task OpenAIResponsesModelProviderRuntime_CodexSessionResumeReplaysLocalHistory()
     {
         using var temp = TestTempDirectory.Create();
         var responsesClient = new RecordingOpenAIResponseClient(
@@ -1673,7 +1673,7 @@ public sealed class OpenAIRawApiAgentBackendTests
             ],
         ]);
 
-        await using var backend = new OpenAIResponsesAgentBackend(new OpenAIResponsesAgentBackendOptions
+        await using var backend = new OpenAIResponsesModelProviderRuntime(new OpenAIResponsesModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -1741,7 +1741,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIResponsesAgentBackend_CodexHttpLiveSessionReplaysFullContextWithoutPreviousResponseId()
+    public async Task OpenAIResponsesModelProviderRuntime_CodexHttpLiveSessionReplaysFullContextWithoutPreviousResponseId()
     {
         using var temp = TestTempDirectory.Create();
         var responsesClient = new RecordingOpenAIResponseClient(
@@ -1760,7 +1760,7 @@ public sealed class OpenAIRawApiAgentBackendTests
             ],
         ]);
 
-        await using var backend = new OpenAIResponsesAgentBackend(new OpenAIResponsesAgentBackendOptions
+        await using var backend = new OpenAIResponsesModelProviderRuntime(new OpenAIResponsesModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -2582,7 +2582,7 @@ public sealed class OpenAIRawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task OpenAIResponsesAgentBackend_CodexTokensAreNotStoredInSessionHistory()
+    public async Task OpenAIResponsesModelProviderRuntime_CodexTokensAreNotStoredInSessionHistory()
     {
         using var temp = TestTempDirectory.Create();
         var store = new FileOpenAICodexSubscriptionCredentialStore(temp.Path);
@@ -2609,7 +2609,7 @@ public sealed class OpenAIRawApiAgentBackendTests
             ],
         ]);
 
-        await using var backend = new OpenAIResponsesAgentBackend(new OpenAIResponsesAgentBackendOptions
+        await using var backend = new OpenAIResponsesModelProviderRuntime(new OpenAIResponsesModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -3578,7 +3578,7 @@ public sealed class OpenAIRawApiAgentBackendTests
                 DisplayName = "OpenAI Responses",
                 TransportKind = LocalAgentTransportKind.OpenAIResponses,
             },
-            BackendId = new AgentBackendId("openai-responses"),
+            ProviderId = new ModelProviderId("openai-responses"),
             SessionId = "session-1",
             RunId = new AgentRunId("run-1"),
             ModelId = "gpt-test",

@@ -49,9 +49,9 @@ public sealed record LocalAgentTurnRequest
     public required ModelProviderRuntimeDescriptor Provider { get; init; }
 
     /// <summary>
-    /// Gets or initializes the backend identifier.
+    /// Gets or initializes the model provider identifier.
     /// </summary>
-    public required AgentBackendId BackendId { get; init; }
+    public required ModelProviderId ProviderId { get; init; }
 
     /// <summary>
     /// Gets or initializes the local session identifier.

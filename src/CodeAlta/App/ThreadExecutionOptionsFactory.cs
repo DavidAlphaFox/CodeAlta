@@ -12,7 +12,7 @@ namespace CodeAlta.App;
 internal sealed class ThreadExecutionOptionsFactory
 {
     private readonly CatalogOptions _catalogOptions;
-    private readonly Dictionary<string, ModelProviderState> _chatBackendStates;
+    private readonly Dictionary<string, ModelProviderState> _modelProviderStates;
     private readonly ThreadSelectionContext _threadSelection;
     private readonly ThreadPermissionRequestCoordinator _permissionRequests;
     private readonly ThreadUserInputRequestCoordinator _userInputRequests;
@@ -21,7 +21,7 @@ internal sealed class ThreadExecutionOptionsFactory
 
     public ThreadExecutionOptionsFactory(
         CatalogOptions catalogOptions,
-        Dictionary<string, ModelProviderState> chatBackendStates,
+        Dictionary<string, ModelProviderState> modelProviderStates,
         ThreadSelectionContext threadSelection,
         ThreadPermissionRequestCoordinator permissionRequests,
         ThreadUserInputRequestCoordinator userInputRequests,
@@ -29,13 +29,13 @@ internal sealed class ThreadExecutionOptionsFactory
         IReadOnlySet<string>? altaToolProviderIds = null)
     {
         ArgumentNullException.ThrowIfNull(catalogOptions);
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
         ArgumentNullException.ThrowIfNull(threadSelection);
         ArgumentNullException.ThrowIfNull(permissionRequests);
         ArgumentNullException.ThrowIfNull(userInputRequests);
 
         _catalogOptions = catalogOptions;
-        _chatBackendStates = chatBackendStates;
+        _modelProviderStates = modelProviderStates;
         _threadSelection = threadSelection;
         _permissionRequests = permissionRequests;
         _userInputRequests = userInputRequests;
@@ -51,7 +51,7 @@ internal sealed class ThreadExecutionOptionsFactory
     {
         ArgumentNullException.ThrowIfNull(projectRoots);
 
-        _chatBackendStates.TryGetValue(providerId.Value, out var backendState);
+        _modelProviderStates.TryGetValue(providerId.Value, out var backendState);
         var model = backendState?.SelectedModelId;
         var reasoning = backendState?.SelectedReasoningEffort;
 

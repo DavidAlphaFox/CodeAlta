@@ -12,26 +12,26 @@ namespace CodeAlta.App;
 internal sealed class SessionUsageProjectionController
 {
     private readonly SessionUsageViewModel _sessionUsageViewModel;
-    private readonly Dictionary<string, ModelProviderState> _chatBackendStates;
+    private readonly Dictionary<string, ModelProviderState> _modelProviderStates;
     private readonly ThreadSelectionContext _threadSelection;
     private readonly ShellWorkspaceContext _workspaceContext;
     private readonly IntState _usageRefreshState;
 
     public SessionUsageProjectionController(
         SessionUsageViewModel sessionUsageViewModel,
-        Dictionary<string, ModelProviderState> chatBackendStates,
+        Dictionary<string, ModelProviderState> modelProviderStates,
         ThreadSelectionContext threadSelection,
         ShellWorkspaceContext workspaceContext,
         IntState usageRefreshState)
     {
         ArgumentNullException.ThrowIfNull(sessionUsageViewModel);
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
         ArgumentNullException.ThrowIfNull(threadSelection);
         ArgumentNullException.ThrowIfNull(workspaceContext);
         ArgumentNullException.ThrowIfNull(usageRefreshState);
 
         _sessionUsageViewModel = sessionUsageViewModel;
-        _chatBackendStates = chatBackendStates;
+        _modelProviderStates = modelProviderStates;
         _threadSelection = threadSelection;
         _workspaceContext = workspaceContext;
         _usageRefreshState = usageRefreshState;
@@ -76,22 +76,22 @@ internal sealed class SessionUsageProjectionController
             }
 
             var tab = _threadSelection.EnsureThreadTab(selectedThread);
-            _chatBackendStates.TryGetValue(tab.ProviderId.Value, out var backendState);
+            _modelProviderStates.TryGetValue(tab.ProviderId.Value, out var backendState);
             _sessionUsageViewModel.Usage = tab.Usage;
-            _sessionUsageViewModel.BackendName = ResolveBackendDisplayName(tab.ProviderId.Value, backendState);
+            _sessionUsageViewModel.ProviderName = ResolveProviderDisplayName(tab.ProviderId.Value, backendState);
             _sessionUsageViewModel.ModelName = tab.ModelId ?? backendState?.SelectedModelId;
             _sessionUsageViewModel.PluginTransientEvents = tab.PluginTransientEvents.Snapshot;
             return;
         }
 
         var providerId = _workspaceContext.GetPreferredModelProviderId();
-        _chatBackendStates.TryGetValue(providerId.Value, out var draftBackendState);
+        _modelProviderStates.TryGetValue(providerId.Value, out var draftBackendState);
         _sessionUsageViewModel.Usage = null;
-        _sessionUsageViewModel.BackendName = ResolveBackendDisplayName(providerId.Value, draftBackendState);
+        _sessionUsageViewModel.ProviderName = ResolveProviderDisplayName(providerId.Value, draftBackendState);
         _sessionUsageViewModel.ModelName = draftBackendState?.SelectedModelId;
         _sessionUsageViewModel.PluginTransientEvents = [];
     }
 
-    private static string ResolveBackendDisplayName(string providerKey, ModelProviderState? backendState)
+    private static string ResolveProviderDisplayName(string providerKey, ModelProviderState? backendState)
         => SidebarThreadPresentation.ResolveProviderDisplayName(providerKey, backendState?.DisplayName);
 }

@@ -89,7 +89,7 @@ public sealed class CodeAltaAgentRuntimeTests
     }
 
     [TestMethod]
-    public async Task CodeAltaAgentRuntime_ResumeSession_LoadsLegacyBackendIdOnlyJournalAndSwitchesProvider()
+    public async Task CodeAltaAgentRuntime_ResumeSession_LoadsLegacyProviderIdOnlyJournalAndSwitchesProvider()
     {
         using var temp = TestTempDirectory.Create();
         var sessionId = "019e836a-ef6d-7a2a-97a7-893f0f0c1001";
@@ -98,7 +98,7 @@ public sealed class CodeAltaAgentRuntimeTests
                 temp.Path,
                 sessionId,
                 createdAt,
-                backendId: "openai",
+                ProviderId: "openai",
                 providerSessionId: "resp_legacy")
             .ConfigureAwait(false);
 
@@ -110,7 +110,7 @@ public sealed class CodeAltaAgentRuntimeTests
             displayName: "Anthropic",
             protocolFamily: "anthropic-messages",
             transportKind: LocalAgentTransportKind.AnthropicMessages,
-            backendId: new AgentBackendId("anthropic"));
+            ProviderId: new ModelProviderId("anthropic"));
 
         var legacySessions = await CreateSessionStore(temp.Path).ListSessionsAsync().ToArrayAsync().ConfigureAwait(false);
         Assert.AreEqual(1, legacySessions.Length);
@@ -150,7 +150,7 @@ public sealed class CodeAltaAgentRuntimeTests
             displayName: "OpenAI",
             protocolFamily: "openai-responses",
             transportKind: LocalAgentTransportKind.OpenAIResponses,
-            backendId: new AgentBackendId("openai"));
+            ProviderId: new ModelProviderId("openai"));
 
         await using var sourceSession = await sourceBackend.CreateSessionAsync(
                 new AgentSessionCreateOptions
@@ -185,7 +185,7 @@ public sealed class CodeAltaAgentRuntimeTests
             displayName: "Anthropic",
             protocolFamily: "anthropic-messages",
             transportKind: LocalAgentTransportKind.AnthropicMessages,
-            backendId: new AgentBackendId("anthropic"));
+            ProviderId: new ModelProviderId("anthropic"));
 
         await using var resumedSession = await targetBackend.ResumeSessionAsync(
                 sourceSession.SessionId,
@@ -330,7 +330,7 @@ public sealed class CodeAltaAgentRuntimeTests
         var summary = new LocalAgentSessionSummary
         {
             SessionId = sessionId,
-            BackendId = AgentBackendIds.OpenAIResponses,
+            ProviderId = ModelProviderIds.OpenAIResponses,
             ProtocolFamily = "openai-responses",
             ProviderKey = "openai",
             ModelId = "gpt-5.4",
@@ -394,7 +394,7 @@ public sealed class CodeAltaAgentRuntimeTests
         await store.UpsertSessionAsync(new LocalAgentSessionSummary
             {
                 SessionId = sessionId,
-                BackendId = AgentBackendIds.OpenAIResponses,
+                ProviderId = ModelProviderIds.OpenAIResponses,
                 ProtocolFamily = "openai-responses",
                 ProviderKey = "openai",
                 ModelId = "gpt-5.4",
@@ -441,7 +441,7 @@ public sealed class CodeAltaAgentRuntimeTests
         var summary = new LocalAgentSessionSummary
         {
             SessionId = sessionId,
-            BackendId = AgentBackendIds.OpenAIResponses,
+            ProviderId = ModelProviderIds.OpenAIResponses,
             ProtocolFamily = "openai-responses",
             ProviderKey = "openai",
             ModelId = "gpt-5.4",
@@ -474,7 +474,7 @@ public sealed class CodeAltaAgentRuntimeTests
                 "openai",
                 sessionId,
                 [new AgentSessionUpdateEvent(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     sessionId,
                     usageUpdatedAt,
                     null,
@@ -522,7 +522,7 @@ public sealed class CodeAltaAgentRuntimeTests
             displayName: "OpenAI",
             protocolFamily: "openai-responses",
             transportKind: LocalAgentTransportKind.OpenAIResponses,
-            backendId: AgentBackendIds.OpenAIResponses);
+            ProviderId: ModelProviderIds.OpenAIResponses);
 
     private static CodeAltaAgentRuntime CreateBackend(
         string tempRoot,
@@ -531,10 +531,10 @@ public sealed class CodeAltaAgentRuntimeTests
         string displayName,
         string protocolFamily,
         LocalAgentTransportKind transportKind,
-        AgentBackendId backendId)
+        ModelProviderId ProviderId)
     {
         return new CodeAltaAgentRuntime(
-            new ModelProviderId(backendId.Value),
+            new ModelProviderId(ProviderId.Value),
             displayName,
             new CodeAltaAgentRuntimeOptions
             {
@@ -571,7 +571,7 @@ public sealed class CodeAltaAgentRuntimeTests
         string tempRoot,
         string sessionId,
         DateTimeOffset createdAt,
-        string backendId,
+        string ProviderId,
         string? providerSessionId = null)
     {
         var layout = new LocalAgentRuntimePathLayout(Path.Combine(tempRoot, "machine", "agents"));
@@ -582,7 +582,7 @@ public sealed class CodeAltaAgentRuntimeTests
             $$"""
               {
                 "sessionId": "{{sessionId}}",
-                "backendId": "{{backendId}}",
+                "backendId": "{{ProviderId}}",
                 "modelId": "legacy-model",
                 "workingDirectory": "C:\\repo\\legacy",
                 "createdAt": "{{createdAt:O}}",
@@ -600,13 +600,13 @@ public sealed class CodeAltaAgentRuntimeTests
         var events = new AgentEvent[]
         {
             new AgentRawEvent(
-                new AgentBackendId(backendId),
+                new ModelProviderId(ProviderId),
                 sessionId,
                 createdAt,
                 "local.sessionSummary",
                 summaryDocument.RootElement.Clone()),
             new AgentRawEvent(
-                new AgentBackendId(backendId),
+                new ModelProviderId(ProviderId),
                 sessionId,
                 createdAt,
                 "local.sessionState",

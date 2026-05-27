@@ -3,20 +3,20 @@ using CodeAlta.Agent.LocalRuntime;
 namespace CodeAlta.Agent.OpenAI;
 
 /// <summary>
-/// OpenAI-compatible Chat/Completions model-provider runtime.
+/// OpenAI Responses model-provider runtime.
 /// </summary>
-public sealed class OpenAIChatAgentBackend : ICodeAltaModelProviderRuntime
+public sealed class OpenAIResponsesModelProviderRuntime : ICodeAltaModelProviderRuntime
 {
     private readonly ICodeAltaModelProviderRuntime _runtime;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="OpenAIChatAgentBackend"/> class.
+    /// Initializes a new instance of the <see cref="OpenAIResponsesModelProviderRuntime"/> class.
     /// </summary>
     /// <param name="options">The provider runtime options.</param>
-    public OpenAIChatAgentBackend(OpenAIChatAgentBackendOptions options)
+    public OpenAIResponsesModelProviderRuntime(OpenAIResponsesModelProviderRuntimeOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        _runtime = OpenAIBackendFactory.CreateChatProviderRuntime(options);
+        _runtime = OpenAIBackendFactory.CreateResponsesProviderRuntime(options);
     }
 
     /// <inheritdoc />

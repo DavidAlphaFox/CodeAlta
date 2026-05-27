@@ -7,12 +7,12 @@ using CodeAlta.Agent.LocalRuntime.Compaction;
 
 namespace CodeAlta.Agent;
 
-internal sealed class AgentBackendIdJsonConverter : JsonConverter<AgentBackendId>
+internal sealed class ModelProviderIdJsonConverter : JsonConverter<ModelProviderId>
 {
-    public override AgentBackendId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override ModelProviderId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         => new(reader.GetString() ?? string.Empty);
 
-    public override void Write(Utf8JsonWriter writer, AgentBackendId value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, ModelProviderId value, JsonSerializerOptions options)
         => writer.WriteStringValue(value.Value);
 }
 
@@ -143,8 +143,8 @@ internal sealed class AgentObjectDictionaryJsonConverter : JsonConverter<IReadOn
             case Guid guidValue:
                 writer.WriteStringValue(guidValue);
                 return;
-            case AgentBackendId backendId:
-                writer.WriteStringValue(backendId.Value);
+            case ModelProviderId ProviderId:
+                writer.WriteStringValue(ProviderId.Value);
                 return;
             case AgentRunId runId:
                 writer.WriteStringValue(runId.Value);
@@ -179,7 +179,7 @@ internal sealed class AgentObjectDictionaryJsonConverter : JsonConverter<IReadOn
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true,
     WriteIndented = false)]
-[JsonSerializable(typeof(AgentBackendId))]
+[JsonSerializable(typeof(ModelProviderId))]
 [JsonSerializable(typeof(AgentRunId))]
 [JsonSerializable(typeof(AgentEvent))]
 [JsonSerializable(typeof(AgentPermissionRequest))]
@@ -279,7 +279,7 @@ internal partial class AgentJsonSerializerContext : JsonSerializerContext;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true,
     WriteIndented = true)]
-[JsonSerializable(typeof(AgentBackendId))]
+[JsonSerializable(typeof(ModelProviderId))]
 [JsonSerializable(typeof(AgentRunId))]
 [JsonSerializable(typeof(AgentEvent))]
 [JsonSerializable(typeof(AgentPermissionRequest))]

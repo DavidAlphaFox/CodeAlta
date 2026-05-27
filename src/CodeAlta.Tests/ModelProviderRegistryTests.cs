@@ -19,7 +19,7 @@ public sealed class ModelProviderRegistryTests
         Assert.AreEqual("openai-main", descriptor.ProviderId.Value);
         Assert.AreEqual("OpenAI Main", descriptor.DisplayName);
         Assert.AreEqual("openai-chat", descriptor.ProviderType);
-        Assert.AreEqual("openai-main", descriptor.BackendId.Value);
+        Assert.AreEqual("openai-main", descriptor.ProviderId.Value);
         Assert.AreEqual("gpt-test", descriptor.DefaultModelId);
         Assert.IsTrue(descriptor.IsDefault);
     }

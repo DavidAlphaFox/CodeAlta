@@ -98,14 +98,15 @@ public sealed record AgentToolSpec
 /// <summary>
 /// Represents a tool invocation.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier. Serialized as <c>backendId</c> for tool-journal compatibility.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="ToolCallId">The tool call identifier.</param>
 /// <param name="ToolName">The tool name.</param>
 /// <param name="Arguments">The tool arguments.</param>
 /// <param name="Progress">Optional progress callback for streaming tool output.</param>
 public sealed record AgentToolInvocation(
-    AgentBackendId BackendId,
+    [property: JsonPropertyName("backendId")]
+    ModelProviderId ProviderId,
     string SessionId,
     string ToolCallId,
     string ToolName,

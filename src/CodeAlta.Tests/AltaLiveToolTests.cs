@@ -273,7 +273,7 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("openai-responses");
+        var ProviderId = new ModelProviderId("openai-responses");
         var pluginCatalog = new FakeAltaPluginCatalog(
             new AltaPluginCommandContribution
             {
@@ -291,8 +291,8 @@ public sealed class AltaLiveToolTests
             .Add(new ProjectCatalog(options))
             .Add(new WorkThreadCatalog(options))
             .Add(new SkillCatalog())
-            .Add<IReadOnlyList<ModelProviderDescriptor>>([new ModelProviderDescriptor(backendId, "OpenAI Responses")])
-            .Add<IAltaSessionToolBackendPolicy>(new AltaSessionToolBackendPolicy([backendId.Value]))
+            .Add<IReadOnlyList<ModelProviderDescriptor>>([new ModelProviderDescriptor(ProviderId, "OpenAI Responses")])
+            .Add<IAltaSessionToolBackendPolicy>(new AltaSessionToolBackendPolicy([ProviderId.Value]))
             .Add<IAltaPluginCatalog>(pluginCatalog));
 
         var result = await dispatcher.InvokeAsync(["tool", "capability", "list"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
@@ -317,12 +317,12 @@ public sealed class AltaLiveToolTests
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var projectCatalog = new ProjectCatalog(options);
         var project = await projectCatalog.UpsertFromPathAsync(projectPath).ConfigureAwait(false);
-        var backendId = new AgentBackendId("compact-provider");
+        var ProviderId = new ModelProviderId("compact-provider");
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
             .Add(options)
             .Add(projectCatalog)
             .Add(new SkillCatalog())
-            .Add<IReadOnlyList<ModelProviderDescriptor>>([new ModelProviderDescriptor(backendId, "Compact Provider")])
+            .Add<IReadOnlyList<ModelProviderDescriptor>>([new ModelProviderDescriptor(ProviderId, "Compact Provider")])
             .Add<IAltaPluginCatalog>(new FakeAltaPluginCatalog(new AltaPluginCommandContribution
             {
                 Plugin = CreatePluginDescriptor("compact-plugin"),
@@ -350,7 +350,7 @@ public sealed class AltaLiveToolTests
 
         Assert.AreEqual(AltaExitCodes.Success, providerList.ExitCode);
         var providerKeys = ReadJsonLines(providerList.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.provider.keys");
-        AssertJsonArrayContains(providerKeys.GetProperty("providerKeys"), backendId.Value);
+        AssertJsonArrayContains(providerKeys.GetProperty("providerKeys"), ProviderId.Value);
         Assert.IsFalse(providerKeys.TryGetProperty("correlationId", out _));
 
         Assert.AreEqual(AltaExitCodes.Success, pluginList.ExitCode);
@@ -434,14 +434,14 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("parent-model");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("parent-model");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var parentOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             Model = "gpt-parent",
             ReasoningEffort = AgentReasoningEffort.High,
             WorkingDirectory = root.Path,
@@ -451,8 +451,8 @@ public sealed class AltaLiveToolTests
         var parent = await runtime.CreateGlobalThreadAsync(parentOptions, "Parent").ConfigureAwait(false);
         var childOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             WorkingDirectory = root.Path,
             ProjectRoots = [],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
@@ -634,8 +634,8 @@ public sealed class AltaLiveToolTests
         var projectPath = System.IO.Path.Combine(root.Path, "plugin-project");
         Directory.CreateDirectory(projectPath);
         var project = await projectCatalog.UpsertFromPathAsync(projectPath).ConfigureAwait(false);
-        var backendId = new AgentBackendId("plugin-create");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("plugin-create");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var loopback = new LoopbackPluginAltaRuntimeService();
@@ -663,7 +663,7 @@ public sealed class AltaLiveToolTests
                         command.Add(async (_, _) =>
                         {
                             var result = await pluginContext.Services.Alta.InvokeAsync(
-                                    ["session", "create", "--project", project.Id, "--provider", backendId.Value],
+                                    ["session", "create", "--project", project.Id, "--provider", ProviderId.Value],
                                     options: new PluginAltaInvocationOptions
                                     {
                                         SourceProjectId = project.Id,
@@ -689,7 +689,7 @@ public sealed class AltaLiveToolTests
             .Add(projectCatalog)
             .Add(new WorkThreadCatalog(options))
             .Add(runtime)
-            .Add<IReadOnlyList<ModelProviderDescriptor>>([new ModelProviderDescriptor(backendId, "Plugin Create")])
+            .Add<IReadOnlyList<ModelProviderDescriptor>>([new ModelProviderDescriptor(ProviderId, "Plugin Create")])
             .Add<IAltaPluginCatalog>(catalog));
         loopback.SetDispatcher(dispatcher);
 
@@ -777,8 +777,8 @@ public sealed class AltaLiveToolTests
         var projectPath = System.IO.Path.Combine(root.Path, "plugin-prompt-project");
         Directory.CreateDirectory(projectPath);
         var project = await projectCatalog.UpsertFromPathAsync(projectPath).ConfigureAwait(false);
-        var backendId = new AgentBackendId("plugin-prompt");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("plugin-prompt");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         string? targetThreadId = null;
@@ -826,10 +826,10 @@ public sealed class AltaLiveToolTests
             .Add(projectCatalog)
             .Add(new WorkThreadCatalog(options))
             .Add(runtime)
-            .Add<IReadOnlyList<ModelProviderDescriptor>>([new ModelProviderDescriptor(backendId, "Plugin Prompt")])
+            .Add<IReadOnlyList<ModelProviderDescriptor>>([new ModelProviderDescriptor(ProviderId, "Plugin Prompt")])
             .Add<IAltaPluginCatalog>(catalog));
         loopback.SetDispatcher(dispatcher);
-        var created = await dispatcher.InvokeAsync(["session", "create", "--project", project.Id, "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var created = await dispatcher.InvokeAsync(["session", "create", "--project", project.Id, "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         targetThreadId = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString();
 
         var result = await dispatcher.InvokeAsync(["plugin-prompt"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
@@ -897,7 +897,7 @@ public sealed class AltaLiveToolTests
         }).ConfigureAwait(false);
         await AppendJournalStateAsync(threadCatalog, parent, new WorkThreadLocalState
         {
-            ProviderKey = AgentBackendIds.Codex.Value,
+            ProviderKey = ModelProviderIds.Codex.Value,
             ModelId = "gpt-test",
             ReasoningEffort = AgentReasoningEffort.Low,
         }).ConfigureAwait(false);
@@ -954,14 +954,14 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("stateful");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("stateful");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var executionOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             WorkingDirectory = root.Path,
             ProjectRoots = [],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
@@ -997,16 +997,16 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("openai");
+        var ProviderId = new ModelProviderId("openai");
         var sessionId = "session-history";
         var timestamp = new DateTimeOffset(2026, 05, 09, 11, 00, 00, TimeSpan.Zero);
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(root.Path));
         await store.UpsertSessionAsync(new LocalAgentSessionSummary
         {
             SessionId = sessionId,
-            BackendId = backendId,
+            ProviderId = ProviderId,
             ProtocolFamily = "openai",
-            ProviderKey = backendId.Value,
+            ProviderKey = ProviderId.Value,
             ModelId = "gpt-history",
             WorkingDirectory = root.Path,
             Title = "History session",
@@ -1017,9 +1017,9 @@ public sealed class AltaLiveToolTests
         await store.UpsertSessionAsync(new LocalAgentSessionSummary
         {
             SessionId = "session-empty",
-            BackendId = backendId,
+            ProviderId = ProviderId,
             ProtocolFamily = "openai",
-            ProviderKey = backendId.Value,
+            ProviderKey = ProviderId.Value,
             ModelId = "gpt-history",
             WorkingDirectory = root.Path,
             Title = "Empty history session",
@@ -1029,15 +1029,15 @@ public sealed class AltaLiveToolTests
         }).ConfigureAwait(false);
         await store.AppendEventsAsync(
             "openai",
-            backendId.Value,
+            ProviderId.Value,
             sessionId,
             [
-                new AgentContentCompletedEvent(backendId, sessionId, timestamp.AddMinutes(1), new AgentRunId("run-1"), AgentContentKind.User, "user-1", null, "user message"),
-                new AgentContentCompletedEvent(backendId, sessionId, timestamp.AddMinutes(2), new AgentRunId("run-1"), AgentContentKind.Assistant, "assistant-1", null, "assistant first"),
-                new AgentContentCompletedEvent(backendId, sessionId, timestamp.AddMinutes(3), new AgentRunId("run-1"), AgentContentKind.ToolOutput, "tool-1", null, "tool output"),
-                new AgentContentCompletedEvent(backendId, sessionId, timestamp.AddMinutes(4), new AgentRunId("run-2"), AgentContentKind.Assistant, "assistant-2", null, "assistant second"),
+                new AgentContentCompletedEvent(ProviderId, sessionId, timestamp.AddMinutes(1), new AgentRunId("run-1"), AgentContentKind.User, "user-1", null, "user message"),
+                new AgentContentCompletedEvent(ProviderId, sessionId, timestamp.AddMinutes(2), new AgentRunId("run-1"), AgentContentKind.Assistant, "assistant-1", null, "assistant first"),
+                new AgentContentCompletedEvent(ProviderId, sessionId, timestamp.AddMinutes(3), new AgentRunId("run-1"), AgentContentKind.ToolOutput, "tool-1", null, "tool output"),
+                new AgentContentCompletedEvent(ProviderId, sessionId, timestamp.AddMinutes(4), new AgentRunId("run-2"), AgentContentKind.Assistant, "assistant-2", null, "assistant second"),
             ]).ConfigureAwait(false);
-        var runtime = CreateRuntime(options, backendId);
+        var runtime = CreateRuntime(options, ProviderId);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
             .Add(options)
@@ -1079,7 +1079,7 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("metrics");
+        var ProviderId = new ModelProviderId("metrics");
         var sessionId = "session-metrics";
         var secondSessionId = "session-metrics-second";
         var timestamp = new DateTimeOffset(2026, 05, 09, 11, 00, 00, TimeSpan.Zero);
@@ -1087,9 +1087,9 @@ public sealed class AltaLiveToolTests
         await store.UpsertSessionAsync(new LocalAgentSessionSummary
         {
             SessionId = sessionId,
-            BackendId = backendId,
+            ProviderId = ProviderId,
             ProtocolFamily = "openai",
-            ProviderKey = backendId.Value,
+            ProviderKey = ProviderId.Value,
             ModelId = "gpt-metrics",
             WorkingDirectory = root.Path,
             Title = "Metrics session",
@@ -1100,9 +1100,9 @@ public sealed class AltaLiveToolTests
         await store.UpsertSessionAsync(new LocalAgentSessionSummary
         {
             SessionId = secondSessionId,
-            BackendId = backendId,
+            ProviderId = ProviderId,
             ProtocolFamily = "openai",
-            ProviderKey = backendId.Value,
+            ProviderKey = ProviderId.Value,
             ModelId = "gpt-metrics",
             WorkingDirectory = root.Path,
             Title = "Second metrics session",
@@ -1112,14 +1112,14 @@ public sealed class AltaLiveToolTests
         }).ConfigureAwait(false);
         await store.AppendEventsAsync(
             "openai",
-            backendId.Value,
+            ProviderId.Value,
             sessionId,
             [
-                new AgentContentCompletedEvent(backendId, sessionId, timestamp, new AgentRunId("run-1"), AgentContentKind.User, "user-1", null, "please summarize"),
-                new AgentActivityEvent(backendId, sessionId, timestamp.AddMinutes(1), new AgentRunId("run-1"), AgentActivityKind.ToolCall, AgentActivityPhase.Requested, "tool-1", null, "read_file", null),
-                new AgentContentCompletedEvent(backendId, sessionId, timestamp.AddMinutes(2), new AgentRunId("run-1"), AgentContentKind.ToolOutput, "tool-output-1", "tool-1", "large tool output"),
+                new AgentContentCompletedEvent(ProviderId, sessionId, timestamp, new AgentRunId("run-1"), AgentContentKind.User, "user-1", null, "please summarize"),
+                new AgentActivityEvent(ProviderId, sessionId, timestamp.AddMinutes(1), new AgentRunId("run-1"), AgentActivityKind.ToolCall, AgentActivityPhase.Requested, "tool-1", null, "read_file", null),
+                new AgentContentCompletedEvent(ProviderId, sessionId, timestamp.AddMinutes(2), new AgentRunId("run-1"), AgentContentKind.ToolOutput, "tool-output-1", "tool-1", "large tool output"),
                 new AgentSessionUpdateEvent(
-                    backendId,
+                    ProviderId,
                     sessionId,
                     timestamp.AddMinutes(3),
                     new AgentRunId("run-1"),
@@ -1131,17 +1131,17 @@ public sealed class AltaLiveToolTests
                         Scope: AgentUsageScope.CurrentWindow,
                         Source: AgentUsageSource.LocalProviderUsage,
                         UpdatedAt: timestamp.AddMinutes(3))),
-                new AgentContentCompletedEvent(backendId, sessionId, timestamp.AddMinutes(4), new AgentRunId("run-1"), AgentContentKind.Assistant, "assistant-1", null, "final concise answer"),
+                new AgentContentCompletedEvent(ProviderId, sessionId, timestamp.AddMinutes(4), new AgentRunId("run-1"), AgentContentKind.Assistant, "assistant-1", null, "final concise answer"),
             ]).ConfigureAwait(false);
         await store.AppendEventsAsync(
             "openai",
-            backendId.Value,
+            ProviderId.Value,
             secondSessionId,
             [
-                new AgentContentCompletedEvent(backendId, secondSessionId, timestamp.AddMinutes(10), new AgentRunId("run-2"), AgentContentKind.User, "user-2", null, "please summarize again"),
-                new AgentContentCompletedEvent(backendId, secondSessionId, timestamp.AddMinutes(12), new AgentRunId("run-2"), AgentContentKind.Assistant, "assistant-2", null, "second final answer"),
+                new AgentContentCompletedEvent(ProviderId, secondSessionId, timestamp.AddMinutes(10), new AgentRunId("run-2"), AgentContentKind.User, "user-2", null, "please summarize again"),
+                new AgentContentCompletedEvent(ProviderId, secondSessionId, timestamp.AddMinutes(12), new AgentRunId("run-2"), AgentContentKind.Assistant, "assistant-2", null, "second final answer"),
             ]).ConfigureAwait(false);
-        var runtime = CreateRuntime(options, backendId);
+        var runtime = CreateRuntime(options, ProviderId);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
             .Add(options)
@@ -1232,16 +1232,16 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("error-result");
+        var ProviderId = new ModelProviderId("error-result");
         var sessionId = "session-error-result";
         var timestamp = new DateTimeOffset(2026, 05, 09, 12, 00, 00, TimeSpan.Zero);
         var store = new FileSystemLocalAgentSessionStore(new LocalAgentRuntimePathLayout(root.Path));
         await store.UpsertSessionAsync(new LocalAgentSessionSummary
         {
             SessionId = sessionId,
-            BackendId = backendId,
+            ProviderId = ProviderId,
             ProtocolFamily = "openai",
-            ProviderKey = backendId.Value,
+            ProviderKey = ProviderId.Value,
             ModelId = "gpt-error",
             WorkingDirectory = root.Path,
             Title = "Error result session",
@@ -1251,13 +1251,13 @@ public sealed class AltaLiveToolTests
         }).ConfigureAwait(false);
         await store.AppendEventsAsync(
             "openai",
-            backendId.Value,
+            ProviderId.Value,
             sessionId,
             [
-                new AgentContentCompletedEvent(backendId, sessionId, timestamp, new AgentRunId("run-error"), AgentContentKind.User, "user-1", null, "please run"),
-                new AgentErrorEvent(backendId, sessionId, timestamp.AddMinutes(2), "Run cancelled before completion.", exception: null, runId: new AgentRunId("run-error")),
+                new AgentContentCompletedEvent(ProviderId, sessionId, timestamp, new AgentRunId("run-error"), AgentContentKind.User, "user-1", null, "please run"),
+                new AgentErrorEvent(ProviderId, sessionId, timestamp.AddMinutes(2), "Run cancelled before completion.", exception: null, runId: new AgentRunId("run-error")),
             ]).ConfigureAwait(false);
-        var runtime = CreateRuntime(options, backendId);
+        var runtime = CreateRuntime(options, ProviderId);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
             .Add(options)
@@ -1287,14 +1287,14 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("corrupt-history");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("corrupt-history");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var executionOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             WorkingDirectory = root.Path,
             ProjectRoots = [],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
@@ -1327,8 +1327,8 @@ public sealed class AltaLiveToolTests
     [TestMethod]
     public async Task ModelListAndShow_SupportPracticalFiltersAndRefs()
     {
-        var backendId = new AgentBackendId("models");
-        var backend = new StatefulBackend(backendId)
+        var ProviderId = new ModelProviderId("models");
+        var backend = new StatefulBackend(ProviderId)
         {
             Models =
             [
@@ -1346,16 +1346,16 @@ public sealed class AltaLiveToolTests
             ],
         };
         var providerRegistry = new ModelProviderRegistry();
-        providerRegistry.RegisterOrReplaceBackendRuntime(new ModelProviderDescriptor(backendId, "Models"), () => backend);
+        providerRegistry.RegisterOrReplaceBackendRuntime(new ModelProviderDescriptor(ProviderId, "Models"), () => backend);
         var providerInitializationService = new ModelProviderInitializationService(providerRegistry);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
             .Add(new AgentHub(providerRegistry))
             .Add<IModelProviderRegistry>(providerRegistry)
             .Add<IModelProviderInitializationService>(providerInitializationService));
 
-        var refs = await dispatcher.InvokeAsync(["model", "list", "--provider", backendId.Value, "--contains", "sonnet", "--reasoning", "low", "--supports-tools"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
-        var detailed = await dispatcher.InvokeAsync(["model", "list", "--provider", backendId.Value, "--contains", "sonnet", "--reasoning", "low", "--supports-tools", "--detailed"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
-        var show = await dispatcher.InvokeAsync(["model", "show", "--model-ref", $"{backendId.Value}:claude-sonnet-4.6@low"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var refs = await dispatcher.InvokeAsync(["model", "list", "--provider", ProviderId.Value, "--contains", "sonnet", "--reasoning", "low", "--supports-tools"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var detailed = await dispatcher.InvokeAsync(["model", "list", "--provider", ProviderId.Value, "--contains", "sonnet", "--reasoning", "low", "--supports-tools", "--detailed"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var show = await dispatcher.InvokeAsync(["model", "show", "--model-ref", $"{ProviderId.Value}:claude-sonnet-4.6@low"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
 
         Assert.AreEqual(AltaExitCodes.Success, refs.ExitCode);
         var refRecord = ReadJsonLines(refs.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.model.refs");
@@ -1384,8 +1384,8 @@ public sealed class AltaLiveToolTests
         var projectCatalog = new ProjectCatalog(options);
         var project = await projectCatalog.UpsertFromPathAsync(projectPath).ConfigureAwait(false);
         var threadCatalog = new WorkThreadCatalog(options);
-        var backendId = new AgentBackendId("model-create");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("model-create");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -1395,7 +1395,7 @@ public sealed class AltaLiveToolTests
             .Add(runtime)
             .Add<IAltaSessionQueryService>(new ThrowingSessionQueryService()));
 
-        var parent = await dispatcher.InvokeAsync(["session", "create", "--project", project.Id, "--title", "Parent", "--model-ref", $"{backendId.Value}:gpt-parent@low"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var parent = await dispatcher.InvokeAsync(["session", "create", "--project", project.Id, "--title", "Parent", "--model-ref", $"{ProviderId.Value}:gpt-parent@low"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var parentRecord = ReadJsonLines(parent.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created");
         var parentThreadId = parentRecord.GetProperty("threadId").GetString()!;
         var caller = new AltaCallerIdentity
@@ -1446,8 +1446,8 @@ public sealed class AltaLiveToolTests
         var projectCatalog = new ProjectCatalog(options);
         var projectA = await projectCatalog.UpsertFromPathAsync(projectAPath).ConfigureAwait(false);
         var projectB = await projectCatalog.UpsertFromPathAsync(projectBPath).ConfigureAwait(false);
-        var backendId = new AgentBackendId("explicit-parent");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("explicit-parent");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -1457,12 +1457,12 @@ public sealed class AltaLiveToolTests
             .Add(runtime)
             .Add<IAltaSessionQueryService>(new ThrowingSessionQueryService()));
 
-        var parent = await dispatcher.InvokeAsync(["session", "create", "--project", projectA.Id, "--provider", backendId.Value, "--title", "Parent"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var parent = await dispatcher.InvokeAsync(["session", "create", "--project", projectA.Id, "--provider", ProviderId.Value, "--title", "Parent"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var parentThreadId = ReadJsonLines(parent.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
 
-        var child = await dispatcher.InvokeAsync(["session", "create", "--project", projectA.Id, "--provider", backendId.Value, "--parent", parentThreadId, "--title", "Child"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
-        var crossScope = await dispatcher.InvokeAsync(["session", "create", "--project", projectB.Id, "--provider", backendId.Value, "--parent", parentThreadId, "--title", "Cross"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
-        var missingParent = await dispatcher.InvokeAsync(["session", "create", "--project", projectA.Id, "--provider", backendId.Value, "--parent", "missing-parent", "--title", "Missing"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var child = await dispatcher.InvokeAsync(["session", "create", "--project", projectA.Id, "--provider", ProviderId.Value, "--parent", parentThreadId, "--title", "Child"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var crossScope = await dispatcher.InvokeAsync(["session", "create", "--project", projectB.Id, "--provider", ProviderId.Value, "--parent", parentThreadId, "--title", "Cross"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var missingParent = await dispatcher.InvokeAsync(["session", "create", "--project", projectA.Id, "--provider", ProviderId.Value, "--parent", "missing-parent", "--title", "Missing"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
 
         Assert.AreEqual(AltaExitCodes.Success, parent.ExitCode);
         Assert.AreEqual(AltaExitCodes.Success, child.ExitCode);
@@ -1487,14 +1487,14 @@ public sealed class AltaLiveToolTests
         var projectCatalog = new ProjectCatalog(options);
         var threadCatalog = new WorkThreadCatalog(options);
         var project = await projectCatalog.UpsertFromPathAsync(projectPath).ConfigureAwait(false);
-        var backendId = new AgentBackendId("caller-inherit");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("caller-inherit");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var executionOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             Model = "gpt-caller",
             ReasoningEffort = AgentReasoningEffort.High,
             WorkingDirectory = root.Path,
@@ -1510,7 +1510,7 @@ public sealed class AltaLiveToolTests
             .Add<IAltaSessionQueryService>(new ThrowingSessionQueryService()));
         var caller = new AltaCallerIdentity { Kind = "agent", SourceThreadId = sourceThread.ThreadId };
 
-        var result = await dispatcher.InvokeAsync(["session", "create", "--project", project.Id, "--provider", backendId.Value, "--reasoning", "low"], caller: caller).ConfigureAwait(false);
+        var result = await dispatcher.InvokeAsync(["session", "create", "--project", project.Id, "--provider", ProviderId.Value, "--reasoning", "low"], caller: caller).ConfigureAwait(false);
 
         Assert.AreEqual(AltaExitCodes.Success, result.ExitCode);
         Assert.AreEqual("gpt-caller", backend.CreatedOptions.Last().Model);
@@ -1529,7 +1529,7 @@ public sealed class AltaLiveToolTests
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var projectCatalog = new ProjectCatalog(options);
         var threadCatalog = new WorkThreadCatalog(options);
-        var backend = new StatefulBackend(AgentBackendIds.Codex);
+        var backend = new StatefulBackend(ModelProviderIds.Codex);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -1537,14 +1537,14 @@ public sealed class AltaLiveToolTests
             .Add(projectCatalog)
             .Add(threadCatalog)
             .Add(runtime)
-            .Add<IAltaSessionToolBackendPolicy>(new AltaSessionToolBackendPolicy([AgentBackendIds.Codex.Value])));
+            .Add<IAltaSessionToolBackendPolicy>(new AltaSessionToolBackendPolicy([ModelProviderIds.Codex.Value])));
         var timestamp = DateTimeOffset.UtcNow;
         var parent = new SessionViewDescriptor
         {
             ThreadId = "draft-parent",
             Kind = WorkThreadKind.GlobalThread,
-            BackendId = AgentBackendIds.Codex.Value,
-            ProviderKey = AgentBackendIds.Codex.Value,
+            ProviderId = ModelProviderIds.Codex.Value,
+            ProviderKey = ModelProviderIds.Codex.Value,
             WorkingDirectory = root.Path,
             Title = "Draft parent",
             Status = WorkThreadStatus.Draft,
@@ -1554,8 +1554,8 @@ public sealed class AltaLiveToolTests
         };
         var parentOptions = new SessionExecutionOptions
         {
-            BackendId = AgentBackendIds.Codex,
-            ProviderKey = AgentBackendIds.Codex.Value,
+            ProviderId = ModelProviderIds.Codex,
+            ProviderKey = ModelProviderIds.Codex.Value,
             WorkingDirectory = root.Path,
             ProjectRoots = [],
             Tools =
@@ -1575,7 +1575,7 @@ public sealed class AltaLiveToolTests
         var canonicalParentThreadId = parent.ThreadId;
         using var createArguments = JsonDocument.Parse(JsonSerializer.Serialize(new
         {
-            args = new[] { "session", "create", "--global", "--provider", AgentBackendIds.Codex.Value, "--title", "Child" },
+            args = new[] { "session", "create", "--global", "--provider", ModelProviderIds.Codex.Value, "--title", "Child" },
         }));
 
         var createResult = await parentOptions.Tools.Single().Handler(CreateInvocation(createArguments.RootElement), CancellationToken.None).ConfigureAwait(false);
@@ -1613,8 +1613,8 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("send-failure");
-        var backend = new StatefulBackend(backendId)
+        var ProviderId = new ModelProviderId("send-failure");
+        var backend = new StatefulBackend(ProviderId)
         {
             SendException = new InvalidOperationException("backend rejected request shape"),
         };
@@ -1625,7 +1625,7 @@ public sealed class AltaLiveToolTests
             .Add(new ProjectCatalog(options))
             .Add(new WorkThreadCatalog(options))
             .Add(runtime));
-        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var threadId = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
 
         var send = await dispatcher.InvokeAsync(["session", "send", threadId, "--message", "fail"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
@@ -1648,8 +1648,8 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("create-failure");
-        var backend = new StatefulBackend(backendId)
+        var ProviderId = new ModelProviderId("create-failure");
+        var backend = new StatefulBackend(ProviderId)
         {
             SubscribeException = new InvalidOperationException("subscription failed after create"),
         };
@@ -1661,7 +1661,7 @@ public sealed class AltaLiveToolTests
             .Add(new WorkThreadCatalog(options))
             .Add(runtime));
 
-        var create = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var create = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var threadId = backend.CreatedOptions.Single().ThreadId!;
         var errorEvent = await ReadRuntimeEventAsync<WorkThreadAgentEvent>(
                 runtime,
@@ -1683,8 +1683,8 @@ public sealed class AltaLiveToolTests
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var threadCatalog = new WorkThreadCatalog(options);
-        var backendId = new AgentBackendId("control");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("control");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -1692,7 +1692,7 @@ public sealed class AltaLiveToolTests
             .Add(new ProjectCatalog(options))
             .Add(threadCatalog)
             .Add(runtime));
-        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value, "--model", "gpt-control", "--reasoning", "medium"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value, "--model", "gpt-control", "--reasoning", "medium"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var threadId = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
         var caller = new AltaCallerIdentity { Kind = "agent", SourceThreadId = "source-thread", SourceAgentId = "source-agent" };
 
@@ -1736,14 +1736,14 @@ public sealed class AltaLiveToolTests
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var threadCatalog = new WorkThreadCatalog(options);
-        var backendId = new AgentBackendId("parent-steer");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("parent-steer");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var executionOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             WorkingDirectory = root.Path,
             ProjectRoots = [],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
@@ -1790,14 +1790,14 @@ public sealed class AltaLiveToolTests
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var threadCatalog = new WorkThreadCatalog(options);
-        var backendId = new AgentBackendId("parent-queue");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("parent-queue");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var executionOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             WorkingDirectory = root.Path,
             ProjectRoots = [],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
@@ -1834,14 +1834,14 @@ public sealed class AltaLiveToolTests
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var threadCatalog = new WorkThreadCatalog(options);
-        var backendId = new AgentBackendId("child-error-parent-notify");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("child-error-parent-notify");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var executionOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             WorkingDirectory = root.Path,
             ProjectRoots = [],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
@@ -1876,8 +1876,8 @@ public sealed class AltaLiveToolTests
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var threadCatalog = new WorkThreadCatalog(options);
-        var backendId = new AgentBackendId("queue-busy");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("queue-busy");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -1885,7 +1885,7 @@ public sealed class AltaLiveToolTests
             .Add(new ProjectCatalog(options))
             .Add(threadCatalog)
             .Add(runtime));
-        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var threadId = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
 
         var first = await dispatcher.InvokeAsync(["session", "send", threadId, "--message", "first prompt"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
@@ -1928,8 +1928,8 @@ public sealed class AltaLiveToolTests
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var threadCatalog = new WorkThreadCatalog(options);
-        var backendId = new AgentBackendId("started-catalog");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("started-catalog");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -1937,7 +1937,7 @@ public sealed class AltaLiveToolTests
             .Add(new ProjectCatalog(options))
             .Add(threadCatalog)
             .Add(runtime));
-        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var threadId = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
 
         var sent = await dispatcher.InvokeAsync(["session", "send", threadId, "--message", "start history"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
@@ -1955,9 +1955,9 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("detach-send");
+        var ProviderId = new ModelProviderId("detach-send");
         var sendBlocker = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var backend = new StatefulBackend(backendId) { SendBlocker = sendBlocker, PublishRunEventOnSend = true };
+        var backend = new StatefulBackend(ProviderId) { SendBlocker = sendBlocker, PublishRunEventOnSend = true };
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -1965,7 +1965,7 @@ public sealed class AltaLiveToolTests
             .Add(new ProjectCatalog(options))
             .Add(new WorkThreadCatalog(options))
             .Add(runtime));
-        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var threadId = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
         var caller = new AltaCallerIdentity { Kind = "agent", SourceThreadId = "parent-thread" };
 
@@ -1994,9 +1994,9 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("parented-detach-send");
+        var ProviderId = new ModelProviderId("parented-detach-send");
         var sendBlocker = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var backend = new StatefulBackend(backendId) { SendBlocker = sendBlocker, PublishRunEventOnSend = true };
+        var backend = new StatefulBackend(ProviderId) { SendBlocker = sendBlocker, PublishRunEventOnSend = true };
         var threadCatalog = new WorkThreadCatalog(options);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
@@ -2005,9 +2005,9 @@ public sealed class AltaLiveToolTests
             .Add(new ProjectCatalog(options))
             .Add(threadCatalog)
             .Add(runtime));
-        var parentCreated = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var parentCreated = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var parentThreadId = ReadJsonLines(parentCreated.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
-        var childCreated = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value, "--parent", parentThreadId], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var childCreated = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value, "--parent", parentThreadId], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var childThreadId = ReadJsonLines(childCreated.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
         var caller = new AltaCallerIdentity { Kind = "agent", SourceThreadId = parentThreadId };
 
@@ -2054,15 +2054,15 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("cancel-send");
+        var ProviderId = new ModelProviderId("cancel-send");
         var sendBlocker = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var backend = new StatefulBackend(backendId) { SendBlocker = sendBlocker, PublishRunEventOnSend = true };
+        var backend = new StatefulBackend(ProviderId) { SendBlocker = sendBlocker, PublishRunEventOnSend = true };
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var executionOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             WorkingDirectory = root.Path,
             ProjectRoots = [],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
@@ -2096,15 +2096,15 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("internal-cancel-send");
+        var ProviderId = new ModelProviderId("internal-cancel-send");
         var sendBlocker = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var backend = new StatefulBackend(backendId) { SendBlocker = sendBlocker, PublishRunEventOnSend = true };
+        var backend = new StatefulBackend(ProviderId) { SendBlocker = sendBlocker, PublishRunEventOnSend = true };
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var executionOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             WorkingDirectory = root.Path,
             ProjectRoots = [],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
@@ -2138,8 +2138,8 @@ public sealed class AltaLiveToolTests
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var threadCatalog = new WorkThreadCatalog(options);
-        var backendId = new AgentBackendId("queue-duplicate-idle");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("queue-duplicate-idle");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -2147,7 +2147,7 @@ public sealed class AltaLiveToolTests
             .Add(new ProjectCatalog(options))
             .Add(threadCatalog)
             .Add(runtime));
-        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var createdRecord = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created");
         var threadId = createdRecord.GetProperty("threadId").GetString()!;
 
@@ -2182,8 +2182,8 @@ public sealed class AltaLiveToolTests
         Directory.CreateDirectory(projectPath);
         var projectCatalog = new ProjectCatalog(options);
         var project = await projectCatalog.UpsertFromPathAsync(projectPath).ConfigureAwait(false);
-        var backendId = new AgentBackendId("peer-message");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("peer-message");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -2191,7 +2191,7 @@ public sealed class AltaLiveToolTests
             .Add(projectCatalog)
             .Add(new WorkThreadCatalog(options))
             .Add(runtime));
-        var created = await dispatcher.InvokeAsync(["session", "create", "--project", project.Id, "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var created = await dispatcher.InvokeAsync(["session", "create", "--project", project.Id, "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var threadId = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
         var caller = new AltaCallerIdentity
         {
@@ -2221,8 +2221,8 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backendId = new AgentBackendId("no-steer");
-        var backend = new StatefulBackend(backendId) { SupportsSteering = false };
+        var ProviderId = new ModelProviderId("no-steer");
+        var backend = new StatefulBackend(ProviderId) { SupportsSteering = false };
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -2230,7 +2230,7 @@ public sealed class AltaLiveToolTests
             .Add(new ProjectCatalog(options))
             .Add(new WorkThreadCatalog(options))
             .Add(runtime));
-        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var threadId = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
         await dispatcher.InvokeAsync(["session", "send", threadId, "--message", "start"], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
 
@@ -2245,7 +2245,7 @@ public sealed class AltaLiveToolTests
     {
         using var root = TempDirectory.Create();
         var options = new CatalogOptions { GlobalRoot = root.Path };
-        var backend = new StatefulBackend(AgentBackendIds.Codex);
+        var backend = new StatefulBackend(ModelProviderIds.Codex);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -2253,7 +2253,7 @@ public sealed class AltaLiveToolTests
             .Add(new ProjectCatalog(options))
             .Add(new WorkThreadCatalog(options))
             .Add(runtime));
-        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", AgentBackendIds.Codex.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var created = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ModelProviderIds.Codex.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var threadId = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
 
         var result = await dispatcher.InvokeAsync(["skill", "activate", "sample-skill", "--session", threadId], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
@@ -2274,8 +2274,8 @@ public sealed class AltaLiveToolTests
         var projectCatalog = new ProjectCatalog(options);
         var projectA = await projectCatalog.UpsertFromPathAsync(projectAPath).ConfigureAwait(false);
         var projectB = await projectCatalog.UpsertFromPathAsync(projectBPath).ConfigureAwait(false);
-        var backendId = new AgentBackendId("visibility");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("visibility");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -2283,15 +2283,15 @@ public sealed class AltaLiveToolTests
             .Add(projectCatalog)
             .Add(new WorkThreadCatalog(options))
             .Add(runtime));
-        var created = await dispatcher.InvokeAsync(["session", "create", "--project", projectA.Id, "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var created = await dispatcher.InvokeAsync(["session", "create", "--project", projectA.Id, "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var threadId = ReadJsonLines(created.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
         var caller = new AltaCallerIdentity { Kind = "agent", SourceProjectId = projectB.Id, SourceThreadId = "other-thread" };
 
         var show = await dispatcher.InvokeAsync(["session", "show", threadId], caller: caller).ConfigureAwait(false);
         var listOtherProject = await dispatcher.InvokeAsync(["session", "list", "--project", projectA.Id], caller: caller).ConfigureAwait(false);
         var send = await dispatcher.InvokeAsync(["session", "send", threadId, "--message", "cross-project"], caller: caller).ConfigureAwait(false);
-        var createOtherProject = await dispatcher.InvokeAsync(["session", "create", "--project", projectA.Id, "--provider", backendId.Value], caller: caller).ConfigureAwait(false);
-        var createGlobal = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: caller).ConfigureAwait(false);
+        var createOtherProject = await dispatcher.InvokeAsync(["session", "create", "--project", projectA.Id, "--provider", ProviderId.Value], caller: caller).ConfigureAwait(false);
+        var createGlobal = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value], caller: caller).ConfigureAwait(false);
         var modelResolve = await dispatcher.InvokeAsync(["model", "resolve", "--same-model-as", threadId], caller: caller).ConfigureAwait(false);
 
         Assert.AreEqual(AltaExitCodes.Success, show.ExitCode);
@@ -2394,8 +2394,8 @@ public sealed class AltaLiveToolTests
         var options = new CatalogOptions { GlobalRoot = root.Path };
         var projectCatalog = new ProjectCatalog(options);
         var project = await projectCatalog.UpsertFromPathAsync(projectPath).ConfigureAwait(false);
-        var backendId = new AgentBackendId("coordinator-visibility");
-        var backend = new StatefulBackend(backendId);
+        var ProviderId = new ModelProviderId("coordinator-visibility");
+        var backend = new StatefulBackend(ProviderId);
         var runtime = CreateRuntime(options, backend);
         await using var _ = runtime.ConfigureAwait(false);
         var dispatcher = CreateDispatcher(new AltaServiceCollection()
@@ -2403,8 +2403,8 @@ public sealed class AltaLiveToolTests
             .Add(projectCatalog)
             .Add(new WorkThreadCatalog(options))
             .Add(runtime));
-        var global = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
-        var projectSession = await dispatcher.InvokeAsync(["session", "create", "--project", project.Id, "--provider", backendId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var global = await dispatcher.InvokeAsync(["session", "create", "--global", "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
+        var projectSession = await dispatcher.InvokeAsync(["session", "create", "--project", project.Id, "--provider", ProviderId.Value], caller: AltaCallerIdentity.Cli).ConfigureAwait(false);
         var globalThreadId = ReadJsonLines(global.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
         var projectThreadId = ReadJsonLines(projectSession.Stdout).Single(static line => line.GetProperty("type").GetString() == "alta.session.created").GetProperty("threadId").GetString()!;
         var coordinatorCaller = new AltaCallerIdentity { Kind = "agent", SourceThreadId = globalThreadId, SourceAgentId = "global-coordinator" };
@@ -2485,7 +2485,7 @@ public sealed class AltaLiveToolTests
 
     private static AgentToolInvocation CreateInvocation(JsonElement arguments)
         => new(
-            new AgentBackendId("openai-responses"),
+            new ModelProviderId("openai-responses"),
             "session-1",
             "call-1",
             "alta",
@@ -2501,8 +2501,8 @@ public sealed class AltaLiveToolTests
         {
             ThreadId = threadId,
             Kind = WorkThreadKind.InternalThread,
-            BackendId = AgentBackendIds.Codex.Value,
-            ProviderKey = AgentBackendIds.Codex.Value,
+            ProviderId = ModelProviderIds.Codex.Value,
+            ProviderKey = ModelProviderIds.Codex.Value,
             ProjectRef = projectId,
             WorkingDirectory = workingDirectory,
             Title = title,
@@ -2512,13 +2512,13 @@ public sealed class AltaLiveToolTests
             LastActiveAt = timestamp,
         };
 
-    private static SessionRuntimeService CreateRuntime(CatalogOptions options, AgentBackendId backendId)
-        => CreateRuntime(options, new TestAgentBackend(backendId));
+    private static SessionRuntimeService CreateRuntime(CatalogOptions options, ModelProviderId ProviderId)
+        => CreateRuntime(options, new TestModelProviderRuntime(ProviderId));
 
-    private static SessionRuntimeService CreateRuntime(CatalogOptions options, IAgentBackend backend)
+    private static SessionRuntimeService CreateRuntime(CatalogOptions options, ITestModelProviderSessionRuntime backend)
     {
         var registry = new ModelProviderRegistry();
-        registry.RegisterOrReplaceBackendRuntime(new ModelProviderDescriptor(new ModelProviderId(backend.BackendId.Value), backend.DisplayName), () => backend);
+        registry.RegisterOrReplaceBackendRuntime(new ModelProviderDescriptor(new ModelProviderId(backend.ProviderId.Value), backend.DisplayName), () => backend);
         var hub = new AgentHub(registry);
         var projectCatalog = new ProjectCatalog(options);
         var threadCatalog = new WorkThreadCatalog(options);
@@ -2780,9 +2780,9 @@ public sealed class AltaLiveToolTests
             => throw new InvalidOperationException("Session infos must not be loaded for this path.");
     }
 
-    private sealed class TestAgentBackend(AgentBackendId backendId) : IAgentBackend
+    private sealed class TestModelProviderRuntime(ModelProviderId providerId) : ITestModelProviderSessionRuntime
     {
-        public AgentBackendId BackendId => backendId;
+        public ModelProviderId ProviderId => providerId;
 
         public string DisplayName => "Test Agent Backend";
 
@@ -2802,7 +2802,7 @@ public sealed class AltaLiveToolTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class StatefulBackend(AgentBackendId backendId) : IAgentBackend
+    private sealed class StatefulBackend(ModelProviderId providerId) : ITestModelProviderSessionRuntime
     {
         private readonly Dictionary<string, List<Action<AgentEvent>>> _subscriptions = new(StringComparer.Ordinal);
         private int _nextSession;
@@ -2829,7 +2829,7 @@ public sealed class AltaLiveToolTests
 
         public IReadOnlyList<AgentModelInfo> Models { get; init; } = [];
 
-        public AgentBackendId BackendId => backendId;
+        public ModelProviderId ProviderId => providerId;
 
         public string DisplayName => "Stateful Backend";
 
@@ -2847,13 +2847,13 @@ public sealed class AltaLiveToolTests
                 ? "session-" + Interlocked.Increment(ref _nextSession).ToString(System.Globalization.CultureInfo.InvariantCulture)
                 : options.ThreadId!;
             var workingDirectory = options.WorkingDirectory ?? Environment.CurrentDirectory;
-            return Task.FromResult<IAgentSession>(new StatefulAgentSession(this, backendId, sessionId, workingDirectory));
+            return Task.FromResult<IAgentSession>(new StatefulAgentSession(this, ProviderId, sessionId, workingDirectory));
         }
 
         public Task<IAgentSession> ResumeSessionAsync(string sessionId, AgentSessionResumeOptions options, CancellationToken cancellationToken = default)
         {
             var workingDirectory = options.WorkingDirectory ?? Environment.CurrentDirectory;
-            return Task.FromResult<IAgentSession>(new StatefulAgentSession(this, backendId, sessionId, workingDirectory));
+            return Task.FromResult<IAgentSession>(new StatefulAgentSession(this, ProviderId, sessionId, workingDirectory));
         }
 
         public void RecordAbort() => AbortCount++;
@@ -2862,7 +2862,7 @@ public sealed class AltaLiveToolTests
 
         public void PublishIdle(string sessionId, AgentRunId runId)
         {
-            var @event = new AgentSessionUpdateEvent(backendId, sessionId, DateTimeOffset.UtcNow, runId, AgentSessionUpdateKind.Idle, "Idle");
+            var @event = new AgentSessionUpdateEvent(ProviderId, sessionId, DateTimeOffset.UtcNow, runId, AgentSessionUpdateKind.Idle, "Idle");
             foreach (var handler in _subscriptions.TryGetValue(sessionId, out var handlers) ? handlers.ToArray() : [])
             {
                 handler(@event);
@@ -2872,7 +2872,7 @@ public sealed class AltaLiveToolTests
         public void PublishAssistantCompleted(string sessionId, AgentRunId runId, string content)
         {
             var @event = new AgentContentCompletedEvent(
-                backendId,
+                ProviderId,
                 sessionId,
                 DateTimeOffset.UtcNow,
                 runId,
@@ -2888,7 +2888,7 @@ public sealed class AltaLiveToolTests
 
         public void PublishError(string sessionId, AgentRunId runId, string message)
         {
-            var @event = new AgentErrorEvent(backendId, sessionId, DateTimeOffset.UtcNow, message, exception: null, runId: runId);
+            var @event = new AgentErrorEvent(ProviderId, sessionId, DateTimeOffset.UtcNow, message, exception: null, runId: runId);
             foreach (var handler in _subscriptions.TryGetValue(sessionId, out var handlers) ? handlers.ToArray() : [])
             {
                 handler(@event);
@@ -2898,7 +2898,7 @@ public sealed class AltaLiveToolTests
         public void PublishUserCompleted(string sessionId, AgentRunId runId, string content)
         {
             var @event = new AgentContentCompletedEvent(
-                backendId,
+                ProviderId,
                 sessionId,
                 DateTimeOffset.UtcNow,
                 runId,
@@ -2927,11 +2927,11 @@ public sealed class AltaLiveToolTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class StatefulAgentSession(StatefulBackend owner, AgentBackendId backendId, string sessionId, string workingDirectory) : IAgentSession
+    private sealed class StatefulAgentSession(StatefulBackend owner, ModelProviderId providerId, string sessionId, string workingDirectory) : IAgentSession
     {
         private int _nextRun;
 
-        public AgentBackendId BackendId => backendId;
+        public ModelProviderId ProviderId => providerId;
 
         public string SessionId => sessionId;
 

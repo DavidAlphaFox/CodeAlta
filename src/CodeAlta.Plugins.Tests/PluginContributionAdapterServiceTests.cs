@@ -35,7 +35,7 @@ public sealed class PluginContributionAdapterServiceTests
         var (registry, active) = await ActivateAsync<ComprehensivePlugin>();
         var adapter = new PluginContributionAdapterService(registry);
 
-        var prompt = await adapter.ProcessPromptSubmittingAsync([active], "hello", options: new PluginAdapterOperationOptions { BackendId = "local", IsCodeAltaManagedBackend = true });
+        var prompt = await adapter.ProcessPromptSubmittingAsync([active], "hello", options: new PluginAdapterOperationOptions { ProviderId = "local", IsCodeAltaManagedBackend = true });
         var (parts, diagnostics) = await adapter.BuildSystemPromptPartsAsync([active], PluginPromptChannel.System, supportsDirectInjection: true);
 
         Assert.AreEqual(0, prompt.Diagnostics.Count, string.Join(Environment.NewLine, prompt.Diagnostics.Select(static diagnostic => diagnostic.Message)));
@@ -52,7 +52,7 @@ public sealed class PluginContributionAdapterServiceTests
     {
         var (registry, active) = await ActivateAsync<ComprehensivePlugin>();
         var adapter = new PluginContributionAdapterService(registry);
-        var invocation = new AgentToolInvocation(new AgentBackendId("local"), "session", "call", "sample", JsonSerializer.SerializeToElement(new { value = 1 }));
+        var invocation = new AgentToolInvocation(new ModelProviderId("local"), "session", "call", "sample", JsonSerializer.SerializeToElement(new { value = 1 }));
         var toolResult = new AgentToolResult(true, [new AgentToolResultItem.Text("original")]);
 
         var before = await adapter.BeforeAgentRunAsync([active], CreateBeforeRunTemplate(active, "prompt"));
@@ -273,7 +273,7 @@ public sealed class PluginContributionAdapterServiceTests
         {
             Plugin = active.Descriptor,
             Services = active.RuntimeContext.Services,
-            Event = new AgentActivityEvent(new AgentBackendId("local"), "session", DateTimeOffset.UtcNow, null, AgentActivityKind.Turn, AgentActivityPhase.Started, "activity", null, "name", "message"),
+            Event = new AgentActivityEvent(new ModelProviderId("local"), "session", DateTimeOffset.UtcNow, null, AgentActivityKind.Turn, AgentActivityPhase.Started, "activity", null, "name", "message"),
         };
 
     private static PluginBeforeCompactionContext CreateBeforeCompactionTemplate(ActivePluginInstance active)

@@ -17,7 +17,7 @@ public sealed class HeadlessHostFixtureTests
     public async Task HeadlessHost_CreatesThreadSubmitsPromptStreamsEventsAndShutsDown()
     {
         using var temp = TempDirectory.Create();
-        var backendId = new AgentBackendId("fake-headless");
+        var ProviderId = new ModelProviderId("fake-headless");
         await using var host = await CodeAltaHost.CreateAsync(
             new CodeAltaHostOptions
             {
@@ -26,13 +26,13 @@ public sealed class HeadlessHostFixtureTests
                 IsHeadless = true,
                 HasInteractiveUi = false,
                 StartPlugins = false,
-                ConfigureModelProviders = registry => RegisterFakeProvider(registry, backendId),
+                ConfigureModelProviders = registry => RegisterFakeProvider(registry, ProviderId),
             },
             CancellationToken.None);
         var executionOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             WorkingDirectory = temp.ProjectRoot,
             ProjectRoots = [temp.ProjectRoot],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.Deny)),
@@ -138,7 +138,7 @@ public sealed class HeadlessHostFixtureTests
     public async Task HeadlessHost_DoesNotLeaveRunActiveWhenIdleArrivesBeforeSendReturns()
     {
         using var temp = TempDirectory.Create();
-        var backendId = new AgentBackendId("fake-race");
+        var ProviderId = new ModelProviderId("fake-race");
         await using var host = await CodeAltaHost.CreateAsync(
             new CodeAltaHostOptions
             {
@@ -147,13 +147,13 @@ public sealed class HeadlessHostFixtureTests
                 IsHeadless = true,
                 HasInteractiveUi = false,
                 StartPlugins = false,
-                ConfigureModelProviders = registry => RegisterFakeProvider(registry, backendId),
+                ConfigureModelProviders = registry => RegisterFakeProvider(registry, ProviderId),
             },
             CancellationToken.None);
         var executionOptions = new SessionExecutionOptions
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             WorkingDirectory = temp.ProjectRoot,
             ProjectRoots = [temp.ProjectRoot],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.Deny)),
@@ -175,9 +175,9 @@ public sealed class HeadlessHostFixtureTests
         Assert.IsFalse(hasActiveRun);
     }
 
-    private static void RegisterFakeProvider(ModelProviderRegistry registry, AgentBackendId backendId)
+    private static void RegisterFakeProvider(ModelProviderRegistry registry, ModelProviderId ProviderId)
     {
-        var descriptor = new ModelProviderDescriptor(new ModelProviderId(backendId.Value), "Fake Headless") { DefaultModelId = "fake-model" };
+        var descriptor = new ModelProviderDescriptor(new ModelProviderId(ProviderId.Value), "Fake Headless") { DefaultModelId = "fake-model" };
         registry.RegisterOrReplace(descriptor, () => new FakeModelProviderRuntime(descriptor));
     }
 
@@ -263,12 +263,12 @@ public sealed class HeadlessHostFixtureTests
         }
     }
 
-    private sealed class FakeAgentSession(AgentBackendId backendId, string sessionId, string? workspacePath) : IAgentSession
+    private sealed class FakeAgentSession(ModelProviderId ProviderId, string sessionId, string? workspacePath) : IAgentSession
     {
         private readonly ConcurrentDictionary<Guid, Action<AgentEvent>> _subscribers = new();
         private readonly Channel<AgentEvent> _events = Channel.CreateUnbounded<AgentEvent>();
 
-        public AgentBackendId BackendId { get; } = backendId;
+        public ModelProviderId ProviderId { get; } = ProviderId;
 
         public string SessionId { get; } = sessionId;
 
@@ -290,14 +290,14 @@ public sealed class HeadlessHostFixtureTests
             ArgumentNullException.ThrowIfNull(options);
             var runId = new AgentRunId("run-1");
             Publish(new AgentSessionUpdateEvent(
-                BackendId,
+                ProviderId,
                 SessionId,
                 DateTimeOffset.UtcNow,
                 runId,
                 AgentSessionUpdateKind.Started,
                 "Fake session started."));
             Publish(new AgentContentCompletedEvent(
-                BackendId,
+                ProviderId,
                 SessionId,
                 DateTimeOffset.UtcNow,
                 runId,
@@ -306,7 +306,7 @@ public sealed class HeadlessHostFixtureTests
                 ParentActivityId: null,
                 "fake response"));
             Publish(new AgentSessionUpdateEvent(
-                BackendId,
+                ProviderId,
                 SessionId,
                 DateTimeOffset.UtcNow,
                 runId,

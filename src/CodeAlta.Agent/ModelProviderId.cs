@@ -6,8 +6,9 @@ namespace CodeAlta.Agent;
 /// Identifies a configured model provider instance.
 /// </summary>
 /// <remarks>
-/// The value maps to the provider key in <c>config.toml</c> and to legacy persisted backend identifiers when they denoted a provider.
+/// The value maps to the provider key in <c>config.toml</c> and to legacy persisted model provider identifiers when they denoted a provider.
 /// </remarks>
+[JsonConverter(typeof(ModelProviderIdJsonConverter))]
 public readonly record struct ModelProviderId
 {
     /// <summary>

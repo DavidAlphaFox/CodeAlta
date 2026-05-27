@@ -8,7 +8,7 @@ namespace CodeAlta.Agent.Copilot;
 /// <summary>
 /// Options used to create a GitHub Copilot direct local-runtime backend.
 /// </summary>
-public sealed class CopilotDirectAgentBackendOptions
+public sealed class CopilotDirectModelProviderRuntimeOptions
 {
     /// <summary>
     /// Gets or sets the optional provider identifier override.

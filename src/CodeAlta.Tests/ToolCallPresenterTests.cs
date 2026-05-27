@@ -22,7 +22,7 @@ public sealed class ToolCallPresenterTests
         var timestamp = DateTimeOffset.UtcNow;
 
         presenter.TryHandleContent(new AgentContentDeltaEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp,
             null,
@@ -31,7 +31,7 @@ public sealed class ToolCallPresenterTests
             null,
             "first line\r"));
         presenter.TryHandleContent(new AgentContentDeltaEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp.AddMilliseconds(10),
             null,
@@ -56,7 +56,7 @@ public sealed class ToolCallPresenterTests
         var timestamp = DateTimeOffset.UtcNow;
 
         presenter.TryHandleActivity(new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp,
             null,
@@ -67,7 +67,7 @@ public sealed class ToolCallPresenterTests
             "shell_command",
             null));
         presenter.TryHandleActivity(new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp.AddMilliseconds(5),
             null,
@@ -78,7 +78,7 @@ public sealed class ToolCallPresenterTests
             "shell_command",
             null));
         presenter.TryHandleActivity(new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp.AddMilliseconds(10),
             null,
@@ -89,7 +89,7 @@ public sealed class ToolCallPresenterTests
             "shell_command",
             null));
         presenter.TryHandleActivity(new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp.AddMilliseconds(15),
             null,
@@ -119,7 +119,7 @@ public sealed class ToolCallPresenterTests
         var timestamp = DateTimeOffset.UtcNow;
 
         presenter.TryHandleActivity(new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp,
             null,
@@ -133,7 +133,7 @@ public sealed class ToolCallPresenterTests
         flow.FollowTail = false;
 
         presenter.TryHandleActivity(new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp.AddMilliseconds(5),
             null,

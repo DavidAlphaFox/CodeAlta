@@ -18,8 +18,8 @@ namespace CodeAlta.App;
 internal sealed class ThreadCommandCoordinator
 {
     private readonly SessionRuntimeService _runtimeService;
-    private readonly IReadOnlyList<ModelProviderDescriptor> _backendDescriptors;
-    private readonly Dictionary<string, ModelProviderState> _chatBackendStates;
+    private readonly IReadOnlyList<ModelProviderDescriptor> _providerDescriptors;
+    private readonly Dictionary<string, ModelProviderState> _modelProviderStates;
     private readonly ThreadSelectionContext _threadSelection;
     private readonly ModelProviderSelectorStateStore _selectorState;
     private readonly ThreadCommandContext _commandContext;
@@ -33,7 +33,7 @@ internal sealed class ThreadCommandCoordinator
     public ThreadCommandCoordinator(
         SessionRuntimeService runtimeService,
         CatalogOptions catalogOptions,
-        Dictionary<string, ModelProviderState> chatBackendStates,
+        Dictionary<string, ModelProviderState> modelProviderStates,
         ThreadSelectionContext threadSelection,
         ModelProviderSelectorStateStore selectorState,
         ThreadCommandContext commandContext,
@@ -42,7 +42,7 @@ internal sealed class ThreadCommandCoordinator
         IProjectFileSearchService? projectFileSearchService = null,
         PluginHostBridge? pluginHostBridge = null,
         IServiceProvider? altaServices = null,
-        IReadOnlySet<string>? altaToolBackendIds = null,
+        IReadOnlySet<string>? altaToolProviderIds = null,
         Func<bool>? getAlwaysEnqueue = null)
         : this(
             runtimeService,
@@ -50,7 +50,7 @@ internal sealed class ThreadCommandCoordinator
             ModelProviderPresentation.CreateProviderStates().Values
                 .Select(static state => new ModelProviderDescriptor(state.ProviderId, state.DisplayName))
                 .ToArray(),
-            chatBackendStates,
+            modelProviderStates,
             threadSelection,
             selectorState,
             commandContext,
@@ -59,7 +59,7 @@ internal sealed class ThreadCommandCoordinator
             projectFileSearchService,
             pluginHostBridge,
             altaServices,
-            altaToolBackendIds,
+            altaToolProviderIds,
             getAlwaysEnqueue)
     {
     }
@@ -67,8 +67,8 @@ internal sealed class ThreadCommandCoordinator
     public ThreadCommandCoordinator(
         SessionRuntimeService runtimeService,
         CatalogOptions catalogOptions,
-        IReadOnlyList<ModelProviderDescriptor> backendDescriptors,
-        Dictionary<string, ModelProviderState> chatBackendStates,
+        IReadOnlyList<ModelProviderDescriptor> providerDescriptors,
+        Dictionary<string, ModelProviderState> modelProviderStates,
         ThreadSelectionContext threadSelection,
         ModelProviderSelectorStateStore selectorState,
         ThreadCommandContext commandContext,
@@ -77,12 +77,12 @@ internal sealed class ThreadCommandCoordinator
         IProjectFileSearchService? projectFileSearchService = null,
         PluginHostBridge? pluginHostBridge = null,
         IServiceProvider? altaServices = null,
-        IReadOnlySet<string>? altaToolBackendIds = null,
+        IReadOnlySet<string>? altaToolProviderIds = null,
         Func<bool>? getAlwaysEnqueue = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
-        ArgumentNullException.ThrowIfNull(backendDescriptors);
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(providerDescriptors);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
         ArgumentNullException.ThrowIfNull(threadSelection);
         ArgumentNullException.ThrowIfNull(selectorState);
         ArgumentNullException.ThrowIfNull(commandContext);
@@ -90,8 +90,8 @@ internal sealed class ThreadCommandCoordinator
         ArgumentNullException.ThrowIfNull(promptComposerViewModel);
 
         _runtimeService = runtimeService;
-        _backendDescriptors = backendDescriptors;
-        _chatBackendStates = chatBackendStates;
+        _providerDescriptors = providerDescriptors;
+        _modelProviderStates = modelProviderStates;
         _threadSelection = threadSelection;
         _selectorState = selectorState;
         _commandContext = commandContext;
@@ -101,7 +101,7 @@ internal sealed class ThreadCommandCoordinator
         _pluginHostBridge = pluginHostBridge;
         var permissionRequests = new ThreadPermissionRequestCoordinator(threadSelection, commandContext);
         var userInputRequests = new ThreadUserInputRequestCoordinator(threadSelection, commandContext);
-        _executionOptionsFactory = new ThreadExecutionOptionsFactory(catalogOptions, chatBackendStates, threadSelection, permissionRequests, userInputRequests, altaServices, altaToolBackendIds);
+        _executionOptionsFactory = new ThreadExecutionOptionsFactory(catalogOptions, modelProviderStates, threadSelection, permissionRequests, userInputRequests, altaServices, altaToolProviderIds);
         _promptDispatchCoordinator = new ThreadPromptDispatchCoordinator(
             runtimeService,
             _executionOptionsFactory,
@@ -156,7 +156,7 @@ internal sealed class ThreadCommandCoordinator
 
             _commandContext.ClearDraftInput();
         }
-        else if (!IsModelProviderReady(new ModelProviderId(thread.BackendId)))
+        else if (!IsModelProviderReady(new ModelProviderId(thread.ProviderId)))
         {
             _commandContext.SetReadyStatusForCurrentSelection();
             return;
@@ -228,7 +228,7 @@ internal sealed class ThreadCommandCoordinator
             return;
         }
 
-        if (!IsModelProviderReady(new ModelProviderId(thread.BackendId)))
+        if (!IsModelProviderReady(new ModelProviderId(thread.ProviderId)))
         {
             _commandContext.SetReadyStatusForCurrentSelection();
             return;
@@ -418,7 +418,7 @@ internal sealed class ThreadCommandCoordinator
 
     private bool IsModelProviderReady(ModelProviderId providerId)
     {
-        return _chatBackendStates.TryGetValue(providerId.Value, out var state) &&
+        return _modelProviderStates.TryGetValue(providerId.Value, out var state) &&
                state.Availability == ModelProviderAvailability.Ready;
     }
 
@@ -429,7 +429,7 @@ internal sealed class ThreadCommandCoordinator
             : thread is not null
                 ? new ModelProviderId(thread.ResolvedProviderKey)
                 : ResolveSelectedProviderId();
-        if (!_chatBackendStates.TryGetValue(providerId.Value, out var backendState))
+        if (!_modelProviderStates.TryGetValue(providerId.Value, out var backendState))
         {
             return false;
         }
@@ -446,13 +446,13 @@ internal sealed class ThreadCommandCoordinator
     private ModelProviderId ResolveSelectedProviderId()
     {
         var backendIndex = UiDispatch.Invoke(_selectorState.GetUiDispatcher(), () => _selectorState.GetSelectedModelProviderIndex());
-        var backendOptions = ModelProviderPresentation.BuildProviderOptions(_backendDescriptors);
+        var backendOptions = ModelProviderPresentation.BuildProviderOptions(_providerDescriptors);
         if (backendIndex is { } index && (uint)index < (uint)backendOptions.Count)
         {
             return backendOptions[index].ProviderId;
         }
 
-        return _chatBackendStates.Values.FirstOrDefault(static state => state.Availability == ModelProviderAvailability.Ready) is { } readyState
+        return _modelProviderStates.Values.FirstOrDefault(static state => state.Availability == ModelProviderAvailability.Ready) is { } readyState
             ? readyState.ProviderId
             : ModelProviderIds.Codex;
     }

@@ -111,7 +111,7 @@ public sealed class ThreadTimelinePresenterTests
         var presenter = CreatePresenter();
         var timestamp = DateTimeOffset.UtcNow;
         var delta = new AgentContentDeltaEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp,
             null,
@@ -120,7 +120,7 @@ public sealed class ThreadTimelinePresenterTests
             null,
             "Streaming reply");
         var completed = new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp,
             null,
@@ -146,7 +146,7 @@ public sealed class ThreadTimelinePresenterTests
         var timestamp = DateTimeOffset.UtcNow;
         var runId = new AgentRunId("run-1");
         var delta = new AgentContentDeltaEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp,
             runId,
@@ -155,7 +155,7 @@ public sealed class ThreadTimelinePresenterTests
             null,
             "Streaming ");
         var completed = new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp.AddSeconds(1),
             runId,
@@ -178,7 +178,7 @@ public sealed class ThreadTimelinePresenterTests
         var timestamp = DateTimeOffset.UtcNow;
         var runId = new AgentRunId("run-1");
         var delta = new AgentContentDeltaEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp,
             runId,
@@ -187,7 +187,7 @@ public sealed class ThreadTimelinePresenterTests
             null,
             "Streaming ");
         var completed = new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp.AddSeconds(1),
             runId,
@@ -211,7 +211,7 @@ public sealed class ThreadTimelinePresenterTests
         var presenter = CreatePresenter();
         var timestamp = DateTimeOffset.UtcNow;
         var delta = new AgentContentDeltaEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp,
             null,
@@ -221,7 +221,7 @@ public sealed class ThreadTimelinePresenterTests
             "Partial draft",
             CreateJsonDetails("""{"attemptId":"run-1:1","draft":true}"""));
         var update = new AgentSessionUpdateEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp.AddSeconds(1),
             null,
@@ -473,7 +473,7 @@ public sealed class ThreadTimelinePresenterTests
         var presenter = CreatePresenter();
         var timestamp = DateTimeOffset.UtcNow;
         var delta = new AgentContentDeltaEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp,
             null,
@@ -482,7 +482,7 @@ public sealed class ThreadTimelinePresenterTests
             null,
             "Streaming reply");
         var completed = new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             timestamp,
             null,
@@ -528,7 +528,7 @@ public sealed class ThreadTimelinePresenterTests
         string contentId,
         string content)
         => presenter.FinalizeContent(new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,

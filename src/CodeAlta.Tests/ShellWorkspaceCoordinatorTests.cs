@@ -165,7 +165,7 @@ public sealed class ShellWorkspaceCoordinatorTests
 
         workspace.ApplySelectionProjection();
 
-        Assert.AreEqual("Codex", sessionUsage.BackendName);
+        Assert.AreEqual("Codex", sessionUsage.ProviderName);
         Assert.IsNull(sessionUsage.ModelName);
         Assert.IsNull(sessionUsage.Usage);
     }
@@ -192,7 +192,7 @@ public sealed class ShellWorkspaceCoordinatorTests
 
         workspace.ApplySelectionProjection();
 
-        Assert.AreEqual("Codex", sessionUsage.BackendName);
+        Assert.AreEqual("Codex", sessionUsage.ProviderName);
         Assert.IsNull(sessionUsage.ModelName);
         Assert.IsNull(sessionUsage.Usage);
     }
@@ -286,12 +286,12 @@ public sealed class ShellWorkspaceCoordinatorTests
     private static (ShellWorkspaceCoordinator Workspace, SessionUsageViewModel SessionUsage) CreateWorkspaceCoordinator(
         ShellThreadStateCoordinator threadStateCoordinator,
         ThreadSelectionContext threadSelection,
-        Dictionary<string, ModelProviderState> chatBackendStates,
-        Func<ModelProviderId> getPreferredBackendId)
+        Dictionary<string, ModelProviderState> modelProviderStates,
+        Func<ModelProviderId> getPreferredProviderId)
     {
         var workspaceContext = new ShellWorkspaceContext(
             new DelegatingShellPromptAvailabilityPort(
-                getPreferredBackendId,
+                getPreferredProviderId,
                 static () => (true, "No model provider is ready.", StatusTone.Warning)),
             new ShellWorkspaceSurfacePort(
                 static () => true,
@@ -318,7 +318,7 @@ public sealed class ShellWorkspaceCoordinatorTests
             new CodeAltaShellViewModel(),
             new ThreadWorkspaceViewModel(),
             sessionUsage,
-            chatBackendStates,
+            modelProviderStates,
             threadSelection,
             workspaceContext);
 
@@ -382,7 +382,7 @@ public sealed class ShellWorkspaceCoordinatorTests
         {
             ThreadId = threadId,
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = ModelProviderIds.Codex.Value,
+            ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = projectId,
             WorkingDirectory = @"C:\repo",
             Title = "Test thread",

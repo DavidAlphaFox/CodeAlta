@@ -4,9 +4,9 @@ using System.Text.Json.Serialization;
 namespace CodeAlta.Agent;
 
 /// <summary>
-/// Shared base type for a permission request originating from a backend.
+/// Shared base type for a permission request originating from a provider.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">The event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
@@ -17,38 +17,38 @@ namespace CodeAlta.Agent;
 [JsonDerivedType(typeof(AgentCommandPermissionRequest), "command")]
 [JsonDerivedType(typeof(AgentFileChangePermissionRequest), "fileChange")]
 public abstract record AgentPermissionRequest(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
     string InteractionId,
     string Kind)
-    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+    : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
 /// <summary>
 /// Generic permission request for backends that do not expose a richer typed prompt.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">The event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
 /// <param name="InteractionId">Stable interaction identifier.</param>
-/// <param name="Kind">The backend-defined request kind.</param>
+/// <param name="Kind">The provider-defined request kind.</param>
 /// <param name="Raw">The raw request payload.</param>
 public sealed record AgentGenericPermissionRequest(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
     string InteractionId,
     string Kind,
     JsonElement Raw)
-    : AgentPermissionRequest(BackendId, SessionId, Timestamp, RunId, InteractionId, Kind);
+    : AgentPermissionRequest(ProviderId, SessionId, Timestamp, RunId, InteractionId, Kind);
 
 /// <summary>
 /// Permission request for command execution.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">The event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
@@ -62,7 +62,7 @@ public sealed record AgentGenericPermissionRequest(
 /// <param name="ProposedExecPolicyAmendment">Optional proposed exec policy amendment.</param>
 /// <param name="ProposedNetworkPolicyAmendments">Optional proposed network policy amendments.</param>
 public sealed record AgentCommandPermissionRequest(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
@@ -75,12 +75,12 @@ public sealed record AgentCommandPermissionRequest(
     AgentNetworkAccessRequest? Network,
     IReadOnlyList<string>? ProposedExecPolicyAmendment,
     IReadOnlyList<AgentNetworkPolicyAmendment>? ProposedNetworkPolicyAmendments)
-    : AgentPermissionRequest(BackendId, SessionId, Timestamp, RunId, InteractionId, Kind: "commandExecution");
+    : AgentPermissionRequest(ProviderId, SessionId, Timestamp, RunId, InteractionId, Kind: "commandExecution");
 
 /// <summary>
 /// Permission request for file changes.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">The event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
@@ -88,14 +88,14 @@ public sealed record AgentCommandPermissionRequest(
 /// <param name="GrantRoot">Optional root path to grant for the session.</param>
 /// <param name="Reason">Optional explanatory reason.</param>
 public sealed record AgentFileChangePermissionRequest(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
     string InteractionId,
     string? GrantRoot,
     string? Reason)
-    : AgentPermissionRequest(BackendId, SessionId, Timestamp, RunId, InteractionId, Kind: "fileChange");
+    : AgentPermissionRequest(ProviderId, SessionId, Timestamp, RunId, InteractionId, Kind: "fileChange");
 
 /// <summary>
 /// Identifies the kind of a parsed command action.

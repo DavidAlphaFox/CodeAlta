@@ -253,13 +253,13 @@ public sealed class PluginAbstractionsTests
             Services = NoopPluginServices.Create(),
             Scope = PluginScope.Project,
             ScopeProjectId = "project",
-            Event = new AgentRawEvent(new AgentBackendId("fake"), "session", DateTimeOffset.UtcNow, "raw", document.RootElement.Clone()),
+            Event = new AgentRawEvent(new ModelProviderId("fake"), "session", DateTimeOffset.UtcNow, "raw", document.RootElement.Clone()),
             ProjectId = "project",
             ThreadId = "thread",
         };
 
         Assert.AreEqual("project", context.ProjectId);
-        Assert.AreEqual("fake", context.Event.BackendId.Value);
+        Assert.AreEqual("fake", context.Event.ProviderId.Value);
         Assert.IsTrue(context.AppliesToCurrentProject());
         context.Invalidate();
         Assert.ThrowsExactly<ObjectDisposedException>(context.ThrowIfInvalid);

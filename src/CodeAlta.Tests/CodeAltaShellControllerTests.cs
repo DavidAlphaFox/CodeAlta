@@ -159,15 +159,15 @@ public sealed class CodeAltaShellControllerTests
     public async Task InitializeAsync_AppliesRecoverableSessionsProgressivelyFromOneStream()
     {
         var log = new List<string>();
-        var codexBackendId = new AgentBackendId("codex");
-        var slowBackendId = new AgentBackendId("slow");
+        var codexProviderId = new ModelProviderId("codex");
+        var slowProviderId = new ModelProviderId("slow");
         var shell = new FakeShell(log);
         var project = new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" };
         var threadSource = new FakeRecoverableSessionSource(
             log,
             [
-                CreateThread("thread-codex", backendId: codexBackendId.Value),
-                CreateThread("thread-slow", backendId: slowBackendId.Value),
+                CreateThread("thread-codex", ProviderId: codexProviderId.Value),
+                CreateThread("thread-slow", ProviderId: slowProviderId.Value),
             ]);
         var controller = new CodeAltaShellController(
             shell,
@@ -176,8 +176,8 @@ public sealed class CodeAltaShellControllerTests
             threadSource,
             new FakeSessionDeleter(log),
             [
-                new ModelProviderDescriptor(codexBackendId, "Codex"),
-                new ModelProviderDescriptor(slowBackendId, "Slow"),
+                new ModelProviderDescriptor(codexProviderId, "Codex"),
+                new ModelProviderDescriptor(slowProviderId, "Slow"),
             ]);
         controller.AttachUiDispatcher(new FakeUiDispatcher());
 
@@ -194,23 +194,23 @@ public sealed class CodeAltaShellControllerTests
     public async Task InitializeAsync_LoadsManySessionsAcrossProvidersThroughSingleRecoverableSource()
     {
         var log = new List<string>();
-        var codexBackendId = new AgentBackendId("codex");
-        var slowBackendId = new AgentBackendId("slow");
+        var codexProviderId = new ModelProviderId("codex");
+        var slowProviderId = new ModelProviderId("slow");
         var shell = new FakeShell(log);
         var project = new ProjectDescriptor { Id = "project-1", DisplayName = "CodeAlta", ProjectPath = @"C:\repo", Slug = "codealta" };
-        var parent = CreateThread("thread-parent", backendId: codexBackendId.Value);
+        var parent = CreateThread("thread-parent", ProviderId: codexProviderId.Value);
         var providerIds = new[]
         {
-            codexBackendId,
-            slowBackendId,
-            new AgentBackendId("anthropic"),
-            new AgentBackendId("openai"),
+            codexProviderId,
+            slowProviderId,
+            new ModelProviderId("anthropic"),
+            new ModelProviderId("openai"),
         };
         var children = Enumerable.Range(1, 64)
             .Select(index =>
             {
                 var providerId = providerIds[index % providerIds.Length];
-                var child = CreateThread($"thread-child-{index}", backendId: providerId.Value);
+                var child = CreateThread($"thread-child-{index}", ProviderId: providerId.Value);
                 child.ParentThreadId = parent.ThreadId;
                 child.LastActiveAt = parent.LastActiveAt.AddMinutes(index);
                 return child;
@@ -666,7 +666,7 @@ public sealed class CodeAltaShellControllerTests
         return new WorkThreadAgentEvent(
             threadId,
             new AgentContentDeltaEvent(
-                AgentBackendIds.Codex,
+                ModelProviderIds.Codex,
                 "session-1",
                 timestamp,
                 null,
@@ -679,13 +679,13 @@ public sealed class CodeAltaShellControllerTests
     private static SessionViewDescriptor CreateThread(
         string threadId,
         string projectId = "project-1",
-        string? backendId = null)
+        string? ProviderId = null)
     {
         return new SessionViewDescriptor
         {
             ThreadId = threadId,
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = backendId ?? AgentBackendIds.Codex.Value,
+            ProviderId = ProviderId ?? ModelProviderIds.Codex.Value,
             ProjectRef = projectId,
             WorkingDirectory = @"C:\repo",
             Title = "Test thread",
@@ -734,11 +734,11 @@ public sealed class CodeAltaShellControllerTests
                 : Task.CompletedTask;
         }
 
-        public void BlockBackendInitialization(AgentBackendId backendId)
-            => _backendInitializationCompletions[backendId.Value] = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        public void BlockBackendInitialization(ModelProviderId ProviderId)
+            => _backendInitializationCompletions[ProviderId.Value] = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public void CompleteBackendInitialization(AgentBackendId backendId)
-            => _backendInitializationCompletions[backendId.Value].TrySetResult(true);
+        public void CompleteBackendInitialization(ModelProviderId ProviderId)
+            => _backendInitializationCompletions[ProviderId.Value].TrySetResult(true);
 
         public void SetStatus(string message, bool showSpinner = false, StatusTone tone = StatusTone.Info)
             => log.Add($"Shell.Status:{message}:{showSpinner}:{tone}");

@@ -406,7 +406,7 @@ public sealed class CodeAltaAppTests
     {
         var markdown = ChatMarkdownFormatter.FormatChatActivityMarkdown(
             new AgentActivityEvent(
-                AgentBackendIds.Codex,
+                ModelProviderIds.Codex,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -429,7 +429,7 @@ public sealed class CodeAltaAppTests
         var payload = string.Join('\n', Enumerable.Range(1, 12).Select(static index => $"line {index}"));
         var markdown = ChatMarkdownFormatter.FormatChatActivityMarkdown(
             new AgentActivityEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -457,7 +457,7 @@ public sealed class CodeAltaAppTests
 
         var markdown = ChatMarkdownFormatter.FormatChatActivityMarkdown(
             new AgentActivityEvent(
-                AgentBackendIds.Codex,
+                ModelProviderIds.Codex,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -501,7 +501,7 @@ public sealed class CodeAltaAppTests
     {
         var markdown = ChatMarkdownFormatter.FormatChatSessionUpdateMarkdown(
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Codex,
+                ModelProviderIds.Codex,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -517,7 +517,7 @@ public sealed class CodeAltaAppTests
     public void FormatChatSessionUpdateMarkdown_RebuildsModelUsedMessageFromDetails()
     {
         var update = new AgentSessionUpdateEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -534,7 +534,7 @@ public sealed class CodeAltaAppTests
     public void FormatChatSessionUpdateMarkdown_UsesLegacyModelUsedMessageWithoutStructuredKeys()
     {
         var update = new AgentSessionUpdateEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -664,12 +664,12 @@ public sealed class CodeAltaAppTests
         var timestamp = DateTimeOffset.UtcNow;
         AgentEvent[] history =
         [
-            new AgentContentDeltaEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-1", null, "First prompt"),
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-1", null, "First prompt"),
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.Assistant, "assistant-1", null, "First reply"),
-            new AgentContentDeltaEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-2", null, "Second prompt"),
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-2", null, "Second prompt"),
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.Assistant, "assistant-2", null, "Second reply"),
+            new AgentContentDeltaEvent(ModelProviderIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-1", null, "First prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-1", null, "First prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp, null, AgentContentKind.Assistant, "assistant-1", null, "First reply"),
+            new AgentContentDeltaEvent(ModelProviderIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-2", null, "Second prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-2", null, "Second prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp, null, AgentContentKind.Assistant, "assistant-2", null, "Second reply"),
         ];
 
         var plan = SessionHistoryCoordinator.CreateInitialLoadPlan(history);
@@ -685,7 +685,7 @@ public sealed class CodeAltaAppTests
         var timestamp = DateTimeOffset.UtcNow;
         var systemPrompt = CreateSystemPromptEvent(timestamp.AddSeconds(3), "sha256:latest");
         var modelChanged = new AgentSessionUpdateEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             timestamp.AddSeconds(2),
             null,
@@ -694,13 +694,13 @@ public sealed class CodeAltaAppTests
         AgentEvent[] history =
         [
             CreateSystemPromptEvent(timestamp, "sha256:old"),
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-1", null, "First prompt"),
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.Assistant, "assistant-1", null, "First reply"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-1", null, "First prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp, null, AgentContentKind.Assistant, "assistant-1", null, "First reply"),
             modelChanged,
             systemPrompt,
-            new AgentContentDeltaEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-2", null, "Second prompt"),
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-2", null, "Second prompt"),
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp, null, AgentContentKind.Assistant, "assistant-2", null, "Second reply"),
+            new AgentContentDeltaEvent(ModelProviderIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-2", null, "Second prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp, null, AgentContentKind.User, "user-2", null, "Second prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp, null, AgentContentKind.Assistant, "assistant-2", null, "Second reply"),
         ];
 
         var plan = SessionHistoryCoordinator.CreateInitialLoadPlan(history);
@@ -728,10 +728,10 @@ public sealed class CodeAltaAppTests
             UpdatedAt: timestamp.AddSeconds(2));
         AgentEvent[] history =
         [
-            new AgentContentCompletedEvent(AgentBackendIds.OpenAIResponses, "session-1", timestamp, null, AgentContentKind.User, "user-1", null, "First prompt"),
-            new AgentContentCompletedEvent(AgentBackendIds.OpenAIResponses, "session-1", timestamp.AddSeconds(1), null, AgentContentKind.Assistant, "assistant-1", null, "First reply"),
-            new AgentSessionUpdateEvent(AgentBackendIds.OpenAIResponses, "session-1", timestamp.AddSeconds(2), null, AgentSessionUpdateKind.UsageUpdated, "Usage updated.", Usage: usage),
-            new AgentContentCompletedEvent(AgentBackendIds.OpenAIResponses, "session-1", timestamp.AddSeconds(3), null, AgentContentKind.User, "user-2", null, "Second prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.OpenAIResponses, "session-1", timestamp, null, AgentContentKind.User, "user-1", null, "First prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.OpenAIResponses, "session-1", timestamp.AddSeconds(1), null, AgentContentKind.Assistant, "assistant-1", null, "First reply"),
+            new AgentSessionUpdateEvent(ModelProviderIds.OpenAIResponses, "session-1", timestamp.AddSeconds(2), null, AgentSessionUpdateKind.UsageUpdated, "Usage updated.", Usage: usage),
+            new AgentContentCompletedEvent(ModelProviderIds.OpenAIResponses, "session-1", timestamp.AddSeconds(3), null, AgentContentKind.User, "user-2", null, "Second prompt"),
         ];
 
         var plan = SessionHistoryCoordinator.CreateInitialLoadPlan(history);
@@ -751,16 +751,16 @@ public sealed class CodeAltaAppTests
         AgentEvent[] history =
         [
             new AgentSessionUpdateEvent(
-                AgentBackendIds.OpenAIResponses,
+                ModelProviderIds.OpenAIResponses,
                 "session-1",
                 timestamp,
                 null,
                 AgentSessionUpdateKind.ModelChanged,
                 "Model selected: `gpt-5`.",
                 JsonSerializer.SerializeToElement(new { modelId = "gpt-5", reasoningEffort = "Medium" })),
-            new AgentContentCompletedEvent(AgentBackendIds.OpenAIResponses, "session-1", timestamp.AddSeconds(1), null, AgentContentKind.User, "user-1", null, "Prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.OpenAIResponses, "session-1", timestamp.AddSeconds(1), null, AgentContentKind.User, "user-1", null, "Prompt"),
             new AgentSessionUpdateEvent(
-                AgentBackendIds.OpenAIResponses,
+                ModelProviderIds.OpenAIResponses,
                 "session-1",
                 timestamp.AddSeconds(2),
                 null,
@@ -772,7 +772,7 @@ public sealed class CodeAltaAppTests
         var preference = SessionHistoryCoordinator.RecoverModelProviderPreferenceFromHistory(history);
 
         Assert.IsNotNull(preference);
-        Assert.AreEqual(AgentBackendIds.OpenAIResponses.Value, preference.ModelProviderId.Value);
+        Assert.AreEqual(ModelProviderIds.OpenAIResponses.Value, preference.ModelProviderId.Value);
         Assert.AreEqual("gpt-5.5", preference.ModelId);
         Assert.AreEqual(AgentReasoningEffort.High, preference.ReasoningEffort);
     }
@@ -786,11 +786,11 @@ public sealed class CodeAltaAppTests
         AgentEvent[] history =
         [
             initialSystemPrompt,
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp.AddSeconds(1), null, AgentContentKind.User, "user-1", null, "First prompt"),
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp.AddSeconds(2), null, AgentContentKind.Assistant, "assistant-1", null, "First reply"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp.AddSeconds(1), null, AgentContentKind.User, "user-1", null, "First prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp.AddSeconds(2), null, AgentContentKind.Assistant, "assistant-1", null, "First reply"),
             changedSystemPrompt,
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp.AddSeconds(4), null, AgentContentKind.User, "user-2", null, "Second prompt"),
-            new AgentContentCompletedEvent(AgentBackendIds.Copilot, "session-1", timestamp.AddSeconds(5), null, AgentContentKind.Assistant, "assistant-2", null, "Second reply"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp.AddSeconds(4), null, AgentContentKind.User, "user-2", null, "Second prompt"),
+            new AgentContentCompletedEvent(ModelProviderIds.Copilot, "session-1", timestamp.AddSeconds(5), null, AgentContentKind.Assistant, "assistant-2", null, "Second reply"),
         ];
         var plan = SessionHistoryCoordinator.CreateInitialLoadPlan(history);
 
@@ -900,7 +900,7 @@ public sealed class CodeAltaAppTests
         Assert.IsTrue(
             ThreadRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
                 new AgentContentDeltaEvent(
-                    AgentBackendIds.Copilot,
+                    ModelProviderIds.Copilot,
                     "session-1",
                     timestamp,
                     null,
@@ -912,7 +912,7 @@ public sealed class CodeAltaAppTests
         Assert.IsTrue(
             ThreadRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
                 new AgentActivityEvent(
-                    AgentBackendIds.Copilot,
+                    ModelProviderIds.Copilot,
                     "session-1",
                     timestamp,
                     null,
@@ -926,7 +926,7 @@ public sealed class CodeAltaAppTests
         Assert.IsFalse(
             ThreadRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
                 new AgentSessionUpdateEvent(
-                    AgentBackendIds.Copilot,
+                    ModelProviderIds.Copilot,
                     "session-1",
                     timestamp,
                     null,
@@ -936,7 +936,7 @@ public sealed class CodeAltaAppTests
         Assert.IsFalse(
             ThreadRuntimeEventCoordinator.ShouldPromoteAgentEventToThinking(
                 new AgentErrorEvent(
-                    AgentBackendIds.Copilot,
+                    ModelProviderIds.Copilot,
                     "session-1",
                     timestamp,
                     "Reconnect failed.",
@@ -949,7 +949,7 @@ public sealed class CodeAltaAppTests
         var runtimeEvent = new WorkThreadAgentEvent(
             "thread-1",
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Codex,
+                ModelProviderIds.Codex,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -965,7 +965,7 @@ public sealed class CodeAltaAppTests
         var runtimeEvent = new WorkThreadAgentEvent(
             "thread-1",
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Codex,
+                ModelProviderIds.Codex,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -990,7 +990,7 @@ public sealed class CodeAltaAppTests
         {
             ThreadId = "thread-1",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = AgentBackendIds.Codex.Value,
+            ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Review startup",
@@ -1012,7 +1012,7 @@ public sealed class CodeAltaAppTests
         {
             ThreadId = "thread-1",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = AgentBackendIds.Codex.Value,
+            ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Review startup",
@@ -1037,7 +1037,7 @@ public sealed class CodeAltaAppTests
         {
             ThreadId = "thread-1",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = AgentBackendIds.Codex.Value,
+            ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Review startup",
@@ -1084,7 +1084,7 @@ public sealed class CodeAltaAppTests
         {
             ThreadId = "copilot:session-1",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = AgentBackendIds.Copilot.Value,
+            ProviderId = ModelProviderIds.Copilot.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Recovered Session",
@@ -1142,7 +1142,7 @@ public sealed class CodeAltaAppTests
             """);
 
         var completion = new AgentActivityEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1175,7 +1175,7 @@ public sealed class CodeAltaAppTests
             """);
 
         var activity = new AgentActivityEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1210,7 +1210,7 @@ public sealed class CodeAltaAppTests
             """);
 
         var activity = new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1243,7 +1243,7 @@ public sealed class CodeAltaAppTests
             """);
 
         var activity = new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1508,7 +1508,7 @@ public sealed class CodeAltaAppTests
         {
             ThreadId = "thread-1",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = AgentBackendIds.Codex.Value,
+            ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Investigate startup",
@@ -1537,7 +1537,7 @@ public sealed class CodeAltaAppTests
         using var payloadJson = JsonDocument.Parse("""{"kind":"shell","toolCallId":"call-1"}""");
         var markdown = ChatMarkdownFormatter.FormatChatRawEventMarkdown(
             new AgentRawEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 "permission.request",
@@ -1553,7 +1553,7 @@ public sealed class CodeAltaAppTests
     public void ShouldDisplayActivity_HidesTurnAndToolStartNoise()
     {
         var turn = new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1564,7 +1564,7 @@ public sealed class CodeAltaAppTests
             "assistant turn",
             null);
         var toolStart = new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1575,7 +1575,7 @@ public sealed class CodeAltaAppTests
             "view",
             "Reading file");
         var toolCompleted = new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1595,7 +1595,7 @@ public sealed class CodeAltaAppTests
     public void ShouldDisplayActivity_HidesToolGroupedSubagentLifecycleAndKeepsCompaction()
     {
         var subagent = new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1606,7 +1606,7 @@ public sealed class CodeAltaAppTests
             "reviewer",
             "Started reviewer agent");
         var compaction = new AgentActivityEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1626,7 +1626,7 @@ public sealed class CodeAltaAppTests
     {
         using var payloadJson = JsonDocument.Parse("""{"kind":"shell"}""");
         var raw = new AgentRawEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             "tool.started",
@@ -1639,49 +1639,49 @@ public sealed class CodeAltaAppTests
     public void ShouldDisplaySessionUpdate_ShowsWarningsModelChangesAndCompactionLifecycle()
     {
         var copilotUsage = new AgentSessionUpdateEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
             AgentSessionUpdateKind.UsageUpdated,
             "token usage");
         var copilotResumed = new AgentSessionUpdateEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
             AgentSessionUpdateKind.Resumed,
             "session resumed");
         var copilotWarning = new AgentSessionUpdateEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
             AgentSessionUpdateKind.Warning,
             "warning");
         var copilotModelChanged = new AgentSessionUpdateEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
             AgentSessionUpdateKind.ModelChanged,
             "Model changed to gpt-5.");
         var copilotCompactionStarted = new AgentSessionUpdateEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
             AgentSessionUpdateKind.CompactionStarted,
             "Compaction started.");
         var copilotCompactionCompleted = new AgentSessionUpdateEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
             AgentSessionUpdateKind.CompactionCompleted,
             "Compaction completed.");
         var codexUsage = new AgentSessionUpdateEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1743,7 +1743,7 @@ public sealed class CodeAltaAppTests
             }
             """);
         var update = new AgentSessionUpdateEvent(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1779,7 +1779,7 @@ public sealed class CodeAltaAppTests
             }
             """);
         var update = new AgentSessionUpdateEvent(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1805,7 +1805,7 @@ public sealed class CodeAltaAppTests
     public void ShouldDisplayInteraction_HidesAutoApprovedPermissionResolutions()
     {
         var permissionResolved = new AgentInteractionEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1813,7 +1813,7 @@ public sealed class CodeAltaAppTests
             "interaction-1",
             "Permission resolved.");
         var userInputResolved = new AgentInteractionEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -1831,7 +1831,7 @@ public sealed class CodeAltaAppTests
     {
         var typedMarkdown = ChatMarkdownFormatter.FormatChatPermissionRequestMarkdown(
             new AgentCommandPermissionRequest(
-                AgentBackendIds.Codex,
+                ModelProviderIds.Codex,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -1854,7 +1854,7 @@ public sealed class CodeAltaAppTests
         using var rawJson = JsonDocument.Parse("""{"toolName":"search_workspace"}""");
         var genericMarkdown = ChatMarkdownFormatter.FormatChatPermissionRequestMarkdown(
             new AgentGenericPermissionRequest(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-2",
                 DateTimeOffset.UtcNow,
                 null,
@@ -1871,7 +1871,7 @@ public sealed class CodeAltaAppTests
     {
         var markdown = ChatMarkdownFormatter.FormatChatUserInputRequestMarkdown(
             new AgentUserInputRequest(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -1903,7 +1903,7 @@ public sealed class CodeAltaAppTests
     {
         var markdown = ChatMarkdownFormatter.FormatChatUserInputRequestMarkdown(
             new AgentUserInputRequest(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -1926,7 +1926,7 @@ public sealed class CodeAltaAppTests
     {
         var response = ChatPromptResponseBuilder.CreateResponse(
             new AgentUserInputRequest(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -1960,7 +1960,7 @@ public sealed class CodeAltaAppTests
     {
         var response = ChatPromptResponseBuilder.CreateResponse(
             new AgentUserInputRequest(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -1988,7 +1988,7 @@ public sealed class CodeAltaAppTests
     {
         var response = ChatPromptResponseBuilder.CreateResponse(
             new AgentUserInputRequest(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -2012,7 +2012,7 @@ public sealed class CodeAltaAppTests
         using var detailsJson = JsonDocument.Parse("""{"decisionKind":"AllowOnce"}""");
         var markdown = ChatMarkdownFormatter.FormatChatInteractionResolutionMarkdown(
             new AgentInteractionEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -2059,7 +2059,7 @@ public sealed class CodeAltaAppTests
         using var detailsJson = JsonDocument.Parse("""{"answerCount":1,"answers":{"answer":""}}""");
         var markdown = ChatMarkdownFormatter.FormatChatInteractionResolutionMarkdown(
             new AgentInteractionEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -2214,7 +2214,7 @@ public sealed class CodeAltaAppTests
     public void ShouldDisplayCompletedContent_HidesEmptyReasoning()
     {
         var completed = new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "thread-1",
             DateTimeOffset.Parse("2026-03-14T14:02:50+00:00"),
             new AgentRunId("turn-1"),
@@ -2230,7 +2230,7 @@ public sealed class CodeAltaAppTests
     public void ShouldDisplayCompletedContent_HidesCommandOutput()
     {
         var completed = new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "thread-1",
             DateTimeOffset.Parse("2026-03-14T14:02:50+00:00"),
             new AgentRunId("turn-1"),
@@ -2246,7 +2246,7 @@ public sealed class CodeAltaAppTests
     public void ShouldDisplayContentDelta_HidesCommandOutput()
     {
         var delta = new AgentContentDeltaEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "thread-1",
             DateTimeOffset.Parse("2026-03-14T14:02:50+00:00"),
             new AgentRunId("turn-1"),
@@ -2259,7 +2259,7 @@ public sealed class CodeAltaAppTests
     }
 
     [TestMethod]
-    public void BuildChatBackendStatusMarkup_IncludesWarningsAndSelectedBackend()
+    public void BuildModelProviderStatusMarkup_IncludesWarningsAndSelectedProvider()
     {
         var states = new[]
         {
@@ -2762,7 +2762,7 @@ public sealed class CodeAltaAppTests
         var selected = ModelProviderPresentation.ResolveProviderSelection(
             ModelProviderIds.Copilot,
             ModelProviderIds.Codex,
-            adoptRequestedBackend: false);
+            adoptRequestedProvider: false);
 
         Assert.AreEqual(ModelProviderIds.Copilot, selected);
     }
@@ -2780,7 +2780,7 @@ public sealed class CodeAltaAppTests
             {
                 ThreadId = "global",
                 Kind = WorkThreadKind.GlobalThread,
-                BackendId = "codex",
+                ProviderId = "codex",
                 WorkingDirectory = @"C:\Users\alexa\.alta",
                 Title = "Global",
                 Status = WorkThreadStatus.Active,
@@ -2792,7 +2792,7 @@ public sealed class CodeAltaAppTests
             {
                 ThreadId = "thread-a",
                 Kind = WorkThreadKind.ProjectThread,
-                BackendId = "codex",
+                ProviderId = "codex",
                 ProjectRef = project1,
                 WorkingDirectory = @"C:\code\project1",
                 Title = "Project 1",
@@ -2805,7 +2805,7 @@ public sealed class CodeAltaAppTests
             {
                 ThreadId = "thread-b",
                 Kind = WorkThreadKind.InternalThread,
-                BackendId = "codex",
+                ProviderId = "codex",
                 ProjectRef = project1,
                 ParentThreadId = "thread-a",
                 WorkingDirectory = @"C:\Users\alexa\.alta\threads\internal\child",
@@ -2819,7 +2819,7 @@ public sealed class CodeAltaAppTests
             {
                 ThreadId = "thread-c",
                 Kind = WorkThreadKind.ProjectThread,
-                BackendId = "copilot",
+                ProviderId = "copilot",
                 ProjectRef = project2,
                 WorkingDirectory = @"C:\code\project2",
                 Title = "Project 2",
@@ -2857,7 +2857,7 @@ public sealed class CodeAltaAppTests
             {
                 ThreadId = "global",
                 Kind = WorkThreadKind.GlobalThread,
-                BackendId = "codex",
+                ProviderId = "codex",
                 WorkingDirectory = @"C:\Users\alexa\.alta",
                 Title = "Global",
                 Status = WorkThreadStatus.Active,
@@ -2873,7 +2873,7 @@ public sealed class CodeAltaAppTests
             {
                 ThreadId = "project",
                 Kind = WorkThreadKind.ProjectThread,
-                BackendId = "codex",
+                ProviderId = "codex",
                 ProjectRef = projectId,
                 WorkingDirectory = @"C:\code\CodeAlta",
                 Title = "Project",
@@ -2890,7 +2890,7 @@ public sealed class CodeAltaAppTests
             {
                 ThreadId = "internal",
                 Kind = WorkThreadKind.InternalThread,
-                BackendId = "codex",
+                ProviderId = "codex",
                 ProjectRef = projectId,
                 WorkingDirectory = @"C:\Users\alexa\.alta\threads\internal",
                 Title = "Internal",
@@ -2910,7 +2910,7 @@ public sealed class CodeAltaAppTests
     [TestMethod]
     public void ResolveSidebarThreadAccent_UsesKindAccentForCopilotThreads()
     {
-        var accent = SidebarThreadPresentation.ResolveThreadAccent(AgentBackendIds.Copilot.Value, WorkThreadKind.ProjectThread);
+        var accent = SidebarThreadPresentation.ResolveThreadAccent(ModelProviderIds.Copilot.Value, WorkThreadKind.ProjectThread);
 
         Assert.AreEqual(SidebarAccent.ProjectThread, accent);
     }
@@ -2918,7 +2918,7 @@ public sealed class CodeAltaAppTests
     [TestMethod]
     public void ResolveSidebarThreadAccent_UsesKindAccentForCodexThreads()
     {
-        var accent = SidebarThreadPresentation.ResolveThreadAccent(AgentBackendIds.Codex.Value, WorkThreadKind.ProjectThread);
+        var accent = SidebarThreadPresentation.ResolveThreadAccent(ModelProviderIds.Codex.Value, WorkThreadKind.ProjectThread);
 
         Assert.AreEqual(SidebarAccent.ProjectThread, accent);
     }
@@ -2926,7 +2926,7 @@ public sealed class CodeAltaAppTests
     [TestMethod]
     public void BuildSidebarThreadProviderMarkup_UsesSidebarAccentAndProviderLabel()
     {
-        var markup = SidebarThreadPresentation.BuildProviderMarkup(AgentBackendIds.Copilot.Value, displayName: null, WorkThreadKind.ProjectThread);
+        var markup = SidebarThreadPresentation.BuildProviderMarkup(ModelProviderIds.Copilot.Value, displayName: null, WorkThreadKind.ProjectThread);
 
         StringAssert.Contains(markup, UiPalette.GetSidebarAccentMarkup(SidebarAccent.ProjectThread));
         StringAssert.Contains(markup, "Copilot");
@@ -3256,7 +3256,7 @@ public sealed class CodeAltaAppTests
         string developerInstructions = "developer",
         string changeKind = "initial")
         => new(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             timestamp,
             null,

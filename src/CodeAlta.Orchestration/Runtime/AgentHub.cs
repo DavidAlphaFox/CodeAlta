@@ -327,7 +327,7 @@ public sealed class AgentHub : IAsyncDisposable
         {
             HandleId = handleId,
             SessionId = session.SessionId,
-            ProviderId = new AgentBackendId(providerId.Value),
+            ProviderId = new ModelProviderId(providerId.Value),
             ParentSessionId = normalizedParentSessionId,
         };
         var entry = new SessionEntry(new AgentSessionCoordinator(session), runtime);
@@ -342,7 +342,7 @@ public sealed class AgentHub : IAsyncDisposable
             _gate.Release();
         }
 
-        _events.TryPublish(new AgentSessionAttachedEvent(DateTimeOffset.UtcNow, handleId, session.SessionId, new AgentBackendId(providerId.Value), normalizedParentSessionId));
+        _events.TryPublish(new AgentSessionAttachedEvent(DateTimeOffset.UtcNow, handleId, session.SessionId, new ModelProviderId(providerId.Value), normalizedParentSessionId));
         return handle;
     }
 

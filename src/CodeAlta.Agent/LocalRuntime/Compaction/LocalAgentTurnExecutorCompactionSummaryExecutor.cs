@@ -15,7 +15,7 @@ internal sealed class LocalAgentTurnExecutorCompactionSummaryExecutor(IModelProv
                 new LocalAgentTurnRequest
                 {
                     Provider = request.Provider,
-                    BackendId = request.BackendId,
+                    ProviderId = request.ProviderId,
                     SessionId = request.SessionId,
                     RunId = new AgentRunId($"compaction-summary:{Guid.CreateVersion7()}"),
                     ModelId = request.ModelId,

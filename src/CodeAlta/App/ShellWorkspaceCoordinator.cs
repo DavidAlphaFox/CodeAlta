@@ -24,21 +24,21 @@ internal sealed class ShellWorkspaceCoordinator : IWorkspaceProjectionController
         CodeAltaShellViewModel shellViewModel,
         ThreadWorkspaceViewModel threadWorkspaceViewModel,
         SessionUsageViewModel sessionUsageViewModel,
-        Dictionary<string, ModelProviderState> chatBackendStates,
+        Dictionary<string, ModelProviderState> modelProviderStates,
         ThreadSelectionContext threadSelection,
         ShellWorkspaceContext workspaceContext)
     {
         ArgumentNullException.ThrowIfNull(shellViewModel);
         ArgumentNullException.ThrowIfNull(threadWorkspaceViewModel);
         ArgumentNullException.ThrowIfNull(sessionUsageViewModel);
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
         ArgumentNullException.ThrowIfNull(threadSelection);
         ArgumentNullException.ThrowIfNull(workspaceContext);
 
         _shellViewModel = shellViewModel;
         _workspaceContext = workspaceContext;
         _statusProjection = new ShellStatusProjectionController(shellViewModel, threadSelection, workspaceContext, _viewRefreshState);
-        _sessionUsageProjection = new SessionUsageProjectionController(sessionUsageViewModel, chatBackendStates, threadSelection, workspaceContext, _usageRefreshState);
+        _sessionUsageProjection = new SessionUsageProjectionController(sessionUsageViewModel, modelProviderStates, threadSelection, workspaceContext, _usageRefreshState);
         _workspaceProjection = new WorkspaceProjectionController(threadWorkspaceViewModel, threadSelection, workspaceContext, _viewRefreshState, _statusProjection, _sessionUsageProjection);
     }
 

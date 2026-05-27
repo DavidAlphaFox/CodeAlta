@@ -31,7 +31,7 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
         IProjectCatalogStore projectCatalog,
         IRecoverableSessionSource recoverableSessionSource,
         ISessionDeleter sessionDeleter,
-        IReadOnlyList<ModelProviderDescriptor>? backendDescriptors = null)
+        IReadOnlyList<ModelProviderDescriptor>? providerDescriptors = null)
     {
         ArgumentNullException.ThrowIfNull(shell);
         ArgumentNullException.ThrowIfNull(knownProjectImporter);
@@ -534,13 +534,13 @@ internal sealed class CodeAltaShellController : IThreadRuntimeEventProjector, IA
             string.Equals(firstDelta.ContentId, secondDelta.ContentId, StringComparison.Ordinal) &&
             string.Equals(firstDelta.ParentActivityId, secondDelta.ParentActivityId, StringComparison.Ordinal) &&
             string.Equals(firstDelta.SessionId, secondDelta.SessionId, StringComparison.Ordinal) &&
-            firstDelta.BackendId == secondDelta.BackendId &&
+            firstDelta.ProviderId == secondDelta.ProviderId &&
             firstDelta.RunId == secondDelta.RunId)
         {
             merged = new WorkThreadAgentEvent(
                 firstAgent.ThreadId,
                 new AgentContentDeltaEvent(
-                    firstDelta.BackendId,
+                    firstDelta.ProviderId,
                     firstDelta.SessionId,
                     secondDelta.Timestamp,
                     firstDelta.RunId,

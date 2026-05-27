@@ -51,9 +51,9 @@ public sealed class SessionProviderSwitchCoordinatorTests
 
         Assert.IsTrue(switched);
         Assert.AreEqual("019e1584", thread.ThreadId, "Switching providers must not rekey the open thread/tab.");
-        Assert.AreEqual("anthropic", thread.BackendId);
+        Assert.AreEqual("anthropic", thread.ProviderId);
         Assert.AreEqual("anthropic", thread.ProviderKey);
-        Assert.AreEqual("anthropic", tabState.BackendId.Value);
+        Assert.AreEqual("anthropic", tabState.ProviderId.Value);
         Assert.AreEqual("claude-sonnet-4", tabState.ModelId);
         Assert.AreEqual(AgentReasoningEffort.High, tabState.ReasoningEffort);
         Assert.IsNull(tabState.Usage);
@@ -80,8 +80,8 @@ public sealed class SessionProviderSwitchCoordinatorTests
             static _ => { },
             static () => Task.CompletedTask);
         var createdAt = DateTimeOffset.Parse("2026-04-19T10:00:00+00:00");
-        var thread = CreateThread("native-session", AgentBackendIds.Codex.Value, createdAt);
-        var tabState = CreateTabState(thread, AgentBackendIds.Codex.Value, "gpt-5");
+        var thread = CreateThread("native-session", ModelProviderIds.Codex.Value, createdAt);
+        var tabState = CreateTabState(thread, ModelProviderIds.Codex.Value, "gpt-5");
 
         var switched = await coordinator.SwitchThreadProviderAsync(
             thread,
@@ -90,8 +90,8 @@ public sealed class SessionProviderSwitchCoordinatorTests
 
         Assert.IsTrue(switched);
         Assert.AreEqual("native-session", thread.ThreadId);
-        Assert.AreEqual("anthropic", thread.BackendId);
-        Assert.AreEqual("anthropic", tabState.BackendId.Value);
+        Assert.AreEqual("anthropic", thread.ProviderId);
+        Assert.AreEqual("anthropic", tabState.ProviderId.Value);
     }
 
     [TestMethod]
@@ -111,8 +111,8 @@ public sealed class SessionProviderSwitchCoordinatorTests
             _ =>
             {
                 observedTargetDuringDetach =
-                    string.Equals(thread.BackendId, "anthropic", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(tabState.BackendId.Value, "anthropic", StringComparison.OrdinalIgnoreCase);
+                    string.Equals(thread.ProviderId, "anthropic", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(tabState.ProviderId.Value, "anthropic", StringComparison.OrdinalIgnoreCase);
                 return Task.FromResult(true);
             },
             static _ => { },
@@ -209,19 +209,19 @@ public sealed class SessionProviderSwitchCoordinatorTests
         };
         if (includeNative)
         {
-            states[AgentBackendIds.Codex.Value] = ReadyState(AgentBackendIds.Codex.Value, "Codex");
+            states[ModelProviderIds.Codex.Value] = ReadyState(ModelProviderIds.Codex.Value, "Codex");
         }
 
         return states;
     }
 
-    private static ModelProviderState ReadyState(string backendId, string displayName)
+    private static ModelProviderState ReadyState(string ProviderId, string displayName)
     {
-        var state = new ModelProviderState(new ModelProviderId(backendId), displayName)
+        var state = new ModelProviderState(new ModelProviderId(ProviderId), displayName)
         {
             Availability = ModelProviderAvailability.Ready,
         };
-        if (string.Equals(backendId, "anthropic", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(ProviderId, "anthropic", StringComparison.OrdinalIgnoreCase))
         {
             state.Models.Add(new AgentModelInfo(
                 "claude-sonnet-4",
@@ -230,7 +230,7 @@ public sealed class SessionProviderSwitchCoordinatorTests
             state.SelectedModelId = "claude-sonnet-4";
             state.SelectedReasoningEffort = AgentReasoningEffort.Medium;
         }
-        else if (string.Equals(backendId, "openai", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(ProviderId, "openai", StringComparison.OrdinalIgnoreCase))
         {
             state.Models.Add(new AgentModelInfo("gpt-4.1", "GPT-4.1"));
             state.SelectedModelId = "gpt-4.1";
@@ -239,13 +239,13 @@ public sealed class SessionProviderSwitchCoordinatorTests
         return state;
     }
 
-    private static SessionViewDescriptor CreateThread(string threadId, string backendId, DateTimeOffset timestamp)
+    private static SessionViewDescriptor CreateThread(string threadId, string ProviderId, DateTimeOffset timestamp)
         => new()
         {
             ThreadId = threadId,
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = backendId,
-            ProviderKey = backendId,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\repo",
             Title = "Review startup",
@@ -256,13 +256,13 @@ public sealed class SessionProviderSwitchCoordinatorTests
             StartedAt = timestamp,
         };
 
-    private static OpenThreadState CreateTabState(SessionViewDescriptor thread, string backendId, string modelId)
+    private static OpenThreadState CreateTabState(SessionViewDescriptor thread, string ProviderId, string modelId)
         => new(thread, new Presentation.Timeline.ThreadTimelinePresenter(
             new InlineUiDispatcher(),
             static () => null,
             localFileRootPath: null))
         {
-            BackendId = new AgentBackendId(backendId),
+            ProviderId = new ModelProviderId(ProviderId),
             ModelId = modelId,
             Usage = new AgentSessionUsage(
                 Window: new AgentWindowUsageSnapshot(1200, 8000, 3, "Old usage"),

@@ -23,7 +23,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
         var promptComposerViewModel = new PromptComposerViewModel();
         var backendStates = ModelProviderPresentation.CreateProviderStates();
 
-        var codexState = backendStates[AgentBackendIds.Codex.Value];
+        var codexState = backendStates[ModelProviderIds.Codex.Value];
         codexState.Availability = ModelProviderAvailability.Ready;
         codexState.Models.Add(new AgentModelInfo(
             "gpt-5-codex",
@@ -31,7 +31,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             DefaultReasoningEffort: AgentReasoningEffort.High,
             SupportedReasoningEfforts: [AgentReasoningEffort.Medium, AgentReasoningEffort.High]));
 
-        var copilotState = backendStates[AgentBackendIds.Copilot.Value];
+        var copilotState = backendStates[ModelProviderIds.Copilot.Value];
         copilotState.Availability = ModelProviderAvailability.Ready;
         copilotState.Models.Add(new AgentModelInfo(
             "gpt-4.1",
@@ -91,25 +91,25 @@ public sealed class ModelProviderSelectorCoordinatorTests
     {
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new ModelProviderDescriptor(AgentBackendIds.Codex, "Codex"),
-            new ModelProviderDescriptor(new AgentBackendId("zai"), "ZAI"),
+            new ModelProviderDescriptor(ModelProviderIds.Codex, "Codex"),
+            new ModelProviderDescriptor(new ModelProviderId("zai"), "ZAI"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
-        backendStates[AgentBackendIds.Codex.Value].Availability = ModelProviderAvailability.Ready;
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
+        backendStates[ModelProviderIds.Codex.Value].Availability = ModelProviderAvailability.Ready;
         backendStates["zai"].Availability = ModelProviderAvailability.Ready;
 
         var coordinator = CreateCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
             static _ => "zai");
 
-        var preferredBackendId = coordinator.GetPreferredModelProviderId();
+        var preferredProviderId = coordinator.GetPreferredModelProviderId();
 
-        Assert.AreEqual("zai", preferredBackendId.Value);
+        Assert.AreEqual("zai", preferredProviderId.Value);
     }
 
     [TestMethod]
@@ -117,12 +117,12 @@ public sealed class ModelProviderSelectorCoordinatorTests
     {
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
-            new(new AgentBackendId("anthropic"), "Anthropic"),
+            new(new ModelProviderId("openai"), "OpenAI"),
+            new(new ModelProviderId("anthropic"), "Anthropic"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
         backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4"));
         backendStates["anthropic"].Availability = ModelProviderAvailability.Probing;
@@ -134,7 +134,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _, _) => { },
             static (_, _, _, _) => { });
         var coordinator = new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -160,11 +160,11 @@ public sealed class ModelProviderSelectorCoordinatorTests
     {
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("codex"), "Codex subscription"),
+            new(new ModelProviderId("codex"), "Codex subscription"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         var backendState = backendStates["codex"];
         backendState.Availability = ModelProviderAvailability.Ready;
         backendState.Models.Add(new AgentModelInfo("gpt-5.2", DisplayName: "GPT-5.2"));
@@ -180,7 +180,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _, _) => { },
             static (_, _, _, _) => { });
         var coordinator = new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -207,27 +207,27 @@ public sealed class ModelProviderSelectorCoordinatorTests
     {
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new ModelProviderDescriptor(new AgentBackendId("zai"), "ZAI"),
-            new ModelProviderDescriptor(new AgentBackendId("openai"), "OpenAI"),
-            new ModelProviderDescriptor(AgentBackendIds.Codex, "Codex"),
+            new ModelProviderDescriptor(new ModelProviderId("zai"), "ZAI"),
+            new ModelProviderDescriptor(new ModelProviderId("openai"), "OpenAI"),
+            new ModelProviderDescriptor(ModelProviderIds.Codex, "Codex"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["zai"].Availability = ModelProviderAvailability.Unsupported;
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
-        backendStates[AgentBackendIds.Codex.Value].Availability = ModelProviderAvailability.Ready;
+        backendStates[ModelProviderIds.Codex.Value].Availability = ModelProviderAvailability.Ready;
 
         var coordinator = CreateCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
             static _ => null);
 
-        var preferredBackendId = coordinator.GetPreferredModelProviderId();
+        var preferredProviderId = coordinator.GetPreferredModelProviderId();
 
-        Assert.AreEqual("openai", preferredBackendId.Value);
+        Assert.AreEqual("openai", preferredProviderId.Value);
     }
 
     [TestMethod]
@@ -235,17 +235,17 @@ public sealed class ModelProviderSelectorCoordinatorTests
     {
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new ModelProviderDescriptor(AgentBackendIds.Codex, "Codex"),
-            new ModelProviderDescriptor(AgentBackendIds.Copilot, "Copilot"),
+            new ModelProviderDescriptor(ModelProviderIds.Codex, "Codex"),
+            new ModelProviderDescriptor(ModelProviderIds.Copilot, "Copilot"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
-        backendStates[AgentBackendIds.Codex.Value].Availability = ModelProviderAvailability.Ready;
-        backendStates[AgentBackendIds.Copilot.Value].Availability = ModelProviderAvailability.Failed;
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
+        backendStates[ModelProviderIds.Codex.Value].Availability = ModelProviderAvailability.Ready;
+        backendStates[ModelProviderIds.Copilot.Value].Availability = ModelProviderAvailability.Failed;
 
         var coordinator = CreateCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -272,12 +272,12 @@ public sealed class ModelProviderSelectorCoordinatorTests
 
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
-            new(new AgentBackendId("anthropic"), "Anthropic"),
+            new(new ModelProviderId("openai"), "OpenAI"),
+            new(new ModelProviderId("anthropic"), "Anthropic"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
         backendStates["anthropic"].Availability = ModelProviderAvailability.Ready;
 
@@ -289,7 +289,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var coordinator = new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -311,23 +311,23 @@ public sealed class ModelProviderSelectorCoordinatorTests
     {
         using var temp = TempDirectory.Create();
         var threadStateCoordinator = CreateThreadStateCoordinator(temp.Path, out var thread);
-        thread.BackendId = "unavailable-provider";
+        thread.ProviderId = "unavailable-provider";
         thread.ProviderKey = "unavailable-provider";
         var threadSelection = new ThreadSelectionContext(
             threadStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
         var tab = threadStateCoordinator.EnsureThreadTab(thread);
-        tab.BackendId = new AgentBackendId("unavailable-provider");
+        tab.ProviderId = new ModelProviderId("unavailable-provider");
         tab.ModelId = "gpt-4.1";
 
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new ModelProviderId("openai"), "OpenAI"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
 
         var selectorState = new ModelProviderSelectorStateStore(workspaceViewModel, new InlineUiDispatcher());
@@ -337,7 +337,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _, _) => { },
             static (_, _, _, _) => { });
         var coordinator = new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -378,12 +378,12 @@ public sealed class ModelProviderSelectorCoordinatorTests
 
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
-            new(new AgentBackendId("anthropic"), "Anthropic"),
+            new(new ModelProviderId("openai"), "OpenAI"),
+            new(new ModelProviderId("anthropic"), "Anthropic"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
         backendStates["anthropic"].Availability = ModelProviderAvailability.Ready;
 
@@ -395,7 +395,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var coordinator = new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -433,12 +433,12 @@ public sealed class ModelProviderSelectorCoordinatorTests
 
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
-            new(new AgentBackendId("anthropic"), "Anthropic"),
+            new(new ModelProviderId("openai"), "OpenAI"),
+            new(new ModelProviderId("anthropic"), "Anthropic"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
         backendStates["anthropic"].Availability = ModelProviderAvailability.Ready;
 
@@ -452,7 +452,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
         var switchCallCount = 0;
         var refreshedSelectionCount = 0;
         var coordinator = new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -463,11 +463,11 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static _ => null,
             static () => { },
             static (_, _) => true,
-            (selectedThread, selectedTab, targetBackendId) =>
+            (selectedThread, selectedTab, targetProviderId) =>
             {
                 Assert.AreSame(thread, selectedThread);
                 Assert.AreSame(tab, selectedTab);
-                Assert.AreEqual("anthropic", targetBackendId.Value);
+                Assert.AreEqual("anthropic", targetProviderId.Value);
                 switchCallCount++;
                 return Task.FromResult(true);
             },
@@ -493,12 +493,12 @@ public sealed class ModelProviderSelectorCoordinatorTests
 
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
-            new(new AgentBackendId("anthropic"), "Anthropic"),
+            new(new ModelProviderId("openai"), "OpenAI"),
+            new(new ModelProviderId("anthropic"), "Anthropic"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
         backendStates["anthropic"].Availability = ModelProviderAvailability.Ready;
 
@@ -511,7 +511,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
         var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var switchCompletion = new TaskCompletionSource<bool>();
         var coordinator = new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -524,8 +524,8 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _) => true,
             (_, selectedTab, targetProviderId) =>
             {
-                thread.BackendId = targetProviderId.Value;
-                selectedTab.BackendId = new AgentBackendId(targetProviderId.Value);
+                thread.ProviderId = targetProviderId.Value;
+                selectedTab.ProviderId = new ModelProviderId(targetProviderId.Value);
                 return switchCompletion.Task;
             });
 
@@ -580,11 +580,11 @@ public sealed class ModelProviderSelectorCoordinatorTests
 
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new ModelProviderId("openai"), "OpenAI"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
         backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4", DisplayName: "GPT-5.4"));
         backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4-mini", DisplayName: "GPT-5.4 Mini"));
@@ -597,7 +597,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var coordinator = new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -621,11 +621,11 @@ public sealed class ModelProviderSelectorCoordinatorTests
     {
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new ModelProviderId("openai"), "OpenAI"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         var backendState = backendStates["openai"];
         backendState.Availability = ModelProviderAvailability.Ready;
         backendState.Models.Add(new AgentModelInfo("gpt-5.4", DisplayName: "GPT-5.4"));
@@ -647,7 +647,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var coordinator = new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -675,26 +675,26 @@ public sealed class ModelProviderSelectorCoordinatorTests
             threadStateCoordinator,
             static (_, _) => Task.CompletedTask,
             static _ => true);
-        thread.BackendId = "anthropic";
+        thread.ProviderId = "anthropic";
         thread.ProviderKey = "anthropic";
         var tab = threadStateCoordinator.EnsureThreadTab(thread);
-        tab.BackendId = new AgentBackendId("anthropic");
+        tab.ProviderId = new ModelProviderId("anthropic");
 
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
-            new(new AgentBackendId("anthropic"), "Anthropic"),
+            new(new ModelProviderId("openai"), "OpenAI"),
+            new(new ModelProviderId("anthropic"), "Anthropic"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
         backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4"));
         backendStates["anthropic"].Availability = ModelProviderAvailability.Ready;
         backendStates["anthropic"].Models.Add(new AgentModelInfo("claude-sonnet-4.5"));
 
         var coordinator = CreateCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -728,19 +728,19 @@ public sealed class ModelProviderSelectorCoordinatorTests
 
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
-            new(new AgentBackendId("anthropic"), "Anthropic"),
+            new(new ModelProviderId("openai"), "OpenAI"),
+            new(new ModelProviderId("anthropic"), "Anthropic"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
         backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4"));
         backendStates["anthropic"].Availability = ModelProviderAvailability.Ready;
         backendStates["anthropic"].Models.Add(new AgentModelInfo("claude-sonnet-4.5"));
 
         var coordinator = CreateCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -775,18 +775,18 @@ public sealed class ModelProviderSelectorCoordinatorTests
 
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new ModelProviderId("openai"), "OpenAI"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         var backendState = backendStates["openai"];
         backendState.Availability = ModelProviderAvailability.Ready;
         backendState.Models.Add(new AgentModelInfo("gpt-5.4", DisplayName: "GPT-5.4"));
         backendState.Models.Add(new AgentModelInfo("gpt-5.4-mini", DisplayName: "GPT-5.4 Mini"));
 
         var coordinator = CreateCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -824,11 +824,11 @@ public sealed class ModelProviderSelectorCoordinatorTests
 
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new ModelProviderId("openai"), "OpenAI"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
         backendStates["openai"].Models.Add(new AgentModelInfo(
             "gpt-5.4",
@@ -844,7 +844,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         var coordinator = new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -868,18 +868,18 @@ public sealed class ModelProviderSelectorCoordinatorTests
     {
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new ModelProviderId("openai"), "OpenAI"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         var backendState = backendStates["openai"];
         backendState.Availability = ModelProviderAvailability.Ready;
         backendState.Models.Add(new AgentModelInfo("gpt-5.4", DisplayName: "GPT-5.4"));
         backendState.Models.Add(new AgentModelInfo("gpt-5.4-mini", DisplayName: "GPT-5.4 Mini"));
 
         var coordinator = CreateCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -905,17 +905,17 @@ public sealed class ModelProviderSelectorCoordinatorTests
 
         var workspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
-            new(new AgentBackendId("openai"), "OpenAI"),
+            new(new ModelProviderId("openai"), "OpenAI"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["openai"].Availability = ModelProviderAvailability.Ready;
         backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4", DisplayName: "GPT-5.4"));
         backendStates["openai"].Models.Add(new AgentModelInfo("gpt-5.4-mini", DisplayName: "GPT-5.4 Mini"));
 
         var coordinator = CreateCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -931,7 +931,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
     }
 
     private static ModelProviderSelectorCoordinator CreateCoordinator(
-        IReadOnlyList<ModelProviderDescriptor> backendDescriptors,
+        IReadOnlyList<ModelProviderDescriptor> providerDescriptors,
         ThreadWorkspaceViewModel workspaceViewModel,
         PromptComposerViewModel promptComposerViewModel,
         Dictionary<string, ModelProviderState> backendStates,
@@ -948,7 +948,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
             static (_, _, _, _) => { });
         var workspaceRefresh = new WorkspaceRefreshContext(static _ => { });
         return new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             workspaceViewModel,
             promptComposerViewModel,
             backendStates,
@@ -995,7 +995,7 @@ public sealed class ModelProviderSelectorCoordinatorTests
         {
             ThreadId = "openai:session-1",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = "openai",
+            ProviderId = "openai",
             ProviderKey = "openai",
             ProjectRef = project.Id,
             WorkingDirectory = project.ProjectPath,

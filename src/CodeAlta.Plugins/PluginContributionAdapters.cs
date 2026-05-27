@@ -23,7 +23,7 @@ public sealed record PluginAdapterOperationOptions
     public string? RunId { get; init; }
 
     /// <summary>Gets the active backend id, when known.</summary>
-    public string? BackendId { get; init; }
+    public string? ProviderId { get; init; }
 
     /// <summary>Gets the active model, when known.</summary>
     public string? Model { get; init; }
@@ -750,7 +750,7 @@ public sealed class PluginContributionAdapterService
             return false;
         }
 
-        if (policy.BackendNames.Count > 0 && !policy.BackendNames.Contains(options?.BackendId ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+        if (policy.ProviderNames.Count > 0 && !policy.ProviderNames.Contains(options?.ProviderId ?? string.Empty, StringComparer.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -847,7 +847,7 @@ public sealed class PluginContributionAdapterService
             ProjectPath = options?.ProjectPath,
             ThreadId = options?.ThreadId,
             RunId = options?.RunId,
-            BackendId = options?.BackendId,
+            ProviderId = options?.ProviderId,
             Model = options?.Model,
             Arguments = arguments,
             RawText = rawText,
@@ -866,7 +866,7 @@ public sealed class PluginContributionAdapterService
             ProjectPath = options?.ProjectPath,
             ThreadId = options?.ThreadId,
             RunId = options?.RunId,
-            BackendId = options?.BackendId,
+            ProviderId = options?.ProviderId,
             Model = options?.Model,
             RawArguments = rawArguments,
             ConfigurationPaths = options?.ConfigurationPaths ?? [],
@@ -886,7 +886,7 @@ public sealed class PluginContributionAdapterService
             ProjectPath = options?.ProjectPath,
             ThreadId = options?.ThreadId,
             RunId = options?.RunId,
-            BackendId = options?.BackendId,
+            ProviderId = options?.ProviderId,
             Model = options?.Model,
             Text = text,
             Attachments = attachments,
@@ -906,7 +906,7 @@ public sealed class PluginContributionAdapterService
             ProjectPath = options?.ProjectPath,
             ThreadId = options?.ThreadId,
             RunId = options?.RunId,
-            BackendId = options?.BackendId,
+            ProviderId = options?.ProviderId,
             Model = options?.Model,
             Channel = channel,
             SupportsDirectInjection = supportsDirectInjection,
@@ -925,7 +925,7 @@ public sealed class PluginContributionAdapterService
             ProjectPath = options?.ProjectPath ?? template.ProjectPath,
             ThreadId = options?.ThreadId ?? template.ThreadId,
             RunId = options?.RunId ?? template.RunId,
-            BackendId = options?.BackendId ?? template.BackendId,
+            ProviderId = options?.ProviderId ?? template.ProviderId,
             Model = options?.Model ?? template.Model,
             PromptText = template.PromptText,
             Input = template.Input,
@@ -945,7 +945,7 @@ public sealed class PluginContributionAdapterService
             ProjectPath = options?.ProjectPath ?? template.ProjectPath,
             ThreadId = options?.ThreadId ?? template.ThreadId,
             RunId = options?.RunId ?? template.RunId,
-            BackendId = options?.BackendId ?? template.BackendId,
+            ProviderId = options?.ProviderId ?? template.ProviderId,
             Model = options?.Model ?? template.Model,
             Invocation = template.Invocation,
             CancellationToken = cancellationToken,
@@ -963,7 +963,7 @@ public sealed class PluginContributionAdapterService
             ProjectPath = options?.ProjectPath ?? template.ProjectPath,
             ThreadId = options?.ThreadId ?? template.ThreadId,
             RunId = options?.RunId ?? template.RunId,
-            BackendId = options?.BackendId ?? template.BackendId,
+            ProviderId = options?.ProviderId ?? template.ProviderId,
             Model = options?.Model ?? template.Model,
             Invocation = template.Invocation,
             Result = template.Result,
@@ -982,7 +982,7 @@ public sealed class PluginContributionAdapterService
             ProjectPath = options?.ProjectPath ?? template.ProjectPath,
             ThreadId = options?.ThreadId ?? template.ThreadId,
             RunId = options?.RunId ?? template.RunId,
-            BackendId = options?.BackendId ?? template.BackendId,
+            ProviderId = options?.ProviderId ?? template.ProviderId,
             Model = options?.Model ?? template.Model,
             Event = template.Event,
             Session = template.Session,
@@ -1001,7 +1001,7 @@ public sealed class PluginContributionAdapterService
             ProjectPath = options?.ProjectPath,
             ThreadId = options?.ThreadId,
             RunId = options?.RunId,
-            BackendId = options?.BackendId,
+            ProviderId = options?.ProviderId,
             Model = options?.Model,
             CancellationToken = cancellationToken,
         };
@@ -1018,7 +1018,7 @@ public sealed class PluginContributionAdapterService
             ProjectPath = options?.ProjectPath,
             ThreadId = options?.ThreadId,
             RunId = options?.RunId,
-            BackendId = options?.BackendId,
+            ProviderId = options?.ProviderId,
             Model = options?.Model,
             Region = region,
             HasInteractiveUi = options?.HasInteractiveUi ?? false,
@@ -1037,7 +1037,7 @@ public sealed class PluginContributionAdapterService
             ProjectPath = options?.ProjectPath,
             ThreadId = options?.ThreadId,
             RunId = options?.RunId,
-            BackendId = options?.BackendId,
+            ProviderId = options?.ProviderId,
             Model = options?.Model,
             Target = target,
             Payload = payload,

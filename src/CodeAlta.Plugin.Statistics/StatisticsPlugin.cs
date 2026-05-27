@@ -670,7 +670,7 @@ public sealed class StatisticsPlugin : PluginBase
             HasEvents = true;
             FirstEventAt = Min(FirstEventAt, @event.Timestamp);
             LastEventAt = Max(LastEventAt, @event.Timestamp);
-            BackendId = @event.BackendId.Value;
+            ProviderId = @event.ProviderId.Value;
 
             switch (@event)
             {
@@ -719,7 +719,7 @@ public sealed class StatisticsPlugin : PluginBase
 
         public string? RunId { get; } = runId;
 
-        public string? BackendId { get; private set; }
+        public string? ProviderId { get; private set; }
 
         public DateTimeOffset? FirstEventAt { get; private set; }
 
@@ -782,7 +782,7 @@ public sealed class StatisticsPlugin : PluginBase
                 Key,
                 SessionId,
                 RunId,
-                BackendId,
+                ProviderId,
                 FirstEventAt,
                 LastEventAt,
                 StartedAt,
@@ -1578,7 +1578,7 @@ public sealed class StatisticsPlugin : PluginBase
         string Key,
         string SessionId,
         string? RunId,
-        string? BackendId,
+        string? ProviderId,
         DateTimeOffset? FirstEventAt,
         DateTimeOffset? LastEventAt,
         DateTimeOffset? StartedAt,

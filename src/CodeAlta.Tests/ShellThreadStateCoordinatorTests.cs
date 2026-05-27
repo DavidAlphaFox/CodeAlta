@@ -35,7 +35,7 @@ public sealed class ShellThreadStateCoordinatorTests
         coordinator.ApplyRecoveredCatalogState([], [CreateThread("thread-1")]);
 
         var thread = coordinator.Threads.Single();
-        Assert.AreEqual("zai", thread.BackendId);
+        Assert.AreEqual("zai", thread.ProviderId);
         Assert.AreEqual("zai", thread.ProviderKey);
         Assert.AreEqual("glm-5.1", thread.ModelId);
         Assert.AreEqual(AgentReasoningEffort.High, thread.ReasoningEffort);
@@ -54,7 +54,7 @@ public sealed class ShellThreadStateCoordinatorTests
 
         var thread = CreateThread("thread-1");
         thread.ProviderKey = "zai";
-        thread.BackendId = "zai";
+        thread.ProviderId = "zai";
         thread.ModelId = "glm-5.1";
         thread.ReasoningEffort = AgentReasoningEffort.High;
         thread.Status = WorkThreadStatus.Archived;
@@ -711,7 +711,7 @@ public sealed class ShellThreadStateCoordinatorTests
         tab.Session.PromptDraftText = "preserve me";
 
         thread.ThreadId = "anthropic:session-1";
-        thread.BackendId = "anthropic";
+        thread.ProviderId = "anthropic";
         thread.ProviderKey = "anthropic";
         coordinator.RekeyThreadIdentity("openai:session-1", thread);
 
@@ -768,7 +768,7 @@ public sealed class ShellThreadStateCoordinatorTests
         {
             ThreadId = threadId,
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = AgentBackendIds.Codex.Value,
+            ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\repo",
             Title = "Test thread",
@@ -786,7 +786,7 @@ public sealed class ShellThreadStateCoordinatorTests
         {
             ThreadId = threadId,
             Kind = WorkThreadKind.GlobalThread,
-            BackendId = AgentBackendIds.Codex.Value,
+            ProviderId = ModelProviderIds.Codex.Value,
             WorkingDirectory = globalRoot,
             Title = "Global Thread",
             Status = WorkThreadStatus.Active,

@@ -13,7 +13,7 @@ namespace CodeAlta.Agent.OpenAI;
 /// <summary>
 /// Shared options for the OpenAI-backed local-runtime backends.
 /// </summary>
-public abstract class OpenAIAgentBackendOptions
+public abstract class OpenAIModelProviderRuntimeOptions
 {
     /// <summary>
     /// Gets or sets the optional provider identifier override.
@@ -39,7 +39,7 @@ public abstract class OpenAIAgentBackendOptions
 /// <summary>
 /// Options for the OpenAI Responses backend.
 /// </summary>
-public sealed class OpenAIResponsesAgentBackendOptions : OpenAIAgentBackendOptions
+public sealed class OpenAIResponsesModelProviderRuntimeOptions : OpenAIModelProviderRuntimeOptions
 {
     internal CodexSubscriptionConcurrencyLimiter? CodexSubscriptionConcurrencyLimiter { get; set; }
 }
@@ -47,7 +47,7 @@ public sealed class OpenAIResponsesAgentBackendOptions : OpenAIAgentBackendOptio
 /// <summary>
 /// Options for the OpenAI Chat/Completions backend.
 /// </summary>
-public sealed class OpenAIChatAgentBackendOptions : OpenAIAgentBackendOptions;
+public sealed class OpenAIChatModelProviderRuntimeOptions : OpenAIModelProviderRuntimeOptions;
 
 /// <summary>
 /// Describes one configured OpenAI-compatible provider.

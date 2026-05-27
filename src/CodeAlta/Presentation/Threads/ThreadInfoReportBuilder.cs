@@ -25,7 +25,7 @@ internal static class ThreadInfoReportBuilder
 
         return new ThreadInfoReport(
             ThreadTitle: thread.Title,
-            BackendName: backendName,
+            ProviderName: backendName,
             ThreadId: thread.ThreadId,
             WorkingDirectory: thread.WorkingDirectory,
             ModelName: modelName,
@@ -37,7 +37,7 @@ internal static class ThreadInfoReportBuilder
             UserMessageCount: CountMessages(history, AgentContentKind.User),
             AssistantMessageCount: CountMessages(history, AgentContentKind.Assistant),
             StorageLocation: ProbeStorageLocation(metadata?.WorkspacePath),
-            BackendFacts: BuildBackendFacts(metadata?.Details),
+            ProviderFacts: BuildProviderFacts(metadata?.Details),
             LoadedSkills: BuildLoadedSkills(history));
     }
 
@@ -78,7 +78,7 @@ internal static class ThreadInfoReportBuilder
             ThreadInfoStorageKind.MissingPath);
     }
 
-    private static IReadOnlyList<ThreadInfoFact> BuildBackendFacts(AgentSessionMetadataDetails? details)
+    private static IReadOnlyList<ThreadInfoFact> BuildProviderFacts(AgentSessionMetadataDetails? details)
     {
         if (details is null)
         {

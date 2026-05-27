@@ -42,12 +42,6 @@ internal sealed class OpenThreadState
         set => Session.ProviderId = value;
     }
 
-    public AgentBackendId BackendId
-    {
-        get => new(ProviderId.Value);
-        set => ProviderId = new ModelProviderId(value.Value);
-    }
-
     public string? ModelId
     {
         get => Session.ModelId;

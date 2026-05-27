@@ -13,7 +13,7 @@ public sealed class ThreadCommandPortsTests
     [TestMethod]
     public async Task LifecyclePort_ForwardsCreationPersistenceAndRekey()
     {
-        var created = new SessionViewDescriptor { ThreadId = "thread-1", BackendId = "codex", ProviderKey = "codex" };
+        var created = new SessionViewDescriptor { ThreadId = "thread-1", ProviderId = "codex", ProviderKey = "codex" };
         var persisted = false;
         (string OldThreadId, SessionViewDescriptor Thread)? rekey = null;
         var port = new DelegatingThreadLifecycleCommandPort(
@@ -75,7 +75,7 @@ public sealed class ThreadCommandPortsTests
 
     private static OpenThreadState CreateThreadState()
     {
-        var thread = new SessionViewDescriptor { ThreadId = "thread-1", BackendId = "codex", ProviderKey = "codex" };
+        var thread = new SessionViewDescriptor { ThreadId = "thread-1", ProviderId = "codex", ProviderKey = "codex" };
         return new OpenThreadState(thread, new ThreadTimelinePresenter(new ImmediateUiDispatcher(), static () => null));
     }
 

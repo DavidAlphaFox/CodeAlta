@@ -1,22 +1,22 @@
 namespace CodeAlta.Agent;
 
 /// <summary>
-/// Represents a user-input request originating from a backend.
+/// Represents a user-input request originating from a provider.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">The event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
 /// <param name="InteractionId">Stable interaction identifier.</param>
 /// <param name="Form">The structured input form.</param>
 public sealed record AgentUserInputRequest(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
     string InteractionId,
     AgentUserInputForm Form)
-    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+    : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
 /// <summary>
 /// Structured user-input form payload.

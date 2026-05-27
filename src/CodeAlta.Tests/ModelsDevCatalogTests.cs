@@ -107,11 +107,11 @@ public sealed class ModelsDevCatalogTests
     }
 
     [TestMethod]
-    public async Task OpenAIResponsesAgentBackend_ListModelsAsync_EnrichesWithModelsDevMetadata()
+    public async Task OpenAIResponsesModelProviderRuntime_ListModelsAsync_EnrichesWithModelsDevMetadata()
     {
         await using var catalog = CreateCatalog();
         using var temp = TestTempDirectory.Create();
-        await using var backend = new OpenAIResponsesAgentBackend(new OpenAIResponsesAgentBackendOptions
+        await using var backend = new OpenAIResponsesModelProviderRuntime(new OpenAIResponsesModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -137,11 +137,11 @@ public sealed class ModelsDevCatalogTests
     }
 
     [TestMethod]
-    public async Task AnthropicAgentBackend_ListModelsAsync_EnrichesWithModelsDevMetadata()
+    public async Task AnthropicModelProviderRuntime_ListModelsAsync_EnrichesWithModelsDevMetadata()
     {
         await using var catalog = CreateCatalog();
         using var temp = TestTempDirectory.Create();
-        await using var backend = new AnthropicAgentBackend(new AnthropicAgentBackendOptions
+        await using var backend = new AnthropicModelProviderRuntime(new AnthropicModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -167,11 +167,11 @@ public sealed class ModelsDevCatalogTests
     }
 
     [TestMethod]
-    public async Task AnthropicAgentBackend_ListModelsAsync_UsesConfiguredSingleModelId()
+    public async Task AnthropicModelProviderRuntime_ListModelsAsync_UsesConfiguredSingleModelId()
     {
         await using var catalog = CreateCatalog();
         using var temp = TestTempDirectory.Create();
-        await using var backend = new AnthropicAgentBackend(new AnthropicAgentBackendOptions
+        await using var backend = new AnthropicModelProviderRuntime(new AnthropicModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -197,11 +197,11 @@ public sealed class ModelsDevCatalogTests
     }
 
     [TestMethod]
-    public async Task GoogleGenAIAgentBackend_ListModelsAsync_EnrichesWithModelsDevMetadata()
+    public async Task GoogleGenAIModelProviderRuntime_ListModelsAsync_EnrichesWithModelsDevMetadata()
     {
         await using var catalog = CreateCatalog();
         using var temp = TestTempDirectory.Create();
-        await using var backend = new GoogleGenAIAgentBackend(new GoogleGenAIAgentBackendOptions
+        await using var backend = new GoogleGenAIModelProviderRuntime(new GoogleGenAIModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -227,11 +227,11 @@ public sealed class ModelsDevCatalogTests
     }
 
     [TestMethod]
-    public async Task GoogleGenAIAgentBackend_ListModelsAsync_UsesConfiguredSingleModelId()
+    public async Task GoogleGenAIModelProviderRuntime_ListModelsAsync_UsesConfiguredSingleModelId()
     {
         await using var catalog = CreateCatalog();
         using var temp = TestTempDirectory.Create();
-        await using var backend = new GoogleGenAIAgentBackend(new GoogleGenAIAgentBackendOptions
+        await using var backend = new GoogleGenAIModelProviderRuntime(new GoogleGenAIModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -257,7 +257,7 @@ public sealed class ModelsDevCatalogTests
     }
 
     [TestMethod]
-    public async Task AnthropicAgentBackend_UsesModelsDevContextWindowForUsageSnapshots()
+    public async Task AnthropicModelProviderRuntime_UsesModelsDevContextWindowForUsageSnapshots()
     {
         await using var catalog = CreateCatalog();
         using var temp = TestTempDirectory.Create();
@@ -284,7 +284,7 @@ public sealed class ModelsDevCatalogTests
             },
         ]);
 
-        await using var backend = new AnthropicAgentBackend(new AnthropicAgentBackendOptions
+        await using var backend = new AnthropicModelProviderRuntime(new AnthropicModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =

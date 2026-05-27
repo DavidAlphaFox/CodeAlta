@@ -36,7 +36,7 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
             throw new ArgumentException("At least one provider registration is required.", nameof(options));
         }
 
-        BackendId = new AgentBackendId(providerId.Value);
+        ProviderId = new ModelProviderId(providerId.Value);
         DisplayName = displayName.Trim();
         _options = options;
         var stateRootPath = string.IsNullOrWhiteSpace(options.StateRootPath)
@@ -53,7 +53,7 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
     /// <summary>
     /// Gets the provider identifier as stored in legacy persisted backend-id fields.
     /// </summary>
-    public AgentBackendId BackendId { get; }
+    public ModelProviderId ProviderId { get; }
 
     /// <summary>
     /// Gets the user-facing runtime name.
@@ -109,7 +109,7 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             LogInfo(
-                $"Listing models backend={BackendId.Value} provider={provider.Provider.ProviderKey} displayName={provider.Provider.DisplayName} protocol={provider.Provider.ProtocolFamily} baseUri={FormatUri(provider.Provider.BaseUri)}");
+                $"Listing models backend={ProviderId.Value} provider={provider.Provider.ProviderKey} displayName={provider.Provider.DisplayName} protocol={provider.Provider.ProtocolFamily} baseUri={FormatUri(provider.Provider.BaseUri)}");
 
             IReadOnlyList<AgentModelInfo> models;
             try
@@ -130,12 +130,12 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
             {
                 LogWarn(
                     ex,
-                    $"Failed to list models backend={BackendId.Value} provider={provider.Provider.ProviderKey} displayName={provider.Provider.DisplayName} protocol={provider.Provider.ProtocolFamily} baseUri={FormatUri(provider.Provider.BaseUri)}");
+                    $"Failed to list models backend={ProviderId.Value} provider={provider.Provider.ProviderKey} displayName={provider.Provider.DisplayName} protocol={provider.Provider.ProtocolFamily} baseUri={FormatUri(provider.Provider.BaseUri)}");
                 throw;
             }
 
             LogInfo(
-                $"Listed models backend={BackendId.Value} provider={provider.Provider.ProviderKey} displayName={provider.Provider.DisplayName} count={models.Count}");
+                $"Listed models backend={ProviderId.Value} provider={provider.Provider.ProviderKey} displayName={provider.Provider.DisplayName} count={models.Count}");
             _modelCache[provider.Provider.ProviderKey] = models;
             results.AddRange(models);
         }
@@ -146,7 +146,7 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
             .OrderBy(static model => model.DisplayName ?? model.Id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        LogInfo($"Backend model catalog ready backend={BackendId.Value} providers={_options.Providers.Count} models={mergedModels.Length}");
+        LogInfo($"Backend model catalog ready backend={ProviderId.Value} providers={_options.Providers.Count} models={mergedModels.Length}");
         return mergedModels;
     }
 
@@ -177,7 +177,7 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
         var summary = new LocalAgentSessionSummary
         {
             SessionId = sessionId,
-            BackendId = BackendId,
+            ProviderId = ProviderId,
             ProtocolFamily = registration.Provider.ProtocolFamily,
             ProviderKey = registration.Provider.ProviderKey,
             ModelId = options.Model,
@@ -201,7 +201,7 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
         await Store.UpsertSessionAsync(summary, cancellationToken).ConfigureAwait(false);
         await Store.UpsertStateAsync(state, cancellationToken).ConfigureAwait(false);
         return new LocalAgentSession(
-            BackendId,
+            ProviderId,
             registration.Provider,
             summary,
             state,
@@ -226,7 +226,7 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
         var summary = await Store.GetSessionSummaryAsync(sessionId, cancellationToken).ConfigureAwait(false);
         if (summary is null)
         {
-            throw new KeyNotFoundException($"The session '{sessionId}' was not found for runtime '{BackendId.Value}'.");
+            throw new KeyNotFoundException($"The session '{sessionId}' was not found for runtime '{ProviderId.Value}'.");
         }
 
         var provider = ResolveResumeProvider(options, summary);
@@ -251,7 +251,7 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
         (summary, state) = await RepairRecoveredUsageAsync(summary, state, history, provider, options, cancellationToken).ConfigureAwait(false);
 
         return new LocalAgentSession(
-            BackendId,
+            ProviderId,
             provider.Provider,
             OverrideSummary(summary, options),
             state,
@@ -290,7 +290,7 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
                 return resolved;
             }
 
-            throw new KeyNotFoundException($"The provider '{providerKey}' is not registered for backend '{BackendId.Value}'.");
+            throw new KeyNotFoundException($"The provider '{providerKey}' is not registered for backend '{ProviderId.Value}'.");
         }
 
         var preferred = _options.Providers.FirstOrDefault(static provider => provider.Provider.IsDefault)
@@ -298,7 +298,7 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
         if (preferred is null)
         {
             throw new InvalidOperationException(
-                $"Backend '{BackendId.Value}' requires an explicit provider key because no single default provider is configured.");
+                $"Backend '{ProviderId.Value}' requires an explicit provider key because no single default provider is configured.");
         }
 
         return preferred;
@@ -329,7 +329,7 @@ public sealed class CodeAltaAgentRuntime : IAsyncDisposable
         DateTimeOffset updatedAt)
         => summary with
         {
-            BackendId = BackendId,
+            ProviderId = ProviderId,
             ProtocolFamily = provider.ProtocolFamily,
             ProviderKey = provider.ProviderKey,
             ModelId = NormalizeOptionalText(options.Model),

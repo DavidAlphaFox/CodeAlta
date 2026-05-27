@@ -136,12 +136,12 @@ internal sealed class ShellCommandBindingProjector
             return false;
         }
 
-        if (availability.RequiresCodeAltaManagedBackend && !IsCodeAltaManagedBackend(backendThread!.BackendId))
+        if (availability.RequiresCodeAltaManagedBackend && !IsCodeAltaManagedBackend(backendThread!.ProviderId))
         {
             return false;
         }
 
-        if (availability.BackendFamilies.Count > 0 && !availability.BackendFamilies.Contains(backendThread!.BackendId, StringComparer.OrdinalIgnoreCase))
+        if (availability.BackendFamilies.Count > 0 && !availability.BackendFamilies.Contains(backendThread!.ProviderId, StringComparer.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -149,9 +149,9 @@ internal sealed class ShellCommandBindingProjector
         return true;
     }
 
-    private static bool IsCodeAltaManagedBackend(string backendId)
-        => !string.Equals(backendId, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase) &&
-           !string.Equals(backendId, AgentBackendIds.Copilot.Value, StringComparison.OrdinalIgnoreCase);
+    private static bool IsCodeAltaManagedBackend(string ProviderId)
+        => !string.Equals(ProviderId, ModelProviderIds.Codex.Value, StringComparison.OrdinalIgnoreCase) &&
+           !string.Equals(ProviderId, ModelProviderIds.Copilot.Value, StringComparison.OrdinalIgnoreCase);
 
     private bool CanExecuteShellCommand(ShellCommandAvailability availability)
     {

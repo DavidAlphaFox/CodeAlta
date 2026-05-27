@@ -9,7 +9,7 @@ namespace CodeAlta.Tests;
 public sealed class ProviderFrontendCoordinatorTests
 {
     [TestMethod]
-    public void TryBuildActiveBackendTestResult_UsesReadyBackendState()
+    public void TryBuildActiveProviderTestResult_UsesReadyBackendState()
     {
         var definition = new CodeAltaProviderDocument
         {
@@ -24,7 +24,7 @@ public sealed class ProviderFrontendCoordinatorTests
         backendState.Models.Add(new AgentModelInfo("gpt-4.1"));
         backendState.Models.Add(new AgentModelInfo("gpt-4o"));
 
-        var reused = ProviderFrontendCoordinator.TryBuildActiveBackendTestResult(
+        var reused = ProviderFrontendCoordinator.TryBuildActiveProviderTestResult(
             definition,
             new Dictionary<string, ModelProviderState>(StringComparer.OrdinalIgnoreCase)
             {
@@ -39,7 +39,7 @@ public sealed class ProviderFrontendCoordinatorTests
     }
 
     [TestMethod]
-    public void TryBuildActiveBackendTestResult_UsesFailureStatusForBackend()
+    public void TryBuildActiveProviderTestResult_UsesFailureStatusForBackend()
     {
         var definition = new CodeAltaProviderDocument
         {
@@ -52,7 +52,7 @@ public sealed class ProviderFrontendCoordinatorTests
             StatusMessage = "Codex startup failed.",
         };
 
-        var reused = ProviderFrontendCoordinator.TryBuildActiveBackendTestResult(
+        var reused = ProviderFrontendCoordinator.TryBuildActiveProviderTestResult(
             definition,
             new Dictionary<string, ModelProviderState>(StringComparer.OrdinalIgnoreCase)
             {
@@ -67,14 +67,14 @@ public sealed class ProviderFrontendCoordinatorTests
     }
 
     [TestMethod]
-    public void TryBuildActiveBackendTestResult_DoesNotReuseMissingProviderState()
+    public void TryBuildActiveProviderTestResult_DoesNotReuseMissingProviderState()
     {
         var definition = new CodeAltaProviderDocument
         {
             ProviderKey = "openai",
             ProviderType = "openai-chat",
         };
-        var reused = ProviderFrontendCoordinator.TryBuildActiveBackendTestResult(
+        var reused = ProviderFrontendCoordinator.TryBuildActiveProviderTestResult(
             definition,
             new Dictionary<string, ModelProviderState>(StringComparer.OrdinalIgnoreCase),
             out var result);

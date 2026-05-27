@@ -88,15 +88,15 @@ internal sealed class ModelProviderPreferenceCoordinator
         OpenThreadState tab,
         WorkThreadViewState viewState,
         string? threadProjectRoot,
-        IReadOnlyDictionary<string, ModelProviderState> chatBackendStates)
+        IReadOnlyDictionary<string, ModelProviderState> modelProviderStates)
     {
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentNullException.ThrowIfNull(viewState);
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
 
         viewState.ThreadPreferences.TryGetValue(tab.Thread.ThreadId, out var persistedPreference);
         var defaults = _configStore.GetEffectiveProviderPreference(tab.ProviderId.Value, threadProjectRoot);
-        chatBackendStates.TryGetValue(tab.ProviderId.Value, out var backendState);
+        modelProviderStates.TryGetValue(tab.ProviderId.Value, out var backendState);
         var preferredModelId = tab.ModelId ?? tab.Thread.ModelId ?? persistedPreference?.ModelId ?? defaults.Model;
         tab.ModelId = ResolveModelSelection(backendState?.Models ?? [], preferredModelId);
         tab.ReasoningEffort ??= tab.Thread.ReasoningEffort ?? persistedPreference?.ReasoningEffort ?? defaults.ReasoningEffort;

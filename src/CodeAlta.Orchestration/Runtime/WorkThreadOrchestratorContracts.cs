@@ -281,8 +281,8 @@ public sealed record SessionViewDescriptorSnapshot
     /// <summary>Gets the thread kind.</summary>
     public WorkThreadKind Kind { get; init; }
 
-    /// <summary>Gets the backend identifier for the thread.</summary>
-    public required string BackendId { get; init; }
+    /// <summary>Gets the model provider identifier for the thread.</summary>
+    public required string ProviderId { get; init; }
 
     /// <summary>Gets the provider key selected for the thread.</summary>
     public string? ProviderKey { get; init; }
@@ -343,7 +343,7 @@ public sealed record SessionViewDescriptorSnapshot
         {
             ThreadId = descriptor.ThreadId,
             Kind = descriptor.Kind,
-            BackendId = descriptor.BackendId,
+            ProviderId = descriptor.ProviderId,
             ProviderKey = descriptor.ProviderKey,
             ProjectRef = descriptor.ProjectRef,
             ParentThreadId = descriptor.ParentThreadId,

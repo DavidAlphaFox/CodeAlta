@@ -12,10 +12,10 @@ using AnthropicMessageCreateParams = Anthropic.Models.Messages.MessageCreatePara
 namespace CodeAlta.Tests;
 
 [TestClass]
-public sealed class RawApiAgentBackendTests
+public sealed class RawApiModelProviderRuntimeTests
 {
     [TestMethod]
-    public async Task AnthropicAgentBackend_UsesInjectedChatClientForSessionsAndModelListing()
+    public async Task AnthropicModelProviderRuntime_UsesInjectedChatClientForSessionsAndModelListing()
     {
         using var temp = TestTempDirectory.Create();
         var client = new RecordingChatClient(
@@ -47,7 +47,7 @@ public sealed class RawApiAgentBackendTests
                     ModelId = "claude-sonnet-test",
                 },
             ]);
-        await using var backend = new AnthropicAgentBackend(new AnthropicAgentBackendOptions
+        await using var backend = new AnthropicModelProviderRuntime(new AnthropicModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -110,7 +110,7 @@ public sealed class RawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task AnthropicAgentBackend_MiniMaxCompatibility_FallsBackToNonStreamingChatResponse()
+    public async Task AnthropicModelProviderRuntime_MiniMaxCompatibility_FallsBackToNonStreamingChatResponse()
     {
         using var temp = TestTempDirectory.Create();
         var client = new NonStreamingOnlyChatClient(
@@ -143,7 +143,7 @@ public sealed class RawApiAgentBackendTests
             },
         ]);
 
-        await using var backend = new AnthropicAgentBackend(new AnthropicAgentBackendOptions
+        await using var backend = new AnthropicModelProviderRuntime(new AnthropicModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -193,7 +193,7 @@ public sealed class RawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task AnthropicAgentBackend_UsesAdaptiveThinkingForOpus47Reasoning()
+    public async Task AnthropicModelProviderRuntime_UsesAdaptiveThinkingForOpus47Reasoning()
     {
         using var temp = TestTempDirectory.Create();
         var client = new RecordingChatClient(
@@ -207,7 +207,7 @@ public sealed class RawApiAgentBackendTests
             },
         ]);
 
-        await using var backend = new AnthropicAgentBackend(new AnthropicAgentBackendOptions
+        await using var backend = new AnthropicModelProviderRuntime(new AnthropicModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -247,7 +247,7 @@ public sealed class RawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task AnthropicAgentBackend_MapsOpus46XHighReasoningToAdaptiveMaxEffort()
+    public async Task AnthropicModelProviderRuntime_MapsOpus46XHighReasoningToAdaptiveMaxEffort()
     {
         using var temp = TestTempDirectory.Create();
         var client = new RecordingChatClient(
@@ -261,7 +261,7 @@ public sealed class RawApiAgentBackendTests
             },
         ]);
 
-        await using var backend = new AnthropicAgentBackend(new AnthropicAgentBackendOptions
+        await using var backend = new AnthropicModelProviderRuntime(new AnthropicModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -299,7 +299,7 @@ public sealed class RawApiAgentBackendTests
     }
 
     [TestMethod]
-    public async Task GoogleGenAIAgentBackend_PreservesThoughtSignaturesInSessionHistory()
+    public async Task GoogleGenAIModelProviderRuntime_PreservesThoughtSignaturesInSessionHistory()
     {
         using var temp = TestTempDirectory.Create();
         var client = new RecordingChatClient(
@@ -331,7 +331,7 @@ public sealed class RawApiAgentBackendTests
                     ModelId = "gemini-test",
                 },
             ]);
-        await using var backend = new GoogleGenAIAgentBackend(new GoogleGenAIAgentBackendOptions
+        await using var backend = new GoogleGenAIModelProviderRuntime(new GoogleGenAIModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =

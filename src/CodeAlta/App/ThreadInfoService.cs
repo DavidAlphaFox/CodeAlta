@@ -11,27 +11,27 @@ internal sealed class ThreadInfoService
 {
     private readonly record struct ThreadInfoSnapshot(
         SessionViewDescriptor Thread,
-        string BackendDisplayName,
+        string ProviderDisplayName,
         string? ModelId,
         AgentReasoningEffort? ReasoningEffort,
         IReadOnlyList<AgentEvent>? History);
 
     private readonly IAgentSessionCatalog _sessionCatalog;
     private readonly ThreadSelectionContext _threadSelection;
-    private readonly IReadOnlyDictionary<string, ModelProviderState> _chatBackendStates;
+    private readonly IReadOnlyDictionary<string, ModelProviderState> _modelProviderStates;
 
     public ThreadInfoService(
         IAgentSessionCatalog sessionCatalog,
         ThreadSelectionContext threadSelection,
-        IReadOnlyDictionary<string, ModelProviderState> chatBackendStates)
+        IReadOnlyDictionary<string, ModelProviderState> modelProviderStates)
     {
         ArgumentNullException.ThrowIfNull(sessionCatalog);
         ArgumentNullException.ThrowIfNull(threadSelection);
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
 
         _sessionCatalog = sessionCatalog;
         _threadSelection = threadSelection;
-        _chatBackendStates = chatBackendStates;
+        _modelProviderStates = modelProviderStates;
     }
 
     public async Task<ThreadInfoReport?> LoadSelectedThreadReportAsync(CancellationToken cancellationToken = default)
@@ -66,7 +66,7 @@ internal sealed class ThreadInfoService
 
         return ThreadInfoReportBuilder.Build(
             snapshot.Value.Thread,
-            snapshot.Value.BackendDisplayName,
+            snapshot.Value.ProviderDisplayName,
             snapshot.Value.ModelId,
             snapshot.Value.ReasoningEffort,
             metadata,
@@ -83,9 +83,9 @@ internal sealed class ThreadInfoService
         }
 
         var tab = _threadSelection.EnsureThreadTab(thread);
-        var backendState = _chatBackendStates.TryGetValue(thread.BackendId, out var resolvedBackendState)
+        var backendState = _modelProviderStates.TryGetValue(thread.ProviderId, out var resolvedBackendState)
             ? resolvedBackendState
-            : new ModelProviderState(new ModelProviderId(thread.BackendId), thread.BackendId);
+            : new ModelProviderState(new ModelProviderId(thread.ProviderId), thread.ProviderId);
 
         if (!tab.HistoryLoaded || tab.HistoryEvents is null)
         {

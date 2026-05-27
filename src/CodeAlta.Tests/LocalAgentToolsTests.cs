@@ -25,7 +25,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -52,7 +52,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -78,7 +78,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -103,7 +103,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -130,7 +130,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -155,7 +155,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -188,7 +188,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -218,7 +218,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -244,7 +244,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -268,7 +268,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -304,7 +304,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -331,7 +331,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -357,7 +357,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -382,7 +382,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -411,7 +411,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -441,7 +441,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -472,7 +472,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -503,7 +503,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -539,7 +539,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -561,7 +561,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -587,7 +587,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -620,7 +620,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -653,7 +653,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -681,7 +681,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -725,7 +725,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -753,7 +753,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -997,7 +997,7 @@ public sealed class LocalAgentToolsTests
         using var writeArgs = JsonDocument.Parse("""{"path":"src/sample.txt","content":"alpha\nbeta\n"}""");
         var writeResult = await writeFile.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     writeFile.Spec.Name,
@@ -1018,7 +1018,7 @@ public sealed class LocalAgentToolsTests
             """);
         var replaceResult = await replaceInFile.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-2",
                     replaceInFile.Spec.Name,
@@ -1040,7 +1040,7 @@ public sealed class LocalAgentToolsTests
         using var emptyArgs = JsonDocument.Parse("""{"path":"empty.txt","content":""}""");
         var emptyResult = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -1054,7 +1054,7 @@ public sealed class LocalAgentToolsTests
         using var newlineArgs = JsonDocument.Parse("""{"path":"newlines.txt","content":"\n\n"}""");
         var newlineResult = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-2",
                     tool.Spec.Name,
@@ -1086,7 +1086,7 @@ public sealed class LocalAgentToolsTests
 
         var emptyReplacementResult = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -1110,7 +1110,7 @@ public sealed class LocalAgentToolsTests
 
         var newlineReplacementResult = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-2",
                     tool.Spec.Name,
@@ -1134,7 +1134,7 @@ public sealed class LocalAgentToolsTests
 
         var newlineSearchResult = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-3",
                     tool.Spec.Name,
@@ -1159,7 +1159,7 @@ public sealed class LocalAgentToolsTests
         using var writeArgs = JsonDocument.Parse($$"""{"path":{{JsonSerializer.Serialize(filePath)}},"content":"alpha\nbeta\n"}""");
         var writeResult = await writeFile.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     writeFile.Spec.Name,
@@ -1179,7 +1179,7 @@ public sealed class LocalAgentToolsTests
             """);
         var replaceResult = await replaceInFile.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-2",
                     replaceInFile.Spec.Name,
@@ -1205,7 +1205,7 @@ public sealed class LocalAgentToolsTests
         using var writeArgs = JsonDocument.Parse("""{"path":"../sibling/sample.txt","content":"alpha\nbeta\n"}""");
         var writeResult = await writeFile.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     writeFile.Spec.Name,
@@ -1226,7 +1226,7 @@ public sealed class LocalAgentToolsTests
             """);
         var replaceResult = await replaceInFile.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-2",
                     replaceInFile.Spec.Name,
@@ -1249,7 +1249,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -1272,7 +1272,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -1298,7 +1298,7 @@ public sealed class LocalAgentToolsTests
         using var renameArgs = JsonDocument.Parse("""{"old_path":"old-dir","new_path":"new-dir"}""");
         var renameResult = await rename.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     rename.Spec.Name,
@@ -1313,7 +1313,7 @@ public sealed class LocalAgentToolsTests
         using var deleteArgs = JsonDocument.Parse("""{"path":"delete-me.txt"}""");
         var deleteResult = await delete.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-2",
                     delete.Spec.Name,
@@ -1343,7 +1343,7 @@ public sealed class LocalAgentToolsTests
             $$"""{"old_path":{{JsonSerializer.Serialize(sourcePath)}},"new_path":{{JsonSerializer.Serialize(destinationPath)}}}""");
         var renameResult = await rename.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     rename.Spec.Name,
@@ -1357,7 +1357,7 @@ public sealed class LocalAgentToolsTests
         using var deleteArgs = JsonDocument.Parse($$"""{"path":{{JsonSerializer.Serialize(deletePath)}}}""");
         var deleteResult = await delete.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-2",
                     delete.Spec.Name,
@@ -1388,7 +1388,7 @@ public sealed class LocalAgentToolsTests
         using var renameArgs = JsonDocument.Parse("""{"old_path":"../sibling-old","new_path":"../sibling-new"}""");
         var renameResult = await rename.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     rename.Spec.Name,
@@ -1403,7 +1403,7 @@ public sealed class LocalAgentToolsTests
         using var deleteArgs = JsonDocument.Parse("""{"path":"../delete-me.txt"}""");
         var deleteResult = await delete.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-2",
                     delete.Spec.Name,
@@ -1441,7 +1441,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -1484,7 +1484,7 @@ public sealed class LocalAgentToolsTests
 
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.OpenAIResponses,
+                    ModelProviderIds.OpenAIResponses,
                     "session-1",
                     "tool-1",
                     tool.Spec.Name,
@@ -1507,7 +1507,7 @@ public sealed class LocalAgentToolsTests
     {
         return new LocalAgentBuiltInToolOptions
         {
-            BackendId = AgentBackendIds.OpenAIResponses,
+            ProviderId = ModelProviderIds.OpenAIResponses,
             SessionId = "session-1",
             WorkingDirectory = workingDirectory,
             HttpClient = httpClient,

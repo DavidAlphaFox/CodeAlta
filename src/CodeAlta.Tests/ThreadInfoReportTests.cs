@@ -10,7 +10,7 @@ namespace CodeAlta.Tests;
 public sealed class ThreadInfoReportTests
 {
     [TestMethod]
-    public void Build_UsesHistoryStorageAndBackendFacts()
+    public void Build_UsesHistoryStorageAndProviderFacts()
     {
         var tempFile = Path.GetTempFileName();
         try
@@ -19,7 +19,7 @@ public sealed class ThreadInfoReportTests
             var thread = new SessionViewDescriptor
             {
                 ThreadId = "codex:thread-1",
-                BackendId = AgentBackendIds.Codex.Value,
+                ProviderId = ModelProviderIds.Codex.Value,
                 WorkingDirectory = @"C:\code\CodeAlta",
                 Title = "Investigate startup",
                 CreatedAt = DateTimeOffset.Parse("2026-03-20T10:00:00+00:00"),
@@ -29,12 +29,12 @@ public sealed class ThreadInfoReportTests
             };
             AgentEvent[] history =
             [
-                new AgentContentCompletedEvent(AgentBackendIds.Codex, "thread-1", thread.StartedAt.Value, null, AgentContentKind.User, "user-1", null, "Check startup"),
-                new AgentContentCompletedEvent(AgentBackendIds.Codex, "thread-1", thread.StartedAt.Value.AddMinutes(1), null, AgentContentKind.Assistant, "assistant-1", null, "I am checking."),
-                new AgentContentCompletedEvent(AgentBackendIds.Codex, "thread-1", thread.StartedAt.Value.AddMinutes(2), null, AgentContentKind.User, "user-2", null, "Continue"),
-                new AgentContentCompletedEvent(AgentBackendIds.Codex, "thread-1", thread.StartedAt.Value.AddMinutes(3), null, AgentContentKind.Assistant, "assistant-2", null, "Done."),
+                new AgentContentCompletedEvent(ModelProviderIds.Codex, "thread-1", thread.StartedAt.Value, null, AgentContentKind.User, "user-1", null, "Check startup"),
+                new AgentContentCompletedEvent(ModelProviderIds.Codex, "thread-1", thread.StartedAt.Value.AddMinutes(1), null, AgentContentKind.Assistant, "assistant-1", null, "I am checking."),
+                new AgentContentCompletedEvent(ModelProviderIds.Codex, "thread-1", thread.StartedAt.Value.AddMinutes(2), null, AgentContentKind.User, "user-2", null, "Continue"),
+                new AgentContentCompletedEvent(ModelProviderIds.Codex, "thread-1", thread.StartedAt.Value.AddMinutes(3), null, AgentContentKind.Assistant, "assistant-2", null, "Done."),
                 new AgentRawEvent(
-                    AgentBackendIds.Codex,
+                    ModelProviderIds.Codex,
                     "thread-1",
                     thread.StartedAt.Value.AddMinutes(4),
                     "local.skillActivation",
@@ -89,7 +89,7 @@ public sealed class ThreadInfoReportTests
             Assert.AreEqual("code-review", report.LoadedSkills[0].Name);
             CollectionAssert.AreEqual(
                 new[] { "Model provider", "Source", "Status", "Persistence", "Session name" },
-                report.BackendFacts.Select(static fact => fact.Label).ToArray());
+                report.ProviderFacts.Select(static fact => fact.Label).ToArray());
         }
         finally
         {
@@ -102,7 +102,7 @@ public sealed class ThreadInfoReportTests
     {
         var report = new ThreadInfoReport(
             ThreadTitle: "Investigate startup",
-            BackendName: "Codex",
+            ProviderName: "Codex",
             ThreadId: "thread-1",
             WorkingDirectory: @"C:\code\CodeAlta",
             ModelName: "gpt-5-codex",
@@ -114,7 +114,7 @@ public sealed class ThreadInfoReportTests
             UserMessageCount: 2,
             AssistantMessageCount: 2,
             StorageLocation: new ThreadInfoStorageLocation(@"C:\threads\thread-1.jsonl", ThreadInfoStorageKind.File, 2048),
-            BackendFacts:
+            ProviderFacts:
             [
                 new ThreadInfoFact("Model provider", "openai"),
                 new ThreadInfoFact("Status", "Open"),

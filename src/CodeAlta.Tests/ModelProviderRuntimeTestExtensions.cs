@@ -8,7 +8,7 @@ internal static class ModelProviderRuntimeTestExtensions
     public static void RegisterOrReplaceBackendRuntime(
         this ModelProviderRegistry registry,
         ModelProviderDescriptor descriptor,
-        Func<IAgentBackend> createBackend)
+        Func<ITestModelProviderSessionRuntime> createBackend)
     {
         registry.RegisterOrReplace(descriptor, () => new LegacyBackendRuntime(descriptor, createBackend()));
     }
@@ -84,9 +84,9 @@ internal static class ModelProviderRuntimeTestExtensions
 
     private sealed class LegacyBackendRuntime : IModelProviderSessionRuntime
     {
-        private readonly IAgentBackend _backend;
+        private readonly ITestModelProviderSessionRuntime _backend;
 
-        public LegacyBackendRuntime(ModelProviderDescriptor descriptor, IAgentBackend backend)
+        public LegacyBackendRuntime(ModelProviderDescriptor descriptor, ITestModelProviderSessionRuntime backend)
         {
             Descriptor = descriptor;
             _backend = backend;

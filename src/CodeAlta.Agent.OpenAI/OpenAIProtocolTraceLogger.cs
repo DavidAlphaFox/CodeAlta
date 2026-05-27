@@ -37,7 +37,7 @@ internal sealed class OpenAIProtocolTraceLogger
             layout.GetSessionTraceFilePath(request.SessionId),
             options.MaxBodyBytes);
         logger.WriteLine(
-            $"### turn start provider={request.Provider.ProviderKey} backend={request.BackendId.Value} session={request.SessionId} run={request.RunId.Value} model={FormatValue(request.ModelId)}");
+            $"### turn start provider={request.Provider.ProviderKey} backend={request.ProviderId.Value} session={request.SessionId} run={request.RunId.Value} model={FormatValue(request.ModelId)}");
         return logger;
     }
 

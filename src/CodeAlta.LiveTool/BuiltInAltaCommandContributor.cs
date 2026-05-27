@@ -679,7 +679,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
                 version = 1,
                 correlationId = context.CorrelationId,
                 providerKey = capability.ProviderKey,
-                backendId = capability.BackendId,
+                ProviderId = capability.ProviderId,
                 capability.Registered,
                 capability.Configured,
                 capability.SupportsAltaSessionTool,
@@ -702,22 +702,22 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
 
     private static BackendCapability[] GetBackendCapabilities(AltaCommandContext context)
     {
-        var descriptors = GetBackendDescriptors(context);
+        var descriptors = GetProviderDescriptors(context);
         var policy = context.Services.Get<IAltaSessionToolBackendPolicy>();
-        return GetProviderBackendIds(context, descriptors)
-            .Select(backendId => new BackendCapability(
-                backendId.Value,
-                backendId.Value,
-                descriptors.Any(descriptor => string.Equals(descriptor.ProviderId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase)),
-                descriptors.Any(descriptor => string.Equals(descriptor.ProviderId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase)),
-                policy?.SupportsAltaSessionTool(backendId.Value) ?? false))
+        return GetProviderProviderIds(context, descriptors)
+            .Select(ProviderId => new BackendCapability(
+                ProviderId.Value,
+                ProviderId.Value,
+                descriptors.Any(descriptor => string.Equals(descriptor.ProviderId.Value, ProviderId.Value, StringComparison.OrdinalIgnoreCase)),
+                descriptors.Any(descriptor => string.Equals(descriptor.ProviderId.Value, ProviderId.Value, StringComparison.OrdinalIgnoreCase)),
+                policy?.SupportsAltaSessionTool(ProviderId.Value) ?? false))
             .ToArray();
     }
 
-    private static AgentBackendId[] GetProviderBackendIds(AltaCommandContext context, IReadOnlyList<ModelProviderDescriptor> descriptors)
+    private static ModelProviderId[] GetProviderProviderIds(AltaCommandContext context, IReadOnlyList<ModelProviderDescriptor> descriptors)
     {
-        var backendIds = descriptors.Select(static descriptor => new AgentBackendId(descriptor.ProviderId.Value)).ToList();
-        return backendIds.OrderBy(static id => id.Value, StringComparer.OrdinalIgnoreCase).ToArray();
+        var ProviderIds = descriptors.Select(static descriptor => new ModelProviderId(descriptor.ProviderId.Value)).ToList();
+        return ProviderIds.OrderBy(static id => id.Value, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static int WritePluginCapabilities(AltaCommandContext context, IReadOnlyList<AltaCommandPolicy> policies)
@@ -1049,7 +1049,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
                               string.Equals(stateFilter, "all", StringComparison.OrdinalIgnoreCase);
         var filtered = infos
             .Where(info => project is null || string.Equals(info.Thread.ProjectRef, project.Id, StringComparison.OrdinalIgnoreCase))
-            .Where(info => string.IsNullOrWhiteSpace(backendFilter) || string.Equals(info.Thread.BackendId, backendFilter, StringComparison.OrdinalIgnoreCase))
+            .Where(info => string.IsNullOrWhiteSpace(backendFilter) || string.Equals(info.Thread.ProviderId, backendFilter, StringComparison.OrdinalIgnoreCase))
             .Where(info => includeArchived || !string.Equals(info.State, "archived", StringComparison.OrdinalIgnoreCase))
             .Where(info => string.IsNullOrWhiteSpace(stateFilter) || string.Equals(stateFilter, "all", StringComparison.OrdinalIgnoreCase) || string.Equals(info.State, stateFilter, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(static info => info.Thread.LastActiveAt)
@@ -1757,7 +1757,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             version = 1,
             correlationId = context.CorrelationId,
             threadId = thread.ThreadId,
-            backendId = thread.BackendId,
+            ProviderId = thread.ProviderId,
             providerKey = thread.ResolvedProviderKey,
             projectId = thread.ProjectRef,
             title = thread.Title,
@@ -2052,31 +2052,31 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
 
     private static async ValueTask<int> HandleProviderListAsync(AltaCommandContext context, bool detailed)
     {
-        var descriptors = GetBackendDescriptors(context);
-        var backendIds = GetProviderBackendIds(context, descriptors);
+        var descriptors = GetProviderDescriptors(context);
+        var ProviderIds = GetProviderProviderIds(context, descriptors);
 
         if (!detailed)
         {
-            WriteProviderKeys(context, backendIds);
+            WriteProviderKeys(context, ProviderIds);
             await Task.CompletedTask.ConfigureAwait(false);
             return AltaExitCodes.Success;
         }
 
-        foreach (var backendId in backendIds)
+        foreach (var ProviderId in ProviderIds)
         {
-            var descriptor = descriptors.FirstOrDefault(candidate => string.Equals(candidate.ProviderId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase));
+            var descriptor = descriptors.FirstOrDefault(candidate => string.Equals(candidate.ProviderId.Value, ProviderId.Value, StringComparison.OrdinalIgnoreCase));
             AltaJsonlWriter.WriteRecord(context.Stdout, new
             {
                 type = "alta.provider.item",
                 version = 1,
                 correlationId = context.CorrelationId,
-                providerKey = backendId.Value,
-                backendId = backendId.Value,
+                providerKey = ProviderId.Value,
+                ProviderId = ProviderId.Value,
                 displayName = descriptor?.DisplayName,
             });
         }
 
-        WriteSummary(context, "alta.provider.summary", backendIds.Length, truncated: false);
+        WriteSummary(context, "alta.provider.summary", ProviderIds.Length, truncated: false);
         await Task.CompletedTask.ConfigureAwait(false);
         return AltaExitCodes.Success;
     }
@@ -2356,7 +2356,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             ProjectRoots = projectRoots,
             Model = info.Preference?.ModelId ?? info.Thread.ModelId,
             ReasoningEffort = info.Preference?.ReasoningEffort ?? info.Thread.ReasoningEffort,
-            Tools = CreateAltaSessionTools(context, info.Thread.BackendId, () => info.Thread.ThreadId, info.Thread.ProjectRef, workingDirectory),
+            Tools = CreateAltaSessionTools(context, info.Thread.ProviderId, () => info.Thread.ThreadId, info.Thread.ProjectRef, workingDirectory),
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
             OnUserInputRequest = static (_, _) => Task.FromResult(new AgentUserInputResponse(new Dictionary<string, string>(StringComparer.Ordinal))),
         };
@@ -2364,13 +2364,13 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
 
     private static IReadOnlyList<AgentToolDefinition>? CreateAltaSessionTools(
         AltaCommandContext context,
-        string backendId,
+        string ProviderId,
         Func<string?>? sourceThreadIdProvider,
         string? sourceProjectId,
         string? workingDirectory)
     {
         var policy = context.Services.Get<IAltaSessionToolBackendPolicy>();
-        if (policy is null || !policy.SupportsAltaSessionTool(backendId))
+        if (policy is null || !policy.SupportsAltaSessionTool(ProviderId))
         {
             return null;
         }
@@ -2531,7 +2531,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
 
     private static string? GetDefaultProviderKey(AltaCommandContext context)
     {
-        if (GetBackendDescriptors(context).FirstOrDefault() is { } descriptor)
+        if (GetProviderDescriptors(context).FirstOrDefault() is { } descriptor)
         {
             return descriptor.ProviderId.Value;
         }
@@ -2539,7 +2539,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
         return null;
     }
 
-    private static IReadOnlyList<ModelProviderDescriptor> GetBackendDescriptors(AltaCommandContext context)
+    private static IReadOnlyList<ModelProviderDescriptor> GetProviderDescriptors(AltaCommandContext context)
         => context.Services.Get<IReadOnlyList<ModelProviderDescriptor>>() ?? [];
 
     private static AltaModelSelection CreateModelSelection(SessionViewDescriptor thread, WorkThreadPreference? preference)
@@ -2938,7 +2938,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             correlationId = context.CorrelationId,
             threadId = info.Thread.ThreadId,
             kind = ThreadKindWire(info.Thread.Kind),
-            backendId = info.Thread.BackendId,
+            ProviderId = info.Thread.ProviderId,
             providerKey = info.Thread.ResolvedProviderKey,
             projectId = info.Thread.ProjectRef,
             projectRef = info.Thread.ProjectRef,
@@ -2972,7 +2972,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             version = 1,
             correlationId = context.CorrelationId,
             threadId = info.Thread.ThreadId,
-            backendId = info.Thread.BackendId,
+            ProviderId = info.Thread.ProviderId,
             providerKey = info.Thread.ResolvedProviderKey,
             metrics = ToDetailedMetricsPayload(metrics),
         });
@@ -2997,7 +2997,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             version = 1,
             correlationId = context.CorrelationId,
             threadId = info.Thread.ThreadId,
-            backendId = info.Thread.BackendId,
+            ProviderId = info.Thread.ProviderId,
             providerKey = info.Thread.ResolvedProviderKey,
             status = StatusWire(result.Status),
             scope = MetricsScopeWire(result.Scope),
@@ -3189,7 +3189,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             source = new
             {
                 kind = "backend",
-                backendId = agentEvent.BackendId.Value,
+                ProviderId = agentEvent.ProviderId.Value,
                 runId = agentEvent.RunId?.Value,
             },
             content = string.IsNullOrEmpty(mapped.Text) ? [] : new[] { new { type = "text", text = mapped.Text } },
@@ -3242,7 +3242,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             record["source"] = new
             {
                 kind = "backend",
-                backendId = agentEvent.BackendId.Value,
+                ProviderId = agentEvent.ProviderId.Value,
                 runId = agentEvent.RunId?.Value,
             };
         }
@@ -3515,11 +3515,11 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             modelRefs,
         });
 
-    private static void WriteProviderKeys(AltaCommandContext context, IReadOnlyList<AgentBackendId> backendIds)
+    private static void WriteProviderKeys(AltaCommandContext context, IReadOnlyList<ModelProviderId> ProviderIds)
         => AltaJsonlWriter.WriteRecord(context.Stdout, new
         {
             type = "alta.provider.keys",
-            providerKeys = backendIds.Select(static backendId => backendId.Value).ToArray(),
+            providerKeys = ProviderIds.Select(static ProviderId => ProviderId.Value).ToArray(),
         });
 
     private static string CreateModelRef(string providerKey, AgentModelInfo model, AgentReasoningEffort? requestedReasoning)
@@ -3755,7 +3755,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
 
     private sealed record BackendCapability(
         string ProviderKey,
-        string BackendId,
+        string ProviderId,
         bool Registered,
         bool Configured,
         bool SupportsAltaSessionTool);

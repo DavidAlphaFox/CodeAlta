@@ -39,7 +39,7 @@ internal static class ThreadInfoFormatter
         AppendConversation(builder, report);
         AppendLoadedSkills(builder, report.LoadedSkills);
         AppendStorage(builder, report.StorageLocation);
-        AppendBackendFacts(builder, report.BackendFacts);
+        AppendProviderFacts(builder, report.ProviderFacts);
 
         return builder.ToString().TrimEnd();
     }
@@ -48,7 +48,7 @@ internal static class ThreadInfoFormatter
     {
         if (report is not null)
         {
-            return $"{report.BackendName} · {report.ThreadTitle}";
+            return $"{report.ProviderName} · {report.ThreadTitle}";
         }
 
         return isLoading
@@ -100,7 +100,7 @@ internal static class ThreadInfoFormatter
     private static void AppendOverview(StringBuilder builder, ThreadInfoReport report)
     {
         StartSection(builder, "Overview");
-        builder.Append("- Provider: ").AppendLine(report.BackendName);
+        builder.Append("- Provider: ").AppendLine(report.ProviderName);
         builder.Append("- Session ID: `").Append(report.ThreadId).AppendLine("`");
         builder.Append("- Working directory: `").Append(report.WorkingDirectory).AppendLine("`");
         builder.Append("- Model: ").AppendLine(report.ModelName ?? "(default model)");
@@ -181,7 +181,7 @@ internal static class ThreadInfoFormatter
         }
     }
 
-    private static void AppendBackendFacts(StringBuilder builder, IReadOnlyList<ThreadInfoFact> backendFacts)
+    private static void AppendProviderFacts(StringBuilder builder, IReadOnlyList<ThreadInfoFact> backendFacts)
     {
         if (backendFacts.Count == 0)
         {

@@ -293,7 +293,7 @@ internal sealed class CopilotDirectCredentialStore
         var root = string.IsNullOrWhiteSpace(stateRootPath)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CodeAlta")
             : stateRootPath.Trim();
-        _path = Path.Combine(root, "auth", CopilotDirectAgentBackend.ProtocolFamily, SanitizeFileName(providerKey) + ".json");
+        _path = Path.Combine(root, "auth", CopilotDirectModelProviderRuntime.ProtocolFamily, SanitizeFileName(providerKey) + ".json");
     }
 
     public async ValueTask<CopilotDirectCredentialCache?> ReadAsync(CancellationToken cancellationToken)

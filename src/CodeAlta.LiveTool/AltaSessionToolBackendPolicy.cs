@@ -8,10 +8,10 @@ public interface IAltaSessionToolBackendPolicy
     /// <summary>
     /// Returns <see langword="true"/> when the backend supports host-injected <c>alta</c> tools.
     /// </summary>
-    /// <param name="backendId">The backend identifier.</param>
+    /// <param name="ProviderId">The model provider identifier.</param>
     /// <returns><see langword="true"/> when the live tool may be exposed to the backend.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="backendId"/> is empty.</exception>
-    bool SupportsAltaSessionTool(string backendId);
+    /// <exception cref="ArgumentException">Thrown when <paramref name="ProviderId"/> is empty.</exception>
+    bool SupportsAltaSessionTool(string ProviderId);
 }
 
 /// <summary>
@@ -19,23 +19,23 @@ public interface IAltaSessionToolBackendPolicy
 /// </summary>
 public sealed class AltaSessionToolBackendPolicy : IAltaSessionToolBackendPolicy
 {
-    private readonly HashSet<string> _backendIds;
+    private readonly HashSet<string> _ProviderIds;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AltaSessionToolBackendPolicy"/> class.
     /// </summary>
-    /// <param name="backendIds">Backend identifiers that support host-injected <c>alta</c> tools.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="backendIds"/> is <see langword="null"/>.</exception>
-    public AltaSessionToolBackendPolicy(IEnumerable<string> backendIds)
+    /// <param name="ProviderIds">model provider identifiers that support host-injected <c>alta</c> tools.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="ProviderIds"/> is <see langword="null"/>.</exception>
+    public AltaSessionToolBackendPolicy(IEnumerable<string> ProviderIds)
     {
-        ArgumentNullException.ThrowIfNull(backendIds);
-        _backendIds = new HashSet<string>(backendIds.Where(static id => !string.IsNullOrWhiteSpace(id)), StringComparer.OrdinalIgnoreCase);
+        ArgumentNullException.ThrowIfNull(ProviderIds);
+        _ProviderIds = new HashSet<string>(ProviderIds.Where(static id => !string.IsNullOrWhiteSpace(id)), StringComparer.OrdinalIgnoreCase);
     }
 
     /// <inheritdoc />
-    public bool SupportsAltaSessionTool(string backendId)
+    public bool SupportsAltaSessionTool(string ProviderId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(backendId);
-        return _backendIds.Contains(backendId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(ProviderId);
+        return _ProviderIds.Contains(ProviderId);
     }
 }

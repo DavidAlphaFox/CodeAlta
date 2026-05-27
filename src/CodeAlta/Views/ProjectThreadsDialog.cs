@@ -63,7 +63,7 @@ internal sealed class ProjectThreadsDialog
         {
             _document
                 .AddColumn(new DataGridColumnInfo<bool>("select", "✅", false, ProjectThreadsDialogRowViewModel.Accessor.IsSelected))
-                .AddColumn(new DataGridColumnInfo<string>("backend", "🤖 Provider", true, ProjectThreadsDialogRowViewModel.Accessor.BackendDisplayName))
+                .AddColumn(new DataGridColumnInfo<string>("backend", "🤖 Provider", true, ProjectThreadsDialogRowViewModel.Accessor.ProviderDisplayName))
                 .AddColumn(new DataGridColumnInfo<string>("title", "🧵 Session", false, ProjectThreadsDialogRowViewModel.Accessor.Title))
                 .AddColumn(new DataGridColumnInfo<DateTimeOffset?>("updated", "🕒 Updated", true, ProjectThreadsDialogRowViewModel.Accessor.LastUpdatedAt))
                 .AddColumn(new DataGridColumnInfo<int?>("messages", "💬 Messages", true, ProjectThreadsDialogRowViewModel.Accessor.MessageCount))
@@ -97,11 +97,11 @@ internal sealed class ProjectThreadsDialog
         static Visual BuildBackendCell(DataTemplateValue<string> value, in DataTemplateContext _)
         {
             var row = (ProjectThreadsDialogRowViewModel)value.GetBinding().Owner;
-            return new Markup(() => SidebarThreadPresentation.BuildProviderMarkup(row.BackendId, row.BackendDisplayName, row.ThreadKind))
+            return new Markup(() => SidebarThreadPresentation.BuildProviderMarkup(row.ProviderId, row.ProviderDisplayName, row.ThreadKind))
                 .Wrap(false)
-                .Tooltip(new TextBlock(() => string.IsNullOrWhiteSpace(row.BackendId)
-                    ? row.BackendDisplayName
-                    : $"{row.BackendDisplayName} ({row.BackendId})"));
+                .Tooltip(new TextBlock(() => string.IsNullOrWhiteSpace(row.ProviderId)
+                    ? row.ProviderDisplayName
+                    : $"{row.ProviderDisplayName} ({row.ProviderId})"));
         }
 
         static Visual BuildOpenButtonDisplay(DataTemplateValue<string> value, in DataTemplateContext context)
@@ -143,7 +143,7 @@ internal sealed class ProjectThreadsDialog
         {
             Key = "backend",
             Header = new TextBlock("🤖 Provider"),
-            TypedValueAccessor = ProjectThreadsDialogRowViewModel.Accessor.BackendDisplayName,
+            TypedValueAccessor = ProjectThreadsDialogRowViewModel.Accessor.ProviderDisplayName,
             Width = GridLength.Auto,
             Sortable = true,
             CellTemplate = new DataTemplate<string>(BuildBackendCell, null),
@@ -320,8 +320,8 @@ internal sealed class ProjectThreadsDialog
         {
             ThreadId = thread.ThreadId,
             Title = thread.Title,
-            BackendId = thread.BackendId,
-            BackendDisplayName = resolveProviderDisplayName(thread.BackendId),
+            ProviderId = thread.ProviderId,
+            ProviderDisplayName = resolveProviderDisplayName(thread.ProviderId),
             ThreadKind = thread.Kind,
             LastUpdatedAt = thread.LastActiveAt,
             LastUpdatedRelative = display.RelativeText,

@@ -234,7 +234,7 @@ internal sealed class ThreadPromptDispatchCoordinator
             _queueCoordinator.EnqueuePrompt(tab, prompt);
             _commandContext.SetThreadStatus(
                 tab,
-                $"Live steering is not supported by '{thread.BackendId}'; queued the prompt for the next turn.",
+                $"Live steering is not supported by '{thread.ProviderId}'; queued the prompt for the next turn.",
                 false,
                 StatusTone.Warning);
 

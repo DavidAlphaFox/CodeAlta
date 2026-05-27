@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent.LocalRuntime;
 
@@ -13,9 +14,10 @@ public sealed record LocalAgentSessionSummary
     public required string SessionId { get; init; }
 
     /// <summary>
-    /// Gets or initializes the legacy backend identifier. New code treats this as persisted compatibility data.
+    /// Gets or initializes the model provider identifier serialized as <c>backendId</c> for existing local session summaries.
     /// </summary>
-    public AgentBackendId BackendId { get; init; }
+    [JsonPropertyName("backendId")]
+    public ModelProviderId ProviderId { get; init; }
 
     /// <summary>
     /// Gets or initializes the last-used protocol family.

@@ -169,7 +169,7 @@ internal sealed class SessionHistoryCoordinator
                 TryReadModelSelection(update, out var modelId, out var reasoningEffort))
             {
                 return new ModelProviderPreference(
-                    new ModelProviderId(update.BackendId.Value),
+                    new ModelProviderId(update.ProviderId.Value),
                     modelId,
                     reasoningEffort);
             }
@@ -200,10 +200,10 @@ internal sealed class SessionHistoryCoordinator
         }
 
         if (!string.Equals(thread.ProviderKey, normalized.ModelProviderId.Value, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(thread.BackendId, normalized.ModelProviderId.Value, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(thread.ProviderId, normalized.ModelProviderId.Value, StringComparison.OrdinalIgnoreCase))
         {
             thread.ProviderKey = normalized.ModelProviderId.Value;
-            thread.BackendId = normalized.ModelProviderId.Value;
+            thread.ProviderId = normalized.ModelProviderId.Value;
             changed = true;
         }
 

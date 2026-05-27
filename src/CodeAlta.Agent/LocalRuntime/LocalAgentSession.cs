@@ -57,7 +57,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
     /// <summary>
     /// Initializes a new instance of the <see cref="LocalAgentSession"/> class.
     /// </summary>
-    /// <param name="backendId">The backend identifier.</param>
+    /// <param name="ProviderId">The model provider identifier.</param>
     /// <param name="provider">The configured provider descriptor.</param>
     /// <param name="summary">The persisted session summary.</param>
     /// <param name="state">The persisted session state.</param>
@@ -68,7 +68,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
     /// <param name="allowProviderContinuation">Whether provider-native live continuation may be reused for this session.</param>
     /// <param name="cachedModels">Cached provider model metadata available at session creation/resume time.</param>
     public LocalAgentSession(
-        AgentBackendId backendId,
+        ModelProviderId providerId,
         ModelProviderRuntimeDescriptor provider,
         LocalAgentSessionSummary summary,
         LocalAgentSessionState state,
@@ -87,7 +87,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         ArgumentNullException.ThrowIfNull(turnExecutor);
         ArgumentNullException.ThrowIfNull(options);
 
-        BackendId = backendId;
+        ProviderId = providerId;
         _protocolFamily = provider.ProtocolFamily;
         _providerKey = provider.ProviderKey;
         _store = store;
@@ -115,7 +115,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
     public ModelProviderRuntimeDescriptor Provider { get; }
 
     /// <inheritdoc />
-    public AgentBackendId BackendId { get; }
+    public ModelProviderId ProviderId { get; }
 
     /// <inheritdoc />
     public string SessionId => _summary.SessionId;
@@ -269,7 +269,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                         .ConfigureAwait(false);
 
                     var idleEvent = new AgentSessionUpdateEvent(
-                        BackendId,
+                        ProviderId,
                         SessionId,
                         DateTimeOffset.UtcNow,
                         runId,
@@ -292,7 +292,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                         : AgentActivityKind.ToolCall;
 
                     var started = new AgentActivityEvent(
-                        BackendId,
+                        ProviderId,
                         SessionId,
                         DateTimeOffset.UtcNow,
                         runId,
@@ -321,7 +321,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                     {
                         result = await toolDefinition.Handler(
                                 new AgentToolInvocation(
-                                    BackendId,
+                                    ProviderId,
                                     SessionId,
                                     toolCall.CallId,
                                     toolDefinition.Spec.Name,
@@ -337,7 +337,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                                         try
                                         {
                                             var deltaEvent = new AgentContentDeltaEvent(
-                                                BackendId,
+                                                ProviderId,
                                                 SessionId,
                                                 DateTimeOffset.UtcNow,
                                                 runId,
@@ -389,7 +389,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                     _conversation.Add(toolMessage);
 
                     var completed = new AgentActivityEvent(
-                        BackendId,
+                        ProviderId,
                         SessionId,
                         DateTimeOffset.UtcNow,
                         runId,
@@ -401,7 +401,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                         result.Error,
                         CreateToolResultDetails(toolCall, result, _summary.WorkingDirectory, toolDiff));
                     var rawToolEvent = new AgentRawEvent(
-                        BackendId,
+                        ProviderId,
                         SessionId,
                         DateTimeOffset.UtcNow,
                         ToolMessageEventType,
@@ -419,7 +419,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                                 UpdatedAt = DateTimeOffset.UtcNow,
                             };
                             rawSkillActivationEvent = new AgentRawEvent(
-                                BackendId,
+                                ProviderId,
                                 SessionId,
                                 DateTimeOffset.UtcNow,
                                 SkillActivationEventType,
@@ -429,7 +429,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                     }
 
                     var toolOutputText = new AgentContentCompletedEvent(
-                        BackendId,
+                        ProviderId,
                         SessionId,
                         DateTimeOffset.UtcNow,
                         runId,
@@ -579,7 +579,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         var builtIns = LocalAgentBuiltInToolFactory.CreateDefaultTools(
             new LocalAgentBuiltInToolOptions
             {
-                BackendId = BackendId,
+                ProviderId = ProviderId,
                 SessionId = SessionId,
                 WorkingDirectory = _summary.WorkingDirectory,
                 OnPermissionRequest = _options.OnPermissionRequest,
@@ -635,7 +635,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         return new LocalAgentTurnRequest
         {
             Provider = Provider,
-            BackendId = BackendId,
+            ProviderId = ProviderId,
             SessionId = SessionId,
             RunId = runId,
             ModelId = _summary.ModelId ?? _options.Model,
@@ -719,14 +719,14 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         _conversation.Add(message);
 
         var rawEvent = new AgentRawEvent(
-            BackendId,
+            ProviderId,
             SessionId,
             DateTimeOffset.UtcNow,
             UserMessageEventType,
             SerializeAgentInput(input),
             runId);
         var userContent = new AgentContentCompletedEvent(
-            BackendId,
+            ProviderId,
             SessionId,
             DateTimeOffset.UtcNow,
             runId,
@@ -745,14 +745,14 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             };
 
             events.Add(new AgentRawEvent(
-                BackendId,
+                ProviderId,
                 SessionId,
                 DateTimeOffset.UtcNow,
                 SkillActivationEventType,
                 JsonSerializer.SerializeToElement(activatedSkill, AgentJsonSerializerContext.Default.LocalAgentLoadedSkillState),
                 runId));
             events.Add(new AgentActivityEvent(
-                BackendId,
+                ProviderId,
                 SessionId,
                 DateTimeOffset.UtcNow,
                 runId,
@@ -864,7 +864,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         if (shouldEmitPredictiveUpdate)
         {
             var usageEvent = new AgentSessionUpdateEvent(
-                BackendId,
+                ProviderId,
                 SessionId,
                 DateTimeOffset.UtcNow,
                 runId,
@@ -890,7 +890,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         }
 
         var diffUpdated = new AgentSessionUpdateEvent(
-            BackendId,
+            ProviderId,
             SessionId,
             DateTimeOffset.UtcNow,
             runId,
@@ -937,7 +937,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         var events = new List<AgentEvent>
         {
             new AgentRawEvent(
-                BackendId,
+                ProviderId,
                 SessionId,
                 DateTimeOffset.UtcNow,
                 AssistantMessageEventType,
@@ -958,7 +958,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             {
                 case LocalAgentMessagePart.Text text:
                     events.Add(new AgentContentCompletedEvent(
-                        BackendId,
+                        ProviderId,
                         SessionId,
                         DateTimeOffset.UtcNow,
                         runId,
@@ -969,7 +969,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                     break;
                 case LocalAgentMessagePart.Reasoning reasoning:
                     events.Add(new AgentContentCompletedEvent(
-                        BackendId,
+                        ProviderId,
                         SessionId,
                         DateTimeOffset.UtcNow,
                         runId,
@@ -986,7 +986,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
                     break;
                 case LocalAgentMessagePart.ToolCall toolCall:
                     events.Add(new AgentActivityEvent(
-                        BackendId,
+                        ProviderId,
                         SessionId,
                         DateTimeOffset.UtcNow,
                         runId,
@@ -1004,7 +1004,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         if (effectiveUsage is not null)
         {
             events.Add(new AgentSessionUpdateEvent(
-                BackendId,
+                ProviderId,
                 SessionId,
                 DateTimeOffset.UtcNow,
                 runId,
@@ -1025,7 +1025,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
     {
         var details = CreateStreamingDeltaDetails(delta);
         var @event = new AgentContentDeltaEvent(
-            BackendId,
+            ProviderId,
             SessionId,
             DateTimeOffset.UtcNow,
             runId,
@@ -1050,7 +1050,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         }
 
         var @event = new AgentSessionUpdateEvent(
-            BackendId,
+            ProviderId,
             SessionId,
             DateTimeOffset.UtcNow,
             runId,
@@ -1171,7 +1171,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
     {
         var modelId = NormalizeOptionalText(_options.Model) ?? NormalizeOptionalText(_summary.ModelId);
         var update = new AgentSessionUpdateEvent(
-            BackendId,
+            ProviderId,
             SessionId,
             DateTimeOffset.UtcNow,
             runId,
@@ -1226,7 +1226,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
 
         var statistics = CreateSystemPromptStatistics(systemMessage, developerInstructions);
         var promptEvent = new AgentSystemPromptEvent(
-            BackendId,
+            ProviderId,
             SessionId,
             DateTimeOffset.UtcNow,
             runId,
@@ -1294,7 +1294,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             ? "Run cancelled before the assistant response completed."
             : exception.Message;
         var errorEvent = new AgentErrorEvent(
-            BackendId,
+            ProviderId,
             SessionId,
             DateTimeOffset.UtcNow,
             message,
@@ -1565,7 +1565,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             if (!startedEventEmitted)
             {
                 var started = new AgentSessionUpdateEvent(
-                    BackendId,
+                    ProviderId,
                     SessionId,
                     DateTimeOffset.UtcNow,
                     runId,
@@ -1576,7 +1576,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             }
 
             var summaryResult = await _compactionSummarizer.SummarizeAsync(
-                    BackendId,
+                    ProviderId,
                     Provider,
                     SessionId,
                     _summary.ModelId ?? _options.Model,
@@ -1674,7 +1674,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             {
                 shrinkAttempted = true;
                 summaryResult = await _compactionSummarizer.ShrinkSummaryAsync(
-                        BackendId,
+                        ProviderId,
                         Provider,
                         SessionId,
                         _summary.ModelId ?? _options.Model,
@@ -1797,7 +1797,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
         };
 
         var rawCheckpoint = new AgentRawEvent(
-            BackendId,
+            ProviderId,
             SessionId,
             completedAt,
             CompactionCheckpointEventType,
@@ -1807,7 +1807,7 @@ public sealed class LocalAgentSession : IAgentSession, IAgentCompactionOutcomePr
             ? $"{trigger} local compaction compacted inline media attachments in retained context."
             : $"{trigger} local compaction summarized {result.MessagesSummarized} messages.";
         var completed = new AgentSessionUpdateEvent(
-            BackendId,
+            ProviderId,
             SessionId,
             completedAt,
             runId,

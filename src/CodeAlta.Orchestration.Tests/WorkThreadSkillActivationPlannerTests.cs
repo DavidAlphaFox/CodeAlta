@@ -34,7 +34,7 @@ public sealed class WorkThreadSkillActivationPlannerTests
     public void Plan_RejectsNativeSkillProvider()
     {
         var decision = new WorkThreadSkillActivationPlanner().Plan(
-            CreateThread(AgentBackendIds.Codex.Value),
+            CreateThread(ModelProviderIds.Codex.Value),
             isModelProviderReady: true,
             isThreadBusy: false);
 
@@ -65,11 +65,11 @@ public sealed class WorkThreadSkillActivationPlannerTests
         StringAssert.Contains(decision.Message, "Thread");
     }
 
-    private static SessionViewDescriptorSnapshot CreateThread(string backendId)
+    private static SessionViewDescriptorSnapshot CreateThread(string ProviderId)
         => new()
         {
             ThreadId = "thread-1",
-            BackendId = backendId,
+            ProviderId = ProviderId,
             WorkingDirectory = "C:/project",
             Title = "Thread",
         };

@@ -59,7 +59,7 @@ internal sealed record LocalAgentCompactionResult(
     int? ModelVisibleModifiedFileCount = null);
 
 internal sealed record LocalAgentCompactionSummaryRequest(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     ModelProviderRuntimeDescriptor Provider,
     string SessionId,
     string? ModelId,

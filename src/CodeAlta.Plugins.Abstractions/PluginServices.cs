@@ -320,11 +320,11 @@ public interface IPluginPromptService
 /// </summary>
 public interface IPluginAgentService
 {
-    /// <summary>Gets the active backend identifier, when known.</summary>
-    AgentBackendId? ActiveBackendId { get; }
+    /// <summary>Gets the active model provider identifier, when known.</summary>
+    ModelProviderId? ActiveProviderId { get; }
 
     /// <summary>Gets the active backend display name, when known.</summary>
-    string? ActiveBackendDisplayName { get; }
+    string? ActiveProviderDisplayName { get; }
 
     /// <summary>Gets the active model, when known.</summary>
     string? ActiveModel { get; }

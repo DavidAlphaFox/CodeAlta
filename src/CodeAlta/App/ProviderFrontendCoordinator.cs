@@ -17,8 +17,8 @@ internal sealed class ProviderFrontendCoordinator
 {
     private readonly CodeAltaOwnedServices? _ownedServices;
     private readonly CodeAltaConfigStore _configStore;
-    private readonly ModelProviderInitializationCoordinator _chatBackendInitializationCoordinator;
-    private readonly Dictionary<string, ModelProviderState> _chatBackendStates;
+    private readonly ModelProviderInitializationCoordinator _modelProviderInitializationCoordinator;
+    private readonly Dictionary<string, ModelProviderState> _modelProviderStates;
     private readonly Action<Action> _dispatchToUi;
     private readonly FrontendEventPublisher _frontendEvents;
     private readonly Action<string, bool, StatusTone> _setStatus;
@@ -27,23 +27,23 @@ internal sealed class ProviderFrontendCoordinator
     public ProviderFrontendCoordinator(
         CodeAltaOwnedServices? ownedServices,
         CatalogOptions catalogOptions,
-        ModelProviderInitializationCoordinator chatBackendInitializationCoordinator,
-        Dictionary<string, ModelProviderState> chatBackendStates,
+        ModelProviderInitializationCoordinator modelProviderInitializationCoordinator,
+        Dictionary<string, ModelProviderState> modelProviderStates,
         Action<Action> dispatchToUi,
         FrontendEventPublisher frontendEvents,
         Action<string, bool, StatusTone> setStatus)
     {
         ArgumentNullException.ThrowIfNull(catalogOptions);
-        ArgumentNullException.ThrowIfNull(chatBackendInitializationCoordinator);
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(modelProviderInitializationCoordinator);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
         ArgumentNullException.ThrowIfNull(dispatchToUi);
         ArgumentNullException.ThrowIfNull(frontendEvents);
         ArgumentNullException.ThrowIfNull(setStatus);
 
         _ownedServices = ownedServices;
         _configStore = new CodeAltaConfigStore(catalogOptions);
-        _chatBackendInitializationCoordinator = chatBackendInitializationCoordinator;
-        _chatBackendStates = chatBackendStates;
+        _modelProviderInitializationCoordinator = modelProviderInitializationCoordinator;
+        _modelProviderStates = modelProviderStates;
         _dispatchToUi = dispatchToUi;
         _frontendEvents = frontendEvents;
         _setStatus = setStatus;
@@ -112,7 +112,7 @@ internal sealed class ProviderFrontendCoordinator
                     SyncModelProviderCatalog();
                     PublishModelProviderCatalogChanged();
                 });
-            await _chatBackendInitializationCoordinator.InitializeAsync(cancellationToken);
+            await _modelProviderInitializationCoordinator.InitializeAsync(cancellationToken);
             _dispatchToUi(
                 () =>
                 {
@@ -141,7 +141,7 @@ internal sealed class ProviderFrontendCoordinator
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        if (TryBuildActiveBackendTestResult(definition, _chatBackendStates, out var activeResult))
+        if (TryBuildActiveProviderTestResult(definition, _modelProviderStates, out var activeResult))
         {
             return activeResult;
         }
@@ -167,7 +167,7 @@ internal sealed class ProviderFrontendCoordinator
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        if (TryBuildActiveBackendModelListResult(definition, _chatBackendStates, out var activeResult))
+        if (TryBuildActiveProviderModelListResult(definition, _modelProviderStates, out var activeResult))
         {
             return activeResult;
         }
@@ -443,16 +443,16 @@ internal sealed class ProviderFrontendCoordinator
     private void PublishModelProviderCatalogChanged()
         => _frontendEvents.Publish(new ModelProviderCatalogChangedEvent());
 
-    internal static bool TryBuildActiveBackendTestResult(
+    internal static bool TryBuildActiveProviderTestResult(
         CodeAltaProviderDocument definition,
-        IReadOnlyDictionary<string, ModelProviderState> chatBackendStates,
+        IReadOnlyDictionary<string, ModelProviderState> modelProviderStates,
         out ProviderTestResult result)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
 
         result = default;
-        if (!chatBackendStates.TryGetValue(definition.ProviderKey, out var state))
+        if (!modelProviderStates.TryGetValue(definition.ProviderKey, out var state))
         {
             return false;
         }
@@ -475,16 +475,16 @@ internal sealed class ProviderFrontendCoordinator
         }
     }
 
-    internal static bool TryBuildActiveBackendModelListResult(
+    internal static bool TryBuildActiveProviderModelListResult(
         CodeAltaProviderDocument definition,
-        IReadOnlyDictionary<string, ModelProviderState> chatBackendStates,
+        IReadOnlyDictionary<string, ModelProviderState> modelProviderStates,
         out ProviderModelListResult result)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
 
         result = default;
-        if (!chatBackendStates.TryGetValue(definition.ProviderKey, out var state) ||
+        if (!modelProviderStates.TryGetValue(definition.ProviderKey, out var state) ||
             state.Availability != ModelProviderAvailability.Ready)
         {
             return false;
@@ -623,26 +623,26 @@ internal sealed class ProviderFrontendCoordinator
 
     private void SyncModelProviderCatalog()
     {
-        var backendDescriptors = _ownedServices?.BackendDescriptors
-            ?? CodeAltaOwnedServices.CreateBuiltInBackendDescriptors();
-        var activeBackendIds = new HashSet<string>(
-            backendDescriptors.Select(static descriptor => descriptor.ProviderId.Value),
+        var providerDescriptors = _ownedServices?.ProviderDescriptors
+            ?? CodeAltaOwnedServices.CreateBuiltInProviderDescriptors();
+        var activeProviderIds = new HashSet<string>(
+            providerDescriptors.Select(static descriptor => descriptor.ProviderId.Value),
             StringComparer.OrdinalIgnoreCase);
 
-        foreach (var descriptor in backendDescriptors)
+        foreach (var descriptor in providerDescriptors)
         {
-            if (_chatBackendStates.TryGetValue(descriptor.ProviderId.Value, out var existing))
+            if (_modelProviderStates.TryGetValue(descriptor.ProviderId.Value, out var existing))
             {
                 existing.DisplayName = descriptor.DisplayName;
                 continue;
             }
 
-            _chatBackendStates[descriptor.ProviderId.Value] = new ModelProviderState(descriptor.ProviderId, descriptor.DisplayName);
+            _modelProviderStates[descriptor.ProviderId.Value] = new ModelProviderState(descriptor.ProviderId, descriptor.DisplayName);
         }
 
-        foreach (var backendId in _chatBackendStates.Keys.Where(key => !activeBackendIds.Contains(key)).ToArray())
+        foreach (var ProviderId in _modelProviderStates.Keys.Where(key => !activeProviderIds.Contains(key)).ToArray())
         {
-            _chatBackendStates.Remove(backendId);
+            _modelProviderStates.Remove(ProviderId);
         }
     }
 }

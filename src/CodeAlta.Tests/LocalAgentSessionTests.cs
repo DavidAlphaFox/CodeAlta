@@ -103,7 +103,7 @@ public sealed class LocalAgentSessionTests
         var toolInvocations = new List<AgentToolInvocation>();
         using var schema = JsonDocument.Parse("""{"type":"object"}""");
         var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -250,7 +250,7 @@ public sealed class LocalAgentSessionTests
         await store.UpsertSessionAsync(summary).ConfigureAwait(false);
         await store.UpsertStateAsync(state).ConfigureAwait(false);
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -282,7 +282,7 @@ public sealed class LocalAgentSessionTests
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
         var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -332,7 +332,7 @@ public sealed class LocalAgentSessionTests
 
         using var schema = JsonDocument.Parse("""{"type":"object"}""");
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -399,7 +399,7 @@ public sealed class LocalAgentSessionTests
 
         var persistedHistory = await store.ReadEventsAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
         await using var resumedSession = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             persistedState,
@@ -463,7 +463,7 @@ public sealed class LocalAgentSessionTests
         var payload = CreateSkillPayload("code-review", skillFilePath, "Review code for regressions.");
 
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -538,7 +538,7 @@ public sealed class LocalAgentSessionTests
 
         using var schema = JsonDocument.Parse("""{"type":"object"}""");
         await using (var initialSession = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -589,7 +589,7 @@ public sealed class LocalAgentSessionTests
         var persistedState = await store.GetStateAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
         var persistedHistory = await store.ReadEventsAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
         await using var resumedSession = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             persistedState!,
@@ -649,7 +649,7 @@ public sealed class LocalAgentSessionTests
 
         using var schema = JsonDocument.Parse("""{"type":"object"}""");
         await using (var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -732,7 +732,7 @@ public sealed class LocalAgentSessionTests
 
         var persistedHistory = await store.ReadEventsAsync(provider.ProtocolFamily, provider.ProviderKey, summary.SessionId).ConfigureAwait(false);
         await using var resumedSession = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             persistedState,
@@ -777,7 +777,7 @@ public sealed class LocalAgentSessionTests
 
         using var schema = JsonDocument.Parse("""{"type":"object"}""");
         var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -865,7 +865,7 @@ public sealed class LocalAgentSessionTests
         using var toolArguments = JsonDocument.Parse("""{"size":1}""");
         var initialUsage = CreateWindowUsageSnapshot(currentTokens: 780, tokenLimit: 1000, inputTokens: 760, outputTokens: 20);
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -950,7 +950,7 @@ public sealed class LocalAgentSessionTests
         using var toolArguments = JsonDocument.Parse("""{"size":100000}""");
         var initialUsage = CreateWindowUsageSnapshot(currentTokens: 780, tokenLimit: 1000, inputTokens: 760, outputTokens: 20);
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -1037,7 +1037,7 @@ public sealed class LocalAgentSessionTests
                 }),
         };
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -1107,7 +1107,7 @@ public sealed class LocalAgentSessionTests
         var releaseFirstTurn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -1204,7 +1204,7 @@ public sealed class LocalAgentSessionTests
             });
 
         await using (var firstSession = new LocalAgentSession(
-                         AgentBackendIds.OpenAIResponses,
+                         ModelProviderIds.OpenAIResponses,
                          provider,
                          summary,
                          state,
@@ -1241,7 +1241,7 @@ public sealed class LocalAgentSessionTests
             });
 
         await using var resumedSession = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             persistedState,
@@ -1269,7 +1269,7 @@ public sealed class LocalAgentSessionTests
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -1303,7 +1303,7 @@ public sealed class LocalAgentSessionTests
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
         await using (var session = new LocalAgentSession(
-                         AgentBackendIds.OpenAIResponses,
+                         ModelProviderIds.OpenAIResponses,
                          provider,
                          summary,
                          state,
@@ -1411,7 +1411,7 @@ public sealed class LocalAgentSessionTests
         Assert.AreEqual(checkpoint.ContentId, persistedState.CompactionCheckpointEventId);
 
         await using var resumedSession = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             persistedState,
@@ -1458,7 +1458,7 @@ public sealed class LocalAgentSessionTests
         var releaseSummary = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var liveEvents = new List<AgentEvent>();
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -2308,7 +2308,7 @@ public sealed class LocalAgentSessionTests
 
         var summaryPayloads = new List<string>();
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -2414,7 +2414,7 @@ public sealed class LocalAgentSessionTests
         File.WriteAllBytes(imagePath, imageBytes);
 
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -2482,7 +2482,7 @@ public sealed class LocalAgentSessionTests
 
         var summaryPayloads = new List<string>();
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -2575,7 +2575,7 @@ public sealed class LocalAgentSessionTests
 
         var summaryPayloads = new List<string>();
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -2671,7 +2671,7 @@ public sealed class LocalAgentSessionTests
 
         var observedMaxOutputTokens = new List<int?>();
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -2759,7 +2759,7 @@ public sealed class LocalAgentSessionTests
 
         var observedMaxOutputTokens = new List<int?>();
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -2846,7 +2846,7 @@ public sealed class LocalAgentSessionTests
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -2925,7 +2925,7 @@ public sealed class LocalAgentSessionTests
 
         var observedMaxOutputTokens = new List<int?>();
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -3018,7 +3018,7 @@ public sealed class LocalAgentSessionTests
 
         var summaryPayloads = new List<string>();
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -3126,7 +3126,7 @@ public sealed class LocalAgentSessionTests
         var largePrompt = string.Join(' ', Enumerable.Range(1, 300).Select(static index => $"prompt-token-{index}"));
         var largeAnswer = string.Join(' ', Enumerable.Range(1, 300).Select(static index => $"answer-token-{index}"));
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -3222,7 +3222,7 @@ public sealed class LocalAgentSessionTests
         var summaryPayloads = new List<string>();
         var actualTurnPayloads = new List<string>();
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -3356,7 +3356,7 @@ public sealed class LocalAgentSessionTests
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -3416,7 +3416,7 @@ public sealed class LocalAgentSessionTests
         var summaryAttempts = 0;
         var shrinkAttempts = 0;
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -3531,7 +3531,7 @@ public sealed class LocalAgentSessionTests
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -3591,7 +3591,7 @@ public sealed class LocalAgentSessionTests
         await store.UpsertStateAsync(state).ConfigureAwait(false);
 
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -3891,7 +3891,7 @@ public sealed class LocalAgentSessionTests
             });
 
         await using var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -3963,7 +3963,7 @@ public sealed class LocalAgentSessionTests
         var state = CreateState("session-dispose");
         var executor = new CleanupRecordingTurnExecutor();
         var session = new LocalAgentSession(
-            AgentBackendIds.OpenAIResponses,
+            ModelProviderIds.OpenAIResponses,
             provider,
             summary,
             state,
@@ -4019,7 +4019,7 @@ public sealed class LocalAgentSessionTests
         return new LocalAgentSessionSummary
         {
             SessionId = sessionId,
-            BackendId = AgentBackendIds.OpenAIResponses,
+            ProviderId = ModelProviderIds.OpenAIResponses,
             ProtocolFamily = "openai-responses",
             ProviderKey = "openai",
             ModelId = "gpt-5.4",

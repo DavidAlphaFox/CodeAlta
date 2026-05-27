@@ -8,7 +8,7 @@ public interface IAgentSession : IAsyncDisposable
     /// <summary>
     /// Gets the provider/runtime identifier carried by this session.
     /// </summary>
-    AgentBackendId BackendId { get; }
+    ModelProviderId ProviderId { get; }
 
     /// <summary>
     /// Gets the durable CodeAlta session identifier.

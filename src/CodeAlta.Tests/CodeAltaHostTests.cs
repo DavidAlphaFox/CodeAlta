@@ -37,12 +37,12 @@ public sealed class CodeAltaHostTests
     }
 
     [TestMethod]
-    public async Task CreateAsync_ConfiguresHostRegisteredAgentBackends()
+    public async Task CreateAsync_ConfiguresHostRegisteredModelProviderRuntimes()
     {
         using var temp = TempDirectory.Create();
         var projectRoot = Path.Combine(temp.Path, "project");
         Directory.CreateDirectory(projectRoot);
-        var backendId = new AgentBackendId("test-provider");
+        var ProviderId = new ModelProviderId("test-provider");
         var options = new CodeAltaHostOptions
         {
             GlobalRoot = Path.Combine(temp.Path, "home"),
@@ -51,7 +51,7 @@ public sealed class CodeAltaHostTests
             HasInteractiveUi = false,
             PluginSafeMode = true,
             StartPlugins = false,
-            ConfigureModelProviders = registry => registry.RegisterOrReplaceBackendRuntime(new ModelProviderDescriptor(new ModelProviderId(backendId.Value), "Test Provider"), () => new TestAgentBackend(backendId)),
+            ConfigureModelProviders = registry => registry.RegisterOrReplaceBackendRuntime(new ModelProviderDescriptor(new ModelProviderId(ProviderId.Value), "Test Provider"), () => new TestModelProviderRuntime(ProviderId)),
         };
 
         await using var host = await CodeAltaHost.CreateAsync(options, CancellationToken.None);
@@ -59,7 +59,7 @@ public sealed class CodeAltaHostTests
         var handle = await host.AgentHub.StartSessionAsync(
                 new AgentSessionCreateOptions
                 {
-                    ProviderKey = backendId.Value,
+                    ProviderKey = ProviderId.Value,
                     WorkingDirectory = projectRoot,
                     OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
                 },
@@ -69,9 +69,9 @@ public sealed class CodeAltaHostTests
         Assert.AreEqual("test-session", handle.SessionId);
     }
 
-    private sealed class TestAgentBackend(AgentBackendId backendId) : IAgentBackend
+    private sealed class TestModelProviderRuntime(ModelProviderId ProviderId) : ITestModelProviderSessionRuntime
     {
-        public AgentBackendId BackendId { get; } = backendId;
+        public ModelProviderId ProviderId { get; } = ProviderId;
 
         public string DisplayName => "Test Provider";
 
@@ -96,7 +96,7 @@ public sealed class CodeAltaHostTests
         public Task<IAgentSession> CreateSessionAsync(
             AgentSessionCreateOptions options,
             CancellationToken cancellationToken = default)
-            => Task.FromResult<IAgentSession>(new TestAgentSession(BackendId));
+            => Task.FromResult<IAgentSession>(new TestAgentSession(ProviderId));
 
         public Task<IAgentSession> ResumeSessionAsync(
             string sessionId,
@@ -107,9 +107,9 @@ public sealed class CodeAltaHostTests
         public ValueTask DisposeAsync()
             => ValueTask.CompletedTask;
 
-        private sealed class TestAgentSession(AgentBackendId backendId) : IAgentSession
+        private sealed class TestAgentSession(ModelProviderId ProviderId) : IAgentSession
         {
-            public AgentBackendId BackendId { get; } = backendId;
+            public ModelProviderId ProviderId { get; } = ProviderId;
 
             public string SessionId => "test-session";
 

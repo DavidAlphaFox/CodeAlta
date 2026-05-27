@@ -897,7 +897,7 @@ internal sealed class ThreadTabStripCoordinator
                 thread.ThreadId,
                 new PromptSessionId(thread.ThreadId),
                 projectId,
-                new CodeAlta.Agent.ModelProviderId(thread.ProviderKey ?? thread.BackendId)),
+                new CodeAlta.Agent.ModelProviderId(thread.ProviderKey ?? thread.ProviderId)),
             Header = header,
             Content = workspaceView.CreateThreadTabContent(thread.ThreadId, tab.Timeline.Flow, tab.Session),
             ViewModel = tab.ViewModel,

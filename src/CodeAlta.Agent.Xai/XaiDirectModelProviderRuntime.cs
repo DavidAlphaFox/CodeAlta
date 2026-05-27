@@ -2,26 +2,26 @@ using CodeAlta.Agent;
 using CodeAlta.Agent.LocalRuntime;
 using CodeAlta.Agent.LocalRuntime.Compaction;
 
-namespace CodeAlta.Agent.Copilot;
+namespace CodeAlta.Agent.Xai;
 
 /// <summary>
-/// Direct GitHub Copilot model-provider runtime.
+/// Direct xAI (Grok) model-provider runtime.
 /// </summary>
-public sealed class CopilotDirectAgentBackend : ICodeAltaModelProviderRuntime
+public sealed class XaiDirectModelProviderRuntime : ICodeAltaModelProviderRuntime
 {
     /// <summary>
-    /// The canonical provider type and protocol family for direct Copilot access.
+    /// The canonical provider type and protocol family for direct xAI access.
     /// </summary>
-    public const string ProtocolFamily = "copilot";
+    public const string ProtocolFamily = "xai";
 
     private readonly ICodeAltaModelProviderRuntime _runtime;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="CopilotDirectAgentBackend"/> class.
+    /// Initializes a new instance of the <see cref="XaiDirectModelProviderRuntime"/> class.
     /// </summary>
     /// <param name="options">The backend options.</param>
     /// <exception cref="ArgumentException">Thrown when no provider is configured.</exception>
-    public CopilotDirectAgentBackend(CopilotDirectAgentBackendOptions options)
+    public XaiDirectModelProviderRuntime(XaiModelProviderRuntimeOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (options.Providers.Count == 0)
@@ -70,7 +70,7 @@ public sealed class CopilotDirectAgentBackend : ICodeAltaModelProviderRuntime
     /// <inheritdoc />
     public ValueTask DisposeAsync() => _runtime.DisposeAsync();
 
-    private static CodeAltaModelProviderRuntime CreateProviderRuntime(CopilotDirectProviderOptions provider)
+    private static CodeAltaModelProviderRuntime CreateProviderRuntime(XaiProviderOptions provider)
     {
         var providerKey = provider.ProviderKey.Trim();
         var displayName = string.IsNullOrWhiteSpace(provider.DisplayName) ? providerKey : provider.DisplayName.Trim();
@@ -79,22 +79,22 @@ public sealed class CopilotDirectAgentBackend : ICodeAltaModelProviderRuntime
             ProtocolFamily = ProtocolFamily,
             ProviderKey = providerKey,
             DisplayName = displayName,
-            TransportKind = LocalAgentTransportKind.OpenAIChatCompletions,
-            BaseUri = provider.BaseUri,
+            TransportKind = LocalAgentTransportKind.OpenAIResponses,
+            BaseUri = provider.BaseUri ?? XaiDefaults.DefaultApiBaseUri,
             IsDefault = provider.IsDefault,
             Profile = provider.Profile ?? CreateDefaultProfile(),
             Compaction = provider.Compaction ?? LocalAgentCompactionSettings.Default,
         };
         var descriptor = new ModelProviderDescriptor(new ModelProviderId(providerKey), displayName, ProtocolFamily)
         {
-            BaseUri = provider.BaseUri,
+            BaseUri = runtimeDescriptor.BaseUri,
             IsDefault = provider.IsDefault,
             DefaultModelId = provider.SingleModelId,
         };
         return new CodeAltaModelProviderRuntime(
             descriptor,
             runtimeDescriptor,
-            new CopilotDirectTurnExecutor(provider));
+            new XaiDirectTurnExecutor(provider));
     }
 
     private static LocalAgentProviderProfile CreateDefaultProfile()
@@ -104,8 +104,7 @@ public sealed class CopilotDirectAgentBackend : ICodeAltaModelProviderRuntime
             SupportsReasoningEffort = true,
             SupportsStore = false,
             StreamsUsage = true,
-            MaxTokensFieldName = "max_completion_tokens",
-            ReasoningFieldNames = ["reasoning_text", "reasoning_content", "reasoning"],
-            ReasoningInputFieldName = "reasoning_opaque",
+            MaxTokensFieldName = "max_output_tokens",
+            ReasoningFieldNames = ["reasoning"],
         };
 }

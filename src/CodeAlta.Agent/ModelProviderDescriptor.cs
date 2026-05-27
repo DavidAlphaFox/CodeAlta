@@ -16,16 +16,6 @@ public sealed record ModelProviderDescriptor
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ModelProviderDescriptor" /> class from a transitional backend id.
-    /// </summary>
-    /// <param name="backendId">The backend identifier that denotes a provider.</param>
-    /// <param name="displayName">The user-facing provider name. Whitespace falls back to <paramref name="backendId" />.</param>
-    public ModelProviderDescriptor(AgentBackendId backendId, string? displayName)
-        : this(new ModelProviderId(backendId.Value), displayName, backendId.Value)
-    {
-    }
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="ModelProviderDescriptor" /> class.
     /// </summary>
     /// <param name="providerId">The configured provider identifier.</param>
@@ -44,11 +34,6 @@ public sealed record ModelProviderDescriptor
     /// Gets the configured provider identifier.
     /// </summary>
     public ModelProviderId ProviderId { get; init; }
-
-    /// <summary>
-    /// Gets the transitional backend identifier for call sites that still use backend-bound runtime APIs.
-    /// </summary>
-    public AgentBackendId BackendId => new(ProviderId.Value);
 
     /// <summary>
     /// Gets the user-facing provider name.

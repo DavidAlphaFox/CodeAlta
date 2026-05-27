@@ -24,7 +24,7 @@ public sealed class WorkThreadPluginEventObserverTests
             ThreadId = "thread-1",
         };
         var agentEvent = new AgentErrorEvent(
-            new AgentBackendId("provider-1"),
+            new ModelProviderId("provider-1"),
             "session-1",
             DateTimeOffset.UtcNow,
             "diagnostic");
@@ -41,7 +41,7 @@ public sealed class WorkThreadPluginEventObserverTests
             new PluginContributionAdapterService(new PluginContributionRegistry()),
             static () => []));
         var agentEvent = new AgentErrorEvent(
-            new AgentBackendId("provider-1"),
+            new ModelProviderId("provider-1"),
             "session-1",
             DateTimeOffset.UtcNow,
             "diagnostic");

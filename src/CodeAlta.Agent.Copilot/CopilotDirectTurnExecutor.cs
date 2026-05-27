@@ -162,7 +162,7 @@ internal sealed class CopilotDirectTurnExecutor : IModelProviderTurnExecutor, IM
             ModelOverrides = _provider.ModelOverrides,
             ExtraHeaders = CreateAnthropicHeaders(IsAgentInitiated(request), HasVisionInput(request)),
         };
-        var executor = AnthropicAgentBackend.CreateTurnExecutor(provider);
+        var executor = AnthropicModelProviderRuntime.CreateTurnExecutor(provider);
         return await executor.ExecuteTurnAsync(
             CreateDelegatedRequest(request, credential, "anthropic-messages", LocalAgentTransportKind.AnthropicMessages, _provider.Profile ?? AnthropicMessagesProfile),
             onUpdate,

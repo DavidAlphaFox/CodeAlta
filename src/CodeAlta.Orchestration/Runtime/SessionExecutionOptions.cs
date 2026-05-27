@@ -13,15 +13,6 @@ public sealed class SessionExecutionOptions
     public ModelProviderId ProviderId { get; init; }
 
     /// <summary>
-    /// Gets or initializes the legacy backend identifier field used by tests and legacy callers.
-    /// </summary>
-    public AgentBackendId BackendId
-    {
-        get => new(ProviderId.Value);
-        init => ProviderId = new ModelProviderId(value.Value);
-    }
-
-    /// <summary>
     /// Gets or initializes the provider key that should be selected within the provider runtime.
     /// </summary>
     public string? ProviderKey { get; init; }

@@ -178,7 +178,7 @@ internal static class SidebarTreeProjectionBuilder
         row.UpdateTitle(thread.Title);
         row.UpdateActivity(thread.LastActiveAt, nowUtc);
         var visualState = getThreadVisualState(thread.ThreadId);
-        var accent = SidebarThreadPresentation.ResolveThreadAccent(thread.BackendId, thread.Kind);
+        var accent = SidebarThreadPresentation.ResolveThreadAccent(thread.ProviderId, thread.Kind);
         var stateTooltip = ResolveLineageDiagnosticTooltip(node.LineageDiagnostic, thread);
         row.UpdateStateIndicator(
             visualState.IsRunning

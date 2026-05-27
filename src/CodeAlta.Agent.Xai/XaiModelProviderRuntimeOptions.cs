@@ -8,7 +8,7 @@ namespace CodeAlta.Agent.Xai;
 /// <summary>
 /// Options used to create an xAI direct local-runtime backend.
 /// </summary>
-public sealed class XaiAgentBackendOptions
+public sealed class XaiModelProviderRuntimeOptions
 {
     /// <summary>
     /// Gets or sets the optional provider identifier override.

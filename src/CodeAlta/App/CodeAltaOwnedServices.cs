@@ -19,7 +19,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
     private readonly ModelProviderRegistry _modelProviderRegistry;
     private readonly IModelProviderInitializationService _modelProviderInitializationService;
     private readonly CodeAltaConfigStore _configStore;
-    private readonly List<ModelProviderDescriptor> _backendDescriptors;
+    private readonly List<ModelProviderDescriptor> _providerDescriptors;
     private readonly ModelsDevCatalogService _modelsDevCatalogService;
 
     private CodeAltaOwnedServices(
@@ -31,7 +31,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         PluginRuntimeManager pluginRuntime,
         PluginHostBridge pluginHostBridge,
         CatalogOptions catalogOptions,
-        List<ModelProviderDescriptor> backendDescriptors,
+        List<ModelProviderDescriptor> providerDescriptors,
         IAgentSessionCatalog sessionCatalog,
         ProjectCatalog projectCatalog,
         WorkThreadCatalog threadCatalog,
@@ -47,7 +47,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         _modelsDevCatalogService = modelsDevCatalogService;
         PluginRuntime = pluginRuntime;
         PluginHostBridge = pluginHostBridge;
-        _backendDescriptors = backendDescriptors;
+        _providerDescriptors = providerDescriptors;
         SessionCatalog = sessionCatalog;
         CatalogOptions = catalogOptions;
         ProjectCatalog = projectCatalog;
@@ -60,7 +60,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 
     public CatalogOptions CatalogOptions { get; }
 
-    public IReadOnlyList<ModelProviderDescriptor> BackendDescriptors => _backendDescriptors;
+    public IReadOnlyList<ModelProviderDescriptor> ProviderDescriptors => _providerDescriptors;
 
     public IModelProviderRegistry ModelProviderRegistry => _modelProviderRegistry;
 
@@ -111,7 +111,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             });
         modelsDevCatalogService.StartBackgroundRefresh();
 
-        var backendDescriptors = new List<ModelProviderDescriptor>();
+        var providerDescriptors = new List<ModelProviderDescriptor>();
         var pluginAltaServiceBridge = new PluginAltaServiceBridge();
         var sharedHost = await CodeAltaHost.CreateAsync(
                 new CodeAltaHostOptions
@@ -142,7 +142,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             pluginRuntime,
             pluginHostBridge,
             sharedHost.CatalogOptions,
-            backendDescriptors,
+            providerDescriptors,
             sharedHost.SessionCatalog,
             sharedHost.ProjectCatalog,
             sharedHost.ThreadCatalog,
@@ -153,7 +153,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
 
         void RegisterFrontendModelProviders(ModelProviderRegistry modelProviderRegistry)
         {
-            backendDescriptors.AddRange(
+            providerDescriptors.AddRange(
                 ConfiguredModelProviderRegistryBuilder.RegisterConfiguredProviders(
                     modelProviderRegistry,
                     configStore,
@@ -177,7 +177,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
         }
     }
 
-    internal static IReadOnlyList<ModelProviderDescriptor> CreateBuiltInBackendDescriptors()
+    internal static IReadOnlyList<ModelProviderDescriptor> CreateBuiltInProviderDescriptors()
     {
         return
         [
@@ -205,7 +205,7 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             expectedProviderIds.Add(descriptor.ProviderId.Value);
         }
 
-        foreach (var descriptor in _backendDescriptors.ToArray())
+        foreach (var descriptor in _providerDescriptors.ToArray())
         {
             if (expectedProviderIds.Contains(descriptor.ProviderId.Value))
             {
@@ -215,11 +215,11 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             _modelProviderRegistry.Unregister(descriptor.ProviderId);
         }
 
-        _backendDescriptors.Clear();
-        _backendDescriptors.InsertRange(
+        _providerDescriptors.Clear();
+        _providerDescriptors.InsertRange(
             0,
             providerDescriptors.OrderBy(static descriptor => descriptor.DisplayName, StringComparer.OrdinalIgnoreCase));
 
-        return _backendDescriptors;
+        return _providerDescriptors;
     }
 }

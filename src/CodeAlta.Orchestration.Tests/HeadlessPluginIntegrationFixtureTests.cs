@@ -32,7 +32,7 @@ public sealed class HeadlessPluginIntegrationFixtureTests
             ProjectId = "project-1",
             ProjectPath = Environment.CurrentDirectory,
             ThreadId = "thread-1",
-            BackendId = "provider-1",
+            ProviderId = "provider-1",
             Model = "model-1",
         };
 
@@ -40,7 +40,7 @@ public sealed class HeadlessPluginIntegrationFixtureTests
         var before = await bridge.BeforeAgentRunAsync(CreateBeforeRunTemplate(active), options);
         var tools = bridge.GetAgentTools(options);
         var toolResult = await tools.Single().Definition.Handler(
-            new AgentToolInvocation(new AgentBackendId("provider-1"), "session-1", "call-1", "headless_fixture", JsonSerializer.SerializeToElement(new { value = 1 })),
+            new AgentToolInvocation(new ModelProviderId("provider-1"), "session-1", "call-1", "headless_fixture", JsonSerializer.SerializeToElement(new { value = 1 })),
             CancellationToken.None);
         var eventDiagnostics = await bridge.ObserveAgentEventAsync(CreateAgentEventTemplate(active), options);
 
@@ -94,7 +94,7 @@ public sealed class HeadlessPluginIntegrationFixtureTests
             Plugin = active.Descriptor,
             Services = active.RuntimeContext.Services,
             Event = new AgentActivityEvent(
-                new AgentBackendId("provider-1"),
+                new ModelProviderId("provider-1"),
                 "session-1",
                 DateTimeOffset.UtcNow,
                 RunId: null,
@@ -155,7 +155,7 @@ public sealed class HeadlessPluginIntegrationFixtureTests
                         ProjectPath = context.ProjectPath ?? Environment.CurrentDirectory,
                         ThreadId = context.ThreadId ?? "thread-1",
                         PromptSessionId = "prompt-session-1",
-                        ModelProviderId = context.BackendId ?? "provider-1",
+                        ModelProviderId = context.ProviderId ?? "provider-1",
                     },
                     Prompt = context.PromptText ?? string.Empty,
                 },

@@ -373,7 +373,7 @@ public sealed class CatalogInfrastructureTests
         Assert.AreEqual(descriptor.Kind, reloaded.Kind);
         Assert.AreEqual(descriptor.ProjectRef, reloaded.ProjectRef);
         Assert.AreEqual(descriptor.ParentThreadId, reloaded.ParentThreadId);
-        Assert.AreEqual(descriptor.BackendId, reloaded.BackendId);
+        Assert.AreEqual(descriptor.ProviderId, reloaded.ProviderId);
         Assert.AreEqual(descriptor.ResolvedProviderKey, reloaded.ResolvedProviderKey);
         Assert.AreEqual(descriptor.ThreadId, reloaded.ThreadId);
         Assert.AreEqual(descriptor.StartedAt, reloaded.StartedAt);
@@ -469,7 +469,7 @@ public sealed class CatalogInfrastructureTests
         {
             ThreadId = "019cc85b",
             Kind = WorkThreadKind.InternalThread,
-            BackendId = "codex",
+            ProviderId = "codex",
             ProjectRef = project.Id,
             ParentThreadId = "019cc700",
             WorkingDirectory = Path.Combine(root.Path, "threads", "internal", "codex-019cc85b"),
@@ -501,7 +501,7 @@ public sealed class CatalogInfrastructureTests
         {
             ThreadId = "019cc700",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = "copilot",
+            ProviderId = "copilot",
             ProjectRef = Guid.CreateVersion7().ToString(),
             WorkingDirectory = @"C:\code\repo-main",
             Title = "Project thread",
@@ -525,7 +525,7 @@ public sealed class CatalogInfrastructureTests
         {
             ThreadId = "thread-header-test",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = "codex",
+            ProviderId = "codex",
             ProviderKey = "codex",
             ProjectRef = Guid.CreateVersion7().ToString(),
             ParentThreadId = "thread-parent",
@@ -569,7 +569,7 @@ public sealed class CatalogInfrastructureTests
         {
             ThreadId = "thread-concurrent-log-test",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = "codex",
+            ProviderId = "codex",
             ProviderKey = "codex",
             WorkingDirectory = @"C:\code\repo-main",
             Title = "Concurrent log test",
@@ -585,7 +585,7 @@ public sealed class CatalogInfrastructureTests
                     new LocalAgentSessionSummary
                     {
                         SessionId = thread.ThreadId,
-                        BackendId = new AgentBackendId(thread.BackendId),
+                        ProviderId = new ModelProviderId(thread.ProviderId),
                         ProtocolFamily = "local",
                         ProviderKey = "codex",
                         CreatedAt = createdAt,
@@ -615,7 +615,7 @@ public sealed class CatalogInfrastructureTests
         {
             ThreadId = "thread-exclusive-file-test",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = "codex",
+            ProviderId = "codex",
             ProviderKey = "codex",
             WorkingDirectory = @"C:\code\repo-main",
             Title = "Exclusive file test",
@@ -657,7 +657,7 @@ public sealed class CatalogInfrastructureTests
         {
             ThreadId = "thread-backend-first-test",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = "codex",
+            ProviderId = "codex",
             ProviderKey = "codex",
             WorkingDirectory = @"C:\code\repo-main",
             Title = "Backend first test",
@@ -671,7 +671,7 @@ public sealed class CatalogInfrastructureTests
                 new LocalAgentSessionSummary
                 {
                     SessionId = thread.ThreadId,
-                    BackendId = new AgentBackendId(thread.BackendId),
+                    ProviderId = new ModelProviderId(thread.ProviderId),
                     ProtocolFamily = "local",
                     ProviderKey = "codex",
                     CreatedAt = createdAt,
@@ -702,7 +702,7 @@ public sealed class CatalogInfrastructureTests
         {
             ThreadId = "thread-tail-probe-test",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = "codex",
+            ProviderId = "codex",
             ProviderKey = "codex",
             WorkingDirectory = @"C:\code\repo-main",
             Title = "Tail probe test",
@@ -715,7 +715,7 @@ public sealed class CatalogInfrastructureTests
         await catalog.JournalStore.AppendStateAsync(thread, new WorkThreadLocalState { MessageCount = 99 }).ConfigureAwait(false);
         var path = new LocalAgentRuntimePathLayout(options.GlobalRoot).GetSessionFilePath(thread.ThreadId, thread.CreatedAt);
         var padding = new string('x', 70 * 1024);
-        await File.AppendAllTextAsync(path, $"{{\"$type\":\"raw\",\"backendId\":\"codex\",\"sessionId\":\"{thread.ThreadId}\",\"timestamp\":\"{createdAt:O}\",\"backendEventType\":\"padding\",\"raw\":{{\"value\":\"{padding}\"}}}}{Environment.NewLine}").ConfigureAwait(false);
+        await File.AppendAllTextAsync(path, $"{{\"$type\":\"raw\",\"ProviderId\":\"codex\",\"sessionId\":\"{thread.ThreadId}\",\"timestamp\":\"{createdAt:O}\",\"backendEventType\":\"padding\",\"raw\":{{\"value\":\"{padding}\"}}}}{Environment.NewLine}").ConfigureAwait(false);
 
         var latestState = await catalog.JournalStore.ReadLatestStateAsync(thread.ThreadId, thread.CreatedAt).ConfigureAwait(false);
 
@@ -814,11 +814,11 @@ public sealed class CatalogInfrastructureTests
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = root.Path });
         store.EnsureGlobalConfigExists();
 
-        store.SaveGlobalProviderPreference(AgentBackendIds.Codex.Value, "gpt-5.4", AgentReasoningEffort.High);
+        store.SaveGlobalProviderPreference(ModelProviderIds.Codex.Value, "gpt-5.4", AgentReasoningEffort.High);
 
         var configPath = Path.Combine(root.Path, "config.toml");
         var content = File.ReadAllText(configPath);
-        var preference = store.GetEffectiveProviderPreference(AgentBackendIds.Codex.Value);
+        var preference = store.GetEffectiveProviderPreference(ModelProviderIds.Codex.Value);
 
         StringAssert.Contains(content, "[providers.codex]");
         StringAssert.Contains(content, "gpt-5.4");
@@ -851,7 +851,7 @@ public sealed class CatalogInfrastructureTests
             """);
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = root.Path });
-        store.SaveGlobalProviderPreference(AgentBackendIds.Codex.Value, "gpt-5.4", AgentReasoningEffort.High);
+        store.SaveGlobalProviderPreference(ModelProviderIds.Codex.Value, "gpt-5.4", AgentReasoningEffort.High);
 
         var content = File.ReadAllText(configPath);
         StringAssert.Contains(content, "[providers.codex]");
@@ -961,7 +961,7 @@ public sealed class CatalogInfrastructureTests
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = root.Path });
         store.EnsureGlobalConfigExists();
-        store.SaveGlobalProviderPreference(AgentBackendIds.Codex.Value, "gpt-5.4", AgentReasoningEffort.High);
+        store.SaveGlobalProviderPreference(ModelProviderIds.Codex.Value, "gpt-5.4", AgentReasoningEffort.High);
 
         File.WriteAllText(
             Path.Combine(projectRoot, ".alta", "config.toml"),
@@ -970,7 +970,7 @@ public sealed class CatalogInfrastructureTests
             reasoning_effort = "medium"
             """);
 
-        var preference = store.GetEffectiveProviderPreference(AgentBackendIds.Codex.Value, projectRoot);
+        var preference = store.GetEffectiveProviderPreference(ModelProviderIds.Codex.Value, projectRoot);
 
         Assert.AreEqual("gpt-5.4", preference.Model);
         Assert.AreEqual(AgentReasoningEffort.Medium, preference.ReasoningEffort);
@@ -1156,7 +1156,7 @@ public sealed class CatalogInfrastructureTests
         {
             ThreadId = "platform-search-review",
             Kind = WorkThreadKind.InternalThread,
-            BackendId = "codex",
+            ProviderId = "codex",
             ProjectRef = Guid.CreateVersion7().ToString(),
             ParentThreadId = "global-thread",
             WorkingDirectory = @"C:\Users\alexa\.alta\threads\internal\platform-search-review",

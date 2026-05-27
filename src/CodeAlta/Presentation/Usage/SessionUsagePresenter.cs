@@ -97,12 +97,12 @@ internal sealed class SessionUsagePresenter
 
     private Visual BuildPopupContent()
     {
-        return BuildDetailsVisual(_viewModel.Usage, _viewModel.BackendName, _viewModel.ModelName, _viewModel.PluginTransientEvents);
+        return BuildDetailsVisual(_viewModel.Usage, _viewModel.ProviderName, _viewModel.ModelName, _viewModel.PluginTransientEvents);
     }
 
     private void CopyMarkdown()
     {
-        var markdown = SessionUsageFormatter.BuildMarkdown(_viewModel.Usage, _viewModel.BackendName, _viewModel.ModelName);
+        var markdown = SessionUsageFormatter.BuildMarkdown(_viewModel.Usage, _viewModel.ProviderName, _viewModel.ModelName);
         _copyMarkdown(markdown);
     }
 

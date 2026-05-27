@@ -6,7 +6,7 @@ namespace CodeAlta.Agent.OpenAI;
 
 internal static class OpenAIBackendFactory
 {
-    public static ICodeAltaModelProviderRuntime CreateResponsesProviderRuntime(OpenAIResponsesAgentBackendOptions options)
+    public static ICodeAltaModelProviderRuntime CreateResponsesProviderRuntime(OpenAIResponsesModelProviderRuntimeOptions options)
     {
         var codexSubscriptionConcurrencyLimiter = options.CodexSubscriptionConcurrencyLimiter ?? new CodexSubscriptionConcurrencyLimiter();
         return CreateSingleProviderRuntime(
@@ -21,7 +21,7 @@ internal static class OpenAIBackendFactory
                 : "codex");
     }
 
-    public static ICodeAltaModelProviderRuntime CreateChatProviderRuntime(OpenAIChatAgentBackendOptions options)
+    public static ICodeAltaModelProviderRuntime CreateChatProviderRuntime(OpenAIChatModelProviderRuntimeOptions options)
         => CreateSingleProviderRuntime(
             options.ProviderIdOverride ?? ModelProviderIds.OpenAIChat,
             string.IsNullOrWhiteSpace(options.DisplayNameOverride) ? "OpenAI Chat" : options.DisplayNameOverride.Trim(),
@@ -35,7 +35,7 @@ internal static class OpenAIBackendFactory
         string displayName,
         string providerType,
         LocalAgentTransportKind transportKind,
-        OpenAIAgentBackendOptions options,
+        OpenAIModelProviderRuntimeOptions options,
         Func<OpenAIProviderOptions, IModelProviderTurnExecutor> executorFactory,
         Func<OpenAIProviderOptions, string>? protocolFamilySelector = null)
     {
@@ -89,7 +89,7 @@ internal static class OpenAIBackendFactory
             executorFactory(provider));
     }
 
-    private static void PrepareProviders(OpenAIAgentBackendOptions options)
+    private static void PrepareProviders(OpenAIModelProviderRuntimeOptions options)
     {
         foreach (var provider in options.Providers)
         {

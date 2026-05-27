@@ -21,7 +21,7 @@ public sealed class SessionRuntimeServiceTests
             new LocalAgentSessionSummary
             {
                 SessionId = "session-1",
-                BackendId = new AgentBackendId("old-provider"),
+                ProviderId = new ModelProviderId("old-provider"),
                 ProtocolFamily = "openai-responses",
                 ProviderKey = "old-provider",
                 WorkingDirectory = temp.Path,
@@ -34,7 +34,7 @@ public sealed class SessionRuntimeServiceTests
 
         Assert.AreEqual(1, threads.Count);
         Assert.AreEqual("session-1", threads[0].ThreadId);
-        Assert.AreEqual("old-provider", threads[0].BackendId);
+        Assert.AreEqual("old-provider", threads[0].ProviderId);
         Assert.AreEqual("old-provider", threads[0].ProviderKey);
     }
 
@@ -42,10 +42,10 @@ public sealed class SessionRuntimeServiceTests
     public async Task ListRecoverableSessionsAsync_DoesNotInitializeProviders()
     {
         using var temp = new TempDirectory();
-        var backendId = new AgentBackendId("registered-provider");
-        var provider = new ThrowingProviderRuntime(backendId);
+        var ProviderId = new ModelProviderId("registered-provider");
+        var provider = new ThrowingProviderRuntime(ProviderId);
         var registry = new ModelProviderRegistry();
-        registry.RegisterOrReplace(new ModelProviderDescriptor(new ModelProviderId(backendId.Value), "Throwing Provider"), () => provider);
+        registry.RegisterOrReplace(new ModelProviderDescriptor(new ModelProviderId(ProviderId.Value), "Throwing Provider"), () => provider);
         await using var hub = new AgentHub(registry, temp.Path);
         await using var runtime = CreateRuntime(temp.Path, hub);
         var store = new WorkThreadCatalog(new CatalogOptions { GlobalRoot = temp.Path }).JournalStore.CreateSessionStore();
@@ -54,9 +54,9 @@ public sealed class SessionRuntimeServiceTests
             new LocalAgentSessionSummary
             {
                 SessionId = "session-1",
-                BackendId = backendId,
+                ProviderId = ProviderId,
                 ProtocolFamily = "openai-responses",
-                ProviderKey = backendId.Value,
+                ProviderKey = ProviderId.Value,
                 WorkingDirectory = temp.Path,
                 Title = "Recovered provider",
                 CreatedAt = createdAt,
@@ -73,16 +73,16 @@ public sealed class SessionRuntimeServiceTests
     public async Task EnsureCoordinatorSessionAsync_RecreatesSessionWhenResumeTargetIsMissing()
     {
         using var temp = new TempDirectory();
-        var backendId = new AgentBackendId("shared-missing");
+        var ProviderId = new ModelProviderId("shared-missing");
         var registry = new ModelProviderRegistry();
         registry.RegisterOrReplace(
-            new ModelProviderDescriptor(new ModelProviderId(backendId.Value), "Missing Resume") { DefaultModelId = "test-model" },
-            () => new MinimalProviderRuntime(backendId));
+            new ModelProviderDescriptor(new ModelProviderId(ProviderId.Value), "Missing Resume") { DefaultModelId = "test-model" },
+            () => new MinimalProviderRuntime(ProviderId));
         await using var hub = new AgentHub(registry, temp.Path);
         await using var runtime = CreateRuntime(temp.Path, hub);
-        var thread = CreateThread("thread-1", backendId, temp.Path);
+        var thread = CreateThread("thread-1", ProviderId, temp.Path);
 
-        var agentId = await runtime.EnsureCoordinatorSessionAsync(thread, CreateOptions(backendId, temp.Path)).ConfigureAwait(false);
+        var agentId = await runtime.EnsureCoordinatorSessionAsync(thread, CreateOptions(ProviderId, temp.Path)).ConfigureAwait(false);
         var history = await runtime.GetHistoryAsync(thread.ThreadId).ConfigureAwait(false);
 
         Assert.AreNotEqual(Guid.Empty, agentId.Value);
@@ -116,12 +116,12 @@ public sealed class SessionRuntimeServiceTests
             options);
     }
 
-    private static SessionViewDescriptor CreateThread(string threadId, AgentBackendId backendId, string root)
+    private static SessionViewDescriptor CreateThread(string threadId, ModelProviderId ProviderId, string root)
         => new()
         {
             ThreadId = threadId,
-            BackendId = backendId.Value,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId.Value,
+            ProviderKey = ProviderId.Value,
             Kind = WorkThreadKind.GlobalThread,
             Status = WorkThreadStatus.Active,
             Title = threadId,
@@ -131,17 +131,17 @@ public sealed class SessionRuntimeServiceTests
             LastActiveAt = DateTimeOffset.UtcNow,
         };
 
-    private static SessionExecutionOptions CreateOptions(AgentBackendId backendId, string root)
+    private static SessionExecutionOptions CreateOptions(ModelProviderId ProviderId, string root)
         => new()
         {
-            BackendId = backendId,
-            ProviderKey = backendId.Value,
+            ProviderId = ProviderId,
+            ProviderKey = ProviderId.Value,
             WorkingDirectory = root,
             ProjectRoots = [root],
             OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
         };
 
-    private sealed class MinimalProviderRuntime(AgentBackendId providerId) : ICodeAltaModelProviderRuntime
+    private sealed class MinimalProviderRuntime(ModelProviderId providerId) : ICodeAltaModelProviderRuntime
     {
         public ModelProviderDescriptor Descriptor { get; } = new(new ModelProviderId(providerId.Value), "Missing Resume") { DefaultModelId = "test-model" };
 
@@ -173,7 +173,7 @@ public sealed class SessionRuntimeServiceTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class ThrowingProviderRuntime(AgentBackendId providerId) : ICodeAltaModelProviderRuntime
+    private sealed class ThrowingProviderRuntime(ModelProviderId providerId) : ICodeAltaModelProviderRuntime
     {
         public ModelProviderDescriptor Descriptor { get; } = new(new ModelProviderId(providerId.Value), "Throwing Provider");
 
@@ -220,9 +220,9 @@ public sealed class SessionRuntimeServiceTests
             => throw new NotSupportedException();
     }
 
-    private sealed class EmptyAgentSession(AgentBackendId backendId, string sessionId) : IAgentSession
+    private sealed class EmptyAgentSession(ModelProviderId ProviderId, string sessionId) : IAgentSession
     {
-        public AgentBackendId BackendId { get; } = backendId;
+        public ModelProviderId ProviderId { get; } = ProviderId;
 
         public string SessionId { get; } = sessionId;
 

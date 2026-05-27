@@ -398,7 +398,7 @@ public sealed record PluginToolActivationPolicy
     public IReadOnlyList<string> BackendFamilies { get; init; } = [];
 
     /// <summary>Gets allowed backend names.</summary>
-    public IReadOnlyList<string> BackendNames { get; init; } = [];
+    public IReadOnlyList<string> ProviderNames { get; init; } = [];
 }
 
 /// <summary>Describes the result of a tool-call hook.</summary>

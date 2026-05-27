@@ -10,7 +10,7 @@ internal sealed class AgentSessionConnection : IAsyncDisposable
     private readonly Action<AgentEvent> _eventHandler;
 
     private AgentSessionHandleId? _connectedSessionHandleId;
-    private AgentBackendId? _connectedProviderId;
+    private ModelProviderId? _connectedProviderId;
     private string? _connectedModel;
     private AgentReasoningEffort? _connectedReasoningEffort;
     private IDisposable? _eventSubscription;
@@ -26,7 +26,7 @@ internal sealed class AgentSessionConnection : IAsyncDisposable
 
     public AgentSessionHandleId? CurrentSessionHandleId => _connectedSessionHandleId;
 
-    public AgentBackendId? ConnectedProviderId => _connectedProviderId;
+    public ModelProviderId? ConnectedProviderId => _connectedProviderId;
 
     public string? ConnectedModel => _connectedModel;
 
@@ -38,7 +38,7 @@ internal sealed class AgentSessionConnection : IAsyncDisposable
         _connectedProviderId is not null;
 
     public async Task<AgentSessionHandleId> EnsureConnectedAsync(
-        AgentBackendId providerId,
+        ModelProviderId providerId,
         string workingDirectory,
         string? model,
         AgentReasoningEffort? reasoningEffort,

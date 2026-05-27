@@ -10,15 +10,15 @@ namespace CodeAlta.Agent.GoogleGenAI;
 /// <summary>
 /// Google GenAI model-provider runtime.
 /// </summary>
-public sealed class GoogleGenAIAgentBackend : ICodeAltaModelProviderRuntime
+public sealed class GoogleGenAIModelProviderRuntime : ICodeAltaModelProviderRuntime
 {
     private readonly ICodeAltaModelProviderRuntime _runtime;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="GoogleGenAIAgentBackend"/> class.
+    /// Initializes a new instance of the <see cref="GoogleGenAIModelProviderRuntime"/> class.
     /// </summary>
     /// <param name="options">The backend options.</param>
-    public GoogleGenAIAgentBackend(GoogleGenAIAgentBackendOptions options)
+    public GoogleGenAIModelProviderRuntime(GoogleGenAIModelProviderRuntimeOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (options.Providers.Count == 0)

@@ -8,7 +8,7 @@ internal sealed partial class SessionUsageViewModel
 {
     public SessionUsageViewModel()
     {
-        BackendName = string.Empty;
+        ProviderName = string.Empty;
         PluginTransientEvents = [];
     }
 
@@ -16,7 +16,7 @@ internal sealed partial class SessionUsageViewModel
     public partial AgentSessionUsage? Usage { get; set; }
 
     [Bindable]
-    public partial string BackendName { get; set; }
+    public partial string ProviderName { get; set; }
 
     [Bindable]
     public partial string? ModelName { get; set; }

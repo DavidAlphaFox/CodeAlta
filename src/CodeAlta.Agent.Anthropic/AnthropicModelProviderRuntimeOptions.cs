@@ -8,7 +8,7 @@ namespace CodeAlta.Agent.Anthropic;
 /// <summary>
 /// Options for the Anthropic Messages backend.
 /// </summary>
-public sealed class AnthropicAgentBackendOptions
+public sealed class AnthropicModelProviderRuntimeOptions
 {
     /// <summary>
     /// Gets or sets the optional provider identifier override.

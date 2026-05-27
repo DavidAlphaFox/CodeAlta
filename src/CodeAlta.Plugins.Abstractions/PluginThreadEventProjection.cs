@@ -49,8 +49,8 @@ public sealed record PluginThreadEventProjectionContext
     /// <summary>Gets the project path, when known.</summary>
     public string? ProjectPath { get; init; }
 
-    /// <summary>Gets the backend identifier, when known.</summary>
-    public string? BackendId { get; init; }
+    /// <summary>Gets the model provider identifier, when known.</summary>
+    public string? ProviderId { get; init; }
 
     /// <summary>Gets the active model identifier, when known.</summary>
     public string? Model { get; init; }

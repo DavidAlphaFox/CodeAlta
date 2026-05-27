@@ -30,7 +30,7 @@ public sealed class ThreadTimelineMarkdownRootTests
         var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => null, initialProjectRoot);
 
         timeline.FinalizeContent(new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -47,7 +47,7 @@ public sealed class ThreadTimelineMarkdownRootTests
         Assert.AreEqual(updatedProjectRoot, firstMarkdown.Options.LocalFileRootPath);
 
         timeline.FinalizeContent(new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -107,7 +107,7 @@ public sealed class ThreadTimelineMarkdownRootTests
         {
             ThreadId = "thread-1",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = AgentBackendIds.Codex.Value,
+            ProviderId = ModelProviderIds.Codex.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Review startup",

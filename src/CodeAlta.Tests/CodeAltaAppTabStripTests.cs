@@ -633,7 +633,7 @@ public sealed class CodeAltaAppTabStripTests
         {
             ThreadId = threadId,
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = "codex",
+            ProviderId = "codex",
             ProjectRef = projectId,
             WorkingDirectory = @"C:\repo",
             Title = threadId,

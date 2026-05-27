@@ -6,7 +6,7 @@ namespace CodeAlta.Agent;
 /// <summary>
 /// Base type for a normalized agent event.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier. Serialized as <c>backendId</c> for session-journal compatibility.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">Event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
@@ -25,7 +25,8 @@ namespace CodeAlta.Agent;
 [JsonDerivedType(typeof(AgentFileChangePermissionRequest), "permissionFileChange")]
 [JsonDerivedType(typeof(AgentUserInputRequest), "userInputRequest")]
 public abstract record AgentEvent(
-    AgentBackendId BackendId,
+    [property: JsonPropertyName("backendId")]
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId = null);
@@ -360,25 +361,25 @@ public enum AgentPlanStepStatus
 /// <summary>
 /// A raw, provider-specific event emitted when no normalized mapping exists.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">Event timestamp.</param>
 /// <param name="BackendEventType">Backend event type identifier.</param>
 /// <param name="Raw">Raw backend payload.</param>
 /// <param name="RunId">Optional run identifier.</param>
 public sealed record AgentRawEvent(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     string BackendEventType,
     JsonElement Raw,
     AgentRunId? RunId = null)
-    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+    : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
 /// <summary>
 /// Streaming delta of normalized content.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">Event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
@@ -388,7 +389,7 @@ public sealed record AgentRawEvent(
 /// <param name="Delta">Delta content.</param>
 /// <param name="Details">Optional structured content metadata.</param>
 public sealed record AgentContentDeltaEvent(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
@@ -397,12 +398,12 @@ public sealed record AgentContentDeltaEvent(
     string? ParentActivityId,
     string Delta,
     JsonElement? Details = null)
-    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+    : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
 /// <summary>
 /// Finalized normalized content.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">Event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
@@ -412,7 +413,7 @@ public sealed record AgentContentDeltaEvent(
 /// <param name="Content">The finalized content.</param>
 /// <param name="Details">Optional structured content metadata.</param>
 public sealed record AgentContentCompletedEvent(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
@@ -421,12 +422,12 @@ public sealed record AgentContentCompletedEvent(
     string? ParentActivityId,
     string Content,
     JsonElement? Details = null)
-    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+    : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
 /// <summary>
 /// Generic activity lifecycle event.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">Event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
@@ -438,7 +439,7 @@ public sealed record AgentContentCompletedEvent(
 /// <param name="Message">Optional activity message.</param>
 /// <param name="Details">Optional structured details.</param>
 public sealed record AgentActivityEvent(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
@@ -449,12 +450,12 @@ public sealed record AgentActivityEvent(
     string? Name,
     string? Message,
     JsonElement? Details = null)
-    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+    : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
 /// <summary>
 /// Auditable system prompt event containing the logical prompt applied to a session turn.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">Event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
@@ -467,7 +468,7 @@ public sealed record AgentActivityEvent(
 /// <param name="Statistics">Prompt statistics.</param>
 /// <param name="Change">Change summary compared with the previous prompt event.</param>
 public sealed record AgentSystemPromptEvent(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
@@ -479,7 +480,7 @@ public sealed record AgentSystemPromptEvent(
     JsonElement? Manifest,
     AgentSystemPromptStatistics Statistics,
     AgentSystemPromptChangeSummary Change)
-    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+    : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
 /// <summary>
 /// Provider payload mapping summary for a system prompt event.
@@ -511,7 +512,7 @@ public sealed record AgentSystemPromptChangeSummary(string Kind, IReadOnlyList<s
 /// <summary>
 /// Generic session update event.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">Event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
@@ -520,7 +521,7 @@ public sealed record AgentSystemPromptChangeSummary(string Kind, IReadOnlyList<s
 /// <param name="Details">Optional structured details.</param>
 /// <param name="Usage">Optional normalized usage payload.</param>
 public sealed record AgentSessionUpdateEvent(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
@@ -528,23 +529,23 @@ public sealed record AgentSessionUpdateEvent(
     string? Message,
     JsonElement? Details = null,
     AgentSessionUsage? Usage = null)
-    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+    : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
 /// <summary>
 /// Structured plan snapshot event.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">Event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
 /// <param name="Snapshot">The structured plan snapshot.</param>
 public sealed record AgentPlanSnapshotEvent(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
     AgentPlanSnapshot Snapshot)
-    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+    : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
 /// <summary>
 /// Structured plan snapshot payload.
@@ -569,7 +570,7 @@ public sealed record AgentPlanStep(
 /// <summary>
 /// Generic interaction lifecycle event.
 /// </summary>
-/// <param name="BackendId">The backend identifier.</param>
+/// <param name="ProviderId">The model provider identifier.</param>
 /// <param name="SessionId">The session identifier.</param>
 /// <param name="Timestamp">Event timestamp.</param>
 /// <param name="RunId">Optional run identifier.</param>
@@ -578,7 +579,7 @@ public sealed record AgentPlanStep(
 /// <param name="Message">Optional interaction message.</param>
 /// <param name="Details">Optional structured details.</param>
 public sealed record AgentInteractionEvent(
-    AgentBackendId BackendId,
+    ModelProviderId ProviderId,
     string SessionId,
     DateTimeOffset Timestamp,
     AgentRunId? RunId,
@@ -586,7 +587,7 @@ public sealed record AgentInteractionEvent(
     string InteractionId,
     string? Message,
     JsonElement? Details = null)
-    : AgentEvent(BackendId, SessionId, Timestamp, RunId);
+    : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
 /// <summary>
 /// Represents an error event.
@@ -596,7 +597,7 @@ public sealed record AgentErrorEvent : AgentEvent
     /// <summary>
     /// Initializes a new instance of the <see cref="AgentErrorEvent"/> class.
     /// </summary>
-    /// <param name="backendId">The backend identifier.</param>
+    /// <param name="ProviderId">The model provider identifier.</param>
     /// <param name="sessionId">The session identifier.</param>
     /// <param name="timestamp">Event timestamp.</param>
     /// <param name="message">Error message.</param>
@@ -604,13 +605,13 @@ public sealed record AgentErrorEvent : AgentEvent
     /// <param name="runId">Optional run identifier.</param>
     [JsonConstructor]
     internal AgentErrorEvent(
-        AgentBackendId backendId,
+        ModelProviderId ProviderId,
         string sessionId,
         DateTimeOffset timestamp,
         string message,
         AgentExceptionInfo? exceptionInfo = null,
         AgentRunId? runId = null)
-        : base(backendId, sessionId, timestamp, runId)
+        : base(ProviderId, sessionId, timestamp, runId)
     {
         Message = message;
         ExceptionInfo = exceptionInfo;
@@ -619,20 +620,20 @@ public sealed record AgentErrorEvent : AgentEvent
     /// <summary>
     /// Initializes a new instance of the <see cref="AgentErrorEvent"/> class.
     /// </summary>
-    /// <param name="backendId">The backend identifier.</param>
+    /// <param name="ProviderId">The model provider identifier.</param>
     /// <param name="sessionId">The session identifier.</param>
     /// <param name="timestamp">Event timestamp.</param>
     /// <param name="message">Error message.</param>
     /// <param name="exception">Optional runtime exception.</param>
     /// <param name="runId">Optional run identifier.</param>
     public AgentErrorEvent(
-        AgentBackendId backendId,
+        ModelProviderId ProviderId,
         string sessionId,
         DateTimeOffset timestamp,
         string message,
         Exception? exception = null,
         AgentRunId? runId = null)
-        : base(backendId, sessionId, timestamp, runId)
+        : base(ProviderId, sessionId, timestamp, runId)
     {
         Message = message;
         Exception = exception;

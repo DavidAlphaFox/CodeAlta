@@ -245,7 +245,7 @@ public sealed class LocalAgentChatClientTurnExecutorTests
                 DisplayName = "Anthropic",
                 TransportKind = LocalAgentTransportKind.AnthropicMessages,
             },
-            BackendId = AgentBackendIds.AnthropicMessages,
+            ProviderId = ModelProviderIds.AnthropicMessages,
             SessionId = "session-1",
             RunId = new AgentRunId("run-1"),
             ModelId = "claude-test",

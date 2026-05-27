@@ -163,11 +163,11 @@ public sealed class ModelProviderPreferenceCoordinatorTests
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
         var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
             new ModelProviderDescriptor(new ModelProviderId("zai"), "ZAI"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["zai"].Models.Add(
             new AgentModelInfo(
                 "gpt-5",
@@ -206,11 +206,11 @@ public sealed class ModelProviderPreferenceCoordinatorTests
         using var temp = TempDirectory.Create();
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
         var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
             new ModelProviderDescriptor(new ModelProviderId("zai"), "ZAI"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["zai"].Models.Add(new AgentModelInfo("gpt-5", DisplayName: "GPT-5"));
         var tab = CreateOpenThreadState("thread-1", "zai");
         var viewState = new WorkThreadViewState
@@ -248,11 +248,11 @@ public sealed class ModelProviderPreferenceCoordinatorTests
 
         var store = new CodeAltaConfigStore(new CatalogOptions { GlobalRoot = temp.Path });
         var coordinator = new ModelProviderPreferenceCoordinator(store, Views.CodeAltaApp.UiLogger);
-        ModelProviderDescriptor[] backendDescriptors =
+        ModelProviderDescriptor[] providerDescriptors =
         [
             new ModelProviderDescriptor(new ModelProviderId("zai"), "ZAI"),
         ];
-        var backendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var backendStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         backendStates["zai"].Models.Add(new AgentModelInfo(
             "gpt-5",
             SupportedReasoningEfforts: [AgentReasoningEffort.High]));
@@ -275,7 +275,7 @@ public sealed class ModelProviderPreferenceCoordinatorTests
         {
             ThreadId = threadId,
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = providerKey,
+            ProviderId = providerKey,
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Investigate provider defaults",
             Status = WorkThreadStatus.Active,
@@ -286,7 +286,7 @@ public sealed class ModelProviderPreferenceCoordinatorTests
         var timeline = new ThreadTimelinePresenter(new InlineUiDispatcher(), static () => null);
         var tab = new OpenThreadState(thread, timeline)
         {
-            BackendId = new AgentBackendId(providerKey),
+            ProviderId = new ModelProviderId(providerKey),
         };
         return tab;
     }

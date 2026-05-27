@@ -247,7 +247,7 @@ public sealed class WorkThreadJournalStore
 
     private static AgentRawEvent CreateHeaderEvent(SessionViewDescriptor thread)
         => new(
-            new AgentBackendId(thread.BackendId),
+            new ModelProviderId(thread.ProviderId),
             thread.ThreadId,
             thread.CreatedAt,
             ThreadHeaderEventType,
@@ -255,7 +255,7 @@ public sealed class WorkThreadJournalStore
 
     private static AgentRawEvent CreateStateEvent(SessionViewDescriptor thread, WorkThreadLocalState state)
         => new(
-            new AgentBackendId(thread.BackendId),
+            new ModelProviderId(thread.ProviderId),
             thread.ThreadId,
             DateTimeOffset.UtcNow,
             ThreadStateEventType,
@@ -439,8 +439,9 @@ public sealed class WorkThreadJournalHeader
     [JsonPropertyName("kind")]
     public WorkThreadKind Kind { get; set; }
 
+    // Persisted work-thread journals used backend_id before provider terminology; keep the wire name stable.
     [JsonPropertyName("backend_id")]
-    public string BackendId { get; set; } = string.Empty;
+    public string ProviderId { get; set; } = string.Empty;
 
     [JsonPropertyName("provider_key")]
     public string? ProviderKey { get; set; }
@@ -470,7 +471,7 @@ public sealed class WorkThreadJournalHeader
         {
             ThreadId = descriptor.ThreadId,
             Kind = descriptor.Kind,
-            BackendId = descriptor.BackendId,
+            ProviderId = descriptor.ProviderId,
             ProviderKey = descriptor.ProviderKey,
             ProjectRef = descriptor.ProjectRef,
             ParentThreadId = descriptor.ParentThreadId,
@@ -486,7 +487,7 @@ public sealed class WorkThreadJournalHeader
         {
             ThreadId = ThreadId,
             Kind = Kind,
-            BackendId = BackendId,
+            ProviderId = ProviderId,
             ProviderKey = ProviderKey,
             ProjectRef = ProjectRef,
             ParentThreadId = ParentThreadId,

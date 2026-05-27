@@ -30,7 +30,7 @@ public sealed class FileChangePresenterTests
             """);
 
         presenter.ObserveActivity(new AgentActivityEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             timestamp,
             null,
@@ -43,7 +43,7 @@ public sealed class FileChangePresenterTests
             details.RootElement.Clone()));
 
         presenter.ObserveSessionUpdate(new AgentSessionUpdateEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             timestamp.AddSeconds(1),
             null,
@@ -81,7 +81,7 @@ public sealed class FileChangePresenterTests
         using var details = JsonDocument.Parse("""{"path":"src/NewFile.cs","operation":"create"}""");
 
         presenter.ObserveSessionUpdate(new AgentSessionUpdateEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             timestamp,
             null,
@@ -89,7 +89,7 @@ public sealed class FileChangePresenterTests
             "Workspace file changed.",
             details.RootElement.Clone()));
         presenter.ObserveSessionUpdate(new AgentSessionUpdateEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             timestamp.AddSeconds(1),
             null,

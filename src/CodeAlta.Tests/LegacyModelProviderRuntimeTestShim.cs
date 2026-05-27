@@ -1,8 +1,8 @@
 namespace CodeAlta.Agent;
 
-internal interface IAgentBackend : IAsyncDisposable
+internal interface ITestModelProviderSessionRuntime : IAsyncDisposable
 {
-    AgentBackendId BackendId { get; }
+    ModelProviderId ProviderId { get; }
 
     string DisplayName { get; }
 

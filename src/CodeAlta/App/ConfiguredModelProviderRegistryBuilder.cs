@@ -141,7 +141,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         var providerId = new ModelProviderId(definition.ProviderKey);
         var displayName = ResolveProviderDisplayName(definition);
         var baseUri = ParseUri(definition.ApiUrl);
-        var options = new OpenAIChatAgentBackendOptions
+        var options = new OpenAIChatModelProviderRuntimeOptions
         {
             ProviderIdOverride = providerId,
             DisplayNameOverride = displayName,
@@ -184,7 +184,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         };
 
         descriptor = CreateProviderDescriptor(definition, displayName, baseUri);
-        createRuntime = () => new OpenAIChatAgentBackend(options);
+        createRuntime = () => new OpenAIChatModelProviderRuntime(options);
         LogInfo(
             $"Registered model provider key={providerId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
         return true;
@@ -210,7 +210,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         var providerId = new ModelProviderId(definition.ProviderKey);
         var displayName = ResolveProviderDisplayName(definition);
         var baseUri = ParseUri(definition.ApiUrl);
-        var options = new OpenAIResponsesAgentBackendOptions
+        var options = new OpenAIResponsesModelProviderRuntimeOptions
         {
             ProviderIdOverride = providerId,
             DisplayNameOverride = displayName,
@@ -253,7 +253,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         };
 
         descriptor = CreateProviderDescriptor(definition, displayName, baseUri);
-        createRuntime = () => new OpenAIResponsesAgentBackend(options);
+        createRuntime = () => new OpenAIResponsesModelProviderRuntime(options);
         LogInfo(
             $"Registered model provider key={providerId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
         return true;
@@ -280,7 +280,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         var displayName = ResolveProviderDisplayName(definition);
         var baseUri = ParseUri(definition.ApiUrl);
         var singleModelId = NormalizeText(definition.SingleModelId) ?? NormalizeText(definition.Model);
-        var options = new OpenAIChatAgentBackendOptions
+        var options = new OpenAIChatModelProviderRuntimeOptions
         {
             ProviderIdOverride = providerId,
             DisplayNameOverride = displayName,
@@ -311,7 +311,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         };
 
         descriptor = CreateProviderDescriptor(definition, displayName, baseUri);
-        createRuntime = () => new OpenAIChatAgentBackend(options);
+        createRuntime = () => new OpenAIChatModelProviderRuntime(options);
         LogInfo(
             $"Registered model provider key={providerId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} azureOpenAI=true");
         return true;
@@ -354,7 +354,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
             },
         };
 
-        var options = new OpenAIResponsesAgentBackendOptions
+        var options = new OpenAIResponsesModelProviderRuntimeOptions
         {
             ProviderIdOverride = providerId,
             DisplayNameOverride = displayName,
@@ -364,7 +364,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         };
 
         descriptor = CreateProviderDescriptor(definition, displayName, baseUri);
-        createRuntime = () => new OpenAIResponsesAgentBackend(options);
+        createRuntime = () => new OpenAIResponsesModelProviderRuntime(options);
         LogInfo(
             $"Registered model provider key={providerId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} authSource={providerOptions.CodexSubscription.AuthSource}");
         return true;
@@ -425,7 +425,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
             ProtocolTraceEnabled = definition.ProtocolTrace == true,
         };
 
-        var options = new CopilotDirectAgentBackendOptions
+        var options = new CopilotDirectModelProviderRuntimeOptions
         {
             ProviderIdOverride = providerId,
             DisplayNameOverride = displayName,
@@ -434,7 +434,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         };
 
         descriptor = CreateProviderDescriptor(definition, displayName, baseUri);
-        createRuntime = () => new CopilotDirectAgentBackend(options);
+        createRuntime = () => new CopilotDirectModelProviderRuntime(options);
         LogInfo(
             $"Registered model provider key={providerId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} authSource={providerOptions.Auth.AuthSource} modelDiscovery={providerOptions.ModelDiscovery}");
         return true;
@@ -491,7 +491,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
             ProtocolTraceEnabled = definition.ProtocolTrace == true,
         };
 
-        var options = new XaiAgentBackendOptions
+        var options = new XaiModelProviderRuntimeOptions
         {
             ProviderIdOverride = providerId,
             DisplayNameOverride = displayName,
@@ -500,7 +500,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         };
 
         descriptor = CreateProviderDescriptor(definition, displayName, baseUri);
-        createRuntime = () => new XaiDirectAgentBackend(options);
+        createRuntime = () => new XaiDirectModelProviderRuntime(options);
         LogInfo(
             $"Registered model provider key={providerId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} authSource={providerOptions.Auth.AuthSource} modelDiscovery={providerOptions.ModelDiscovery}");
         return true;
@@ -541,7 +541,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         var providerId = new ModelProviderId(definition.ProviderKey);
         var displayName = ResolveProviderDisplayName(definition);
         var baseUri = ParseUri(definition.ApiUrl);
-        var options = new AnthropicAgentBackendOptions
+        var options = new AnthropicModelProviderRuntimeOptions
         {
             ProviderIdOverride = providerId,
             DisplayNameOverride = displayName,
@@ -575,7 +575,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         };
 
         descriptor = CreateProviderDescriptor(definition, displayName, baseUri);
-        createRuntime = () => new AnthropicAgentBackend(options);
+        createRuntime = () => new AnthropicModelProviderRuntime(options);
         LogInfo(
             $"Registered model provider key={providerId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)}");
         return true;
@@ -637,7 +637,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         var providerId = new ModelProviderId(definition.ProviderKey);
         var displayName = ResolveProviderDisplayName(definition);
         var baseUri = ParseUri(definition.ApiUrl);
-        var options = new GoogleGenAIAgentBackendOptions
+        var options = new GoogleGenAIModelProviderRuntimeOptions
         {
             ProviderIdOverride = providerId,
             DisplayNameOverride = displayName,
@@ -674,7 +674,7 @@ internal static class ConfiguredModelProviderRegistryBuilder
         };
 
         descriptor = CreateProviderDescriptor(definition, displayName, baseUri);
-        createRuntime = () => new GoogleGenAIAgentBackend(options);
+        createRuntime = () => new GoogleGenAIModelProviderRuntime(options);
         LogInfo(
             $"Registered model provider key={providerId.Value} type={definition.ProviderType} displayName={displayName} apiUrl={FormatUri(baseUri)} vertex={useVertexAI}");
         return true;

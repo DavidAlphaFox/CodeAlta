@@ -13,16 +13,16 @@ namespace CodeAlta.Agent.Anthropic;
 /// <summary>
 /// Anthropic Messages model-provider runtime.
 /// </summary>
-public sealed class AnthropicAgentBackend : ICodeAltaModelProviderRuntime
+public sealed class AnthropicModelProviderRuntime : ICodeAltaModelProviderRuntime
 {
     private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.Agent.Anthropic");
     private readonly ICodeAltaModelProviderRuntime _runtime;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="AnthropicAgentBackend"/> class.
+    /// Initializes a new instance of the <see cref="AnthropicModelProviderRuntime"/> class.
     /// </summary>
     /// <param name="options">The backend options.</param>
-    public AnthropicAgentBackend(AnthropicAgentBackendOptions options)
+    public AnthropicModelProviderRuntime(AnthropicModelProviderRuntimeOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (options.Providers.Count == 0)

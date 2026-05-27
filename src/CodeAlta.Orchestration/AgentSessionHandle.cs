@@ -20,7 +20,7 @@ public sealed record AgentSessionHandle
     /// <summary>
     /// Gets the configured provider identifier used to create or resume the session attachment.
     /// </summary>
-    public required AgentBackendId ProviderId { get; init; }
+    public required ModelProviderId ProviderId { get; init; }
 
     /// <summary>
     /// Gets the optional durable parent session identifier used for coordination metadata only.

@@ -96,7 +96,7 @@ public sealed class ThreadExecutionOptionsFactoryTests
             catalogOptions,
             new Dictionary<string, ModelProviderState>(StringComparer.Ordinal)
             {
-                [AgentBackendIds.Codex.Value] = backendState,
+                [ModelProviderIds.Codex.Value] = backendState,
             },
             selection,
             new ThreadPermissionRequestCoordinator(selection, CreateCommandContext(uiDispatcher)),
@@ -115,11 +115,11 @@ public sealed class ThreadExecutionOptionsFactoryTests
         var project = CreateProject("project-a", Path.Combine(temp.Path, "project-a"));
         Directory.CreateDirectory(project.ProjectPath);
         var factory = CreateFactory(temp.Path, project);
-        var backendId = new AgentBackendId("gemini");
+        var ProviderId = new ModelProviderId("gemini");
 
-        var options = factory.BuildPreferredExecutionOptions(new ModelProviderId(backendId.Value), temp.Path, []);
+        var options = factory.BuildPreferredExecutionOptions(new ModelProviderId(ProviderId.Value), temp.Path, []);
 
-        Assert.AreEqual(backendId.Value, options.ProviderId.Value);
+        Assert.AreEqual(ProviderId.Value, options.ProviderId.Value);
         Assert.AreEqual("gemini", options.ProviderKey);
         Assert.IsNull(options.Model);
         Assert.IsNull(options.ReasoningEffort);
@@ -150,7 +150,7 @@ public sealed class ThreadExecutionOptionsFactoryTests
             catalogOptions,
             new Dictionary<string, ModelProviderState>(StringComparer.Ordinal)
             {
-                [AgentBackendIds.Codex.Value] = new ModelProviderState(ModelProviderIds.Codex, "Codex")
+                [ModelProviderIds.Codex.Value] = new ModelProviderState(ModelProviderIds.Codex, "Codex")
                 {
                     Availability = ModelProviderAvailability.Ready,
                     SelectedModelId = "gpt-test",
@@ -160,7 +160,7 @@ public sealed class ThreadExecutionOptionsFactoryTests
             new ThreadPermissionRequestCoordinator(selection, commandContext),
             new ThreadUserInputRequestCoordinator(selection, commandContext),
             services,
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { AgentBackendIds.Codex.Value });
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ModelProviderIds.Codex.Value });
     }
 
     private static ThreadCommandContext CreateCommandContext(IUiDispatcher uiDispatcher)
@@ -200,7 +200,7 @@ public sealed class ThreadExecutionOptionsFactoryTests
             """);
         var result = await tool.Handler(
                 new AgentToolInvocation(
-                    AgentBackendIds.Codex,
+                    ModelProviderIds.Codex,
                     "backend-session",
                     "tool-call",
                     "alta",

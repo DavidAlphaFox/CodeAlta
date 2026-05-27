@@ -49,7 +49,7 @@ internal sealed class CodeAltaFrontendComposition
     public required WorkspaceRefreshContext WorkspaceRefreshContext { get; init; }
 
     public static CodeAltaFrontendComposition Create(
-        IReadOnlyList<ModelProviderDescriptor> backendDescriptors,
+        IReadOnlyList<ModelProviderDescriptor> providerDescriptors,
         ProjectCatalog projectCatalog,
         WorkThreadCatalog threadCatalog,
         SessionRuntimeService runtimeService,
@@ -68,7 +68,7 @@ internal sealed class CodeAltaFrontendComposition
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(catalogOptions);
         ArgumentNullException.ThrowIfNull(agentHub);
-        ArgumentNullException.ThrowIfNull(backendDescriptors);
+        ArgumentNullException.ThrowIfNull(providerDescriptors);
         ArgumentNullException.ThrowIfNull(projectFileSearchService);
         ArgumentNullException.ThrowIfNull(shell);
         ArgumentNullException.ThrowIfNull(knownProjectImporter);
@@ -79,7 +79,7 @@ internal sealed class CodeAltaFrontendComposition
         var threadWorkspaceViewModel = new ThreadWorkspaceViewModel();
         var promptComposerViewModel = new PromptComposerViewModel();
         var sessionUsageViewModel = new SessionUsageViewModel();
-        var chatBackendStates = ModelProviderPresentation.CreateProviderStates(backendDescriptors);
+        var modelProviderStates = ModelProviderPresentation.CreateProviderStates(providerDescriptors);
         modelProviderInitializationService ??= modelProviderRegistry is not null
             ? new ModelProviderInitializationService(modelProviderRegistry)
             : new EmptyModelProviderInitializationService();
@@ -110,7 +110,7 @@ internal sealed class CodeAltaFrontendComposition
             .Add(agentHub)
             .Add(modelProviderInitializationService)
             .Add(projectFileSearchService)
-            .Add<IReadOnlyList<ModelProviderDescriptor>>(backendDescriptors)
+            .Add<IReadOnlyList<ModelProviderDescriptor>>(providerDescriptors)
             .Add<IAltaSessionToolBackendPolicy>(new AltaSessionToolBackendPolicy(altaToolProviderIds));
         if (modelProviderRegistry is not null)
         {
@@ -139,7 +139,7 @@ internal sealed class CodeAltaFrontendComposition
             new ProjectCatalogStore(projectCatalog),
             new RecoverableSessionSource(runtimeService),
             new SessionDeleter(runtimeService),
-            backendDescriptors);
+            providerDescriptors);
         var runtimeEventPump = new RuntimeEventPump(runtimeService, shellController);
         var terminalLoopCoordinator = new TerminalLoopCoordinator(
             shellController,
@@ -154,7 +154,7 @@ internal sealed class CodeAltaFrontendComposition
             new ThreadTimelineSurface(() => frontend.ThreadPaneLayout?.GetAbsoluteBounds()),
             threadPromptDraftService,
             threadModelProviderPreferenceService,
-            new ThreadModelProviderReadinessService(thread => frontend.IsModelProviderReady(new ModelProviderId(thread.BackendId))),
+            new ThreadModelProviderReadinessService(thread => frontend.IsModelProviderReady(new ModelProviderId(thread.ProviderId))),
             new ThreadHistoryLoaderService(frontend.EnsureThreadHistoryLoadedAsync),
             new ThreadStateTabLifecycleService(
                 () => frontend.GetShellTabs()
@@ -195,7 +195,7 @@ internal sealed class CodeAltaFrontendComposition
                     throw new ArgumentOutOfRangeException(nameof(request), request.Reason, "Unknown workspace refresh reason.");
             }
         });
-        var resolveProviderDisplayName = CreateProviderDisplayNameResolver(backendDescriptors);
+        var resolveProviderDisplayName = CreateProviderDisplayNameResolver(providerDescriptors);
         var (navigatorActionCoordinator, sidebarCoordinator) = SidebarServicesFactory.Create(
             sidebarViewModel,
             catalogOptions,
@@ -208,7 +208,7 @@ internal sealed class CodeAltaFrontendComposition
             frontend.SetReadyStatusForCurrentSelection);
         var threadProviderSwitchCoordinator = new SessionProviderSwitchCoordinator(
             configStore,
-            chatBackendStates,
+            modelProviderStates,
             tab =>
             {
                 frontend.ApplyThreadPreference(tab);
@@ -218,10 +218,10 @@ internal sealed class CodeAltaFrontendComposition
             threadStateCoordinator.UpsertRuntimeThread,
             frontend.PersistViewStateAsync);
         var modelProviderSelectorCoordinator = new ModelProviderSelectorCoordinator(
-            backendDescriptors,
+            providerDescriptors,
             threadWorkspaceViewModel,
             promptComposerViewModel,
-            chatBackendStates,
+            modelProviderStates,
             modelProviderSelectorStateContext,
             threadSelectionContext,
             modelProviderPreferencePort,
@@ -229,7 +229,7 @@ internal sealed class CodeAltaFrontendComposition
             configStore.GetEffectiveDefaultProvider,
             frontend.SyncModelProviderSelectorItems,
             threadProviderSwitchCoordinator.CanSelectThreadProvider,
-            (thread, tab, targetBackendId) => threadProviderSwitchCoordinator.SwitchThreadProviderAsync(thread, tab, targetBackendId),
+            (thread, tab, targetProviderId) => threadProviderSwitchCoordinator.SwitchThreadProviderAsync(thread, tab, targetProviderId),
             () => frontendEvents.Publish(new SelectionChangedEvent()),
             () => configStore.LoadGlobalProviderDefinitions(includeDisabled: true)
                 .Where(static definition => definition.Enabled != false)
@@ -242,7 +242,7 @@ internal sealed class CodeAltaFrontendComposition
                     : threadStateCoordinator.GetSelectedProject()?.Id),
             pluginHostBridge is null ? null : pluginHostBridge.GetPromptPlaceholderContributions);
         var modelCatalogCoordinator = new ModelCatalogCoordinator(
-            chatBackendStates,
+            modelProviderStates,
             modelProviderSelectorCoordinator,
             threadStateCoordinator.GetSelectedThread,
             threadStateCoordinator.FindOpenThread,
@@ -289,7 +289,7 @@ internal sealed class CodeAltaFrontendComposition
             shellViewModel,
             threadWorkspaceViewModel,
             sessionUsageViewModel,
-            chatBackendStates,
+            modelProviderStates,
             threadSelectionContext,
             shellWorkspaceContext);
         threadPromptQueueCoordinator = new ThreadPromptQueueCoordinator(
@@ -299,10 +299,10 @@ internal sealed class CodeAltaFrontendComposition
             frontend.VerifyBindableAccess,
             (tab, prompt, cancellationToken) => threadCommandCoordinator!.DispatchQueuedPromptAsync(tab, prompt, steer: false, cancellationToken),
             (tab, prompt, cancellationToken) => threadCommandCoordinator!.DispatchQueuedPromptAsync(tab, prompt, steer: true, cancellationToken));
-        var chatBackendInitializationCoordinator = new ModelProviderInitializationCoordinator(
+        var modelProviderInitializationCoordinator = new ModelProviderInitializationCoordinator(
             modelProviderInitializationService,
-            backendDescriptors,
-            chatBackendStates,
+            providerDescriptors,
+            modelProviderStates,
             frontend.DispatchToUi,
             frontendEvents,
             frontend.SetProviderSessionLoadStatus);
@@ -338,8 +338,8 @@ internal sealed class CodeAltaFrontendComposition
         threadCommandCoordinator = new ThreadCommandCoordinator(
             runtimeService,
             catalogOptions,
-            backendDescriptors,
-            chatBackendStates,
+            providerDescriptors,
+            modelProviderStates,
             threadSelectionContext,
             modelProviderSelectorStateContext,
             new ThreadCommandContext(
@@ -374,7 +374,7 @@ internal sealed class CodeAltaFrontendComposition
             ShellController = shellController,
             RuntimeEventPump = runtimeEventPump,
             TerminalLoopCoordinator = terminalLoopCoordinator,
-            ModelProviderInitializationCoordinator = chatBackendInitializationCoordinator,
+            ModelProviderInitializationCoordinator = modelProviderInitializationCoordinator,
             ThreadStateCoordinator = threadStateCoordinator,
             DraftTabReplacement = draftTabReplacement,
             WorkspaceCoordinator = workspaceCoordinator,
@@ -388,7 +388,7 @@ internal sealed class CodeAltaFrontendComposition
             ThreadWorkspaceViewModel = threadWorkspaceViewModel,
             PromptComposerViewModel = promptComposerViewModel,
             SessionUsageViewModel = sessionUsageViewModel,
-            ModelProviderStates = chatBackendStates,
+            ModelProviderStates = modelProviderStates,
             SidebarCoordinator = sidebarCoordinator,
             NavigatorActionCoordinator = navigatorActionCoordinator,
             ModelProviderSelectorCoordinator = modelProviderSelectorCoordinator,
@@ -427,7 +427,7 @@ internal sealed class CodeAltaFrontendComposition
     {
         ArgumentNullException.ThrowIfNull(configStore);
 
-        var backendIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        var ProviderIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             ModelProviderIds.OpenAIChat.Value,
             ModelProviderIds.OpenAIResponses.Value,
@@ -436,11 +436,11 @@ internal sealed class CodeAltaFrontendComposition
         {
             if (SupportsHostInjectedTools(provider.ProviderType) && !string.IsNullOrWhiteSpace(provider.ProviderKey))
             {
-                backendIds.Add(provider.ProviderKey);
+                ProviderIds.Add(provider.ProviderKey);
             }
         }
 
-        return backendIds;
+        return ProviderIds;
     }
 
     private static bool SupportsHostInjectedTools(string? providerType)
@@ -452,11 +452,11 @@ internal sealed class CodeAltaFrontendComposition
            string.Equals(providerType, "xai", StringComparison.OrdinalIgnoreCase);
 
     private static Func<string?, string> CreateProviderDisplayNameResolver(
-        IReadOnlyList<ModelProviderDescriptor> backendDescriptors)
+        IReadOnlyList<ModelProviderDescriptor> providerDescriptors)
     {
-        ArgumentNullException.ThrowIfNull(backendDescriptors);
+        ArgumentNullException.ThrowIfNull(providerDescriptors);
 
-        var displayNames = backendDescriptors.ToDictionary(
+        var displayNames = providerDescriptors.ToDictionary(
             static descriptor => descriptor.ProviderId.Value,
             static descriptor => descriptor.DisplayName,
             StringComparer.OrdinalIgnoreCase);

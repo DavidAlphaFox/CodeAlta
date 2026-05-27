@@ -26,8 +26,8 @@ public sealed class WorkThreadSkillActivationPlanner
                 "Open a local/raw model-provider thread before activating a CodeAlta-managed skill.");
         }
 
-        var backendId = new AgentBackendId(thread.BackendId);
-        if (backendId == AgentBackendIds.Codex || backendId == AgentBackendIds.Copilot)
+        var ProviderId = new ModelProviderId(thread.ProviderId);
+        if (ProviderId == ModelProviderIds.Codex || ProviderId == ModelProviderIds.Copilot)
         {
             return new WorkThreadSkillActivationDecision(
                 WorkThreadSkillActivationDecisionKind.RejectNativeSkillProvider,

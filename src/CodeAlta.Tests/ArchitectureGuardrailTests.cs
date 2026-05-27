@@ -56,11 +56,11 @@ public sealed class ArchitectureGuardrailTests
     {
         var sourceRoot = GetSourceRoot();
         var codeAltaRoot = GetCodeAltaSourceRoot();
-        const string externalAcpBackendNamespace = "CodeAlta.Agent" + ".Acp";
+        const string externalAcpProviderNamespace = "CodeAlta.Agent" + ".Acp";
         var matches = Directory
             .EnumerateFiles(codeAltaRoot, "*.cs", SearchOption.AllDirectories)
             .Append(Path.Combine(codeAltaRoot, "CodeAlta.csproj"))
-            .Where(file => File.ReadAllText(file).Contains(externalAcpBackendNamespace, StringComparison.Ordinal))
+            .Where(file => File.ReadAllText(file).Contains(externalAcpProviderNamespace, StringComparison.Ordinal))
             .Select(file => Path.GetRelativePath(sourceRoot, file).Replace('\\', '/'))
             .OrderBy(static path => path, StringComparer.Ordinal)
             .ToArray();
@@ -302,12 +302,12 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
-    public void FrontendShellContractInventory_ReportsLegacyBackendNamedApis()
+    public void FrontendShellContractInventory_ReportsLegacyProviderNamedApis()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
         var legacyNames = new[]
         {
-            "BackendId",
+            "ProviderId",
             "SelectedBackend",
             "ModelProviderState",
         };
@@ -517,6 +517,63 @@ public sealed class ArchitectureGuardrailTests
             .Select(static entry => entry.RelativePath)
             .Where(file => !allowedLegacyFiles.Contains(file))
             .OrderBy(static file => file, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), violations);
+    }
+
+    [TestMethod]
+    public void ProductionProviderIdentity_DoesNotUseRemovedBackendCompatibilitySymbols()
+    {
+        var sourceRoot = GetSourceRoot();
+        var allowedLegacyProviderIdentityFields = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "CodeAlta.Agent/AgentEvent.cs",
+            "CodeAlta.Agent/AgentToolDefinition.cs",
+            "CodeAlta.Agent/LocalRuntime/LocalAgentSessionFiles.cs",
+            "CodeAlta.Catalog/SessionViewDescriptor.cs",
+            "CodeAlta.Catalog/WorkThreadJournalStore.cs",
+            "CodeAlta.Catalog/WorkThreadYamlSerializer.cs",
+        };
+        var forbiddenSymbols = new[]
+        {
+            "Agent" + "BackendId",
+            "Agent" + "BackendIds",
+            "IAgent" + "Backend",
+            "Agent" + "BackendFactory",
+            "ConfigureAgent" + "Backends",
+            "Chat" + "Backend",
+            "InitializeChat" + "Backend",
+        };
+        var productionRoots = Directory.EnumerateDirectories(sourceRoot)
+            .Where(static directory =>
+            {
+                var name = Path.GetFileName(directory);
+                return name.StartsWith("CodeAlta", StringComparison.Ordinal) &&
+                       !name.EndsWith(".Tests", StringComparison.Ordinal) &&
+                       !string.Equals(name, "CodeAlta.Agent.ModelsDev.Updater", StringComparison.Ordinal);
+            })
+            .ToArray();
+
+        var violations = productionRoots
+            .SelectMany(root => Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+            .Where(static file => !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&
+                                  !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            .Select(file => new
+            {
+                RelativePath = Path.GetRelativePath(sourceRoot, file).Replace('\\', '/'),
+                Content = File.ReadAllText(file),
+            })
+            .SelectMany(entry => forbiddenSymbols
+                .Where(symbol => entry.Content.Contains(symbol, StringComparison.Ordinal) || entry.RelativePath.Contains(symbol, StringComparison.Ordinal))
+                .Select(symbol => $"{entry.RelativePath}:{symbol}")
+                .Concat((entry.Content.Contains("BackendId", StringComparison.Ordinal) ||
+                         entry.Content.Contains("backendId", StringComparison.Ordinal) ||
+                         entry.Content.Contains("backend_id", StringComparison.Ordinal)) &&
+                        !allowedLegacyProviderIdentityFields.Contains(entry.RelativePath)
+                    ? [$"{entry.RelativePath}:BackendId/backendId/backend_id"]
+                    : []))
+            .OrderBy(static violation => violation, StringComparer.Ordinal)
             .ToArray();
 
         CollectionAssert.AreEqual(Array.Empty<string>(), violations);
@@ -1441,7 +1498,7 @@ public sealed class ArchitectureGuardrailTests
     {
         var appSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "App", "CodeAltaApp.cs"));
 
-        Assert.IsTrue(appSource.Contains("_chatBackendInitializationCoordinator.InitializeAsync", StringComparison.Ordinal));
+        Assert.IsTrue(appSource.Contains("_modelProviderInitializationCoordinator.InitializeAsync", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("private async Task RefreshModelProviderStateAsync(", StringComparison.Ordinal));
         Assert.IsFalse(appSource.Contains("internal static (ModelProviderAvailability Availability, string StatusMessage) ClassifyBackendInitializationFailure(", StringComparison.Ordinal));
     }
@@ -1577,7 +1634,7 @@ public sealed class ArchitectureGuardrailTests
         Assert.IsTrue(dialogSource.Contains("return new TextBlock(() => row.LastUpdatedRelative)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains(".Tooltip(new TextBlock(() => row.LastUpdatedExact));", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("CellTemplate = new DataTemplate<string>(BuildBackendCell, null)", StringComparison.Ordinal));
-        Assert.IsTrue(dialogSource.Contains("SidebarThreadPresentation.BuildProviderMarkup(row.BackendId, row.BackendDisplayName, row.ThreadKind)", StringComparison.Ordinal));
+        Assert.IsTrue(dialogSource.Contains("SidebarThreadPresentation.BuildProviderMarkup(row.ProviderId, row.ProviderDisplayName, row.ThreadKind)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains(".FilterRowVisible(_viewModel.Bind.FilterRowVisible)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("new CheckBox(\"Filter row\").IsChecked(_viewModel.Bind.FilterRowVisible)", StringComparison.Ordinal));
         Assert.IsTrue(dialogSource.Contains("CellActivationMode = DataGridCellActivationMode.DirectActivate", StringComparison.Ordinal));
@@ -1671,7 +1728,7 @@ public sealed class ArchitectureGuardrailTests
         var source = File.ReadAllText(Path.Combine(GetSourceRoot(), "CodeAlta.Agent", "ModelProviderRegistry.cs"));
 
         Assert.IsFalse(source.Contains("RegisterOrReplaceBackendRuntime", StringComparison.Ordinal));
-        Assert.IsFalse(source.Contains("AgentBackendModelProviderRuntime", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("ModelProviderRuntimeModelProviderRuntime", StringComparison.Ordinal));
     }
 
     [TestMethod]

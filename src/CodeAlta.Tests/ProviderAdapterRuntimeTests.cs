@@ -13,7 +13,7 @@ public sealed class ProviderAdapterRuntimeTests
     [TestMethod]
     public async Task OpenAIChatProviderRuntime_ProbeUsesModelCatalogAndExposesTurnExecutor()
     {
-        await using var runtime = new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
+        await using var runtime = new OpenAIChatModelProviderRuntime(new OpenAIChatModelProviderRuntimeOptions
         {
             ProviderIdOverride = new ModelProviderId("openai-test"),
             Providers =
@@ -46,7 +46,7 @@ public sealed class ProviderAdapterRuntimeTests
         await using var registry = new ModelProviderRegistry();
         registry.RegisterOrReplace(
             new ModelProviderDescriptor(new ModelProviderId("broken"), "Broken", "openai-chat"),
-            () => new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
+            () => new OpenAIChatModelProviderRuntime(new OpenAIChatModelProviderRuntimeOptions
             {
                 ProviderIdOverride = new ModelProviderId("broken"),
                 Providers =
@@ -61,7 +61,7 @@ public sealed class ProviderAdapterRuntimeTests
             }));
         registry.RegisterOrReplace(
             new ModelProviderDescriptor(new ModelProviderId("ready"), "Ready", "openai-chat"),
-            () => new OpenAIChatAgentBackend(new OpenAIChatAgentBackendOptions
+            () => new OpenAIChatModelProviderRuntime(new OpenAIChatModelProviderRuntimeOptions
             {
                 ProviderIdOverride = new ModelProviderId("ready"),
                 Providers =
@@ -91,7 +91,7 @@ public sealed class ProviderAdapterRuntimeTests
     [TestMethod]
     public async Task ProviderRuntimes_ExposeRuntimeDescriptorsAndTurnExecutors()
     {
-        await using var anthropic = new AnthropicAgentBackend(new AnthropicAgentBackendOptions
+        await using var anthropic = new AnthropicModelProviderRuntime(new AnthropicModelProviderRuntimeOptions
         {
             ProviderIdOverride = new ModelProviderId("anthropic-test"),
             Providers =
@@ -104,7 +104,7 @@ public sealed class ProviderAdapterRuntimeTests
                 },
             },
         });
-        await using var copilot = new CopilotDirectAgentBackend(new CopilotDirectAgentBackendOptions
+        await using var copilot = new CopilotDirectModelProviderRuntime(new CopilotDirectModelProviderRuntimeOptions
         {
             ProviderIdOverride = new ModelProviderId("copilot-test"),
             Providers =
@@ -116,7 +116,7 @@ public sealed class ProviderAdapterRuntimeTests
                 },
             },
         });
-        await using var google = new GoogleGenAIAgentBackend(new GoogleGenAIAgentBackendOptions
+        await using var google = new GoogleGenAIModelProviderRuntime(new GoogleGenAIModelProviderRuntimeOptions
         {
             ProviderIdOverride = new ModelProviderId("google-test"),
             Providers =
@@ -129,7 +129,7 @@ public sealed class ProviderAdapterRuntimeTests
                 },
             },
         });
-        await using var vertex = new GoogleGenAIAgentBackend(new GoogleGenAIAgentBackendOptions
+        await using var vertex = new GoogleGenAIModelProviderRuntime(new GoogleGenAIModelProviderRuntimeOptions
         {
             ProviderIdOverride = new ModelProviderId("vertex-test"),
             Providers =
@@ -144,7 +144,7 @@ public sealed class ProviderAdapterRuntimeTests
                 },
             },
         });
-        await using var xai = new XaiDirectAgentBackend(new XaiAgentBackendOptions
+        await using var xai = new XaiDirectModelProviderRuntime(new XaiModelProviderRuntimeOptions
         {
             ProviderIdOverride = new ModelProviderId("xai-test"),
             Providers =

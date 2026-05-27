@@ -20,10 +20,11 @@ public sealed class SessionViewDescriptor
     public WorkThreadKind Kind { get; set; }
 
     /// <summary>
-    /// Gets or sets the backend identifier for the thread.
+    /// Gets or sets the model provider identifier for the thread.
+    /// Serialized as <c>backend_id</c> so existing work-thread front matter remains readable.
     /// </summary>
     [JsonPropertyName("backend_id")]
-    public string BackendId { get; set; } = string.Empty;
+    public string ProviderId { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the provider key selected for the thread.
@@ -134,7 +135,7 @@ public sealed class SessionViewDescriptor
     /// Gets the provider key to use for execution.
     /// </summary>
     [JsonIgnore]
-    public string ResolvedProviderKey => string.IsNullOrWhiteSpace(ProviderKey) ? BackendId : ProviderKey;
+    public string ResolvedProviderKey => string.IsNullOrWhiteSpace(ProviderKey) ? ProviderId : ProviderKey;
 
     /// <summary>
     /// Marks the thread as started.
@@ -186,9 +187,9 @@ public sealed class SessionViewDescriptor
             throw new ArgumentException("LastActiveAt is required.", nameof(LastActiveAt));
         }
 
-        if (string.IsNullOrWhiteSpace(BackendId))
+        if (string.IsNullOrWhiteSpace(ProviderId))
         {
-            throw new ArgumentException("Backend id is required.", nameof(BackendId));
+            throw new ArgumentException("Backend id is required.", nameof(ProviderId));
         }
 
         if (string.IsNullOrWhiteSpace(WorkingDirectory))

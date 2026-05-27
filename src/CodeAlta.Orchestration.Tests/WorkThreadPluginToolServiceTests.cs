@@ -25,7 +25,7 @@ public sealed class WorkThreadPluginToolServiceTests
         Assert.AreSame(existing, merged.Tools![0]);
         Assert.AreSame(pluginTool, merged.Tools[1]);
         CollectionAssert.AreEqual(new[] { "existing", "plugin_tool" }, merged.PreferredToolNames.ToArray());
-        Assert.AreEqual(options.BackendId, merged.BackendId);
+        Assert.AreEqual(options.ProviderId, merged.ProviderId);
         Assert.AreSame(options.OnPermissionRequest, merged.OnPermissionRequest);
     }
 
@@ -87,7 +87,7 @@ public sealed class WorkThreadPluginToolServiceTests
         IReadOnlyList<string> preferredToolNames)
         => new()
         {
-            BackendId = new AgentBackendId("local"),
+            ProviderId = new ModelProviderId("local"),
             WorkingDirectory = "C:/project",
             Tools = tools,
             PreferredToolNames = preferredToolNames,

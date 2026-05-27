@@ -109,7 +109,7 @@ public sealed class AgentSessionCatalogTests
         return new LocalAgentSessionSummary
         {
             SessionId = sessionId,
-            BackendId = new AgentBackendId(providerKey),
+            ProviderId = new ModelProviderId(providerKey),
             ProtocolFamily = "openai-responses",
             ProviderKey = providerKey,
             ModelId = "gpt-5.4",

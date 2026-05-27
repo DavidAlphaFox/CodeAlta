@@ -47,21 +47,21 @@ internal sealed class ModelCatalogDialog
     private readonly DataGridControl _grid;
 
     public ModelCatalogDialog(
-        IReadOnlyDictionary<string, ModelProviderState> chatBackendStates,
+        IReadOnlyDictionary<string, ModelProviderState> modelProviderStates,
         string? selectedProviderKey,
         string? selectedModelId,
         Func<ModelCatalogRowViewModel, Task> selectModelAsync,
         Func<Rectangle?> getBounds,
         Func<Visual?> getFocusTarget)
     {
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
         ArgumentNullException.ThrowIfNull(selectModelAsync);
         ArgumentNullException.ThrowIfNull(getBounds);
         ArgumentNullException.ThrowIfNull(getFocusTarget);
 
         _selectModelAsync = selectModelAsync;
         _getFocusTarget = getFocusTarget;
-        _rows = BuildRows(chatBackendStates, selectedProviderKey, selectedModelId);
+        _rows = BuildRows(modelProviderStates, selectedProviderKey, selectedModelId);
 
         var document = new DataGridListDocument<ModelCatalogRowViewModel>();
         using (document.BeginUpdate())
@@ -222,11 +222,11 @@ internal sealed class ModelCatalogDialog
     }
 
     private static IReadOnlyList<ModelCatalogRowViewModel> BuildRows(
-        IReadOnlyDictionary<string, ModelProviderState> chatBackendStates,
+        IReadOnlyDictionary<string, ModelProviderState> modelProviderStates,
         string? selectedProviderKey,
         string? selectedModelId)
     {
-        return chatBackendStates.Values
+        return modelProviderStates.Values
             .OrderBy(static state => state.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static state => state.ProviderId.Value, StringComparer.OrdinalIgnoreCase)
             .SelectMany(state => state.Models

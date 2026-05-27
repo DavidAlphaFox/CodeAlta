@@ -11,7 +11,7 @@ namespace CodeAlta.Views;
 
 internal sealed class ModelCatalogCoordinator
 {
-    private readonly IReadOnlyDictionary<string, ModelProviderState> _chatBackendStates;
+    private readonly IReadOnlyDictionary<string, ModelProviderState> _modelProviderStates;
     private readonly ModelProviderSelectorCoordinator _modelProviderSelectorCoordinator;
     private readonly Func<SessionViewDescriptor?> _getSelectedThread;
     private readonly Func<string, OpenThreadState?> _findOpenThread;
@@ -23,7 +23,7 @@ internal sealed class ModelCatalogCoordinator
     private readonly Action<string, StatusTone> _setStatus;
 
     public ModelCatalogCoordinator(
-        IReadOnlyDictionary<string, ModelProviderState> chatBackendStates,
+        IReadOnlyDictionary<string, ModelProviderState> modelProviderStates,
         ModelProviderSelectorCoordinator modelProviderSelectorCoordinator,
         Func<SessionViewDescriptor?> getSelectedThread,
         Func<string, OpenThreadState?> findOpenThread,
@@ -34,7 +34,7 @@ internal sealed class ModelCatalogCoordinator
         Action focusReasoning,
         Action<string, StatusTone> setStatus)
     {
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
         ArgumentNullException.ThrowIfNull(modelProviderSelectorCoordinator);
         ArgumentNullException.ThrowIfNull(getSelectedThread);
         ArgumentNullException.ThrowIfNull(findOpenThread);
@@ -45,7 +45,7 @@ internal sealed class ModelCatalogCoordinator
         ArgumentNullException.ThrowIfNull(focusReasoning);
         ArgumentNullException.ThrowIfNull(setStatus);
 
-        _chatBackendStates = chatBackendStates;
+        _modelProviderStates = modelProviderStates;
         _modelProviderSelectorCoordinator = modelProviderSelectorCoordinator;
         _getSelectedThread = getSelectedThread;
         _findOpenThread = findOpenThread;
@@ -61,7 +61,7 @@ internal sealed class ModelCatalogCoordinator
     {
         var (providerKey, modelId) = ResolveCurrentModelSelection();
         new ModelCatalogDialog(
-            _chatBackendStates,
+            _modelProviderStates,
             providerKey,
             modelId,
             SelectModelAsync,
@@ -92,7 +92,7 @@ internal sealed class ModelCatalogCoordinator
         {
             var tabProviderKey = tab.ProviderId.Value;
             var tabModelId = tab.ModelId;
-            if (string.IsNullOrWhiteSpace(tabModelId) && _chatBackendStates.TryGetValue(tabProviderKey, out var tabBackendState))
+            if (string.IsNullOrWhiteSpace(tabModelId) && _modelProviderStates.TryGetValue(tabProviderKey, out var tabBackendState))
             {
                 tabModelId = tabBackendState.SelectedModelId;
             }
@@ -101,7 +101,7 @@ internal sealed class ModelCatalogCoordinator
         }
 
         var providerKey = _getPreferredModelProviderId().Value;
-        var modelId = _chatBackendStates.TryGetValue(providerKey, out var backendState)
+        var modelId = _modelProviderStates.TryGetValue(providerKey, out var backendState)
             ? backendState.SelectedModelId
             : null;
         return (providerKey, modelId);

@@ -140,7 +140,7 @@ public sealed class XaiDirectProviderTests
         using var temp = TestTempDirectory.Create();
         WriteCachedCredential(temp.Path, "xai");
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
-        var backend = new XaiDirectAgentBackend(new XaiAgentBackendOptions
+        var backend = new XaiDirectModelProviderRuntime(new XaiModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -194,7 +194,7 @@ public sealed class XaiDirectProviderTests
                     "application/json"),
             };
         });
-        var backend = new XaiDirectAgentBackend(new XaiAgentBackendOptions
+        var backend = new XaiDirectModelProviderRuntime(new XaiModelProviderRuntimeOptions
         {
             StateRootPath = temp.Path,
             Providers =
@@ -241,7 +241,7 @@ public sealed class XaiDirectProviderTests
         var models = await executor.ListModelsAsync(
             new ModelProviderRuntimeDescriptor
             {
-                ProtocolFamily = XaiDirectAgentBackend.ProtocolFamily,
+                ProtocolFamily = XaiDirectModelProviderRuntime.ProtocolFamily,
                 ProviderKey = "xai",
                 DisplayName = "xAI Grok",
                 TransportKind = LocalAgentTransportKind.OpenAIResponses,

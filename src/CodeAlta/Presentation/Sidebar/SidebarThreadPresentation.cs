@@ -27,12 +27,12 @@ internal static class SidebarThreadPresentation
             return displayName.Trim();
         }
 
-        if (string.Equals(providerKey, AgentBackendIds.Copilot.Value, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(providerKey, ModelProviderIds.Copilot.Value, StringComparison.OrdinalIgnoreCase))
         {
             return "Copilot";
         }
 
-        if (string.Equals(providerKey, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(providerKey, ModelProviderIds.Codex.Value, StringComparison.OrdinalIgnoreCase))
         {
             return "Codex";
         }

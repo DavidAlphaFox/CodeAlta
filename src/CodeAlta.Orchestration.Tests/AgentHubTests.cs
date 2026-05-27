@@ -81,9 +81,9 @@ public sealed class AgentHubTests
             => throw new NotSupportedException();
     }
 
-    private sealed class CountingSession(AgentBackendId backendId, string sessionId = "provider-session") : IAgentSession
+    private sealed class CountingSession(ModelProviderId ProviderId, string sessionId = "provider-session") : IAgentSession
     {
-        public AgentBackendId BackendId { get; } = backendId;
+        public ModelProviderId ProviderId { get; } = ProviderId;
 
         public string SessionId { get; } = sessionId;
 

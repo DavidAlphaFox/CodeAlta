@@ -5,7 +5,7 @@ namespace CodeAlta.Presentation.Threads;
 
 internal sealed record ThreadInfoReport(
     string ThreadTitle,
-    string BackendName,
+    string ProviderName,
     string ThreadId,
     string WorkingDirectory,
     string? ModelName,
@@ -17,7 +17,7 @@ internal sealed record ThreadInfoReport(
     int? UserMessageCount,
     int? AssistantMessageCount,
     ThreadInfoStorageLocation? StorageLocation,
-    IReadOnlyList<ThreadInfoFact> BackendFacts,
+    IReadOnlyList<ThreadInfoFact> ProviderFacts,
     IReadOnlyList<LocalAgentLoadedSkillState> LoadedSkills);
 
 internal sealed record ThreadInfoStorageLocation(

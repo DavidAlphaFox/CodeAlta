@@ -18,11 +18,11 @@ internal static class ModelProviderPresentation
     }
 
     public static Dictionary<string, ModelProviderState> CreateProviderStates(
-        IReadOnlyList<ModelProviderDescriptor> backendDescriptors)
+        IReadOnlyList<ModelProviderDescriptor> providerDescriptors)
     {
-        ArgumentNullException.ThrowIfNull(backendDescriptors);
+        ArgumentNullException.ThrowIfNull(providerDescriptors);
 
-        return backendDescriptors.ToDictionary(
+        return providerDescriptors.ToDictionary(
             static descriptor => descriptor.ProviderId.Value,
             static descriptor => new ModelProviderState(descriptor.ProviderId, descriptor.DisplayName),
             StringComparer.OrdinalIgnoreCase);
@@ -38,11 +38,11 @@ internal static class ModelProviderPresentation
     }
 
     public static List<ModelProviderOption> BuildProviderOptions(
-        IReadOnlyList<ModelProviderDescriptor> backendDescriptors)
+        IReadOnlyList<ModelProviderDescriptor> providerDescriptors)
     {
-        ArgumentNullException.ThrowIfNull(backendDescriptors);
+        ArgumentNullException.ThrowIfNull(providerDescriptors);
 
-        return backendDescriptors
+        return providerDescriptors
             .Select(static descriptor => new ModelProviderOption(descriptor.ProviderId, descriptor.DisplayName))
             .ToList();
     }
@@ -101,9 +101,9 @@ internal static class ModelProviderPresentation
 
     public static ModelProviderId ResolveProviderSelection(
         ModelProviderId currentSelection,
-        ModelProviderId requestedBackend,
-        bool adoptRequestedBackend)
-        => adoptRequestedBackend ? requestedBackend : currentSelection;
+        ModelProviderId requestedProvider,
+        bool adoptRequestedProvider)
+        => adoptRequestedProvider ? requestedProvider : currentSelection;
 
     public static string BuildProviderStatusMarkup(
         IEnumerable<ModelProviderState> backendStates,

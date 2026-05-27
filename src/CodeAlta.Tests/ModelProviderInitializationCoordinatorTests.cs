@@ -12,11 +12,11 @@ public sealed class ModelProviderInitializationCoordinatorTests
     [TestMethod]
     public async Task InitializeAsync_RefreshesLoadedNonProcessBackedBackend()
     {
-        var backendId = new AgentBackendId("openai");
-        var backend = new CountingBackend(backendId);
-        var descriptor = new ModelProviderDescriptor(backendId, "OpenAI");
+        var ProviderId = new ModelProviderId("openai");
+        var backend = new CountingBackend(ProviderId);
+        var descriptor = new ModelProviderDescriptor(ProviderId, "OpenAI");
         var initializationService = CreateInitializationService(descriptor, backend);
-        var state = new ModelProviderState(new ModelProviderId(backendId.Value), "OpenAI")
+        var state = new ModelProviderState(new ModelProviderId(ProviderId.Value), "OpenAI")
         {
             Availability = ModelProviderAvailability.Ready,
             StatusMessage = "Ready",
@@ -28,7 +28,7 @@ public sealed class ModelProviderInitializationCoordinatorTests
             [descriptor],
             new Dictionary<string, ModelProviderState>(StringComparer.OrdinalIgnoreCase)
             {
-                [backendId.Value] = state,
+                [ProviderId.Value] = state,
             });
 
         await coordinator.InitializeAsync(CancellationToken.None).ConfigureAwait(false);
@@ -42,17 +42,17 @@ public sealed class ModelProviderInitializationCoordinatorTests
     [TestMethod]
     public async Task RefreshProviderAsync_PreservesSelectedModelWhenMissingFromDiscoveredModels()
     {
-        var backendId = new AgentBackendId("codex");
+        var ProviderId = new ModelProviderId("codex");
         var backend = new CountingBackend(
-            backendId,
+            ProviderId,
             [
                 new AgentModelInfo(
                     "gpt-5.2",
                     SupportedReasoningEfforts: [AgentReasoningEffort.Low, AgentReasoningEffort.Medium]),
             ]);
-        var descriptor = new ModelProviderDescriptor(backendId, "Codex");
+        var descriptor = new ModelProviderDescriptor(ProviderId, "Codex");
         var initializationService = CreateInitializationService(descriptor, backend);
-        var state = new ModelProviderState(new ModelProviderId(backendId.Value), "Codex")
+        var state = new ModelProviderState(new ModelProviderId(ProviderId.Value), "Codex")
         {
             SelectedModelId = "gpt-5.5",
             SelectedReasoningEffort = AgentReasoningEffort.High,
@@ -62,10 +62,10 @@ public sealed class ModelProviderInitializationCoordinatorTests
             [descriptor],
             new Dictionary<string, ModelProviderState>(StringComparer.OrdinalIgnoreCase)
             {
-                [backendId.Value] = state,
+                [ProviderId.Value] = state,
             });
 
-        await coordinator.RefreshProviderAsync(new ModelProviderId(backendId.Value), CancellationToken.None).ConfigureAwait(false);
+        await coordinator.RefreshProviderAsync(new ModelProviderId(ProviderId.Value), CancellationToken.None).ConfigureAwait(false);
 
         CollectionAssert.AreEqual(new[] { "gpt-5.2" }, state.Models.Select(static model => model.Id).ToArray());
         Assert.AreEqual("gpt-5.5", state.SelectedModelId);
@@ -75,11 +75,11 @@ public sealed class ModelProviderInitializationCoordinatorTests
     [TestMethod]
     public async Task RefreshProviderAsync_UpdatesUiStateAfterProviderRefresh()
     {
-        var backendId = new AgentBackendId("codex");
-        var backend = new CountingBackend(backendId);
-        var descriptor = new ModelProviderDescriptor(backendId, "ChatGPT");
+        var ProviderId = new ModelProviderId("codex");
+        var backend = new CountingBackend(ProviderId);
+        var descriptor = new ModelProviderDescriptor(ProviderId, "ChatGPT");
         var initializationService = CreateInitializationService(descriptor, backend);
-        var state = new ModelProviderState(new ModelProviderId(backendId.Value), "ChatGPT");
+        var state = new ModelProviderState(new ModelProviderId(ProviderId.Value), "ChatGPT");
         var queuedUiActions = new Queue<Action>();
         var publishedEvents = new List<ShellFrontendEvent>();
         var coordinator = new ModelProviderInitializationCoordinator(
@@ -87,12 +87,12 @@ public sealed class ModelProviderInitializationCoordinatorTests
             [descriptor],
             new Dictionary<string, ModelProviderState>(StringComparer.OrdinalIgnoreCase)
             {
-                [backendId.Value] = state,
+                [ProviderId.Value] = state,
             },
             action => queuedUiActions.Enqueue(action),
             CreatePublisher(publishedEvents));
 
-        await coordinator.RefreshProviderAsync(new ModelProviderId(backendId.Value), CancellationToken.None).ConfigureAwait(false);
+        await coordinator.RefreshProviderAsync(new ModelProviderId(ProviderId.Value), CancellationToken.None).ConfigureAwait(false);
 
         Assert.AreEqual(ModelProviderAvailability.Unknown, state.Availability);
 
@@ -102,16 +102,16 @@ public sealed class ModelProviderInitializationCoordinatorTests
         }
 
         Assert.AreEqual(ModelProviderAvailability.Ready, state.Availability);
-        Assert.IsTrue(publishedEvents.OfType<ModelProviderStateChangedEvent>().Any(evt => evt.ModelProviderId == backendId.Value));
+        Assert.IsTrue(publishedEvents.OfType<ModelProviderStateChangedEvent>().Any(evt => evt.ModelProviderId == ProviderId.Value));
         Assert.IsTrue(publishedEvents.OfType<HeaderChangedEvent>().Any());
     }
 
     [TestMethod]
     public async Task InitializeAsync_CreatesMissingBackendStateBeforeRefreshingModels()
     {
-        var backendId = new AgentBackendId("gemini");
-        var backend = new CountingBackend(backendId);
-        var descriptor = new ModelProviderDescriptor(backendId, "Gemini");
+        var ProviderId = new ModelProviderId("gemini");
+        var backend = new CountingBackend(ProviderId);
+        var descriptor = new ModelProviderDescriptor(ProviderId, "Gemini");
         var initializationService = CreateInitializationService(descriptor, backend);
         var states = new Dictionary<string, ModelProviderState>(StringComparer.OrdinalIgnoreCase);
         var coordinator = CreateCoordinator(
@@ -121,7 +121,7 @@ public sealed class ModelProviderInitializationCoordinatorTests
 
         await coordinator.InitializeAsync(CancellationToken.None).ConfigureAwait(false);
 
-        Assert.IsTrue(states.TryGetValue(backendId.Value, out var state));
+        Assert.IsTrue(states.TryGetValue(ProviderId.Value, out var state));
         Assert.AreEqual("Gemini", state.DisplayName);
         Assert.AreEqual(1, backend.ListModelsCount);
         Assert.AreEqual(ModelProviderAvailability.Ready, state.Availability);
@@ -131,10 +131,10 @@ public sealed class ModelProviderInitializationCoordinatorTests
     [TestMethod]
     public async Task InitializeAsync_DropsStaleQueuedProviderInitializationStatus()
     {
-        var backendId = new AgentBackendId("openai");
-        var descriptor = new ModelProviderDescriptor(backendId, "OpenAI");
-        var initializationService = CreateInitializationService(descriptor, new CountingBackend(backendId));
-        var state = new ModelProviderState(new ModelProviderId(backendId.Value), "OpenAI");
+        var ProviderId = new ModelProviderId("openai");
+        var descriptor = new ModelProviderDescriptor(ProviderId, "OpenAI");
+        var initializationService = CreateInitializationService(descriptor, new CountingBackend(ProviderId));
+        var state = new ModelProviderState(new ModelProviderId(ProviderId.Value), "OpenAI");
         var queuedUiActions = new List<Action>();
         var providerStatuses = new List<string?>();
         var coordinator = new ModelProviderInitializationCoordinator(
@@ -142,7 +142,7 @@ public sealed class ModelProviderInitializationCoordinatorTests
             [descriptor],
             new Dictionary<string, ModelProviderState>(StringComparer.OrdinalIgnoreCase)
             {
-                [backendId.Value] = state,
+                [ProviderId.Value] = state,
             },
             action => queuedUiActions.Add(action),
             CreatePublisher(),
@@ -231,19 +231,19 @@ public sealed class ModelProviderInitializationCoordinatorTests
             => Task.FromResult(action());
     }
 
-    private sealed class CountingBackend : IAgentBackend
+    private sealed class CountingBackend : ITestModelProviderSessionRuntime
     {
         private readonly IReadOnlyList<AgentModelInfo> _models;
 
-        public CountingBackend(AgentBackendId backendId, IReadOnlyList<AgentModelInfo>? models = null)
+        public CountingBackend(ModelProviderId providerId, IReadOnlyList<AgentModelInfo>? models = null)
         {
-            BackendId = backendId;
+            ProviderId = providerId;
             _models = models ?? [new AgentModelInfo("new-model")];
         }
 
-        public AgentBackendId BackendId { get; }
+        public ModelProviderId ProviderId { get; }
 
-        public string DisplayName => BackendId.Value;
+        public string DisplayName => ProviderId.Value;
 
         public int StartCount { get; private set; }
 

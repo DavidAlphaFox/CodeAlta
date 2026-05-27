@@ -53,7 +53,7 @@ public sealed class WorkThreadPluginEventObserver
                 ProjectId = context.ProjectId,
                 ProjectPath = context.ProjectPath,
                 ThreadId = context.ThreadId ?? context.ThreadDraftId,
-                BackendId = context.ModelProviderId,
+                ProviderId = context.ModelProviderId,
                 Model = context.ModelId,
                 HasInteractiveUi = false,
                 IsHeadless = true,

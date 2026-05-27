@@ -537,7 +537,7 @@ public static class LocalAgentBuiltInToolFactory
         var login = GetOptionalBool(invocation.Arguments, "login") ?? false;
 
         var permissionRequest = new AgentCommandPermissionRequest(
-            options.BackendId,
+            options.ProviderId,
             options.SessionId,
             DateTimeOffset.UtcNow,
             RunId: null,
@@ -980,7 +980,7 @@ public static class LocalAgentBuiltInToolFactory
         }
 
         var request = new AgentUserInputRequest(
-            options.BackendId,
+            options.ProviderId,
             options.SessionId,
             DateTimeOffset.UtcNow,
             null,
@@ -1013,14 +1013,14 @@ public static class LocalAgentBuiltInToolFactory
         }
 
         return !string.Equals(toolName, "apply_patch", StringComparison.Ordinal) ||
-               IsApplyPatchSupported(options.Provider, options.BackendId);
+               IsApplyPatchSupported(options.Provider, options.ProviderId);
     }
 
-    private static bool IsApplyPatchSupported(ModelProviderRuntimeDescriptor? provider, AgentBackendId backendId)
+    private static bool IsApplyPatchSupported(ModelProviderRuntimeDescriptor? provider, ModelProviderId ProviderId)
     {
         if (provider is null)
         {
-            return backendId == AgentBackendIds.OpenAIResponses || backendId == AgentBackendIds.OpenAIChat;
+            return ProviderId == ModelProviderIds.OpenAIResponses || ProviderId == ModelProviderIds.OpenAIChat;
         }
 
         if (provider.TransportKind is not (LocalAgentTransportKind.OpenAIResponses or LocalAgentTransportKind.OpenAIChatCompletions))
@@ -1065,7 +1065,7 @@ public static class LocalAgentBuiltInToolFactory
     {
         var workingDirectory = GetWorkingDirectoryRoot(options);
         var permissionRequest = new AgentFileChangePermissionRequest(
-            options.BackendId,
+            options.ProviderId,
             options.SessionId,
             DateTimeOffset.UtcNow,
             RunId: null,

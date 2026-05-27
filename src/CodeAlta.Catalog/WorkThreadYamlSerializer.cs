@@ -17,8 +17,9 @@ public sealed class WorkThreadYamlSerializer
         [JsonPropertyName("kind")]
         public string? Kind { get; set; }
 
+        // Persisted front matter uses backend_id; the in-memory API exposes provider terminology.
         [JsonPropertyName("backend_id")]
-        public string? BackendId { get; set; }
+        public string? ProviderId { get; set; }
 
         [JsonPropertyName("provider_key")]
         public string? ProviderKey { get; set; }
@@ -98,14 +99,14 @@ public sealed class WorkThreadYamlSerializer
         var document = ParseFrontMatter(markdown);
         var frontMatter = YamlSerializer.Deserialize<WorkThreadFrontMatter>(document.FrontMatter) ?? new WorkThreadFrontMatter();
 
-        var threadId = MigrateThreadId(frontMatter.ThreadId, ExtractLegacySessionId(document.FrontMatter), frontMatter.BackendId, frontMatter.ProviderKey);
+        var threadId = MigrateThreadId(frontMatter.ThreadId, ExtractLegacySessionId(document.FrontMatter), frontMatter.ProviderId, frontMatter.ProviderKey);
 
         return new SessionViewDescriptor
         {
             ThreadId = threadId,
             Kind = ParseKind(frontMatter.Kind),
-            BackendId = frontMatter.BackendId ?? string.Empty,
-            ProviderKey = frontMatter.ProviderKey ?? frontMatter.BackendId,
+            ProviderId = frontMatter.ProviderId ?? string.Empty,
+            ProviderKey = frontMatter.ProviderKey ?? frontMatter.ProviderId,
             ProjectRef = frontMatter.ProjectRef,
             ParentThreadId = frontMatter.ParentThreadId,
             CreatedBy = frontMatter.CreatedBy,
@@ -141,7 +142,7 @@ public sealed class WorkThreadYamlSerializer
                 WorkThreadKind.InternalThread => "internal_thread",
                 _ => throw new InvalidOperationException($"Unsupported thread kind '{descriptor.Kind}'."),
             },
-            BackendId = descriptor.BackendId,
+            ProviderId = descriptor.ProviderId,
             ProviderKey = descriptor.ResolvedProviderKey,
             ProjectRef = descriptor.ProjectRef,
             ParentThreadId = descriptor.ParentThreadId,
@@ -255,7 +256,7 @@ public sealed class WorkThreadYamlSerializer
     private static string MigrateThreadId(
         string? persistedThreadId,
         string? legacySessionId,
-        string? backendId,
+        string? ProviderId,
         string? providerKey)
     {
         var threadId = NormalizeOptionalText(persistedThreadId);
@@ -273,7 +274,7 @@ public sealed class WorkThreadYamlSerializer
                 return sessionId;
             }
 
-            if (TryStripKnownProviderPrefix(threadId, backendId, providerKey, out var stripped) &&
+            if (TryStripKnownProviderPrefix(threadId, ProviderId, providerKey, out var stripped) &&
                 string.Equals(stripped, sessionId, StringComparison.Ordinal))
             {
                 return sessionId;
@@ -288,14 +289,14 @@ public sealed class WorkThreadYamlSerializer
             return string.Empty;
         }
 
-        return TryStripKnownProviderPrefix(threadId, backendId, providerKey, out var migratedThreadId)
+        return TryStripKnownProviderPrefix(threadId, ProviderId, providerKey, out var migratedThreadId)
             ? migratedThreadId
             : threadId;
     }
 
     private static bool TryStripKnownProviderPrefix(
         string threadId,
-        string? backendId,
+        string? ProviderId,
         string? providerKey,
         out string stripped)
     {
@@ -307,7 +308,7 @@ public sealed class WorkThreadYamlSerializer
         }
 
         var prefix = threadId[..separatorIndex];
-        if (!IsKnownProviderPrefix(prefix, backendId, providerKey))
+        if (!IsKnownProviderPrefix(prefix, ProviderId, providerKey))
         {
             return false;
         }
@@ -316,8 +317,8 @@ public sealed class WorkThreadYamlSerializer
         return true;
     }
 
-    private static bool IsKnownProviderPrefix(string prefix, string? backendId, string? providerKey)
-        => string.Equals(prefix, backendId, StringComparison.OrdinalIgnoreCase) ||
+    private static bool IsKnownProviderPrefix(string prefix, string? ProviderId, string? providerKey)
+        => string.Equals(prefix, ProviderId, StringComparison.OrdinalIgnoreCase) ||
            string.Equals(prefix, providerKey, StringComparison.OrdinalIgnoreCase);
 
     private static string? NormalizeOptionalText(string? value)

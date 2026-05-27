@@ -30,7 +30,7 @@ public sealed class CodeAltaAppSidebarTests
             title: "Recovered thread",
             kind: WorkThreadKind.ProjectThread,
             projectId: project.Id,
-            backendId: AgentBackendIds.Codex.Value,
+            ProviderId: ModelProviderIds.Codex.Value,
             workingDirectory: project.ProjectPath,
             lastActiveAt: timestamp.AddMinutes(2));
         var internalThread = CreateThread(
@@ -38,7 +38,7 @@ public sealed class CodeAltaAppSidebarTests
             title: "Internal helper",
             kind: WorkThreadKind.InternalThread,
             projectId: project.Id,
-            backendId: AgentBackendIds.Codex.Value,
+            ProviderId: ModelProviderIds.Codex.Value,
             workingDirectory: project.ProjectPath,
             lastActiveAt: timestamp.AddMinutes(1));
         var unrelatedThread = CreateThread(
@@ -46,7 +46,7 @@ public sealed class CodeAltaAppSidebarTests
             title: "Other thread",
             kind: WorkThreadKind.ProjectThread,
             projectId: otherProject.Id,
-            backendId: AgentBackendIds.Codex.Value,
+            ProviderId: ModelProviderIds.Codex.Value,
             workingDirectory: otherProject.ProjectPath,
             lastActiveAt: timestamp);
 
@@ -85,9 +85,9 @@ public sealed class CodeAltaAppSidebarTests
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var parent = CreateThread("thread-parent", "Parent", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, timestamp);
-        var child = CreateThread("thread-child", "Child", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(1));
-        var crossProjectChild = CreateThread("thread-cross-project", "Cross project", WorkThreadKind.ProjectThread, "project-2", AgentBackendIds.Codex.Value, @"C:\other", timestamp.AddMinutes(2));
+        var parent = CreateThread("thread-parent", "Parent", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
+        var child = CreateThread("thread-child", "Child", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(1));
+        var crossProjectChild = CreateThread("thread-cross-project", "Cross project", WorkThreadKind.ProjectThread, "project-2", ModelProviderIds.Codex.Value, @"C:\other", timestamp.AddMinutes(2));
         child.ParentThreadId = parent.ThreadId;
         crossProjectChild.ParentThreadId = parent.ThreadId;
 
@@ -116,9 +116,9 @@ public sealed class CodeAltaAppSidebarTests
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var missingParent = CreateThread("thread-missing", "Missing parent", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(1));
-        var cycleParent = CreateThread("thread-cycle-parent", "Cycle parent", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(2));
-        var cycleChild = CreateThread("thread-cycle-child", "Cycle child", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(3));
+        var missingParent = CreateThread("thread-missing", "Missing parent", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(1));
+        var cycleParent = CreateThread("thread-cycle-parent", "Cycle parent", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(2));
+        var cycleChild = CreateThread("thread-cycle-child", "Cycle child", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp.AddMinutes(3));
         missingParent.ParentThreadId = "thread-no-longer-present";
         cycleParent.ParentThreadId = cycleChild.ThreadId;
         cycleChild.ParentThreadId = cycleParent.ThreadId;
@@ -154,8 +154,8 @@ public sealed class CodeAltaAppSidebarTests
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
         var archivedProject = CreateProject("project-2", "Archived", @"C:\archive");
         archivedProject.Archived = true;
-        var visibleThread = CreateThread("thread-1", "Visible", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"));
-        var archivedThread = CreateThread("thread-2", "Archived", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T12:01:00+00:00"));
+        var visibleThread = CreateThread("thread-1", "Visible", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"));
+        var archivedThread = CreateThread("thread-2", "Archived", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T12:01:00+00:00"));
         archivedThread.Status = WorkThreadStatus.Archived;
 
         var projection = BuildProjection(
@@ -178,7 +178,7 @@ public sealed class CodeAltaAppSidebarTests
             "Global session",
             WorkThreadKind.GlobalThread,
             projectId: null,
-            AgentBackendIds.Codex.Value,
+            ModelProviderIds.Codex.Value,
             @"C:\global",
             DateTimeOffset.Parse("2026-03-29T12:00:00+00:00"));
 
@@ -218,8 +218,8 @@ public sealed class CodeAltaAppSidebarTests
         var newerProject = CreateProject("project-2", "Zulu", @"C:\zulu");
         var threads = new[]
         {
-            CreateThread("thread-1", "Older", WorkThreadKind.ProjectThread, olderProject.Id, AgentBackendIds.Codex.Value, olderProject.ProjectPath, timestamp),
-            CreateThread("thread-2", "Newer", WorkThreadKind.ProjectThread, newerProject.Id, AgentBackendIds.Codex.Value, newerProject.ProjectPath, timestamp.AddDays(1)),
+            CreateThread("thread-1", "Older", WorkThreadKind.ProjectThread, olderProject.Id, ModelProviderIds.Codex.Value, olderProject.ProjectPath, timestamp),
+            CreateThread("thread-2", "Newer", WorkThreadKind.ProjectThread, newerProject.Id, ModelProviderIds.Codex.Value, newerProject.ProjectPath, timestamp.AddDays(1)),
         };
 
         var projection = BuildProjection(
@@ -256,7 +256,7 @@ public sealed class CodeAltaAppSidebarTests
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, timestamp);
+        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
         var rows = new Dictionary<string, SidebarNodeViewModel>(StringComparer.OrdinalIgnoreCase);
 
         var first = SidebarTreeProjectionBuilder.Build(
@@ -293,7 +293,7 @@ public sealed class CodeAltaAppSidebarTests
             title: "Recovered thread",
             kind: WorkThreadKind.ProjectThread,
             projectId: project.Id,
-            backendId: AgentBackendIds.Codex.Value,
+            ProviderId: ModelProviderIds.Codex.Value,
             workingDirectory: project.ProjectPath,
             lastActiveAt: DateTimeOffset.Parse("2026-03-29T10:00:00+00:00"));
         var projection = BuildProjection(
@@ -336,7 +336,7 @@ public sealed class CodeAltaAppSidebarTests
     public void SidebarView_ApplyProjectionBuildsSelectableProjectNode()
     {
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
+        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
         var projection = BuildProjection(
             [project],
             [thread],
@@ -371,7 +371,7 @@ public sealed class CodeAltaAppSidebarTests
     [TestMethod]
     public void SidebarView_ApplyProjectionBuildsSelectableGlobalNodeWithOpenThreadsAction()
     {
-        var globalThread = CreateThread("global-1", "Recovered global thread", WorkThreadKind.GlobalThread, null, AgentBackendIds.Codex.Value, @"C:\global", DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
+        var globalThread = CreateThread("global-1", "Recovered global thread", WorkThreadKind.GlobalThread, null, ModelProviderIds.Codex.Value, @"C:\global", DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
         var projection = BuildProjection(
             projects: [],
             threads: [globalThread],
@@ -443,7 +443,7 @@ public sealed class CodeAltaAppSidebarTests
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, timestamp);
+        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
         var rows = new Dictionary<string, SidebarNodeViewModel>(StringComparer.OrdinalIgnoreCase);
 
         SidebarTreeProjectionBuilder.Build(
@@ -467,7 +467,7 @@ public sealed class CodeAltaAppSidebarTests
     {
         var timestamp = DateTimeOffset.Parse("2026-03-29T10:00:00+00:00");
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, timestamp);
+        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, timestamp);
         var rows = new Dictionary<string, SidebarNodeViewModel>(StringComparer.OrdinalIgnoreCase);
 
         SidebarTreeProjectionBuilder.Build(
@@ -535,7 +535,7 @@ public sealed class CodeAltaAppSidebarTests
     public void SidebarView_KeyNavigationNotifiesSelectedTargetChanged()
     {
         var project = CreateProject("project-1", "CodeAlta", @"C:\repo");
-        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, AgentBackendIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
+        var thread = CreateThread("thread-1", "Recovered thread", WorkThreadKind.ProjectThread, project.Id, ModelProviderIds.Codex.Value, project.ProjectPath, DateTimeOffset.Parse("2026-03-29T10:04:00+00:00"));
         var projection = BuildProjection(
             [project],
             [thread],
@@ -685,7 +685,7 @@ public sealed class CodeAltaAppSidebarTests
         string title,
         WorkThreadKind kind,
         string? projectId,
-        string backendId,
+        string ProviderId,
         string workingDirectory,
         DateTimeOffset lastActiveAt)
     {
@@ -693,7 +693,7 @@ public sealed class CodeAltaAppSidebarTests
         {
             ThreadId = threadId,
             Kind = kind,
-            BackendId = backendId,
+            ProviderId = ProviderId,
             ProjectRef = projectId,
             WorkingDirectory = workingDirectory,
             Title = title,

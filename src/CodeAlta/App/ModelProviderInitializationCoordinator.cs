@@ -11,7 +11,7 @@ internal sealed class ModelProviderInitializationCoordinator
 {
     private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.App.ModelProviderInitialization");
     private readonly IModelProviderInitializationService _providerInitializationService;
-    private readonly IReadOnlyList<ModelProviderDescriptor> _backendDescriptors;
+    private readonly IReadOnlyList<ModelProviderDescriptor> _providerDescriptors;
     private readonly Dictionary<string, ModelProviderState> _modelProviderStates;
     private readonly Action<Action> _dispatchToUi;
     private readonly FrontendEventPublisher _frontendEvents;
@@ -20,20 +20,20 @@ internal sealed class ModelProviderInitializationCoordinator
 
     public ModelProviderInitializationCoordinator(
         IModelProviderInitializationService providerInitializationService,
-        IReadOnlyList<ModelProviderDescriptor> backendDescriptors,
+        IReadOnlyList<ModelProviderDescriptor> providerDescriptors,
         Dictionary<string, ModelProviderState> modelProviderStates,
         Action<Action> dispatchToUi,
         FrontendEventPublisher frontendEvents,
         Action<string?>? setProviderInitializationStatus = null)
     {
         ArgumentNullException.ThrowIfNull(providerInitializationService);
-        ArgumentNullException.ThrowIfNull(backendDescriptors);
+        ArgumentNullException.ThrowIfNull(providerDescriptors);
         ArgumentNullException.ThrowIfNull(modelProviderStates);
         ArgumentNullException.ThrowIfNull(dispatchToUi);
         ArgumentNullException.ThrowIfNull(frontendEvents);
 
         _providerInitializationService = providerInitializationService;
-        _backendDescriptors = backendDescriptors;
+        _providerDescriptors = providerDescriptors;
         _modelProviderStates = modelProviderStates;
         _dispatchToUi = dispatchToUi;
         _frontendEvents = frontendEvents;
@@ -42,8 +42,8 @@ internal sealed class ModelProviderInitializationCoordinator
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
-        var progress = new ProviderInitializationProgress(_backendDescriptors);
-        var descriptorsByProviderId = _backendDescriptors.ToDictionary(
+        var progress = new ProviderInitializationProgress(_providerDescriptors);
+        var descriptorsByProviderId = _providerDescriptors.ToDictionary(
             static descriptor => ModelProviderId.NormalizeValue(descriptor.ProviderId.Value),
             StringComparer.OrdinalIgnoreCase);
         var completedProviderIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -198,7 +198,7 @@ internal sealed class ModelProviderInitializationCoordinator
             }
         }
 
-        var state = await EnsureBackendStateAsync(providerState.ProviderId, descriptor.DisplayName, cancellationToken).ConfigureAwait(false);
+        var state = await EnsureProviderStateAsync(providerState.ProviderId, descriptor.DisplayName, cancellationToken).ConfigureAwait(false);
         _dispatchToUi(
             () =>
             {
@@ -227,7 +227,7 @@ internal sealed class ModelProviderInitializationCoordinator
         string? displayName,
         CancellationToken cancellationToken)
     {
-        var state = await EnsureBackendStateAsync(providerId, displayName, cancellationToken).ConfigureAwait(false);
+        var state = await EnsureProviderStateAsync(providerId, displayName, cancellationToken).ConfigureAwait(false);
         if (CanReuseLoadedProviderState(providerId, state))
         {
             LogInfo(
@@ -320,7 +320,7 @@ internal sealed class ModelProviderInitializationCoordinator
             : selectedModelId.Trim();
     }
 
-    private async Task<ModelProviderState> EnsureBackendStateAsync(
+    private async Task<ModelProviderState> EnsureProviderStateAsync(
         ModelProviderId providerId,
         string? displayName,
         CancellationToken cancellationToken)

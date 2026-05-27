@@ -9,8 +9,8 @@ public sealed partial class ProjectThreadsDialogRowViewModel
     {
         ThreadId = string.Empty;
         Title = string.Empty;
-        BackendId = string.Empty;
-        BackendDisplayName = string.Empty;
+        ProviderId = string.Empty;
+        ProviderDisplayName = string.Empty;
         LastUpdatedRelative = "never";
         LastUpdatedExact = "Never";
     }
@@ -25,10 +25,10 @@ public sealed partial class ProjectThreadsDialogRowViewModel
     public partial string Title { get; set; }
 
     [Bindable]
-    public partial string BackendId { get; set; }
+    public partial string ProviderId { get; set; }
 
     [Bindable]
-    public partial string BackendDisplayName { get; set; }
+    public partial string ProviderDisplayName { get; set; }
 
     [Bindable]
     public partial WorkThreadKind ThreadKind { get; set; }

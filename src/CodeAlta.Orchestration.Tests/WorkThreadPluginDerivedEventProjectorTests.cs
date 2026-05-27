@@ -157,7 +157,7 @@ public sealed class WorkThreadPluginDerivedEventProjectorTests
 
     private static AgentEvent CreateAgentEvent()
         => new AgentErrorEvent(
-            new AgentBackendId("provider-1"),
+            new ModelProviderId("provider-1"),
             "session-1",
             DateTimeOffset.UtcNow,
             "diagnostic");
@@ -166,7 +166,7 @@ public sealed class WorkThreadPluginDerivedEventProjectorTests
         =>
         [
             new AgentActivityEvent(
-                new AgentBackendId("provider-1"),
+                new ModelProviderId("provider-1"),
                 "session-1",
                 startedAt,
                 runId,
@@ -177,7 +177,7 @@ public sealed class WorkThreadPluginDerivedEventProjectorTests
                 Name: "turn",
                 Message: null),
             new AgentContentDeltaEvent(
-                new AgentBackendId("provider-1"),
+                new ModelProviderId("provider-1"),
                 "session-1",
                 startedAt.AddSeconds(2),
                 runId,
@@ -186,7 +186,7 @@ public sealed class WorkThreadPluginDerivedEventProjectorTests
                 ParentActivityId: "turn-1",
                 Delta: "hello "),
             new AgentContentDeltaEvent(
-                new AgentBackendId("provider-1"),
+                new ModelProviderId("provider-1"),
                 "session-1",
                 startedAt.AddSeconds(3),
                 runId,
@@ -195,7 +195,7 @@ public sealed class WorkThreadPluginDerivedEventProjectorTests
                 ParentActivityId: "turn-1",
                 Delta: "world"),
             new AgentActivityEvent(
-                new AgentBackendId("provider-1"),
+                new ModelProviderId("provider-1"),
                 "session-1",
                 startedAt.AddSeconds(4),
                 runId,
@@ -206,7 +206,7 @@ public sealed class WorkThreadPluginDerivedEventProjectorTests
                 Name: "read_file",
                 Message: "payload-bytes"),
             new AgentActivityEvent(
-                new AgentBackendId("provider-1"),
+                new ModelProviderId("provider-1"),
                 "session-1",
                 startedAt.AddSeconds(7),
                 runId,

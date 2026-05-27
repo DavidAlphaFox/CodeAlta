@@ -21,7 +21,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
     public void ShouldPromoteAgentEventToThinking_IgnoresToolOutputDeltas()
     {
         var delta = new AgentContentDeltaEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -39,7 +39,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
         var runtimeEvent = new WorkThreadAgentEvent(
             "thread-1",
             new AgentContentDeltaEvent(
-                AgentBackendIds.Codex,
+                ModelProviderIds.Codex,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -57,7 +57,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
         var runtimeEvent = new WorkThreadAgentEvent(
             "thread-1",
             new AgentContentCompletedEvent(
-                AgentBackendIds.Codex,
+                ModelProviderIds.Codex,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -91,7 +91,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
         var observer = new RecordingPluginAgentEventObserver();
         var coordinator = CreateCoordinator(thread, tab, pluginAgentEventObserver: observer);
         var agentEvent = new AgentContentCompletedEvent(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -113,7 +113,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
         var tab = CreateOpenThreadState(thread);
         tab.HistoryLoading = true;
         var hiddenEvent = new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow.AddMinutes(-10),
             null,
@@ -122,7 +122,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             null,
             "Earlier answer");
         var displayedEvent = new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -148,7 +148,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
         var thread = CreateThread();
         var tab = CreateOpenThreadState(thread);
         var hiddenEvent = new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow.AddMinutes(-10),
             null,
@@ -157,7 +157,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             null,
             "Earlier answer");
         var displayedEvent = new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow.AddMinutes(-1),
             null,
@@ -166,7 +166,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             null,
             "Displayed answer");
         var liveEvent = new AgentContentCompletedEvent(
-            AgentBackendIds.Codex,
+            ModelProviderIds.Codex,
             "session-1",
             DateTimeOffset.UtcNow,
             null,
@@ -202,7 +202,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             thread,
             tab,
             new AgentActivityEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -302,7 +302,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             thread,
             tab,
             new AgentContentDeltaEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -314,7 +314,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             thread,
             tab,
             new AgentContentCompletedEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -345,7 +345,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             thread,
             tab,
             new AgentContentCompletedEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -371,7 +371,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             thread,
             tab,
             new AgentContentCompletedEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -395,7 +395,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -423,7 +423,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -445,7 +445,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             thread,
             tab,
             new AgentContentDeltaEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 new AgentRunId("run-1"),
@@ -460,7 +460,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 new AgentRunId("run-1"),
@@ -482,7 +482,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             thread,
             tab,
             new AgentActivityEvent(
-                AgentBackendIds.Codex,
+                ModelProviderIds.Codex,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -512,7 +512,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
         coordinator.ApplyRuntimeEvent(new WorkThreadAgentEvent(
             thread.ThreadId,
             new AgentContentCompletedEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -589,7 +589,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
         coordinator.ApplyRuntimeEvent(new WorkThreadAgentEvent(
             thread.ThreadId,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 new AgentRunId(runId),
@@ -614,7 +614,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -643,7 +643,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
             new WorkThreadAgentEvent(
                 thread.ThreadId,
                 new AgentSessionUpdateEvent(
-                    AgentBackendIds.Copilot,
+                    ModelProviderIds.Copilot,
                     "session-1",
                     DateTimeOffset.UtcNow,
                     null,
@@ -756,7 +756,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
         {
             ThreadId = "thread-1",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = AgentBackendIds.Copilot.Value,
+            ProviderId = ModelProviderIds.Copilot.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Review startup",
@@ -775,7 +775,7 @@ public sealed class ThreadRuntimeEventCoordinatorTests
         string developerInstructions,
         string changeKind)
         => new(
-            AgentBackendIds.Copilot,
+            ModelProviderIds.Copilot,
             "session-1",
             timestamp,
             null,

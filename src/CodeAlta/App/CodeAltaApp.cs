@@ -44,7 +44,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private readonly ShellFrontendHost _frontendHost;
     private readonly FrontendEventPublisher _frontendEvents;
     private readonly ShellProjectionCoordinator _projectionCoordinator;
-    private readonly ModelProviderInitializationCoordinator _chatBackendInitializationCoordinator;
+    private readonly ModelProviderInitializationCoordinator _modelProviderInitializationCoordinator;
     private readonly ShellThreadStateCoordinator _threadStateCoordinator;
     private readonly ShellWorkspaceCoordinator _workspaceCoordinator;
     private readonly SessionHistoryCoordinator _threadHistoryCoordinator;
@@ -59,7 +59,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private readonly ThreadWorkspaceViewModel _threadWorkspaceViewModel;
     private readonly PromptComposerViewModel _promptComposerViewModel;
     private readonly SessionUsageViewModel _sessionUsageViewModel;
-    private readonly Dictionary<string, ModelProviderState> _chatBackendStates;
+    private readonly Dictionary<string, ModelProviderState> _modelProviderStates;
     private readonly SidebarCoordinator _sidebarCoordinator;
     private readonly NavigatorActionCoordinator _navigatorActionCoordinator;
     private readonly ModelProviderSelectorCoordinator _modelProviderSelectorCoordinator;
@@ -99,7 +99,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         CatalogOptions catalogOptions,
         AgentHub agentHub)
         : this(
-            CodeAltaOwnedServices.CreateBuiltInBackendDescriptors(),
+            CodeAltaOwnedServices.CreateBuiltInProviderDescriptors(),
             projectCatalog,
             threadCatalog,
             runtimeService,
@@ -117,7 +117,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     {
         ArgumentNullException.ThrowIfNull(ownedServices);
         return new(
-            ownedServices.BackendDescriptors,
+            ownedServices.ProviderDescriptors,
             ownedServices.ProjectCatalog,
             ownedServices.ThreadCatalog,
             ownedServices.RuntimeService,
@@ -129,7 +129,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             updateService);
     }
 
-    private CodeAltaApp(IReadOnlyList<ModelProviderDescriptor> backendDescriptors,
+    private CodeAltaApp(IReadOnlyList<ModelProviderDescriptor> providerDescriptors,
         ProjectCatalog projectCatalog,
         WorkThreadCatalog threadCatalog,
         SessionRuntimeService runtimeService,
@@ -155,7 +155,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _ownedServices = ownedServices;
         _frontendHost = new ShellFrontendHost(this);
         var composition = CodeAltaFrontendComposition.Create(
-            backendDescriptors,
+            providerDescriptors,
             projectCatalog,
             threadCatalog,
             runtimeService,
@@ -172,7 +172,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _terminalLoopCoordinator = composition.TerminalLoopCoordinator;
         _frontendEvents = composition.FrontendEvents;
         _shellTabService.SetFrontendEvents(_frontendEvents);
-        _chatBackendInitializationCoordinator = composition.ModelProviderInitializationCoordinator;
+        _modelProviderInitializationCoordinator = composition.ModelProviderInitializationCoordinator;
         _threadStateCoordinator = composition.ThreadStateCoordinator;
         _workspaceCoordinator = composition.WorkspaceCoordinator;
         _threadRuntimeEventCoordinator = composition.ThreadRuntimeEventCoordinator;
@@ -185,7 +185,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _threadWorkspaceViewModel = composition.ThreadWorkspaceViewModel;
         _promptComposerViewModel = composition.PromptComposerViewModel;
         _sessionUsageViewModel = composition.SessionUsageViewModel;
-        _chatBackendStates = composition.ModelProviderStates;
+        _modelProviderStates = composition.ModelProviderStates;
         _sidebarCoordinator = composition.SidebarCoordinator;
         _navigatorActionCoordinator = composition.NavigatorActionCoordinator;
         _modelProviderSelectorCoordinator = composition.ModelProviderSelectorCoordinator;
@@ -203,7 +203,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             PublishStartupCatalogProjectionReady,
             FocusPromptEditor,
             SetStatus);
-        _providerUi = new ProviderFrontendCoordinator(_ownedServices, _catalogOptions, _chatBackendInitializationCoordinator, _chatBackendStates, DispatchToUi, composition.FrontendEvents, SetStatus);
+        _providerUi = new ProviderFrontendCoordinator(_ownedServices, _catalogOptions, _modelProviderInitializationCoordinator, _modelProviderStates, DispatchToUi, composition.FrontendEvents, SetStatus);
         _providerDialogCoordinator = new ProviderDialogCoordinator(
             _providerUi,
             () => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()),
@@ -313,7 +313,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         => _modelProviderPreferences.ApplyDraftModelProviderPreference(backendState, _viewState, GetDraftProjectRoot(), GetDraftProjectId());
 
     internal void ApplyThreadPreference(OpenThreadState tab)
-        => _modelProviderPreferences.ApplyThreadPreference(tab, _viewState, GetThreadProjectRoot(tab.Thread), _chatBackendStates);
+        => _modelProviderPreferences.ApplyThreadPreference(tab, _viewState, GetThreadProjectRoot(tab.Thread), _modelProviderStates);
 
     internal void RememberGlobalModelProviderPreference(
         ModelProviderId providerId,
@@ -346,7 +346,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             if (!string.IsNullOrWhiteSpace(providerKey))
             {
                 thread.ProviderKey = providerKey;
-                thread.BackendId = providerKey;
+                thread.ProviderId = providerKey;
             }
 
             thread.ModelId = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
@@ -472,7 +472,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         Func<string?> promptRoot = ResolvePromptRoot;
         var pb = _ownedServices?.PluginHostBridge;
         var pec = pb?.GetPromptEditorContributions() ?? [];
-        var getPromptComposerSession = PromptComposerSessionBindingFactory.Create(_promptDraftUiCoordinator, new PromptImageCapabilityContext(GetSelectedThread, _threadStateCoordinator.FindOpenThread, GetPreferredProviderId, _chatBackendStates), (message, tone) => SetStatus(message, tone: tone));
+        var getPromptComposerSession = PromptComposerSessionBindingFactory.Create(_promptDraftUiCoordinator, new PromptImageCapabilityContext(GetSelectedThread, _threadStateCoordinator.FindOpenThread, GetPreferredProviderId, _modelProviderStates), (message, tone) => SetStatus(message, tone: tone));
         var openHelp = () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.ShowHelpAsync(), "show help");
         var showPalette = () => _shellCommandSurfaceCoordinator.ShowCommandPalette();
         var shellSurface = CodeAltaShellViewFactory.CreateSurface(new CodeAltaShellSurfaceOptions
@@ -549,7 +549,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         => _threadInfoPresenter ??= PopupPresenterFactory.CreateThreadInfoPresenter(
             () => ThreadPaneLayout?.App,
             () => ThreadInput,
-            new ThreadInfoService(_ownedServices!.SessionCatalog, _threadSelectionContext, _chatBackendStates),
+            new ThreadInfoService(_ownedServices!.SessionCatalog, _threadSelectionContext, _modelProviderStates),
             DispatchToUi,
             build => CreateComputedVisual(build));
 
@@ -680,9 +680,9 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     internal async Task PersistViewStateAsync()
         => await _threadStateCoordinator.PersistViewStateAsync();
     internal Task InitializeModelProvidersAsync(CancellationToken cancellationToken)
-        => _chatBackendInitializationCoordinator.InitializeAsync(cancellationToken);
+        => _modelProviderInitializationCoordinator.InitializeAsync(cancellationToken);
     internal Task InitializeModelProviderAsync(ModelProviderId providerId, CancellationToken cancellationToken)
-        => _chatBackendInitializationCoordinator.RefreshProviderAsync(providerId, cancellationToken);
+        => _modelProviderInitializationCoordinator.RefreshProviderAsync(providerId, cancellationToken);
 
     internal void ApplyRecoveredCatalogState(
         IReadOnlyList<ProjectDescriptor> projects,

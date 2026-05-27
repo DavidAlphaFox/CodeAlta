@@ -24,7 +24,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentContentDeltaEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 new AgentRunId("run-1"),
@@ -40,7 +40,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 new AgentRunId("run-1"),
@@ -65,7 +65,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentContentDeltaEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -78,7 +78,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentContentCompletedEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -105,7 +105,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentContentCompletedEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -129,7 +129,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -157,7 +157,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.OpenAIResponses,
+                ModelProviderIds.OpenAIResponses,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 new AgentRunId("run-1"),
@@ -182,7 +182,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.OpenAIResponses,
+                ModelProviderIds.OpenAIResponses,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 new AgentRunId("run-1"),
@@ -241,7 +241,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 new AgentRunId("compaction-run-1"),
@@ -252,7 +252,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentActivityEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 new AgentRunId("compaction-run-1"),
@@ -267,7 +267,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 new AgentRunId("compaction-run-1"),
@@ -296,7 +296,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 new AgentRunId("run-1"),
@@ -321,7 +321,7 @@ public sealed class ThreadRuntimeStateReducerTests
             thread,
             tab,
             new AgentSessionUpdateEvent(
-                AgentBackendIds.Copilot,
+                ModelProviderIds.Copilot,
                 "session-1",
                 DateTimeOffset.UtcNow,
                 null,
@@ -344,7 +344,7 @@ public sealed class ThreadRuntimeStateReducerTests
         {
             ThreadId = "thread-1",
             Kind = WorkThreadKind.ProjectThread,
-            BackendId = AgentBackendIds.Copilot.Value,
+            ProviderId = ModelProviderIds.Copilot.Value,
             ProjectRef = "project-1",
             WorkingDirectory = @"C:\code\CodeAlta",
             Title = "Review startup",

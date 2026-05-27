@@ -81,7 +81,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
     private readonly ILocalAgentCompactionSummaryExecutor _executor = executor ?? throw new ArgumentNullException(nameof(executor));
 
     public async Task<LocalAgentCompactionResult> SummarizeAsync(
-        AgentBackendId backendId,
+        ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
         string sessionId,
         string? modelId,
@@ -107,7 +107,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         if (preparation.OversizedAnchorMessage is not null)
         {
             (oversizedAnchorSynopsis, oversizedAnchorInvocationCount) = await ReduceOversizedAnchorAsync(
-                    backendId,
+                    ProviderId,
                     provider,
                     sessionId,
                     modelId,
@@ -122,7 +122,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         }
 
         var result = await SummarizePreparationAsync(
-                backendId,
+                ProviderId,
                 provider,
                 sessionId,
                 modelId,
@@ -150,7 +150,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
     }
 
     public async Task<LocalAgentCompactionResult> ShrinkSummaryAsync(
-        AgentBackendId backendId,
+        ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
         string sessionId,
         string? modelId,
@@ -172,7 +172,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         var modelVisibleFileActivity = BudgetFileActivityForSummary(completeFileActivity, latestUserRequest, settings, maxOutputTokens);
         var userMessage = BuildShrinkRequestBody(result.Summary, latestUserRequest, modelVisibleFileActivity, checkpointTargetTokens);
         var response = await ExecuteSummaryRequestAsync(
-                backendId,
+                ProviderId,
                 provider,
                 sessionId,
                 modelId,
@@ -205,7 +205,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
     }
 
     private async Task<LocalAgentCompactionResult> SummarizePreparationAsync(
-        AgentBackendId backendId,
+        ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
         string sessionId,
         string? modelId,
@@ -248,7 +248,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
             chunks.Count > 1)
         {
             return await SummarizeChunkedAsync(
-                    backendId,
+                    ProviderId,
                     provider,
                     sessionId,
                     modelId,
@@ -269,7 +269,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         }
 
         var response = await ExecuteSummaryRequestAsync(
-                backendId,
+                ProviderId,
                 provider,
                 sessionId,
                 modelId,
@@ -312,7 +312,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
     }
 
     private async Task<LocalAgentCompactionResult> SummarizeChunkedAsync(
-        AgentBackendId backendId,
+        ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
         string sessionId,
         string? modelId,
@@ -363,7 +363,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
             };
 
             var chunkResult = await SummarizePreparationAsync(
-                    backendId,
+                    ProviderId,
                     provider,
                     sessionId,
                     modelId,
@@ -402,7 +402,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
             };
 
             var mergeResult = await SummarizePreparationAsync(
-                    backendId,
+                    ProviderId,
                     provider,
                     sessionId,
                     modelId,
@@ -486,7 +486,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
     }
 
     private async Task<(string Synopsis, int InvocationCount)> ReduceOversizedAnchorAsync(
-        AgentBackendId backendId,
+        ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
         string sessionId,
         string? modelId,
@@ -505,7 +505,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         }
 
         return await ReduceOversizedAnchorTextAsync(
-                backendId,
+                ProviderId,
                 provider,
                 sessionId,
                 modelId,
@@ -522,7 +522,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
     }
 
     private async Task<(string Synopsis, int InvocationCount)> ReduceOversizedAnchorTextAsync(
-        AgentBackendId backendId,
+        ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
         string sessionId,
         string? modelId,
@@ -558,7 +558,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
                 foreach (var chunkText in chunkTexts)
                 {
                     var (chunkSynopsis, invocationCount) = await ReduceOversizedAnchorTextAsync(
-                            backendId,
+                            ProviderId,
                             provider,
                             sessionId,
                             modelId,
@@ -581,7 +581,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         }
 
         var response = await ExecuteSummaryRequestAsync(
-                backendId,
+                ProviderId,
                 provider,
                 sessionId,
                 modelId,
@@ -598,7 +598,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
     }
 
     private async Task<LocalAgentCompactionSummaryResponse> ExecuteSummaryRequestAsync(
-        AgentBackendId backendId,
+        ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
         string sessionId,
         string? modelId,
@@ -611,7 +611,7 @@ internal sealed class LocalAgentCompactionSummarizer(ILocalAgentCompactionSummar
         CancellationToken cancellationToken)
         => await _executor.ExecuteAsync(
                 new LocalAgentCompactionSummaryRequest(
-                    BackendId: backendId,
+                    ProviderId: ProviderId,
                     Provider: provider,
                     SessionId: sessionId,
                     ModelId: modelId,

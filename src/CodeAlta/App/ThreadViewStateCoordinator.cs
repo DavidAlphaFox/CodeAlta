@@ -188,7 +188,7 @@ internal sealed class ThreadViewStateCoordinator
         {
             var providerKey = localState.ProviderKey.Trim();
             thread.ProviderKey = providerKey;
-            thread.BackendId = providerKey;
+            thread.ProviderId = providerKey;
         }
 
         if (!string.IsNullOrWhiteSpace(localState.ModelId))

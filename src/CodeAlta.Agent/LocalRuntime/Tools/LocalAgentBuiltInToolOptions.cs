@@ -8,9 +8,9 @@ namespace CodeAlta.Agent.LocalRuntime.Tools;
 public sealed class LocalAgentBuiltInToolOptions
 {
     /// <summary>
-    /// Gets or initializes the backend identifier.
+    /// Gets or initializes the model provider identifier.
     /// </summary>
-    public required AgentBackendId BackendId { get; init; }
+    public required ModelProviderId ProviderId { get; init; }
 
     /// <summary>
     /// Gets or initializes the session identifier.

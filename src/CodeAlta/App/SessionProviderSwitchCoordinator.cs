@@ -8,7 +8,7 @@ namespace CodeAlta.App;
 
 internal sealed class SessionProviderSwitchCoordinator
 {
-    private readonly IReadOnlyDictionary<string, ModelProviderState> _chatBackendStates;
+    private readonly IReadOnlyDictionary<string, ModelProviderState> _modelProviderStates;
     private readonly IReadOnlyDictionary<string, LocalRuntimeBackendInfo> _localRuntimeBackends;
     private readonly Func<OpenThreadState, Task> _applyThreadPreferenceAsync;
     private readonly Func<string, Task<bool>> _detachThreadSessionAsync;
@@ -17,20 +17,20 @@ internal sealed class SessionProviderSwitchCoordinator
 
     public SessionProviderSwitchCoordinator(
         CodeAltaConfigStore configStore,
-        IReadOnlyDictionary<string, ModelProviderState> chatBackendStates,
+        IReadOnlyDictionary<string, ModelProviderState> modelProviderStates,
         Func<OpenThreadState, Task> applyThreadPreferenceAsync,
         Func<string, Task<bool>> detachThreadSessionAsync,
         Action<SessionViewDescriptor> updateThreadState,
         Func<Task> persistViewStateAsync)
     {
         ArgumentNullException.ThrowIfNull(configStore);
-        ArgumentNullException.ThrowIfNull(chatBackendStates);
+        ArgumentNullException.ThrowIfNull(modelProviderStates);
         ArgumentNullException.ThrowIfNull(applyThreadPreferenceAsync);
         ArgumentNullException.ThrowIfNull(detachThreadSessionAsync);
         ArgumentNullException.ThrowIfNull(updateThreadState);
         ArgumentNullException.ThrowIfNull(persistViewStateAsync);
 
-        _chatBackendStates = chatBackendStates;
+        _modelProviderStates = modelProviderStates;
         _applyThreadPreferenceAsync = applyThreadPreferenceAsync;
         _detachThreadSessionAsync = detachThreadSessionAsync;
         _updateThreadState = updateThreadState;
@@ -57,7 +57,7 @@ internal sealed class SessionProviderSwitchCoordinator
 
         return !tab.StatusBusy &&
                tab.ActiveRunId is null &&
-               IsSwitchableSourceProvider(new ModelProviderId(thread.BackendId));
+               IsSwitchableSourceProvider(new ModelProviderId(thread.ProviderId));
     }
 
     public bool CanSwitchThreadProvider(
@@ -69,9 +69,9 @@ internal sealed class SessionProviderSwitchCoordinator
         ArgumentNullException.ThrowIfNull(tab);
 
         return CanSelectThreadProvider(thread, tab) &&
-               !string.Equals(thread.BackendId, targetProviderId.Value, StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(thread.ProviderId, targetProviderId.Value, StringComparison.OrdinalIgnoreCase) &&
                TryGetLocalRuntimeBackendInfo(targetProviderId, out _) &&
-               _chatBackendStates.TryGetValue(targetProviderId.Value, out var targetState) &&
+               _modelProviderStates.TryGetValue(targetProviderId.Value, out var targetState) &&
                targetState.Availability == ModelProviderAvailability.Ready;
     }
 
@@ -93,7 +93,7 @@ internal sealed class SessionProviderSwitchCoordinator
 
         var timestamp = DateTimeOffset.UtcNow;
         var oldThreadId = thread.ThreadId;
-        var oldThreadBackendId = thread.BackendId;
+        var oldThreadProviderId = thread.ProviderId;
         var oldThreadProviderKey = thread.ProviderKey;
         var oldThreadUpdatedAt = thread.UpdatedAt;
         var oldThreadModelId = thread.ModelId;
@@ -103,7 +103,7 @@ internal sealed class SessionProviderSwitchCoordinator
         var oldTabReasoningEffort = tab.ReasoningEffort;
         var oldTabUsage = tab.Usage;
 
-        thread.BackendId = targetBackend.ProviderId.Value;
+        thread.ProviderId = targetBackend.ProviderId.Value;
         thread.ProviderKey = targetBackend.ProviderKey;
         thread.UpdatedAt = timestamp;
 
@@ -125,7 +125,7 @@ internal sealed class SessionProviderSwitchCoordinator
         }
         catch
         {
-            thread.BackendId = oldThreadBackendId;
+            thread.ProviderId = oldThreadProviderId;
             thread.ProviderKey = oldThreadProviderKey;
             thread.UpdatedAt = oldThreadUpdatedAt;
             thread.ModelId = oldThreadModelId;
@@ -152,7 +152,7 @@ internal sealed class SessionProviderSwitchCoordinator
 
     private void NormalizeTargetModelSelection(OpenThreadState tab, ModelProviderId targetProviderId)
     {
-        if (!_chatBackendStates.TryGetValue(targetProviderId.Value, out var targetState) ||
+        if (!_modelProviderStates.TryGetValue(targetProviderId.Value, out var targetState) ||
             targetState.Models.Count == 0 ||
             string.IsNullOrWhiteSpace(tab.ModelId) ||
             targetState.Models.Any(model => string.Equals(model.Id, tab.ModelId, StringComparison.Ordinal)))

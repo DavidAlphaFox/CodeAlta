@@ -58,14 +58,14 @@ public sealed class FileSystemLocalAgentSessionStoreTests
         AgentEvent[] events =
         [
             new AgentSessionUpdateEvent(
-                AgentBackendIds.OpenAIResponses,
+                ModelProviderIds.OpenAIResponses,
                 session.SessionId,
                 DateTimeOffset.Parse("2026-04-06T10:00:00+00:00"),
                 new AgentRunId("run_1"),
                 AgentSessionUpdateKind.Started,
                 "Session started"),
             new AgentContentCompletedEvent(
-                AgentBackendIds.OpenAIResponses,
+                ModelProviderIds.OpenAIResponses,
                 session.SessionId,
                 DateTimeOffset.Parse("2026-04-06T10:00:01+00:00"),
                 new AgentRunId("run_1"),
@@ -99,7 +99,7 @@ public sealed class FileSystemLocalAgentSessionStoreTests
                 session.SessionId,
                 [
                     new AgentSessionUpdateEvent(
-                        AgentBackendIds.OpenAIResponses,
+                        ModelProviderIds.OpenAIResponses,
                         session.SessionId,
                         DateTimeOffset.Parse("2026-04-06T10:00:00+00:00"),
                         new AgentRunId("run_1"),
@@ -212,7 +212,7 @@ public sealed class FileSystemLocalAgentSessionStoreTests
                 otherSession.SessionId,
                 [
                     new AgentSessionUpdateEvent(
-                        AgentBackendIds.OpenAIResponses,
+                        ModelProviderIds.OpenAIResponses,
                         otherSession.SessionId,
                         DateTimeOffset.Parse("2026-04-06T10:05:01+00:00"),
                         new AgentRunId("run_1"),
@@ -289,7 +289,7 @@ public sealed class FileSystemLocalAgentSessionStoreTests
         return new LocalAgentSessionSummary
         {
             SessionId = sessionId,
-            BackendId = AgentBackendIds.OpenAIResponses,
+            ProviderId = ModelProviderIds.OpenAIResponses,
             ProtocolFamily = "openai",
             ProviderKey = "openai",
             ModelId = "gpt-5.4",

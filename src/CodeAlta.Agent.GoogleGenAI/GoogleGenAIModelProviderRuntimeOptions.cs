@@ -8,7 +8,7 @@ namespace CodeAlta.Agent.GoogleGenAI;
 /// <summary>
 /// Options for the Google GenAI backend.
 /// </summary>
-public sealed class GoogleGenAIAgentBackendOptions
+public sealed class GoogleGenAIModelProviderRuntimeOptions
 {
     /// <summary>
     /// Gets or sets the optional provider identifier override.

@@ -88,8 +88,8 @@ public sealed class AgentInstructionTemplateProvider
         return _promptBuilder.Build(new SystemPromptBuildRequest
         {
             ProviderKey = thread.ResolvedProviderKey,
-            ProviderType = thread.BackendId,
-            ProtocolFamily = thread.BackendId,
+            ProviderType = thread.ProviderId,
+            ProtocolFamily = thread.ProviderId,
             Model = model,
             Thread = thread,
             Project = project,

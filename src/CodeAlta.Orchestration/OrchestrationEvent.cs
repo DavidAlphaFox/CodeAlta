@@ -14,7 +14,7 @@ public sealed record AgentSessionAttachedEvent(
     DateTimeOffset Timestamp,
     AgentSessionHandleId SessionHandleId,
     string SessionId,
-    AgentBackendId ProviderId,
+    ModelProviderId ProviderId,
     string? ParentSessionId)
     : OrchestrationEvent(Timestamp);
 

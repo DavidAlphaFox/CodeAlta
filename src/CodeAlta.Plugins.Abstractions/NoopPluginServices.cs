@@ -302,10 +302,10 @@ public sealed class NoopPluginPromptService : IPluginPromptService
 public sealed class NoopPluginAgentService : IPluginAgentService
 {
     /// <inheritdoc />
-    public AgentBackendId? ActiveBackendId => null;
+    public ModelProviderId? ActiveProviderId => null;
 
     /// <inheritdoc />
-    public string? ActiveBackendDisplayName => null;
+    public string? ActiveProviderDisplayName => null;
 
     /// <inheritdoc />
     public string? ActiveModel => null;

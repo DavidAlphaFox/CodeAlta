@@ -11,7 +11,7 @@ public sealed class AgentJsonSerializationTests
     public void AgentEvent_ToJson_SerializesDerivedPermissionRequest()
     {
         AgentEvent @event = new AgentCommandPermissionRequest(
-            new AgentBackendId("codex"),
+            new ModelProviderId("codex"),
             "session-1",
             DateTimeOffset.Parse("2026-03-07T10:15:00+00:00"),
             new AgentRunId("run-1"),
@@ -40,7 +40,7 @@ public sealed class AgentJsonSerializationTests
     public void AgentEvent_ToJson_SerializesSystemPromptEvent()
     {
         AgentEvent @event = new AgentSystemPromptEvent(
-            new AgentBackendId("local"),
+            new ModelProviderId("local"),
             "session-1",
             DateTimeOffset.Parse("2026-04-28T12:34:56+00:00"),
             new AgentRunId("run-1"),
@@ -198,7 +198,7 @@ public sealed class AgentJsonSerializationTests
             }
             """);
         var @event = new AgentContentCompletedEvent(
-            AgentBackendIds.GoogleGenAI,
+            ModelProviderIds.GoogleGenAI,
             "session-1",
             DateTimeOffset.Parse("2026-04-06T10:30:00+00:00"),
             new AgentRunId("run-1"),
@@ -271,7 +271,7 @@ public sealed class AgentJsonSerializationTests
     public void AgentErrorEvent_ToJson_SerializesExceptionDetails()
     {
         var error = new AgentErrorEvent(
-            new AgentBackendId("copilot"),
+            new ModelProviderId("copilot"),
             "session-1",
             DateTimeOffset.Parse("2026-03-07T10:30:00+00:00"),
             "boom",
@@ -313,7 +313,7 @@ public sealed class AgentJsonSerializationTests
                         new CopilotRequestQuotaDetails(EntitlementRequests: 1500, UsedRequests: 477)),
                 ]));
         var @event = new AgentSessionUpdateEvent(
-            new AgentBackendId("copilot"),
+            new ModelProviderId("copilot"),
             "session-1",
             DateTimeOffset.Parse("2026-03-18T21:08:00+00:00"),
             null,

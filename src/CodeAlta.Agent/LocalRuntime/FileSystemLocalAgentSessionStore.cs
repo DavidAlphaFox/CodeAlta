@@ -71,7 +71,7 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
             session.CreatedAt,
             cancellationToken).ConfigureAwait(false);
         var snapshotEvent = new AgentRawEvent(
-            session.BackendId,
+            session.ProviderId,
             session.SessionId,
             session.UpdatedAt,
             SessionSummaryEventType,
@@ -285,9 +285,9 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
         ArgumentNullException.ThrowIfNull(state);
 
         var sessionFile = await GetExistingSessionFilePathAsync(state.SessionId, cancellationToken).ConfigureAwait(false);
-        var backendId = await ResolveBackendIdAsync(state.SessionId, state.ProviderKey, cancellationToken).ConfigureAwait(false);
+        var ProviderId = await ResolveProviderIdAsync(state.SessionId, state.ProviderKey, cancellationToken).ConfigureAwait(false);
         var snapshotEvent = new AgentRawEvent(
-            backendId,
+            ProviderId,
             state.SessionId,
             state.UpdatedAt,
             SessionStateEventType,
@@ -464,13 +464,13 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
         return null;
     }
 
-    private async Task<AgentBackendId> ResolveBackendIdAsync(
+    private async Task<ModelProviderId> ResolveProviderIdAsync(
         string sessionId,
         string providerKey,
         CancellationToken cancellationToken)
     {
         var projection = await TryProjectSessionAsync(sessionId, includeHistory: false, cancellationToken).ConfigureAwait(false);
-        return projection?.Summary?.BackendId ?? new AgentBackendId(providerKey);
+        return projection?.Summary?.ProviderId ?? new ModelProviderId(providerKey);
     }
 
     private async Task<SessionProjection?> TryProjectSessionAsync(
@@ -661,14 +661,14 @@ public sealed class FileSystemLocalAgentSessionStore : ILocalAgentSessionStore
         }
 
         var providerKey = NormalizeOptionalText(summary.ProviderKey)
-            ?? NormalizeOptionalText(summary.BackendId.Value)
+            ?? NormalizeOptionalText(summary.ProviderId.Value)
             ?? string.Empty;
-        var backendId = string.IsNullOrWhiteSpace(summary.BackendId.Value)
-            ? new AgentBackendId(providerKey)
-            : summary.BackendId;
+        var ProviderId = string.IsNullOrWhiteSpace(summary.ProviderId.Value)
+            ? new ModelProviderId(providerKey)
+            : summary.ProviderId;
         return summary with
         {
-            BackendId = backendId,
+            ProviderId = ProviderId,
             ProviderKey = providerKey,
             ProtocolFamily = summary.ProtocolFamily ?? string.Empty,
         };

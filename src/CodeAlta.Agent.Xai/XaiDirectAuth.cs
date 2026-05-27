@@ -134,7 +134,7 @@ internal sealed class XaiDirectCredentialStore
         var root = string.IsNullOrWhiteSpace(stateRootPath)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CodeAlta")
             : stateRootPath.Trim();
-        _path = Path.Combine(root, "auth", XaiDirectAgentBackend.ProtocolFamily, SanitizeFileName(providerKey) + ".json");
+        _path = Path.Combine(root, "auth", XaiDirectModelProviderRuntime.ProtocolFamily, SanitizeFileName(providerKey) + ".json");
     }
 
     public async ValueTask<XaiDirectCredentialCache?> ReadAsync(CancellationToken cancellationToken)

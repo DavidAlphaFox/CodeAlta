@@ -47,7 +47,7 @@ public sealed class LocalAgentRuntimeContractsTests
         var root = document.RootElement;
 
         Assert.AreEqual("openai", root.GetProperty("protocolFamily").GetString());
-        Assert.IsFalse(root.TryGetProperty("backendId", out _));
+        Assert.IsFalse(root.TryGetProperty("ProviderId", out _));
         Assert.AreEqual("OpenAIResponses", root.GetProperty("transportKind").GetString());
         Assert.AreEqual("max_completion_tokens", root.GetProperty("profile").GetProperty("maxTokensFieldName").GetString());
         Assert.AreEqual(0.95d, root.GetProperty("compaction").GetProperty("ratio").GetDouble(), 0.0001d);
@@ -184,7 +184,7 @@ public sealed class LocalAgentRuntimeContractsTests
         return new LocalAgentTurnRequest
         {
             Provider = provider,
-            BackendId = new AgentBackendId(provider.ProviderKey),
+            ProviderId = new ModelProviderId(provider.ProviderKey),
             SessionId = "session-1",
             RunId = new AgentRunId("run-1"),
             ModelId = modelId,
