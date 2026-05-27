@@ -90,10 +90,59 @@ public sealed class SessionRuntimeServiceTests
         Assert.AreEqual(0, history.Count);
     }
 
+    [TestMethod]
+    public async Task CreateGlobalSessionAsync_PersistsParentSessionIdForRecoverableSessionListing()
+    {
+        using var temp = new TempDirectory();
+        var providerId = new ModelProviderId("lineage-provider");
+        var registry = new ModelProviderRegistry();
+        registry.RegisterOrReplace(
+            new ModelProviderDescriptor(new ModelProviderId(providerId.Value), "Lineage Provider") { DefaultModelId = "test-model" },
+            () => new MinimalProviderRuntime(providerId));
+        await using var hub = new AgentHub(registry, temp.Path);
+        var options = new CatalogOptions { GlobalRoot = temp.Path };
+        var sessionViewCatalog = new SessionViewCatalog(options);
+        var agentSessionCatalog = new AgentSessionCatalog(sessionViewCatalog.JournalStore.CreateSessionStore());
+        await using var runtime = new SessionRuntimeService(
+            hub,
+            agentSessionCatalog,
+            new ProjectCatalog(options),
+            sessionViewCatalog,
+            new AgentInstructionTemplateProvider(catalogOptions: options),
+            options);
+
+        var parent = await runtime.CreateGlobalSessionAsync(CreateOptions(providerId, temp.Path), "Parent", cancellationToken: default).ConfigureAwait(false);
+        var child = await runtime.CreateGlobalSessionAsync(
+                CreateOptions(providerId, temp.Path),
+                "Child",
+                parent.SessionId,
+                createdBy: null,
+                cancellationToken: default)
+            .ConfigureAwait(false);
+
+        var metadata = await CollectAgentMetadataAsync(agentSessionCatalog.ListSessionsAsync()).ConfigureAwait(false);
+        var recoverable = await CollectAsync(runtime.ListRecoverableSessionsAsync()).ConfigureAwait(false);
+
+        Assert.AreEqual(parent.SessionId, metadata.Single(session => session.SessionId == child.SessionId).ParentSessionId);
+        Assert.AreEqual(parent.SessionId, recoverable.Single(session => session.SessionId == child.SessionId).ParentSessionId);
+    }
+
     private static async Task<IReadOnlyList<SessionViewDescriptor>> CollectAsync(
         IAsyncEnumerable<SessionViewDescriptor> sessions)
     {
         var results = new List<SessionViewDescriptor>();
+        await foreach (var session in sessions.ConfigureAwait(false))
+        {
+            results.Add(session);
+        }
+
+        return results;
+    }
+
+    private static async Task<IReadOnlyList<AgentSessionMetadata>> CollectAgentMetadataAsync(
+        IAsyncEnumerable<AgentSessionMetadata> sessions)
+    {
+        var results = new List<AgentSessionMetadata>();
         await foreach (var session in sessions.ConfigureAwait(false))
         {
             results.Add(session);
