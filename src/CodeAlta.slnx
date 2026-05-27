@@ -28,7 +28,6 @@
   </Folder>
   <Folder Name="/libs/">
     <Project Path="CodeAlta.Acp/CodeAlta.Acp.csproj" />
-    <Project Path="CodeAlta.Agent.Acp/CodeAlta.Agent.Acp.csproj" />
     <Project Path="CodeAlta.Agent.Anthropic/CodeAlta.Agent.Anthropic.csproj" />
     <Project Path="CodeAlta.Agent.Copilot/CodeAlta.Agent.Copilot.csproj" />
     <Project Path="CodeAlta.Agent.Xai/CodeAlta.Agent.Xai.csproj" />

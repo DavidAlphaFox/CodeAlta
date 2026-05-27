@@ -45,8 +45,6 @@ internal sealed class CodeAltaShellSurfaceOptions
 
     public required ShellCommandSurfaceCoordinator ShellCommandSurfaceCoordinator { get; init; }
 
-    public required Action OpenAcpManager { get; init; }
-
     public required Action ToggleTerminalLoopCallback { get; init; }
 
     public required Action ToggleNavigator { get; init; }

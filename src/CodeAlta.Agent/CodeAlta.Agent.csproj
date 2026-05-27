@@ -8,7 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="CodeAlta.Agent.Acp" />
     <InternalsVisibleTo Include="CodeAlta.Agent.Anthropic" />
     <InternalsVisibleTo Include="CodeAlta.Agent.GoogleGenAI" />
     <InternalsVisibleTo Include="CodeAlta.Agent.OpenAI" />

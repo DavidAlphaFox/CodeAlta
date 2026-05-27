@@ -37,12 +37,6 @@ internal static class SidebarThreadPresentation
             return "Codex";
         }
 
-        if (!string.IsNullOrWhiteSpace(providerKey) &&
-            providerKey.StartsWith("acp:", StringComparison.OrdinalIgnoreCase))
-        {
-            return FormatProviderToken(providerKey["acp:".Length..]);
-        }
-
         return string.IsNullOrWhiteSpace(providerKey)
             ? "Unknown"
             : providerKey.Trim();
@@ -56,21 +50,4 @@ internal static class SidebarThreadPresentation
 
     public static string BuildEditedPromptIconMarkup(SidebarAccent accent)
         => $"[{UiPalette.GetSidebarAccentMarkup(accent)}]{NerdFont.MdSquareEditOutline}[/]";
-
-    private static string FormatProviderToken(string token)
-    {
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            return "ACP";
-        }
-
-        var normalized = token.Trim()
-            .Replace('_', ' ')
-            .Replace('-', ' ');
-        return string.Join(
-            ' ',
-            normalized
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(static part => char.ToUpperInvariant(part[0]) + part[1..]));
-    }
 }

@@ -17,7 +17,6 @@
   <ItemGroup>
     <ProjectReference Include="..\CodeAlta\CodeAlta.csproj" />
     <ProjectReference Include="..\CodeAlta.Agent\CodeAlta.Agent.csproj" />
-    <ProjectReference Include="..\CodeAlta.Agent.Acp\CodeAlta.Agent.Acp.csproj" />
     <ProjectReference Include="..\CodeAlta.Agent.Anthropic\CodeAlta.Agent.Anthropic.csproj" />
     <ProjectReference Include="..\CodeAlta.Agent.Copilot\CodeAlta.Agent.Copilot.csproj" />
     <ProjectReference Include="..\CodeAlta.Agent.Xai\CodeAlta.Agent.Xai.csproj" />

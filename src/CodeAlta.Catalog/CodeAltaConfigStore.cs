@@ -423,156 +423,6 @@ public sealed class CodeAltaConfigStore
         SaveDocument(_options.ConfigPath, document);
     }
 
-    /// <summary>
-    /// Loads globally configured ACP backend definitions.
-    /// </summary>
-    /// <returns>The configured ACP agent definitions.</returns>
-    public IReadOnlyList<AcpBackendDefinition> LoadGlobalAcpBackendDefinitions()
-        => LoadGlobalAcpBackendDefinitions(includeDisabled: false);
-
-    /// <summary>
-    /// Loads globally configured ACP backend definitions.
-    /// </summary>
-    /// <param name="includeDisabled">
-    /// <see langword="true"/> to include disabled definitions; otherwise only enabled definitions are returned.
-    /// </param>
-    /// <returns>The configured ACP agent definitions.</returns>
-    public IReadOnlyList<AcpBackendDefinition> LoadGlobalAcpBackendDefinitions(bool includeDisabled)
-    {
-        var document = LoadGlobal();
-        NormalizeDocument(document);
-        return (document.Acp?.Agents ?? new Dictionary<string, AcpBackendDefinition>(StringComparer.OrdinalIgnoreCase))
-            .Values
-            .Where(definition => includeDisabled || definition.Enabled != false)
-            .Select(CloneAcpBackendDefinition)
-            .OrderBy(static definition => definition.DisplayName ?? definition.AgentId, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    /// <summary>
-    /// Loads a globally configured ACP backend definition when present.
-    /// </summary>
-    /// <param name="agentId">The ACP agent identifier.</param>
-    /// <returns>The configured definition, or <see langword="null"/> when missing.</returns>
-    public AcpBackendDefinition? LoadGlobalAcpBackendDefinition(string agentId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(agentId);
-
-        var document = LoadGlobal();
-        NormalizeDocument(document);
-        return document.Acp?.Agents?.TryGetValue(agentId.Trim(), out var definition) == true
-            ? CloneAcpBackendDefinition(definition)
-            : null;
-    }
-
-    /// <summary>
-    /// Saves a global ACP backend definition override.
-    /// </summary>
-    /// <param name="definition">The definition to persist.</param>
-    public void SaveGlobalAcpBackendDefinition(AcpBackendDefinition definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-        if (string.IsNullOrWhiteSpace(definition.AgentId))
-        {
-            throw new ArgumentException("ACP agent id is required.", nameof(definition));
-        }
-
-        var document = LoadGlobal();
-        NormalizeDocument(document);
-        document.Acp ??= new CodeAltaAcpSettingsDocument();
-        document.Acp.Agents ??= new Dictionary<string, AcpBackendDefinition>(StringComparer.OrdinalIgnoreCase);
-        var normalized = CloneAcpBackendDefinition(definition);
-        normalized.AgentId = NormalizeAcpAgentId(normalized.AgentId)
-            ?? throw new ArgumentException("ACP agent id is required.", nameof(definition));
-        normalized.RegistryId = NormalizeAcpAgentId(normalized.RegistryId);
-        normalized.DisplayName = NormalizeText(normalized.DisplayName);
-        normalized.Command = NormalizeText(normalized.Command);
-        normalized.WorkingDirectory = NormalizeText(normalized.WorkingDirectory);
-        normalized.Arguments = NormalizeList(normalized.Arguments);
-        normalized.EnvironmentVariables = NormalizeDictionary(normalized.EnvironmentVariables);
-
-        document.Acp.Agents[normalized.AgentId] = normalized;
-        SaveDocument(_options.ConfigPath, document);
-    }
-
-    /// <summary>
-    /// Deletes a global ACP backend definition override.
-    /// </summary>
-    /// <param name="agentId">The ACP agent identifier.</param>
-    /// <returns><see langword="true"/> when the definition existed and was removed.</returns>
-    public bool DeleteGlobalAcpBackendDefinition(string agentId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(agentId);
-
-        var document = LoadGlobal();
-        NormalizeDocument(document);
-        var removed = document.Acp?.Agents?.Remove(agentId.Trim()) == true;
-        if (removed)
-        {
-            SaveDocument(_options.ConfigPath, document);
-        }
-
-        return removed;
-    }
-
-    /// <summary>
-    /// Deletes every global ACP backend definition override.
-    /// </summary>
-    public void DeleteAllGlobalAcpBackendDefinitions()
-    {
-        var document = LoadGlobal();
-        NormalizeDocument(document);
-        if (document.Acp?.Agents?.Count is not > 0)
-        {
-            return;
-        }
-
-        document.Acp.Agents.Clear();
-        SaveDocument(_options.ConfigPath, document);
-    }
-
-    /// <summary>
-    /// Determines whether a global ACP backend definition override exists.
-    /// </summary>
-    /// <param name="agentId">The ACP agent identifier.</param>
-    /// <returns><see langword="true"/> when an override exists.</returns>
-    public bool HasGlobalAcpBackendDefinition(string agentId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(agentId);
-
-        var document = LoadGlobal();
-        NormalizeDocument(document);
-        return document.Acp?.Agents?.ContainsKey(agentId.Trim()) == true;
-    }
-
-    /// <summary>
-    /// Loads effective ACP backend definitions using installed manifests as defaults and global config as overrides.
-    /// </summary>
-    /// <param name="installedDefinitions">Installed ACP backend definitions.</param>
-    /// <returns>The effective ACP backend definitions.</returns>
-    public IReadOnlyList<AcpBackendDefinition> LoadEffectiveAcpBackendDefinitions(
-        IReadOnlyList<AcpBackendDefinition>? installedDefinitions = null)
-    {
-        var effective = new Dictionary<string, AcpBackendDefinition>(StringComparer.OrdinalIgnoreCase);
-        if (installedDefinitions is not null)
-        {
-            foreach (var installedDefinition in installedDefinitions.Where(static definition => definition.Enabled != false))
-            {
-                effective[installedDefinition.AgentId] = CloneAcpBackendDefinition(installedDefinition);
-            }
-        }
-
-        foreach (var configuredDefinition in LoadGlobalAcpBackendDefinitions(includeDisabled: false))
-        {
-            effective[configuredDefinition.AgentId] = CloneAcpBackendDefinition(configuredDefinition);
-        }
-
-        return effective.Values
-            .Where(static definition => definition.Enabled != false)
-            .OrderBy(static definition => definition.DisplayName ?? definition.AgentId, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
     internal static AgentReasoningEffort? ParseReasoningEffort(string? value)
     {
         return value?.Trim().ToLowerInvariant() switch
@@ -745,10 +595,65 @@ public sealed class CodeAltaConfigStore
 
     private static void SaveDocument(string path, CodeAltaConfigDocument document)
     {
+        var preservedAcpConfig = LoadPreservedAcpConfig(path);
         NormalizeDocument(document);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var content = TomlSerializer.Serialize(document);
+        if (preservedAcpConfig is not null)
+        {
+            content = AppendPreservedAcpConfig(content, preservedAcpConfig.Value.Block, preservedAcpConfig.Value.Newline);
+        }
+
         File.WriteAllText(path, content);
+    }
+
+    private static (string Block, string Newline)? LoadPreservedAcpConfig(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        var content = File.ReadAllText(path);
+        var block = ExtractPreservedAcpConfig(content, path);
+        return string.IsNullOrWhiteSpace(block)
+            ? null
+            : (block, DetectNewline(content));
+    }
+
+    private static string? ExtractPreservedAcpConfig(string content, string sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return null;
+        }
+
+        var sections = GetConfigSections(content, ParseSyntaxDocument(content, sourcePath))
+            .Values
+            .Where(static section =>
+                string.Equals(section.Path, "acp", StringComparison.OrdinalIgnoreCase) ||
+                section.Path.StartsWith("acp.", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static section => section.StartOffset)
+            .ToArray();
+        if (sections.Length == 0)
+        {
+            return null;
+        }
+
+        return string.Join(
+            DetectNewline(content),
+            sections.Select(section => content[section.StartOffset..section.EndOffset].TrimEnd('\r', '\n')));
+    }
+
+    private static string AppendPreservedAcpConfig(string content, string preservedAcpConfig, string newline)
+    {
+        var block = preservedAcpConfig.Trim('\r', '\n');
+        if (string.IsNullOrWhiteSpace(block))
+        {
+            return content;
+        }
+
+        return content + CreateAppendedBlock(content, block, newline);
     }
 
     private static string AddMissingDefaultConfigEntries(string existingContent, string defaultContent, string sourcePath)
@@ -1063,24 +968,6 @@ public sealed class CodeAltaConfigStore
             }
         }
 
-        if (document.Acp?.Agents is not null)
-        {
-            var agents = document.Acp.Agents
-                .Where(static entry => !string.IsNullOrWhiteSpace(entry.Key))
-                .Select(static entry => NormalizeAcpEntry(entry.Key, entry.Value))
-                .Where(static definition => !string.IsNullOrWhiteSpace(definition.AgentId) && CanPersistAcpEntry(definition))
-                .ToDictionary(
-                    static definition => definition.AgentId,
-                    static definition => definition,
-                    StringComparer.OrdinalIgnoreCase);
-
-            document.Acp.Agents = agents.Count == 0 ? null : agents;
-        }
-
-        if (document.Acp?.Agents is null)
-        {
-            document.Acp = null;
-        }
 
         if (document.Providers is not null)
         {
@@ -1107,20 +994,6 @@ public sealed class CodeAltaConfigStore
 
             document.Plugins = plugins.Count == 0 ? null : plugins;
         }
-    }
-
-    private static AcpBackendDefinition NormalizeAcpEntry(string key, AcpBackendDefinition? value)
-    {
-        var definition = value ?? new AcpBackendDefinition();
-        definition.AgentId = NormalizeAcpAgentId(definition.AgentId) ?? key.Trim();
-        definition.DisplayName = NormalizeText(definition.DisplayName);
-        definition.RegistryId = NormalizeAcpAgentId(definition.RegistryId);
-        definition.Command = NormalizeText(definition.Command);
-        definition.WorkingDirectory = NormalizeText(definition.WorkingDirectory);
-        definition.Arguments = NormalizeList(definition.Arguments);
-        definition.EnvironmentVariables = NormalizeDictionary(definition.EnvironmentVariables);
-        PruneAcpDefaults(definition);
-        return definition;
     }
 
     private static CodeAltaProviderDocument NormalizeProviderEntry(string key, CodeAltaProviderDocument? value)
@@ -1267,59 +1140,6 @@ public sealed class CodeAltaConfigStore
                 static entry => entry.Value ?? string.Empty,
             StringComparer.OrdinalIgnoreCase);
         return normalized.Count == 0 ? null : normalized;
-    }
-
-    private static void PruneAcpDefaults(AcpBackendDefinition definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        if (definition.Enabled == AcpBackendDefinition.DefaultEnabled)
-        {
-            definition.Enabled = null;
-        }
-
-        if (definition.UseUnstable == AcpBackendDefinition.DefaultUseUnstable)
-        {
-            definition.UseUnstable = null;
-        }
-
-        if (definition.EnableTerminal == AcpBackendDefinition.DefaultEnableTerminal)
-        {
-            definition.EnableTerminal = null;
-        }
-
-        if (definition.EnableFilesystem == AcpBackendDefinition.DefaultEnableFilesystem)
-        {
-            definition.EnableFilesystem = null;
-        }
-
-        if (definition.EnableElicitation == AcpBackendDefinition.DefaultEnableElicitation)
-        {
-            definition.EnableElicitation = null;
-        }
-    }
-
-    private static bool CanPersistAcpEntry(AcpBackendDefinition definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        return !string.IsNullOrWhiteSpace(definition.DisplayName) ||
-               definition.Enabled is not null ||
-               !string.IsNullOrWhiteSpace(definition.RegistryId) ||
-               !string.IsNullOrWhiteSpace(definition.Command) ||
-               definition.Arguments is { Count: > 0 } ||
-               !string.IsNullOrWhiteSpace(definition.WorkingDirectory) ||
-               definition.EnvironmentVariables is { Count: > 0 } ||
-               definition.UseUnstable is not null ||
-               definition.EnableTerminal is not null ||
-               definition.EnableFilesystem is not null ||
-               definition.EnableElicitation is not null;
-    }
-
-    private static string? NormalizeAcpAgentId(string? value)
-    {
-        var normalized = NormalizeText(value);
-        return normalized?.ToLowerInvariant();
     }
 
     private static string? NormalizeProviderKey(string? value)
@@ -2065,29 +1885,6 @@ public sealed class CodeAltaConfigStore
 
                 break;
         }
-    }
-
-    private static AcpBackendDefinition CloneAcpBackendDefinition(AcpBackendDefinition definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        return new AcpBackendDefinition
-        {
-            AgentId = definition.AgentId,
-            DisplayName = definition.DisplayName,
-            Enabled = definition.Enabled,
-            RegistryId = definition.RegistryId,
-            Command = definition.Command,
-            Arguments = definition.Arguments is null ? null : [.. definition.Arguments],
-            WorkingDirectory = definition.WorkingDirectory,
-            EnvironmentVariables = definition.EnvironmentVariables is null
-                ? null
-                : new Dictionary<string, string>(definition.EnvironmentVariables, StringComparer.OrdinalIgnoreCase),
-            UseUnstable = definition.UseUnstable,
-            EnableTerminal = definition.EnableTerminal,
-            EnableFilesystem = definition.EnableFilesystem,
-            EnableElicitation = definition.EnableElicitation,
-        };
     }
 
     private static CodeAltaProviderDocument CloneProviderDefinition(CodeAltaProviderDocument definition)

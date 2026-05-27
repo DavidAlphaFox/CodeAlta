@@ -36,36 +36,6 @@ public sealed class CatalogOptions
     public string ConfigPath => Path.Combine(GlobalRoot, "config.toml");
 
     /// <summary>
-    /// Gets the ACP root path under the global catalog.
-    /// </summary>
-    public string AcpRoot => Path.Combine(GlobalRoot, "acp");
-
-    /// <summary>
-    /// Gets the ACP registry cache root.
-    /// </summary>
-    public string AcpRegistryRoot => Path.Combine(AcpRoot, "registry");
-
-    /// <summary>
-    /// Gets the ACP download cache root.
-    /// </summary>
-    public string AcpDownloadsRoot => Path.Combine(AcpRoot, "downloads");
-
-    /// <summary>
-    /// Gets the ACP install root.
-    /// </summary>
-    public string AcpInstallsRoot => Path.Combine(AcpRoot, "installs");
-
-    /// <summary>
-    /// Gets the ACP manifest root.
-    /// </summary>
-    public string AcpManifestsRoot => Path.Combine(AcpRoot, "manifests");
-
-    /// <summary>
-    /// Gets the ACP state root.
-    /// </summary>
-    public string AcpStateRoot => Path.Combine(AcpRoot, "state");
-
-    /// <summary>
     /// Gets the local runtime root path under the global catalog.
     /// </summary>
     [Obsolete("Use CacheRoot for caches or the dedicated roots such as SessionsRoot and PromptDraftsRoot.")]

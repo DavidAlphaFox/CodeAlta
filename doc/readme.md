@@ -13,7 +13,7 @@ Read the documents in this order when onboarding or reviewing architecture-sensi
 | 3 | [Runtime and agent sessions](runtime.md) | `IAgentBackend`/`IAgentSession`, `AgentHub`, work-thread orchestration, system prompts, tools, compaction, and journals. |
 | 4 | [Model providers](providers.md) | Provider registration, configured provider types, local-runtime adapters, model metadata, credentials, and protocol tracing. |
 | 5 | [`alta` live tool](live-tool.md) | In-process command registry, JSONL output contract, session control commands, queueing, delegated work, and plugin commands. |
-| 6 | [ACP integration](acp.md) | ACP stdio transport, backend registration, install registry support, client capability bridges, and unsupported operations. |
+| 6 | [ACP integration](acp.md) | Current ACP protocol-library status, legacy config preservation, and future server-adapter direction. |
 | 7 | [Plugins](plugins.md) | Trusted source plugins, public authoring API, runtime build/load flow, contributions, safe mode, and built-in plugins. |
 | 8 | [Skills](skills.md) | Filesystem `SKILL.md` discovery, validation, precedence, UI/live-tool activation, and runtime injection. |
 | 9 | [Orchestration actor model](orchestration-actor-model.md) | Internal mailbox/actor ownership rules for runtime mutation and event backpressure. |
@@ -30,7 +30,7 @@ flowchart TD
     LiveTool[CodeAlta.LiveTool - alta registry + dispatcher]
     Orchestration[CodeAlta.Orchestration - AgentHub + SessionRuntimeService]
     Agent[CodeAlta.Agent - backend/session/event contracts - local runtime]
-    Providers[Provider packages - OpenAI-compatible, Anthropic, Google, direct HTTP, ACP]
+    Providers[Provider packages - OpenAI-compatible, Anthropic, Google, direct HTTP]
     Catalog[CodeAlta.Catalog - projects, config, threads, skills]
     Plugins[CodeAlta.Plugins - runtime + adapters]
     PluginApi[CodeAlta.Plugins.Abstractions - public authoring API]
@@ -64,13 +64,13 @@ The executable is the interactive terminal host. Reusable session/thread orchest
 | `src/CodeAlta` | Executable, terminal UI composition, shell controller, dialogs, view models, provider-management UI, and owned process services. |
 | `src/CodeAlta.Orchestration` | Headless runtime composition and work-thread orchestration. It references `CodeAlta.Agent`, `CodeAlta.Catalog`, and `CodeAlta.Plugins`, not the TUI. |
 | `src/CodeAlta.Agent` | Normalized backend/session/event contracts plus the local raw-API session runtime, tools, journals, prompt instruction composition, and compaction. |
-| `src/CodeAlta.Agent.*` | Provider-specific adapters and ACP backend integration that implement the agent contracts. |
-| `src/CodeAlta.Catalog` | Global/project catalog, config loading/normalization, project descriptors, work-thread metadata, skill discovery, and ACP install/config metadata. |
+| `src/CodeAlta.Agent.*` | Provider-specific adapters that implement the agent contracts. |
+| `src/CodeAlta.Catalog` | Global/project catalog, config loading/normalization, project descriptors, work-thread metadata, and skill discovery. |
 | `src/CodeAlta.LiveTool` | In-process `alta` command contributors, registry, dispatcher, transcript formatter, and agent-tool wrapper. |
 | `src/CodeAlta.Plugins.Abstractions` | Public plugin authoring contracts. |
 | `src/CodeAlta.Plugins` | Trusted plugin discovery, source builds, loading, activation, contribution registry, adapters, and plugin resource roots. |
 | `src/CodeAlta.Plugin.GitHub`, `src/CodeAlta.Plugin.Statistics` | Built-in plugins implemented through the same plugin model used by source plugins. |
-| `src/CodeAlta.Acp` | ACP JSON-RPC, protocol models, registry/install support, and generated protocol helpers. |
+| `src/CodeAlta.Acp` | ACP JSON-RPC, protocol models, and generated protocol helpers kept for future server exposure. |
 | `src/CodeAlta.Tests`, `src/CodeAlta.*.Tests` | MSTest suites, including architecture guardrails for frontend/runtime boundaries and concurrency decisions. |
 
 `src/CodeAlta.Hosting` is not an active project in the solution. Shared host composition is `CodeAlta.Orchestration.Hosting.CodeAltaHost`.
@@ -79,13 +79,12 @@ The executable is the interactive terminal host. Reusable session/thread orchest
 
 CodeAlta's default global root is `~/.alta`. Important roots are:
 
-- `config.toml` for global chat/provider/plugin/ACP configuration;
+- `config.toml` for global chat/provider/plugin configuration;
 - `projects/` for project descriptors;
 - `sessions/yyyy/MM/dd/<session-id>.jsonl` for local-runtime session journals and CodeAlta thread headers/state;
 - `sessions/traces/<session-id>.trace` for optional protocol traces;
 - `cache/` for machine-local caches such as refreshed model metadata;
 - `auth/` for provider credential/token stores owned by provider auth managers;
-- `acp/` for ACP registry cache, downloads, installs, manifests, and state;
 - `saved_prompts/` for unsent prompt drafts;
 - `ui-state.yaml` for frontend view/thread selection state;
 - `plugins/` and `skills/` for user-scoped source plugins and skills.

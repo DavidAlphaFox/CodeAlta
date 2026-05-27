@@ -20,7 +20,7 @@ sequenceDiagram
     UI->>Runtime: runtime commands/events through controllers and coordinators
 ```
 
-`CodeAltaOwnedServices.CreateAsync` owns process concerns: the default `~/.alta` root, logging, model-catalog refresh, global config, ACP install/config services, and provider backend registration. It calls `CodeAltaHost.CreateAsync`, which composes reusable runtime services:
+`CodeAltaOwnedServices.CreateAsync` owns process concerns: the default `~/.alta` root, logging, model-catalog refresh, global config, and provider backend registration. It calls `CodeAltaHost.CreateAsync`, which composes reusable runtime services:
 
 - `ProjectCatalog`, `WorkThreadCatalog`, and `SkillCatalog` from `CodeAlta.Catalog`;
 - `PluginRuntimeManager` and plugin resource/backend adapters;
@@ -156,7 +156,7 @@ The `CodeAlta.Agent` contract is intentionally small:
 - `AgentEvent` is a normalized polymorphic event model for content, activity, session updates, plans, interactions, permissions, user-input requests, and errors.
 - `AgentToolDefinition` and `AgentToolSpec` define model-callable host tools with validated names and JSON schemas.
 
-Local raw-API providers are implemented by wrapping provider-specific turn executors in `LocalAgentBackend`/`LocalAgentSession`. ACP and other backend packages implement the same contract.
+Local raw-API providers are implemented by wrapping provider-specific turn executors in `LocalAgentBackend`/`LocalAgentSession`. Provider packages implement the same contract for configured model providers.
 
 ## Extension integration
 

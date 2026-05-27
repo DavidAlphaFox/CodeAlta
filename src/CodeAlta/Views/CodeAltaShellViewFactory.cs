@@ -27,7 +27,6 @@ internal static class CodeAltaShellViewFactory
         ArgumentNullException.ThrowIfNull(options.ThinkingAnimationPhase01);
         ArgumentNullException.ThrowIfNull(options.Sidebar);
         ArgumentNullException.ThrowIfNull(options.ShellCommandSurfaceCoordinator);
-        ArgumentNullException.ThrowIfNull(options.OpenAcpManager);
         ArgumentNullException.ThrowIfNull(options.ToggleTerminalLoopCallback);
         ArgumentNullException.ThrowIfNull(options.ToggleNavigator);
         ArgumentNullException.ThrowIfNull(options.CanUseCommandPalette);
@@ -55,7 +54,6 @@ internal static class CodeAltaShellViewFactory
             workspaceView.Root,
             workspaceView.ThreadCommandBar,
             options.ShellCommandSurfaceCoordinator,
-            options.OpenAcpManager,
             options.ToggleTerminalLoopCallback,
             options.ToggleNavigator,
             options.CanUseCommandPalette,
@@ -70,7 +68,6 @@ internal static class CodeAltaShellViewFactory
         Visual threadWorkspace,
         Visual threadCommandBar,
         ShellCommandSurfaceCoordinator shellCommandSurfaceCoordinator,
-        Action openAcpManager,
         Action toggleTerminalLoopCallback,
         Action toggleNavigator,
         Func<bool> canUseCommandPalette,
@@ -81,7 +78,6 @@ internal static class CodeAltaShellViewFactory
         ArgumentNullException.ThrowIfNull(threadWorkspace);
         ArgumentNullException.ThrowIfNull(threadCommandBar);
         ArgumentNullException.ThrowIfNull(shellCommandSurfaceCoordinator);
-        ArgumentNullException.ThrowIfNull(openAcpManager);
         ArgumentNullException.ThrowIfNull(toggleTerminalLoopCallback);
         ArgumentNullException.ThrowIfNull(toggleNavigator);
         ArgumentNullException.ThrowIfNull(canUseCommandPalette);
@@ -141,11 +137,6 @@ internal static class CodeAltaShellViewFactory
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.Workspace.Settings"),
             () => _ = shellCommandSurfaceCoordinator.OpenWorkspaceSettingsAsync()));
-        // ACP frontend command registration is intentionally disabled until the
-        // TUI integration is exercised and validated.
-        // shellView.Root.AddCommand(ShellCommandViewFactory.Create(
-        //     ShellCommandCatalog.Get("CodeAlta.Acp.Manage"),
-        //     openAcpManager));
         shellView.Root.AddCommand(ShellCommandViewFactory.Create(
             ShellCommandCatalog.Get("CodeAlta.Shell.FocusSidebar"),
             () => _ = shellCommandSurfaceCoordinator.FocusSidebarAsync()));

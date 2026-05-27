@@ -52,6 +52,23 @@ public sealed class ArchitectureGuardrailTests
     }
 
     [TestMethod]
+    public void CodeAltaApp_DoesNotReferenceExternalAcpBackendProject()
+    {
+        var sourceRoot = GetSourceRoot();
+        var codeAltaRoot = GetCodeAltaSourceRoot();
+        const string externalAcpBackendNamespace = "CodeAlta.Agent" + ".Acp";
+        var matches = Directory
+            .EnumerateFiles(codeAltaRoot, "*.cs", SearchOption.AllDirectories)
+            .Append(Path.Combine(codeAltaRoot, "CodeAlta.csproj"))
+            .Where(file => File.ReadAllText(file).Contains(externalAcpBackendNamespace, StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(sourceRoot, file).Replace('\\', '/'))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), matches);
+    }
+
+    [TestMethod]
     public void RuntimeEventPump_IsOnlyCodeAltaConsumerOfRuntimeEventStream()
     {
         var codeAltaRoot = GetCodeAltaSourceRoot();
@@ -324,7 +341,6 @@ public sealed class ArchitectureGuardrailTests
         var codeAltaRoot = GetCodeAltaSourceRoot();
         var allowedLegacyConstructors = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["App/AcpManagementCoordinator.cs:AcpManagementCoordinator"] = "Legacy coordinator pending provider-management port extraction.",
             ["App/ChatBackendInitializationCoordinator.cs:ChatBackendInitializationCoordinator"] = "Legacy backend initialization seam pending model-provider port migration.",
             ["App/IFrontendPersistencePort.cs:FrontendPersistencePort"] = "Transitional port adapter wrapping persistence callbacks.",
             ["App/IModelProviderPreferencePort.cs:DelegatingModelProviderPreferencePort"] = "Transitional adapter preserving frontend preference callbacks.",
@@ -514,9 +530,9 @@ public sealed class ArchitectureGuardrailTests
         {
             "App/CodeAltaShellController.cs:70:_initializationTask = Task.Run(",
             "App/CodeAltaShellController.cs:433:var startupProviderLoadTask = Task.Run(",
-            "App/CodeAltaApp.cs:348:_ = PersistViewStateAsync();",
-            "App/CodeAltaApp.cs:379:_ = PersistViewStateAsync();",
-            "App/CodeAltaApp.cs:452:_ = OpenModelProvidersAsync();",
+            "App/CodeAltaApp.cs:331:_ = PersistViewStateAsync();",
+            "App/CodeAltaApp.cs:362:_ = PersistViewStateAsync();",
+            "App/CodeAltaApp.cs:435:_ = OpenModelProvidersAsync();",
             "App/RuntimeEventPump.cs:34:_pumpTask = Task.Run(",
             "App/ShellThreadStateCoordinator.cs:274:_ = RestoreStartupThreadHistoryAsync(threadId, cancellationToken);",
             "App/ShellThreadStateCoordinator.cs:283:_ = PersistViewStateAsync();",
@@ -586,7 +602,6 @@ public sealed class ArchitectureGuardrailTests
             Path.Combine(codeAltaRoot, "App", "ShellThreadStateCoordinator.cs"),
             Path.Combine(codeAltaRoot, "App", "ThreadRuntimeEventCoordinator.cs"),
             Path.Combine(codeAltaRoot, "App", "ChatBackendInitializationCoordinator.cs"),
-            Path.Combine(codeAltaRoot, "App", "AcpFrontendCoordinator.cs"),
             Path.Combine(codeAltaRoot, "App", "ProviderFrontendCoordinator.cs"),
             Path.Combine(codeAltaRoot, "Views", "InitialCatalogStateCoordinator.cs"),
         };
@@ -1105,8 +1120,6 @@ public sealed class ArchitectureGuardrailTests
                 entry.RelativePath.StartsWith("Presentation/", StringComparison.Ordinal) ||
                 entry.RelativePath.StartsWith("App/", StringComparison.Ordinal) &&
                 entry.RelativePath is not
-                    "App/AcpAgentRegistryService.cs" and
-                    not
                     "App/ChatBackendInitializationCoordinator.cs" and
                     not "App/CodeAltaOwnedServices.cs" and
                     not "App/CodeAltaShellController.cs" and

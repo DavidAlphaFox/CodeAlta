@@ -72,7 +72,7 @@ Important behavior:
 | `google-genai` | `CodeAlta.Agent.GoogleGenAI` | Requires API key. Wraps SDK chat streaming through the local runtime and supports model metadata enrichment. |
 | `vertex-ai` | `CodeAlta.Agent.GoogleGenAI` | Uses Vertex project/location settings instead of an API key. |
 
-ACP backends are not raw provider entries. They are registered from `[acp.agents]` config and installed ACP definitions as backend ids of the form `acp:<agentId>`.
+External ACP CLI backends are no longer registered as model providers. Legacy `[acp]` config is ignored and preserved only as compatibility data.
 
 ## Local-runtime provider behavior
 

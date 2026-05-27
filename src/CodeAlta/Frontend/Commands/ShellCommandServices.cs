@@ -147,8 +147,6 @@ internal interface IShellDialogCommandService
 
     Task OpenFolderAsync(string path, bool trustFolder);
 
-    void OpenAcpManagement();
-
     Task OpenModelProvidersAsync();
 
     void OpenAbout();
@@ -182,7 +180,6 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
     private readonly Func<Visual?> _getDialogFocusTarget;
     private readonly Func<IReadOnlyList<ProjectDescriptor>> _getProjects;
     private readonly Func<string, bool, Task> _openFolderAsync;
-    private readonly Action _openAcpManagement;
     private readonly Func<Task> _openModelProvidersAsync;
     private readonly Action _openAbout;
     private readonly Action _openModels;
@@ -201,7 +198,6 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
         Func<Visual?> getDialogFocusTarget,
         Func<IReadOnlyList<ProjectDescriptor>> getProjects,
         Func<string, bool, Task> openFolderAsync,
-        Action openAcpManagement,
         Func<Task> openModelProvidersAsync,
         Action openAbout,
         Action openModels,
@@ -219,7 +215,6 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
         ArgumentNullException.ThrowIfNull(getDialogFocusTarget);
         ArgumentNullException.ThrowIfNull(getProjects);
         ArgumentNullException.ThrowIfNull(openFolderAsync);
-        ArgumentNullException.ThrowIfNull(openAcpManagement);
         ArgumentNullException.ThrowIfNull(openModelProvidersAsync);
         ArgumentNullException.ThrowIfNull(openAbout);
         ArgumentNullException.ThrowIfNull(openModels);
@@ -236,7 +231,6 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
         _getDialogFocusTarget = getDialogFocusTarget;
         _getProjects = getProjects;
         _openFolderAsync = openFolderAsync;
-        _openAcpManagement = openAcpManagement;
         _openModelProvidersAsync = openModelProvidersAsync;
         _openAbout = openAbout;
         _openModels = openModels;
@@ -258,8 +252,6 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
     public IReadOnlyList<ProjectDescriptor> GetProjects() => _getProjects();
 
     public Task OpenFolderAsync(string path, bool trustFolder) => _openFolderAsync(path, trustFolder);
-
-    public void OpenAcpManagement() => _openAcpManagement();
 
     public Task OpenModelProvidersAsync() => _openModelProvidersAsync();
 

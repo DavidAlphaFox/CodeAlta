@@ -1,114 +1,17 @@
 # ACP integration
 
-CodeAlta supports ACP backends through stdio JSON-RPC. The implementation is split between protocol/runtime support in `CodeAlta.Acp`, backend adaptation in `CodeAlta.Agent.Acp`, catalog/config metadata in `CodeAlta.Catalog`, and unexposed management services under `src/CodeAlta/App`.
+CodeAlta currently keeps the ACP protocol libraries (`src/CodeAlta.Acp` and `src/CodeAlta.Acp.Generator`) for future server-side integration work. The previous external ACP CLI backend adapter has been removed: the app no longer builds `src/CodeAlta.Agent.Acp`, launches ACP child processes, registers `acp:` model providers, exposes ACP management commands/dialogs, or reads `[acp]` backend definitions as active configuration.
 
-> [!NOTE]
-> ACP protocol and backend support exists, but the frontend integration is intentionally hidden for now. The TUI does not register ACP backends, command-palette entries, slash commands, shortcuts, or management-dialog entry points because ACP has not yet been exercised and validated in the frontend.
+Existing user `[acp]` configuration is intentionally ignored, not migrated or deleted. Config saves preserve existing `[acp]` and `[acp.*]` TOML blocks as compatibility data so users do not lose local notes or legacy backend definitions while the backend path is unavailable.
 
-## Components
+## Future ACP server design note
 
-| Component | Role |
-| --- | --- |
-| `src/CodeAlta.Acp` | JSON-RPC transport, ACP protocol models, generated helpers, registry client, install resolver, and installer. |
-| `src/CodeAlta.Agent.Acp` | `IAgentBackend`/`IAgentSession` adapter over an ACP client process. |
-| `src/CodeAlta.Catalog/AcpBackendDefinition.cs` | Config/install definition shape for ACP agent backends. |
-| `CodeAltaOwnedServices` | Contains ACP backend option helpers, but the active frontend startup path does not register ACP backends while ACP UI integration is hidden. |
-| `AcpAgentRegistryService` and `AcpManagementService` | Registry refresh/cache, install/remove, and management snapshot data. |
+Future ACP exposure should run in the opposite direction: CodeAlta can act as an ACP server adapter over the existing runtime and catalog instead of acting as a client to external ACP CLIs. A server adapter should:
 
-ACP backends are not exposed through the frontend today. They remain documented here for the protocol/backend implementation and configuration shape.
+- use `IAgentRuntime`/`SessionRuntimeService` as the single execution boundary for starting, steering, aborting, and observing sessions;
+- use `IAgentSessionCatalog` for session discovery, load/resume, and metadata projection;
+- map ACP requests/events to existing command/event contracts without introducing a second session owner;
+- keep protocol serialization and generated model code in `CodeAlta.Acp`, with hosting/orchestration logic outside the TUI project;
+- preserve existing permission, filesystem, terminal, and plugin boundaries rather than exposing host services directly from protocol handlers.
 
-## Configuration
-
-ACP backend definitions can come from installed registry entries, `[acp.agents]` config, or the merge of both. Config entries use the `AcpBackendDefinition` fields:
-
-```toml
-[acp.agents.example]
-agent_id = "example"
-display_name = "Example ACP agent"
-enabled = true
-command = "example-agent"
-args = ["--stdio"]
-working_directory = "C:/work/example"
-env = { EXAMPLE_MODE = "stdio" }
-use_unstable = true
-enable_filesystem = true
-enable_terminal = true
-enable_elicitation = false
-```
-
-Defaults:
-
-| Field | Default |
-| --- | --- |
-| `enabled` | `true` |
-| `use_unstable` | `true` |
-| `enable_terminal` | `true` |
-| `enable_filesystem` | `true` |
-| `enable_elicitation` | `false` |
-
-Backend ids are created as `acp:<agentId>`.
-
-## Session behavior
-
-`AcpAgentBackend` launches the configured command over stdio and performs ACP initialization/authentication. It supports session create/load/resume according to the server capabilities reported during initialization. `AcpAgentSession` adapts CodeAlta session operations to ACP requests and maps ACP responses/events into normalized `AgentEvent` history.
-
-Supported behavior includes:
-
-- initialize/auth handshake;
-- session new/load/resume when capabilities allow;
-- list sessions when supported;
-- prompt submission;
-- cancel notification for abort;
-- session close during dispose when available;
-- history journaling through `AcpHistoryJournal`;
-- filesystem and terminal client requests when enabled;
-- permission bridging;
-- optional elicitation bridging when enabled and supported.
-
-The session sends CodeAlta system/developer preamble content on the first prompt when needed, then applies model/reasoning preferences through the backend when supported by the ACP agent.
-
-## Unsupported operations
-
-Generic ACP sessions currently do not support:
-
-- CodeAlta dynamic tool injection;
-- live steering through `IAgentSession.SteerAsync`;
-- manual compaction through `IAgentSession.CompactAsync`;
-- backend session delete through `IAgentBackend.DeleteSessionAsync`.
-
-These operations return unsupported results or throw `NotSupportedException` from the low-level session API. Docs and UI should not present them as implemented for generic ACP backends.
-
-## Registry and install support
-
-`AcpRegistryClient.DefaultRegistryUri` is:
-
-```text
-https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json
-```
-
-The registry cache is stored at `~/.alta/acp/registry/latest/registry.json`. Installs use:
-
-- `~/.alta/acp/downloads/` for downloaded archives or package payloads;
-- `~/.alta/acp/installs/` for resolved installs;
-- `~/.alta/acp/manifests/` and `~/.alta/acp/state/` for metadata and runtime state.
-
-`AcpInstallResolver` supports binary, `npx`, and `uvx` distribution kinds when the registry manifest and current platform allow them. Binary installs require an archive URL. Registry installs are supported only on Windows, macOS, and Linux.
-
-The management dialog can refresh the registry, show installability, install an agent, remove installed metadata/payloads, and inspect the effective command/config that will be registered.
-
-## Client capability bridges
-
-When enabled by config and accepted by the ACP agent, CodeAlta bridges client requests back into host services:
-
-- filesystem requests are resolved through CodeAlta's configured project/global context and permission handling;
-- terminal requests use host terminal/shell permission paths;
-- permission requests map to normalized CodeAlta permission events;
-- elicitation requests are exposed only when `enable_elicitation = true` and the agent supports the unstable capability.
-
-Capability flags should be kept narrow. Disabling filesystem, terminal, or elicitation removes the corresponding bridge from the advertised client capabilities.
-
-## Diagnostics and safety
-
-ACP processes are local child processes launched from user configuration or installed registry metadata. Treat their command, environment, working directory, and outputs as user-owned and potentially sensitive.
-
-Startup failures should remain visible as provider/backend diagnostics without deleting config. Registry download/install failures should preserve existing cached/installed entries unless a user explicitly removes them.
+This note documents the intended direction only; it does not implement an ACP server.

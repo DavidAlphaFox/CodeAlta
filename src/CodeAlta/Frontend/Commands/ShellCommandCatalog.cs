@@ -14,10 +14,6 @@ internal static class ShellCommandCatalog
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
         new KeyGesture(TerminalChar.CtrlP, TerminalModifiers.Ctrl));
 
-    public static readonly KeySequence AcpAgentsShortcutSequence = new(
-        new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
-        new KeyGesture(TerminalChar.CtrlA, TerminalModifiers.Ctrl));
-
     public static readonly KeySequence AboutShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
         new KeyGesture(TerminalChar.CtrlA, TerminalModifiers.Ctrl));
@@ -122,19 +118,6 @@ internal static class ShellCommandCatalog
             Sequence: AboutShortcutSequence,
             CommandName: "about",
             ShowInCommandBar: true),
-        // ACP frontend command registration is intentionally disabled until the
-        // TUI integration is exercised and validated.
-        // new(
-        //     "CodeAlta.Acp.Manage",
-        //     "ACP Agents",
-        //     "Browse the ACP registry and inspect installed ACP backends.",
-        //     ShellCommandHelpCategory.General,
-        //     ShellCommandScope.AnyShell,
-        //     ShellCommandAvailability.Always,
-        //     Sequence: AcpAgentsShortcutSequence,
-        //     CommandName: "acp_agents",
-        //     Aliases: ["acp"],
-        //     ShowInCommandBar: true),
         new(
             "CodeAlta.Skills.Manage",
             "Skills",

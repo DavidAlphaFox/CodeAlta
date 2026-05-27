@@ -48,7 +48,6 @@ internal sealed class ShellInputRouter
                 ? new SteerPromptIntent(trimmed)
                 : new SendPromptIntent(trimmed),
             { Id: "CodeAlta.Project.OpenFolder" } => new OpenFolderIntent(arguments),
-            { Id: "CodeAlta.Acp.Manage" } => new OpenAcpManagementIntent(),
             { Id: "CodeAlta.File.Edit" } => new OpenFileEditorIntent(),
             { Id: "CodeAlta.Shell.About" } => new OpenAboutIntent(),
             { Id: "CodeAlta.Providers.Manage" } => new OpenModelProvidersIntent(),

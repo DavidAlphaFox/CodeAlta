@@ -30,8 +30,6 @@ internal sealed record OpenModelsIntent : ShellInputIntent;
 
 internal sealed record OpenApplicationLogsIntent : ShellInputIntent;
 
-internal sealed record OpenAcpManagementIntent : ShellInputIntent;
-
 internal sealed record OpenFileEditorIntent : ShellInputIntent;
 
 internal sealed record OpenSkillsIntent : ShellInputIntent;

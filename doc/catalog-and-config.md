@@ -8,7 +8,7 @@ CodeAlta keeps user-owned durable state under a global root and project-local `.
 
 | Path under `~/.alta` | Owner | Purpose |
 | --- | --- | --- |
-| `config.toml` | `CodeAltaConfigStore` | Global chat defaults, providers, plugins, and ACP agent definitions. |
+| `config.toml` | `CodeAltaConfigStore` | Global chat defaults, providers, and plugins. |
 | `projects/` | `ProjectCatalog` | Markdown project descriptors keyed by project slug. |
 | `checkouts/` | `ProjectCatalog` helpers | Default checkout root used by catalog planning APIs. |
 | `machines/` | Catalog model | Machine-specific override profile root. |
@@ -19,11 +19,6 @@ CodeAlta keeps user-owned durable state under a global root and project-local `.
 | `ui-state.yaml` | Frontend view-state service | Open/selected tabs, thread/model preferences, theme, and shell view state. |
 | `plugins/` | Plugin runtime | User-scoped source plugin packages. |
 | `skills/` | Skill catalog | User-scoped CodeAlta skill roots. |
-| `acp/registry/` | ACP registry service | Cached ACP registry document. |
-| `acp/downloads/` | ACP installer | Download cache for installable ACP agents. |
-| `acp/installs/` | ACP installer | Installed ACP agent payloads. |
-| `acp/manifests/` | ACP installer/store | ACP install manifests. |
-| `acp/state/` | ACP/backend integration | ACP-specific state files. |
 | `threads/internal/` | Work-thread catalog | Internal thread linkage descriptors still read by the catalog. |
 
 The runtime creates directories as needed. Provider auth managers also write under `~/.alta/auth/`, for example subscription credentials and direct-provider token caches. Protocol traces, session journals, auth files, and provider caches can contain prompts, tool arguments, model output, file paths, command output, or credentials; treat them as private user data.
@@ -42,7 +37,7 @@ The skill catalog also reads `<project>/.agents/skills/` and `~/.agents/skills/`
 
 ## Configuration model
 
-The top-level TOML document has four sections:
+The top-level TOML document has these active sections:
 
 ```toml
 [chat]
@@ -56,19 +51,15 @@ api_key_env = "MY_PROVIDER_API_KEY"
 
 [plugins.statistics]
 enabled = true
-
-[acp.agents.example]
-agent_id = "example"
-command = "example-agent"
-args = ["--stdio"]
 ```
 
 `CodeAltaConfigDocument` maps these sections to:
 
 - `chat`: chat-level defaults, currently the default provider key;
 - `providers`: configured model-provider documents keyed by provider key;
-- `plugins`: plugin enablement keyed by built-in id or source package id;
-- `acp.agents`: ACP backend definitions keyed by agent id.
+- `plugins`: plugin enablement keyed by built-in id or source package id.
+
+Legacy `[acp]` and `[acp.*]` blocks are no longer active configuration. `CodeAltaConfigStore` ignores them while preserving their TOML text when saving normalized config so existing user data is not deleted.
 
 Global config is loaded from `~/.alta/config.toml`. Project config is loaded from `<project>/.alta/config.toml` when a project scope is active. The provider-management UI edits the same global file and validates TOML before saving. During startup, `CodeAltaConfigStore` upgrades a valid existing global config by adding entries that are present in the bundled default template but missing from the user file; it preserves existing text, validates the merged result, and writes a `config.toml.backup*` copy before replacement.
 
@@ -104,18 +95,6 @@ Optional protocol traces are written to `~/.alta/sessions/traces/<session-id>.tr
 Unsent per-thread prompts are stored under `~/.alta/saved_prompts/` so closing a tab or restarting the app does not discard edited drafts. The frontend stores view state in `~/.alta/ui-state.yaml`, including open/selected tabs, theme and navigator settings, and thread-specific model preferences.
 
 `ShellStateStore` is a UI-thread projection of currently open shell state; it is not a replacement for the durable catalog, session journals, or runtime-owned thread state.
-
-## ACP state
-
-ACP install and runtime state is grouped under `~/.alta/acp/`:
-
-- `registry/latest/registry.json` caches the downloaded registry document;
-- `downloads/` stores downloaded archives or package payloads;
-- `installs/` stores resolved install directories;
-- `manifests/` and `state/` store install/runtime metadata;
-- effective ACP backend definitions are merged from installed definitions and `[acp.agents]` config.
-
-See [ACP integration](acp.md) for runtime capabilities and limits.
 
 ## Plugin and skill state
 

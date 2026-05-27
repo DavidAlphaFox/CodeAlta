@@ -155,8 +155,6 @@ Defaults from `LocalAgentCompactionSettings`:
 
 The summarizer is an ordinary provider turn executed through the same turn executor. Checkpoints are persisted as `local.compactionCheckpoint` raw events, and visible session updates mark compaction start/completion. Activated CodeAlta-managed skills can be rehydrated into composed instructions after compaction so skill guidance survives without duplicating current context.
 
-Generic ACP sessions currently do not support manual compaction.
-
 ## Persistence model
 
 Local-runtime session journals contain replayable normalized history plus raw state records:

@@ -71,8 +71,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private readonly ThreadSelectionContext _threadSelectionContext;
     private readonly ThreadTabContext _threadTabContext;
     private readonly WorkspaceRefreshContext _workspaceRefreshContext;
-    private readonly AcpManagementCoordinator? _acpManagementCoordinator;
-    private readonly AcpFrontendCoordinator _acpUi;
     private readonly ProviderFrontendCoordinator _providerUi;
     private readonly ProviderDialogCoordinator _providerDialogCoordinator;
     private readonly FileEditorWorkspaceCoordinator _fileEditorWorkspaceCoordinator;
@@ -205,24 +203,9 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             PublishStartupCatalogProjectionReady,
             FocusPromptEditor,
             SetStatus);
-        _acpUi = new AcpFrontendCoordinator(
-            _ownedServices,
-            _chatBackendInitializationCoordinator,
-            _chatBackendStates,
-            DispatchToUi,
-            composition.FrontendEvents,
-            SetStatus);
         _providerUi = new ProviderFrontendCoordinator(_ownedServices, _catalogOptions, _chatBackendInitializationCoordinator, _chatBackendStates, DispatchToUi, composition.FrontendEvents, SetStatus);
         _providerDialogCoordinator = new ProviderDialogCoordinator(
             _providerUi,
-            () => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()),
-            GetDialogAnchor);
-        _acpManagementCoordinator = AcpManagementCoordinatorFactory.Create(
-            _ownedServices,
-            _catalogOptions,
-            _chatBackendStates,
-            () => _acpUi.RefreshBackendsAsync(),
-            agentId => _acpUi.ProbeBackendAsync(agentId),
             () => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()),
             GetDialogAnchor);
         _fileEditorWorkspaceCoordinator = new FileEditorWorkspaceCoordinator(
@@ -262,7 +245,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         var threadSvc = new DelegatingShellThreadCommandService(GetSelectedThread, EnsureThreadTab);
         var dialogs = new DelegatingShellDialogCommandService(
             () => DialogBoundsResolver.ResolveAppBounds(ThreadInput), () => ThreadInput, () => _threadStateCoordinator.Projects,
-            OpenFolderAsync, OpenAcp, OpenModelProvidersAsync, () => new AboutDialog(() => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()), GetDialogAnchor, _shellAnimationRuntime.WelcomePhase01, updateService).Show(), composition.ModelCatalogCoordinator.Open, _sidebarCoordinator.OpenLogs, _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
+            OpenFolderAsync, OpenModelProvidersAsync, () => new AboutDialog(() => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()), GetDialogAnchor, _shellAnimationRuntime.WelcomePhase01, updateService).Show(), composition.ModelCatalogCoordinator.Open, _sidebarCoordinator.OpenLogs, _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
             SkillsManagementCoordinatorFactory.Create(_ownedServices, _catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync, _threadCommandCoordinator.ActivateSelectedSkillAsync, SetStatus),
             PluginManagementCoordinatorFactory.Create(_catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync), _sidebarCoordinator.OpenNavigatorSettings,
             () => EnsureSessionUsagePresenter().TogglePopupFromIndicator(),
@@ -510,7 +493,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             ThinkingAnimationPhase01 = _shellAnimationRuntime.ThinkingPhase01,
             Sidebar = _sidebarCoordinator.View.Root,
             ShellCommandSurfaceCoordinator = _shellCommandSurfaceCoordinator,
-            OpenAcpManager = OpenAcp,
             ToggleTerminalLoopCallback = ToggleTerminalLoopCallback,
             ToggleNavigator = () => SidebarUiStateHelpers.ToggleNavigator(_sidebarCoordinator.View, FocusPromptTarget),
             CanUseCommandPalette = () => _fileEditorWorkspaceCoordinator.SelectedTabId is null,
@@ -759,7 +741,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         return Task.CompletedTask;
     }
 
-    internal void OpenAcp() { if (_acpManagementCoordinator is null) { SetStatus("ACP management is unavailable in this app instance.", tone: StatusTone.Warning); return; } _acpManagementCoordinator.Open(); }
     internal Task OpenModelProvidersAsync() => _providerDialogCoordinator.OpenAsync();
 
     internal void FocusSidebar() { SyncSidebarSelectionToCurrentState(); ApplyPendingSidebarSelection(); _sidebarCoordinator.View.Tree.App?.Focus(_sidebarCoordinator.View.Tree); }
