@@ -16,20 +16,20 @@ internal sealed class ThreadInfoService
         AgentReasoningEffort? ReasoningEffort,
         IReadOnlyList<AgentEvent>? History);
 
-    private readonly AgentHub _agentHub;
+    private readonly IAgentSessionCatalog _sessionCatalog;
     private readonly ThreadSelectionContext _threadSelection;
     private readonly IReadOnlyDictionary<string, ModelProviderState> _chatBackendStates;
 
     public ThreadInfoService(
-        AgentHub agentHub,
+        IAgentSessionCatalog sessionCatalog,
         ThreadSelectionContext threadSelection,
         IReadOnlyDictionary<string, ModelProviderState> chatBackendStates)
     {
-        ArgumentNullException.ThrowIfNull(agentHub);
+        ArgumentNullException.ThrowIfNull(sessionCatalog);
         ArgumentNullException.ThrowIfNull(threadSelection);
         ArgumentNullException.ThrowIfNull(chatBackendStates);
 
-        _agentHub = agentHub;
+        _sessionCatalog = sessionCatalog;
         _threadSelection = threadSelection;
         _chatBackendStates = chatBackendStates;
     }
@@ -45,8 +45,8 @@ internal sealed class ThreadInfoService
         AgentSessionMetadata? metadata = null;
         try
         {
-            await foreach (var session in _agentHub
-                .ListSessionsAsync(new AgentBackendId(snapshot.Value.Thread.BackendId), cancellationToken: cancellationToken))
+            await foreach (var session in _sessionCatalog
+                .ListSessionsAsync(filter: null, cancellationToken: cancellationToken))
             {
                 if (string.Equals(session.SessionId, snapshot.Value.Thread.ThreadId, StringComparison.Ordinal))
                 {

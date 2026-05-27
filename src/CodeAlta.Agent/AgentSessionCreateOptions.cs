@@ -11,6 +11,11 @@ public class AgentSessionCreateOptions
     public string? ThreadId { get; init; }
 
     /// <summary>
+    /// Gets or initializes the optional durable parent session identifier used for lineage and coordination metadata only.
+    /// </summary>
+    public string? ParentSessionId { get; init; }
+
+    /// <summary>
     /// Gets or initializes the user-facing session title when known at creation time.
     /// </summary>
     public string? Title { get; init; }

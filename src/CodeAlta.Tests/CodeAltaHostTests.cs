@@ -56,7 +56,17 @@ public sealed class CodeAltaHostTests
 
         await using var host = await CodeAltaHost.CreateAsync(options, CancellationToken.None);
 
-        CollectionAssert.Contains(host.AgentHub.ListRegisteredBackends().ToList(), backendId);
+        var handle = await host.AgentHub.StartSessionAsync(
+                new AgentSessionCreateOptions
+                {
+                    ProviderKey = backendId.Value,
+                    WorkingDirectory = projectRoot,
+                    OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
+                },
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual("test-session", handle.SessionId);
     }
 
     private sealed class TestAgentBackend(AgentBackendId backendId) : IAgentBackend
@@ -86,7 +96,7 @@ public sealed class CodeAltaHostTests
         public Task<IAgentSession> CreateSessionAsync(
             AgentSessionCreateOptions options,
             CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+            => Task.FromResult<IAgentSession>(new TestAgentSession(BackendId));
 
         public Task<IAgentSession> ResumeSessionAsync(
             string sessionId,
@@ -96,6 +106,49 @@ public sealed class CodeAltaHostTests
 
         public ValueTask DisposeAsync()
             => ValueTask.CompletedTask;
+
+        private sealed class TestAgentSession(AgentBackendId backendId) : IAgentSession
+        {
+            public AgentBackendId BackendId { get; } = backendId;
+
+            public string SessionId => "test-session";
+
+            public string? WorkspacePath => null;
+
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+            public async IAsyncEnumerable<AgentEvent> StreamEventsAsync(
+                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.CompletedTask.ConfigureAwait(false);
+                yield break;
+            }
+
+            public IDisposable Subscribe(Action<AgentEvent> handler) => NullSubscription.Instance;
+
+            public Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default)
+                => Task.FromResult(new AgentRunId("test-run"));
+
+            public Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
+                => Task.FromResult(options.ExpectedRunId ?? new AgentRunId("test-run"));
+
+            public Task AbortAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+            public Task CompactAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+            public Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(CancellationToken cancellationToken = default)
+                => Task.FromResult<IReadOnlyList<AgentEvent>>([]);
+        }
+
+        private sealed class NullSubscription : IDisposable
+        {
+            public static readonly NullSubscription Instance = new();
+
+            public void Dispose()
+            {
+            }
+        }
     }
 
     private sealed class TempDirectory : IDisposable

@@ -32,10 +32,10 @@ public sealed class AgentSessionConnectionTests
                     userInputRequestHandler: null))
             .ConfigureAwait(false);
 
-        Assert.IsNull(connection.CurrentAgentId);
+        Assert.IsNull(connection.CurrentSessionHandleId);
         Assert.IsFalse(connection.IsConnected);
 
-        var agentId = await connection.EnsureConnectedAsync(
+        var sessionHandleId = await connection.EnsureConnectedAsync(
                 new AgentBackendId("fakechat"),
                 Environment.CurrentDirectory,
                 model: null,
@@ -47,12 +47,12 @@ public sealed class AgentSessionConnectionTests
             .ConfigureAwait(false);
 
         _ = await hub.RunAsync(
-                agentId,
+                sessionHandleId,
                 new AgentSendOptions { Input = AgentInput.Text("hello") })
             .ConfigureAwait(false);
 
         Assert.AreEqual(2, backend.CreateSessionAttempts);
-        Assert.AreEqual(agentId, connection.CurrentAgentId!.Value);
+        Assert.AreEqual(sessionHandleId, connection.CurrentSessionHandleId!.Value);
         Assert.IsTrue(connection.IsConnected);
         Assert.IsTrue(received.OfType<AgentContentCompletedEvent>().Any(x => x.Kind == AgentContentKind.Assistant && x.Content == "ok"));
         Assert.IsTrue(received.OfType<AgentSessionUpdateEvent>().Any(x => x.Kind == AgentSessionUpdateKind.Idle));
@@ -70,7 +70,7 @@ public sealed class AgentSessionConnectionTests
         await using var hub = new AgentHub(backendFactory);
         await using var connection = new AgentSessionConnection(hub, static _ => { });
 
-        var firstAgentId = await connection.EnsureConnectedAsync(
+        var firstHandleId = await connection.EnsureConnectedAsync(
                 new AgentBackendId("fakechat"),
                 Environment.CurrentDirectory,
                 model: "model-a",
@@ -81,7 +81,7 @@ public sealed class AgentSessionConnectionTests
                 userInputRequestHandler: null)
             .ConfigureAwait(false);
 
-        var secondAgentId = await connection.EnsureConnectedAsync(
+        var secondHandleId = await connection.EnsureConnectedAsync(
                 new AgentBackendId("fakechat"),
                 Environment.CurrentDirectory,
                 model: "model-a",
@@ -92,7 +92,7 @@ public sealed class AgentSessionConnectionTests
                 userInputRequestHandler: null)
             .ConfigureAwait(false);
 
-        var thirdAgentId = await connection.EnsureConnectedAsync(
+        var thirdHandleId = await connection.EnsureConnectedAsync(
                 new AgentBackendId("fakechat"),
                 Environment.CurrentDirectory,
                 model: "model-b",
@@ -103,8 +103,8 @@ public sealed class AgentSessionConnectionTests
                 userInputRequestHandler: null)
             .ConfigureAwait(false);
 
-        Assert.AreEqual(firstAgentId, secondAgentId);
-        Assert.AreEqual(firstAgentId, thirdAgentId);
+        Assert.AreEqual(firstHandleId, secondHandleId);
+        Assert.AreNotEqual(firstHandleId, thirdHandleId);
         Assert.AreEqual(2, backend.CreateSessionAttempts);
         CollectionAssert.AreEqual(new[] { "model-a", "model-b" }, backend.CreatedModels);
         CollectionAssert.AreEqual(

@@ -36,7 +36,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private readonly ModelProviderPreferenceCoordinator _modelProviderPreferences;
     private readonly SessionRuntimeService _runtimeService;
     private readonly CatalogOptions _catalogOptions;
-    private readonly AgentHub _agentHub;
     private readonly KnownProjectImporter _knownProjectImporter;
     private readonly CodeAltaOwnedServices? _ownedServices;
     private readonly CodeAltaShellController _shellController;
@@ -152,7 +151,6 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _modelProviderPreferences = new ModelProviderPreferenceCoordinator(new CodeAltaConfigStore(catalogOptions), UiLogger);
         _runtimeService = runtimeService;
         _catalogOptions = catalogOptions;
-        _agentHub = agentHub;
         _knownProjectImporter = knownProjectImporter ?? new KnownProjectImporter(
             new AgentSessionCatalog(threadCatalog.JournalStore.CreateSessionStore()),
             projectCatalog);
@@ -569,7 +567,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         => _threadInfoPresenter ??= PopupPresenterFactory.CreateThreadInfoPresenter(
             () => ThreadPaneLayout?.App,
             () => ThreadInput,
-            new ThreadInfoService(_agentHub, _threadSelectionContext, _chatBackendStates),
+            new ThreadInfoService(_ownedServices!.SessionCatalog, _threadSelectionContext, _chatBackendStates),
             DispatchToUi,
             build => CreateComputedVisual(build));
 

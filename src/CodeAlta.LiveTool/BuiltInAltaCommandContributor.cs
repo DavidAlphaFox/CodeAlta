@@ -703,13 +703,12 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
     private static BackendCapability[] GetBackendCapabilities(AltaCommandContext context)
     {
         var descriptors = GetBackendDescriptors(context);
-        var registered = context.Services.Get<AgentHub>()?.ListRegisteredBackends() ?? [];
         var policy = context.Services.Get<IAltaSessionToolBackendPolicy>();
         return GetProviderBackendIds(context, descriptors)
             .Select(backendId => new BackendCapability(
                 backendId.Value,
                 backendId.Value,
-                registered.Contains(backendId),
+                descriptors.Any(descriptor => string.Equals(descriptor.ProviderId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase)),
                 descriptors.Any(descriptor => string.Equals(descriptor.ProviderId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase)),
                 policy?.SupportsAltaSessionTool(backendId.Value) ?? false))
             .ToArray();
@@ -718,17 +717,6 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
     private static AgentBackendId[] GetProviderBackendIds(AltaCommandContext context, IReadOnlyList<ModelProviderDescriptor> descriptors)
     {
         var backendIds = descriptors.Select(static descriptor => new AgentBackendId(descriptor.ProviderId.Value)).ToList();
-        if (context.Services.Get<AgentHub>() is { } agentHub)
-        {
-            foreach (var id in agentHub.ListRegisteredBackends())
-            {
-                if (!backendIds.Contains(id))
-                {
-                    backendIds.Add(id);
-                }
-            }
-        }
-
         return backendIds.OrderBy(static id => id.Value, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
@@ -2548,7 +2536,7 @@ internal sealed class BuiltInAltaCommandContributor : IAltaCommandContributor
             return descriptor.ProviderId.Value;
         }
 
-        return context.Services.Get<AgentHub>()?.ListRegisteredBackends().FirstOrDefault().Value;
+        return null;
     }
 
     private static IReadOnlyList<ModelProviderDescriptor> GetBackendDescriptors(AltaCommandContext context)

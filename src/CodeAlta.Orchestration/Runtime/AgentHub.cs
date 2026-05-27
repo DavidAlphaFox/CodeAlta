@@ -3,16 +3,17 @@ using CodeAlta.Agent;
 namespace CodeAlta.Orchestration.Runtime;
 
 /// <summary>
-/// Owns active orchestrated agents, sessions, and run coordination.
+/// In-process CodeAlta agent runtime facade for active session and run coordination.
 /// </summary>
+/// <remarks>
+/// <see cref="AgentHub"/> owns active in-memory session attachments, per-session run/control coordination,
+/// subscriptions, and lifecycle events. Persisted session discovery/listing and model-provider probing are owned by
+/// the session catalog and provider initialization services, not by this facade.
+/// </remarks>
 public sealed class AgentHub : IAsyncDisposable
 {
     private readonly AgentBackendFactory _backendFactory;
-    private readonly Dictionary<AgentId, AgentIdentity> _agents = new();
-    private readonly Dictionary<AgentId, SessionEntry> _sessions = new();
-    private readonly Dictionary<string, IAgentBackend> _backends = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, Task<IAgentBackend>> _backendInitializationTasks = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, IReadOnlyList<AgentSessionMetadata>> _sessionMetadataCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<AgentSessionHandleId, SessionEntry> _sessions = new();
     private readonly BoundedRuntimeEventStream<OrchestrationEvent> _events = new();
     private readonly SemaphoreSlim _gate = new(initialCount: 1, maxCount: 1);
     private bool _disposed;
@@ -20,7 +21,7 @@ public sealed class AgentHub : IAsyncDisposable
     /// <summary>
     /// Initializes a new instance of the <see cref="AgentHub"/> class.
     /// </summary>
-    /// <param name="backendFactory">Agent backend factory.</param>
+    /// <param name="backendFactory">Transitional provider runtime factory.</param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="backendFactory"/> is <see langword="null"/>.
     /// </exception>
@@ -42,405 +43,122 @@ public sealed class AgentHub : IAsyncDisposable
     }
 
     /// <summary>
-    /// Registers a backend session owner in memory.
+    /// Starts a session using the provider selected by <see cref="AgentSessionCreateOptions.ProviderKey"/>.
     /// </summary>
-    /// <param name="backendId">Backend id.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The registered identity.</returns>
-    public async Task<AgentIdentity> RegisterAgentAsync(
-        AgentBackendId backendId,
-        CancellationToken cancellationToken = default)
-    {
-        var identity = new AgentIdentity
-        {
-            AgentId = AgentId.NewVersion7(),
-            BackendId = backendId,
-        };
-
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            _agents[identity.AgentId] = identity;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
-        return identity;
-    }
-
-    /// <summary>
-    /// Starts a backend session for an agent.
-    /// </summary>
-    /// <param name="agentId">Agent id.</param>
     /// <param name="options">Session creation options.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The started session id.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the agent is not registered.</exception>
-    public async Task<string> StartSessionAsync(
-        AgentId agentId,
+    /// <returns>The active session handle.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no provider key was provided.</exception>
+    public async Task<AgentSessionHandle> StartSessionAsync(
         AgentSessionCreateOptions options,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        AgentIdentity identity;
-        SessionEntry? previousEntry = null;
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var providerId = ResolveProviderId(options);
+        var runtime = await CreateStartedProviderRuntimeAsync(providerId, cancellationToken).ConfigureAwait(false);
+        IAgentSession? session = null;
         try
         {
-            if (!_agents.TryGetValue(agentId, out identity!))
-            {
-                throw new InvalidOperationException($"Agent '{agentId}' is not registered.");
-            }
+            session = await runtime.CreateSessionAsync(options, cancellationToken).ConfigureAwait(false);
+            return await AttachSessionAsync(providerId, runtime, session, options.ParentSessionId, cancellationToken).ConfigureAwait(false);
         }
-        finally
+        catch
         {
-            _gate.Release();
-        }
-
-        var backend = await GetOrCreateBackendAsync(identity.BackendId, cancellationToken).ConfigureAwait(false);
-        var session = await backend.CreateSessionAsync(options, cancellationToken).ConfigureAwait(false);
-
-        var sessionEntry = new SessionEntry(session, backend);
-
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (_sessions.TryGetValue(agentId, out previousEntry))
+            if (session is not null)
             {
-                _sessions.Remove(agentId);
+                await session.DisposeAsync().ConfigureAwait(false);
             }
 
-            _sessions[agentId] = sessionEntry;
-            InvalidateSessionMetadataCacheUnsafe(identity.BackendId);
+            await DisposeProviderRuntimeAsync(runtime).ConfigureAwait(false);
+            throw;
         }
-        finally
-        {
-            _gate.Release();
-        }
-
-        if (previousEntry is not null)
-        {
-            await previousEntry.DisposeAsync().ConfigureAwait(false);
-        }
-
-        return session.SessionId;
     }
 
     /// <summary>
-    /// Resumes a backend session for an agent.
+    /// Resumes a session using the provider selected by <see cref="AgentSessionCreateOptions.ProviderKey"/>.
     /// </summary>
-    /// <param name="agentId">Agent id.</param>
-    /// <param name="threadId">The canonical thread identifier to resume at the backend boundary.</param>
+    /// <param name="sessionId">The durable session identifier to resume.</param>
     /// <param name="options">Session resume options.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The resumed session id.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the agent is not registered.</exception>
-    public async Task<string> ResumeSessionAsync(
-        AgentId agentId,
-        string threadId,
+    /// <returns>The active session handle.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="sessionId"/> is empty.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no provider key was provided.</exception>
+    public async Task<AgentSessionHandle> ResumeSessionAsync(
+        string sessionId,
         AgentSessionResumeOptions options,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
         ArgumentNullException.ThrowIfNull(options);
 
-        AgentIdentity identity;
-        SessionEntry? previousEntry = null;
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var providerId = ResolveProviderId(options);
+        var runtime = await CreateStartedProviderRuntimeAsync(providerId, cancellationToken).ConfigureAwait(false);
+        IAgentSession? session = null;
         try
         {
-            if (!_agents.TryGetValue(agentId, out identity!))
-            {
-                throw new InvalidOperationException($"Agent '{agentId}' is not registered.");
-            }
+            session = await runtime.ResumeSessionAsync(sessionId, options, cancellationToken).ConfigureAwait(false);
+            return await AttachSessionAsync(providerId, runtime, session, options.ParentSessionId, cancellationToken).ConfigureAwait(false);
         }
-        finally
+        catch
         {
-            _gate.Release();
-        }
-
-        var backend = await GetOrCreateBackendAsync(identity.BackendId, cancellationToken).ConfigureAwait(false);
-        var session = await backend.ResumeSessionAsync(threadId, options, cancellationToken).ConfigureAwait(false);
-        var sessionEntry = new SessionEntry(session, backend);
-
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (_sessions.TryGetValue(agentId, out previousEntry))
+            if (session is not null)
             {
-                _sessions.Remove(agentId);
+                await session.DisposeAsync().ConfigureAwait(false);
             }
 
-            _sessions[agentId] = sessionEntry;
-            InvalidateSessionMetadataCacheUnsafe(identity.BackendId);
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
-        if (previousEntry is not null)
-        {
-            await previousEntry.DisposeAsync().ConfigureAwait(false);
-        }
-
-        return session.SessionId;
-    }
-
-    public async IAsyncEnumerable<AgentSessionMetadata> ListSessionsAsync(
-        AgentBackendId backendId,
-        AgentSessionListFilter? filter = null,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var backend = await GetOrCreateBackendAsync(backendId, cancellationToken).ConfigureAwait(false);
-        if (!CanCacheSessionMetadata(backendId))
-        {
-            await foreach (var session in backend.ListSessionsAsync(filter, cancellationToken).ConfigureAwait(false))
-            {
-                yield return session;
-            }
-
-            yield break;
-        }
-
-        var key = backendId.Value;
-        IReadOnlyList<AgentSessionMetadata>? sessions;
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            _sessionMetadataCache.TryGetValue(key, out sessions);
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
-        if (sessions is not null)
-        {
-            foreach (var session in FilterSessionMetadata(sessions, filter))
-            {
-                yield return session;
-            }
-
-            yield break;
-        }
-
-        var loadedSessions = new List<AgentSessionMetadata>();
-        await foreach (var session in backend.ListSessionsAsync(filter: null, cancellationToken).ConfigureAwait(false))
-        {
-            loadedSessions.Add(session);
-            if (filter is null || MatchesSessionFilter(session, filter))
-            {
-                yield return session;
-            }
-        }
-
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (!_sessionMetadataCache.ContainsKey(key))
-            {
-                _sessionMetadataCache[key] = loadedSessions.ToArray();
-            }
-        }
-        finally
-        {
-            _gate.Release();
+            await DisposeProviderRuntimeAsync(runtime).ConfigureAwait(false);
+            throw;
         }
     }
 
     /// <summary>
-    /// Deletes a backend-owned session when supported.
+    /// Sends input through an active session attachment.
     /// </summary>
-    /// <param name="backendId">The backend identifier.</param>
-    /// <param name="sessionId">The backend session identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><see langword="true"/> when the backend deleted the session; otherwise <see langword="false"/>.</returns>
-    public async Task<bool> DeleteSessionAsync(
-        AgentBackendId backendId,
-        string sessionId,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
-
-        var backend = await GetOrCreateBackendAsync(backendId, cancellationToken).ConfigureAwait(false);
-        var deleted = await backend.DeleteSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        if (deleted)
-        {
-            await InvalidateSessionMetadataCacheAsync(backendId, cancellationToken).ConfigureAwait(false);
-        }
-
-        return deleted;
-    }
-
-    /// <summary>
-    /// Unloads a backend runtime when it has no active sessions.
-    /// </summary>
-    /// <param name="backendId">The backend identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><see langword="true"/> when a cached backend existed and was unloaded.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the backend still owns active sessions.</exception>
-    public async Task<bool> UnloadBackendAsync(AgentBackendId backendId, CancellationToken cancellationToken = default)
-    {
-        IAgentBackend? backend = null;
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (_sessions.Values.Any(entry => string.Equals(entry.Backend.BackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidOperationException(
-                    $"Backend '{backendId.Value}' cannot be reloaded while it has active sessions. Close ACP threads first.");
-            }
-
-            if (_backends.TryGetValue(backendId.Value, out backend))
-            {
-                _backends.Remove(backendId.Value);
-            }
-
-            InvalidateSessionMetadataCacheUnsafe(backendId);
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
-        if (backend is null)
-        {
-            return false;
-        }
-
-        try
-        {
-            await backend.StopAsync().ConfigureAwait(false);
-        }
-        finally
-        {
-            await backend.DisposeAsync().ConfigureAwait(false);
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Returns whether a backend currently owns any active sessions.
-    /// </summary>
-    /// <param name="backendId">The backend identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><see langword="true"/> when the backend has an active session.</returns>
-    public async Task<bool> HasActiveSessionsAsync(AgentBackendId backendId, CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            return _sessions.Values.Any(entry => string.Equals(entry.Backend.BackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase));
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    /// <summary>
-    /// Returns whether a backend uses the CodeAlta-owned shared session metadata store.
-    /// </summary>
-    /// <param name="backendId">The backend identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><see langword="true" /> when sessions can be recovered once from the shared store.</returns>
-    public async Task<bool> UsesSharedSessionMetadataStoreAsync(
-        AgentBackendId backendId,
-        CancellationToken cancellationToken = default)
-    {
-        if (_backendFactory.UsesSharedSessionMetadataStore(backendId))
-        {
-            return true;
-        }
-
-        var backend = await GetOrCreateBackendAsync(backendId, cancellationToken).ConfigureAwait(false);
-        return backend is IAgentSharedSessionMetadataBackend;
-    }
-
-    /// <summary>
-    /// Lists registered backend identifiers known to the orchestration runtime.
-    /// </summary>
-    /// <returns>The registered backend identifiers.</returns>
-    public IReadOnlyList<AgentBackendId> ListRegisteredBackends()
-        => _backendFactory.ListRegisteredBackends();
-
-    /// <summary>
-    /// Sends input through an active agent session.
-    /// </summary>
-    /// <param name="agentId">Agent id.</param>
+    /// <param name="sessionHandleId">The active session handle.</param>
     /// <param name="options">Send options.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The backend run id.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the agent has no active session.</exception>
+    /// <returns>The provider run id.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle does not reference an active session.</exception>
     public async Task<AgentRunId> RunAsync(
-        AgentId agentId,
+        AgentSessionHandleId sessionHandleId,
         AgentSendOptions options,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var entry = await AcquireSessionEntryAsync(agentId, cancellationToken).ConfigureAwait(false);
-
-        var runGateHeld = false;
+        var entry = await AcquireSessionEntryAsync(sessionHandleId, cancellationToken).ConfigureAwait(false);
         try
         {
-            await entry.RunGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-            runGateHeld = true;
-
-            var runId = await entry.Session.SendAsync(options, cancellationToken).ConfigureAwait(false);
-            _events.TryPublish(new RunStartedEvent(DateTimeOffset.UtcNow, agentId, runId));
-            _events.TryPublish(new RunCompletedEvent(DateTimeOffset.UtcNow, agentId, runId));
-            return runId;
-        }
-        catch (Exception ex)
-        {
-            _events.TryPublish(new RunFailedEvent(DateTimeOffset.UtcNow, agentId, ex.Message));
-            throw;
+            return await entry.Coordinator.RunAsync(sessionHandleId, options, _events, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            if (runGateHeld)
-            {
-                entry.RunGate.Release();
-            }
-
             entry.ReleaseReference();
         }
     }
 
     /// <summary>
-    /// Steers an active agent run without starting a new one.
+    /// Steers an active run without starting a new one.
     /// </summary>
-    /// <param name="agentId">Agent id.</param>
+    /// <param name="sessionHandleId">The active session handle.</param>
     /// <param name="options">Steering options.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The backend run id that accepted the steering input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the agent has no active session.</exception>
+    /// <returns>The provider run id that accepted the steering input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle does not reference an active session.</exception>
     public async Task<AgentRunId> SteerAsync(
-        AgentId agentId,
+        AgentSessionHandleId sessionHandleId,
         AgentSteerOptions options,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var entry = await AcquireSessionEntryAsync(agentId, cancellationToken).ConfigureAwait(false);
-
+        var entry = await AcquireSessionEntryAsync(sessionHandleId, cancellationToken).ConfigureAwait(false);
         try
         {
-            var runId = await entry.Session.SteerAsync(options, cancellationToken).ConfigureAwait(false);
-            _events.TryPublish(new RunStartedEvent(DateTimeOffset.UtcNow, agentId, runId));
-            _events.TryPublish(new RunCompletedEvent(DateTimeOffset.UtcNow, agentId, runId));
-            return runId;
-        }
-        catch (Exception ex)
-        {
-            _events.TryPublish(new RunFailedEvent(DateTimeOffset.UtcNow, agentId, ex.Message));
-            throw;
+            return await entry.Coordinator.SteerAsync(sessionHandleId, options, _events, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -449,25 +167,25 @@ public sealed class AgentHub : IAsyncDisposable
     }
 
     /// <summary>
-    /// Subscribes to normalized agent events from the active agent session.
+    /// Subscribes to normalized agent events from the active session attachment.
     /// </summary>
-    /// <param name="agentId">Agent id.</param>
+    /// <param name="sessionHandleId">The active session handle.</param>
     /// <param name="handler">Event handler.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>An <see cref="IDisposable"/> that unsubscribes when disposed.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="handler"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the agent has no active session.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the handle does not reference an active session.</exception>
     public async Task<IDisposable> SubscribeSessionEventsAsync(
-        AgentId agentId,
+        AgentSessionHandleId sessionHandleId,
         Action<AgentEvent> handler,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(handler);
 
-        var entry = await AcquireSessionEntryAsync(agentId, cancellationToken).ConfigureAwait(false);
+        var entry = await AcquireSessionEntryAsync(sessionHandleId, cancellationToken).ConfigureAwait(false);
         try
         {
-            return entry.Session.Subscribe(handler);
+            return await entry.Coordinator.SubscribeAsync(handler, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -476,20 +194,20 @@ public sealed class AgentHub : IAsyncDisposable
     }
 
     /// <summary>
-    /// Retrieves the stored history for the active agent session (best effort).
+    /// Retrieves the stored history for the active session attachment (best effort).
     /// </summary>
-    /// <param name="agentId">Agent id.</param>
+    /// <param name="sessionHandleId">The active session handle.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The session event history.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the agent has no active session.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the handle does not reference an active session.</exception>
     public async Task<IReadOnlyList<AgentEvent>> GetSessionHistoryAsync(
-        AgentId agentId,
+        AgentSessionHandleId sessionHandleId,
         CancellationToken cancellationToken = default)
     {
-        var entry = await AcquireSessionEntryAsync(agentId, cancellationToken).ConfigureAwait(false);
+        var entry = await AcquireSessionEntryAsync(sessionHandleId, cancellationToken).ConfigureAwait(false);
         try
         {
-            return await entry.Session.GetHistoryAsync(cancellationToken).ConfigureAwait(false);
+            return await entry.Coordinator.GetHistoryAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -498,17 +216,17 @@ public sealed class AgentHub : IAsyncDisposable
     }
 
     /// <summary>
-    /// Aborts/cancels the currently running work in the active agent session (best effort).
+    /// Aborts/cancels the currently running work in the active session attachment (best effort).
     /// </summary>
-    /// <param name="agentId">Agent id.</param>
+    /// <param name="sessionHandleId">The active session handle.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the agent has no active session.</exception>
-    public async Task AbortAsync(AgentId agentId, CancellationToken cancellationToken = default)
+    /// <exception cref="InvalidOperationException">Thrown when the handle does not reference an active session.</exception>
+    public async Task AbortAsync(AgentSessionHandleId sessionHandleId, CancellationToken cancellationToken = default)
     {
-        var entry = await AcquireSessionEntryAsync(agentId, cancellationToken).ConfigureAwait(false);
+        var entry = await AcquireSessionEntryAsync(sessionHandleId, cancellationToken).ConfigureAwait(false);
         try
         {
-            await entry.Session.AbortAsync(cancellationToken).ConfigureAwait(false);
+            await entry.Coordinator.AbortAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -517,53 +235,39 @@ public sealed class AgentHub : IAsyncDisposable
     }
 
     /// <summary>
-    /// Triggers a manual compaction in the active agent session.
+    /// Triggers a manual compaction in the active session attachment.
     /// </summary>
-    /// <param name="agentId">Agent id.</param>
+    /// <param name="sessionHandleId">The active session handle.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the agent has no active session.</exception>
-    public async Task<AgentCompactionOutcome?> CompactAsync(AgentId agentId, CancellationToken cancellationToken = default)
+    /// <returns>The compaction outcome when the session supplies one; otherwise <see langword="null"/>.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle does not reference an active session.</exception>
+    public async Task<AgentCompactionOutcome?> CompactAsync(AgentSessionHandleId sessionHandleId, CancellationToken cancellationToken = default)
     {
-        var entry = await AcquireSessionEntryAsync(agentId, cancellationToken).ConfigureAwait(false);
-        var runGateHeld = false;
+        var entry = await AcquireSessionEntryAsync(sessionHandleId, cancellationToken).ConfigureAwait(false);
         try
         {
-            await entry.RunGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-            runGateHeld = true;
-
-            if (entry.Session is IAgentCompactionOutcomeProvider compactionOutcomeProvider)
-            {
-                return await compactionOutcomeProvider.CompactWithOutcomeAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            await entry.Session.CompactAsync(cancellationToken).ConfigureAwait(false);
-            return null;
+            return await entry.Coordinator.CompactAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            if (runGateHeld)
-            {
-                entry.RunGate.Release();
-            }
-
             entry.ReleaseReference();
         }
     }
 
     /// <summary>
-    /// Stops and disposes the active session for an agent, if present.
+    /// Stops and disposes the active session attachment for a handle, if present.
     /// </summary>
-    /// <param name="agentId">Agent id.</param>
+    /// <param name="sessionHandleId">The active session handle.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public async Task StopSessionAsync(AgentId agentId, CancellationToken cancellationToken = default)
+    public async Task StopSessionAsync(AgentSessionHandleId sessionHandleId, CancellationToken cancellationToken = default)
     {
         SessionEntry? entry = null;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_sessions.TryGetValue(agentId, out entry))
+            if (_sessions.TryGetValue(sessionHandleId, out entry))
             {
-                _sessions.Remove(agentId);
+                _sessions.Remove(sessionHandleId);
             }
         }
         finally
@@ -588,146 +292,91 @@ public sealed class AgentHub : IAsyncDisposable
         _disposed = true;
         _events.Complete();
 
-        foreach (var session in _sessions.Values)
+        SessionEntry[] sessions;
+        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+        try
+        {
+            sessions = _sessions.Values.ToArray();
+            _sessions.Clear();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        foreach (var session in sessions)
         {
             await session.DisposeAsync().ConfigureAwait(false);
         }
 
-        _sessions.Clear();
-        _sessionMetadataCache.Clear();
-
-        foreach (var backend in _backends.Values)
-        {
-            try
-            {
-                await backend.StopAsync().ConfigureAwait(false);
-            }
-            catch
-            {
-                // Ignore shutdown exceptions from backend runtimes.
-            }
-
-            await backend.DisposeAsync().ConfigureAwait(false);
-        }
-
-        _backends.Clear();
         _gate.Dispose();
     }
 
-    private async Task<IAgentBackend> GetOrCreateBackendAsync(
-        AgentBackendId backendId,
+    private async Task<AgentSessionHandle> AttachSessionAsync(
+        AgentBackendId providerId,
+        IAgentBackend runtime,
+        IAgentSession session,
+        string? parentSessionId,
         CancellationToken cancellationToken)
     {
-        var key = backendId.Value;
-        Task<IAgentBackend> initializationTask;
+        var handleId = AgentSessionHandleId.NewVersion7();
+        var normalizedParentSessionId = string.IsNullOrWhiteSpace(parentSessionId) ? null : parentSessionId.Trim();
+        var handle = new AgentSessionHandle
+        {
+            HandleId = handleId,
+            SessionId = session.SessionId,
+            ProviderId = providerId,
+            ParentSessionId = normalizedParentSessionId,
+        };
+        var entry = new SessionEntry(new AgentSessionCoordinator(session), runtime);
+
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_backends.TryGetValue(key, out var existing))
-            {
-                return existing;
-            }
-
-            if (!_backendInitializationTasks.TryGetValue(key, out initializationTask!))
-            {
-                initializationTask = CreateAndStartBackendAsync(backendId, key, CancellationToken.None);
-                _backendInitializationTasks[key] = initializationTask;
-            }
+            _sessions[handleId] = entry;
         }
         finally
         {
             _gate.Release();
         }
 
-        return await initializationTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+        _events.TryPublish(new AgentSessionAttachedEvent(DateTimeOffset.UtcNow, handleId, session.SessionId, providerId, normalizedParentSessionId));
+        return handle;
     }
 
-    private async Task<IAgentBackend> CreateAndStartBackendAsync(
-        AgentBackendId backendId,
-        string key,
+    private async Task<IAgentBackend> CreateStartedProviderRuntimeAsync(
+        AgentBackendId providerId,
         CancellationToken cancellationToken)
     {
-        IAgentBackend? created = null;
+        var runtime = _backendFactory.Create(providerId);
         try
         {
-            created = _backendFactory.Create(backendId);
-            await created.StartAsync(cancellationToken).ConfigureAwait(false);
-
-            IAgentBackend? existing = null;
-            await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
-            {
-                _backendInitializationTasks.Remove(key);
-                if (_backends.TryGetValue(key, out existing))
-                {
-                    return existing;
-                }
-
-                _backends[key] = created;
-                return created;
-            }
-            finally
-            {
-                _gate.Release();
-            }
+            await runtime.StartAsync(cancellationToken).ConfigureAwait(false);
+            return runtime;
         }
         catch
         {
-            await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-            try
-            {
-                _backendInitializationTasks.Remove(key);
-            }
-            finally
-            {
-                _gate.Release();
-            }
-
-            if (created is not null)
-            {
-                try
-                {
-                    await created.StopAsync().ConfigureAwait(false);
-                }
-                catch
-                {
-                    // Ignore shutdown exceptions from backend runtimes that did not finish starting.
-                }
-
-                await created.DisposeAsync().ConfigureAwait(false);
-            }
-
+            await DisposeProviderRuntimeAsync(runtime).ConfigureAwait(false);
             throw;
         }
     }
 
-    private async Task InvalidateSessionMetadataCacheAsync(AgentBackendId backendId, CancellationToken cancellationToken)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            InvalidateSessionMetadataCacheUnsafe(backendId);
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    private async Task<SessionEntry> AcquireSessionEntryAsync(AgentId agentId, CancellationToken cancellationToken)
+    private async Task<SessionEntry> AcquireSessionEntryAsync(
+        AgentSessionHandleId sessionHandleId,
+        CancellationToken cancellationToken)
     {
         SessionEntry entry;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (!_sessions.TryGetValue(agentId, out entry!))
+            if (!_sessions.TryGetValue(sessionHandleId, out entry!))
             {
-                throw new InvalidOperationException($"Agent '{agentId}' does not have an active session.");
+                throw new InvalidOperationException($"Agent session handle '{sessionHandleId}' does not have an active session.");
             }
 
             if (!entry.TryAddReference())
             {
-                throw new InvalidOperationException($"Agent '{agentId}' does not have an active session.");
+                throw new InvalidOperationException($"Agent session handle '{sessionHandleId}' does not have an active session.");
             }
         }
         finally
@@ -738,72 +387,175 @@ public sealed class AgentHub : IAsyncDisposable
         return entry;
     }
 
-    private void InvalidateSessionMetadataCacheUnsafe(AgentBackendId backendId)
-        => _sessionMetadataCache.Remove(backendId.Value);
-
-    private static bool CanCacheSessionMetadata(AgentBackendId backendId)
-        => !string.IsNullOrWhiteSpace(backendId.Value);
-
-    private static IReadOnlyList<AgentSessionMetadata> FilterSessionMetadata(
-        IReadOnlyList<AgentSessionMetadata> sessions,
-        AgentSessionListFilter? filter)
+    private static AgentBackendId ResolveProviderId(AgentSessionCreateOptions options)
     {
-        if (filter is null)
+        if (string.IsNullOrWhiteSpace(options.ProviderKey))
         {
-            return sessions;
+            throw new InvalidOperationException("Agent session provider key is required to start or resume a session.");
         }
 
-        return sessions.Where(session => MatchesSessionFilter(session, filter)).ToArray();
+        return new AgentBackendId(options.ProviderKey.Trim());
     }
 
-    private static bool MatchesSessionFilter(AgentSessionMetadata session, AgentSessionListFilter filter)
+    private static async ValueTask DisposeProviderRuntimeAsync(IAgentBackend runtime)
     {
-        if (!string.IsNullOrWhiteSpace(filter.Cwd) &&
-            !string.Equals(session.Context?.Cwd ?? session.WorkspacePath, filter.Cwd, StringComparison.OrdinalIgnoreCase))
+        try
         {
-            return false;
+            await runtime.StopAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Ignore shutdown exceptions from provider runtimes that did not finish starting.
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.GitRoot) &&
-            !string.Equals(session.Context?.GitRoot, filter.GitRoot, StringComparison.OrdinalIgnoreCase))
+        await runtime.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private sealed class AgentSessionCoordinator : IAsyncDisposable
+    {
+        private readonly IAgentSession _session;
+        private readonly SemaphoreSlim _runGate = new(initialCount: 1, maxCount: 1);
+        private readonly SemaphoreSlim _controlGate = new(initialCount: 1, maxCount: 1);
+
+        public AgentSessionCoordinator(IAgentSession session)
         {
-            return false;
+            ArgumentNullException.ThrowIfNull(session);
+
+            _session = session;
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Repository) &&
-            !string.Equals(session.Context?.Repository, filter.Repository, StringComparison.OrdinalIgnoreCase))
+        public async Task<AgentRunId> RunAsync(
+            AgentSessionHandleId sessionHandleId,
+            AgentSendOptions options,
+            BoundedRuntimeEventStream<OrchestrationEvent> events,
+            CancellationToken cancellationToken)
         {
-            return false;
+            await _runGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var runId = await _session.SendAsync(options, cancellationToken).ConfigureAwait(false);
+                events.TryPublish(new RunStartedEvent(DateTimeOffset.UtcNow, sessionHandleId, runId));
+                events.TryPublish(new RunCompletedEvent(DateTimeOffset.UtcNow, sessionHandleId, runId));
+                return runId;
+            }
+            catch (Exception ex)
+            {
+                events.TryPublish(new RunFailedEvent(DateTimeOffset.UtcNow, sessionHandleId, ex.Message));
+                throw;
+            }
+            finally
+            {
+                _runGate.Release();
+            }
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Branch) &&
-            !string.Equals(session.Context?.Branch, filter.Branch, StringComparison.OrdinalIgnoreCase))
+        public async Task<AgentRunId> SteerAsync(
+            AgentSessionHandleId sessionHandleId,
+            AgentSteerOptions options,
+            BoundedRuntimeEventStream<OrchestrationEvent> events,
+            CancellationToken cancellationToken)
         {
-            return false;
+            await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var runId = await _session.SteerAsync(options, cancellationToken).ConfigureAwait(false);
+                events.TryPublish(new RunStartedEvent(DateTimeOffset.UtcNow, sessionHandleId, runId));
+                events.TryPublish(new RunCompletedEvent(DateTimeOffset.UtcNow, sessionHandleId, runId));
+                return runId;
+            }
+            catch (Exception ex)
+            {
+                events.TryPublish(new RunFailedEvent(DateTimeOffset.UtcNow, sessionHandleId, ex.Message));
+                throw;
+            }
+            finally
+            {
+                _controlGate.Release();
+            }
         }
 
-        return true;
+        public async Task<IDisposable> SubscribeAsync(Action<AgentEvent> handler, CancellationToken cancellationToken)
+        {
+            await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return _session.Subscribe(handler);
+            }
+            finally
+            {
+                _controlGate.Release();
+            }
+        }
+
+        public async Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(CancellationToken cancellationToken)
+        {
+            await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await _session.GetHistoryAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _controlGate.Release();
+            }
+        }
+
+        public async Task AbortAsync(CancellationToken cancellationToken)
+        {
+            await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await _session.AbortAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _controlGate.Release();
+            }
+        }
+
+        public async Task<AgentCompactionOutcome?> CompactAsync(CancellationToken cancellationToken)
+        {
+            await _runGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (_session is IAgentCompactionOutcomeProvider compactionOutcomeProvider)
+                {
+                    return await compactionOutcomeProvider.CompactWithOutcomeAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                await _session.CompactAsync(cancellationToken).ConfigureAwait(false);
+                return null;
+            }
+            finally
+            {
+                _runGate.Release();
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _runGate.Dispose();
+            _controlGate.Dispose();
+            await _session.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     private sealed class SessionEntry : IAsyncDisposable
     {
         private readonly object _sync = new();
+        private readonly IAgentBackend _providerRuntime;
         private readonly TaskCompletionSource _disposedCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private TaskCompletionSource? _idleCompletion;
         private int _activeReferences;
         private bool _disposeStarted;
 
-        public SessionEntry(IAgentSession session, IAgentBackend backend)
+        public SessionEntry(AgentSessionCoordinator coordinator, IAgentBackend providerRuntime)
         {
-            Session = session;
-            Backend = backend;
+            Coordinator = coordinator;
+            _providerRuntime = providerRuntime;
         }
 
-        public IAgentSession Session { get; }
-
-        public IAgentBackend Backend { get; }
-
-        public SemaphoreSlim RunGate { get; } = new(initialCount: 1, maxCount: 1);
+        public AgentSessionCoordinator Coordinator { get; }
 
         public bool TryAddReference()
         {
@@ -873,7 +625,7 @@ public sealed class AgentHub : IAsyncDisposable
                 {
                     try
                     {
-                        await Session.AbortAsync(CancellationToken.None).ConfigureAwait(false);
+                        await Coordinator.AbortAsync(CancellationToken.None).ConfigureAwait(false);
                     }
                     catch
                     {
@@ -883,8 +635,8 @@ public sealed class AgentHub : IAsyncDisposable
                     await idleTask.ConfigureAwait(false);
                 }
 
-                RunGate.Dispose();
-                await Session.DisposeAsync().ConfigureAwait(false);
+                await Coordinator.DisposeAsync().ConfigureAwait(false);
+                await DisposeProviderRuntimeAsync(_providerRuntime).ConfigureAwait(false);
                 _disposedCompletion.TrySetResult();
             }
             catch (Exception ex)

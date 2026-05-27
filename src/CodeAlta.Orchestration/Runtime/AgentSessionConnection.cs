@@ -1,6 +1,4 @@
 using CodeAlta.Agent;
-using CodeAlta.Orchestration;
-using CodeAlta.Orchestration.Runtime;
 using XenoAtom.Logging;
 
 namespace CodeAlta.Orchestration.Runtime;
@@ -11,8 +9,8 @@ internal sealed class AgentSessionConnection : IAsyncDisposable
     private readonly AgentHub _agentHub;
     private readonly Action<AgentEvent> _eventHandler;
 
-    private AgentId? _connectedAgentId;
-    private AgentBackendId? _connectedBackendId;
+    private AgentSessionHandleId? _connectedSessionHandleId;
+    private AgentBackendId? _connectedProviderId;
     private string? _connectedModel;
     private AgentReasoningEffort? _connectedReasoningEffort;
     private IDisposable? _eventSubscription;
@@ -26,21 +24,21 @@ internal sealed class AgentSessionConnection : IAsyncDisposable
         _eventHandler = eventHandler;
     }
 
-    public AgentId? CurrentAgentId => _connectedAgentId;
+    public AgentSessionHandleId? CurrentSessionHandleId => _connectedSessionHandleId;
 
-    public AgentBackendId? ConnectedBackendId => _connectedBackendId;
+    public AgentBackendId? ConnectedProviderId => _connectedProviderId;
 
     public string? ConnectedModel => _connectedModel;
 
     public AgentReasoningEffort? ConnectedReasoningEffort => _connectedReasoningEffort;
 
     public bool IsConnected =>
-        _connectedAgentId is not null &&
+        _connectedSessionHandleId is not null &&
         _eventSubscription is not null &&
-        _connectedBackendId is not null;
+        _connectedProviderId is not null;
 
-    public async Task<AgentId> EnsureConnectedAsync(
-        AgentBackendId backendId,
+    public async Task<AgentSessionHandleId> EnsureConnectedAsync(
+        AgentBackendId providerId,
         string workingDirectory,
         string? model,
         AgentReasoningEffort? reasoningEffort,
@@ -53,56 +51,37 @@ internal sealed class AgentSessionConnection : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(permissionRequestHandler);
 
         LogDebug(
-            $"EnsureConnected backend={backendId.Value} workdir={workingDirectory} model={model ?? "<default>"} reasoning={reasoningEffort?.ToString() ?? "<default>"} tools={tools?.Count ?? 0}");
+            $"EnsureConnected provider={providerId.Value} workdir={workingDirectory} model={model ?? "<default>"} reasoning={reasoningEffort?.ToString() ?? "<default>"} tools={tools?.Count ?? 0}");
 
         if (IsConnected &&
-            _connectedAgentId is { } connectedAgentId &&
-            _connectedBackendId is { } connectedBackendId &&
-            string.Equals(connectedBackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase) &&
+            _connectedSessionHandleId is { } connectedSessionHandleId &&
+            _connectedProviderId is { } connectedProviderId &&
+            string.Equals(connectedProviderId.Value, providerId.Value, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(_connectedModel, model, StringComparison.Ordinal) &&
             _connectedReasoningEffort == reasoningEffort)
         {
-            LogDebug($"Reusing existing chat connection agentId={connectedAgentId.Value} backend={backendId.Value}");
-            return connectedAgentId;
+            LogDebug($"Reusing existing chat connection handle={connectedSessionHandleId.Value} provider={providerId.Value}");
+            return connectedSessionHandleId;
         }
 
-        AgentId agentId;
-        if (_connectedAgentId is { } existingAgentId &&
-            _connectedBackendId is { } existingBackendId &&
-            string.Equals(existingBackendId.Value, backendId.Value, StringComparison.OrdinalIgnoreCase))
+        if (_connectedSessionHandleId is { } previousHandleId)
         {
-            LogInfo($"Restarting chat connection agentId={existingAgentId.Value} backend={backendId.Value} model={model ?? "<default>"} reasoning={reasoningEffort?.ToString() ?? "<default>"}");
-            LogDebug($"Restarting existing chat session agentId={existingAgentId.Value} backend={backendId.Value}");
+            LogInfo($"Restarting chat connection handle={previousHandleId.Value} provider={_connectedProviderId?.Value ?? "<none>"} nextProvider={providerId.Value} model={model ?? "<default>"} reasoning={reasoningEffort?.ToString() ?? "<default>"}");
+            LogDebug($"Stopping previous chat session handle={previousHandleId.Value}");
             _eventSubscription?.Dispose();
             _eventSubscription = null;
-            await _agentHub.StopSessionAsync(existingAgentId, cancellationToken).ConfigureAwait(false);
-            agentId = existingAgentId;
-        }
-        else
-        {
-            if (_connectedAgentId is { } previousAgentId)
-            {
-                LogInfo($"Switching chat connection from agentId={previousAgentId.Value} backend={_connectedBackendId?.Value ?? "<none>"} to backend={backendId.Value}");
-                LogDebug($"Stopping previous chat session agentId={previousAgentId.Value}");
-                _eventSubscription?.Dispose();
-                _eventSubscription = null;
-                await _agentHub.StopSessionAsync(previousAgentId, cancellationToken).ConfigureAwait(false);
-            }
-
-            var identity = await _agentHub.RegisterAgentAsync(backendId, cancellationToken)
-                .ConfigureAwait(false);
-            agentId = identity.AgentId;
-            LogDebug($"Registered chat agent agentId={agentId.Value} backend={backendId.Value}");
+            await _agentHub.StopSessionAsync(previousHandleId, cancellationToken).ConfigureAwait(false);
+            _connectedSessionHandleId = null;
         }
 
+        AgentSessionHandle handle;
         IDisposable? newSubscription = null;
         try
         {
-            await _agentHub.StartSessionAsync(
-                    agentId,
+            handle = await _agentHub.StartSessionAsync(
                     new AgentSessionCreateOptions
                     {
-                        ProviderKey = backendId.Value,
+                        ProviderKey = providerId.Value,
                         Model = model,
                         ReasoningEffort = reasoningEffort,
                         Streaming = true,
@@ -114,15 +93,15 @@ internal sealed class AgentSessionConnection : IAsyncDisposable
                     },
                     cancellationToken)
                 .ConfigureAwait(false);
-            LogInfo($"Started chat session agentId={agentId.Value} backend={backendId.Value} model={model ?? "<default>"} reasoning={reasoningEffort?.ToString() ?? "<default>"}");
-            LogDebug($"Started chat session agentId={agentId.Value} backend={backendId.Value}");
+            LogInfo($"Started chat session handle={handle.HandleId.Value} provider={providerId.Value} session={handle.SessionId} model={model ?? "<default>"} reasoning={reasoningEffort?.ToString() ?? "<default>"}");
+            LogDebug($"Started chat session handle={handle.HandleId.Value} provider={providerId.Value}");
 
             newSubscription = await _agentHub.SubscribeSessionEventsAsync(
-                    agentId,
+                    handle.HandleId,
                     _eventHandler,
                     cancellationToken)
                 .ConfigureAwait(false);
-            LogDebug($"Subscribed to chat session events agentId={agentId.Value} backend={backendId.Value}");
+            LogDebug($"Subscribed to chat session events handle={handle.HandleId.Value} provider={providerId.Value}");
         }
         catch
         {
@@ -132,37 +111,37 @@ internal sealed class AgentSessionConnection : IAsyncDisposable
 
         _eventSubscription?.Dispose();
         _eventSubscription = newSubscription;
-        _connectedAgentId = agentId;
-        _connectedBackendId = backendId;
+        _connectedSessionHandleId = handle.HandleId;
+        _connectedProviderId = providerId;
         _connectedModel = model;
         _connectedReasoningEffort = reasoningEffort;
-        LogInfo($"Chat connection ready agentId={agentId.Value} backend={backendId.Value} model={model ?? "<default>"} reasoning={reasoningEffort?.ToString() ?? "<default>"}");
-        LogDebug($"Chat connection ready agentId={agentId.Value} backend={backendId.Value}");
-        return agentId;
+        LogInfo($"Chat connection ready handle={handle.HandleId.Value} provider={providerId.Value} session={handle.SessionId} model={model ?? "<default>"} reasoning={reasoningEffort?.ToString() ?? "<default>"}");
+        LogDebug($"Chat connection ready handle={handle.HandleId.Value} provider={providerId.Value}");
+        return handle.HandleId;
     }
 
     public async Task AbortAsync(CancellationToken cancellationToken = default)
     {
-        if (_connectedAgentId is not { } agentId)
+        if (_connectedSessionHandleId is not { } sessionHandleId)
         {
             return;
         }
 
-        LogDebug($"Aborting chat session agentId={agentId.Value}");
-        await _agentHub.AbortAsync(agentId, cancellationToken).ConfigureAwait(false);
+        LogDebug($"Aborting chat session handle={sessionHandleId.Value}");
+        await _agentHub.AbortAsync(sessionHandleId, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
     {
         _eventSubscription?.Dispose();
         _eventSubscription = null;
-        if (_connectedAgentId is { } agentId)
+        if (_connectedSessionHandleId is { } sessionHandleId)
         {
-            await _agentHub.StopSessionAsync(agentId).ConfigureAwait(false);
+            await _agentHub.StopSessionAsync(sessionHandleId).ConfigureAwait(false);
         }
 
-        _connectedAgentId = null;
-        _connectedBackendId = null;
+        _connectedSessionHandleId = null;
+        _connectedProviderId = null;
         _connectedModel = null;
         _connectedReasoningEffort = null;
     }

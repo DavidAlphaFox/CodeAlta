@@ -514,9 +514,9 @@ public sealed class ArchitectureGuardrailTests
         {
             "App/CodeAltaShellController.cs:70:_initializationTask = Task.Run(",
             "App/CodeAltaShellController.cs:433:var startupProviderLoadTask = Task.Run(",
-            "App/CodeAltaApp.cs:350:_ = PersistViewStateAsync();",
-            "App/CodeAltaApp.cs:381:_ = PersistViewStateAsync();",
-            "App/CodeAltaApp.cs:454:_ = OpenModelProvidersAsync();",
+            "App/CodeAltaApp.cs:348:_ = PersistViewStateAsync();",
+            "App/CodeAltaApp.cs:379:_ = PersistViewStateAsync();",
+            "App/CodeAltaApp.cs:452:_ = OpenModelProvidersAsync();",
             "App/RuntimeEventPump.cs:34:_pumpTask = Task.Run(",
             "App/ShellThreadStateCoordinator.cs:274:_ = RestoreStartupThreadHistoryAsync(threadId, cancellationToken);",
             "App/ShellThreadStateCoordinator.cs:283:_ = PersistViewStateAsync();",
@@ -971,11 +971,11 @@ public sealed class ArchitectureGuardrailTests
     {
         var runtimeSource = File.ReadAllText(Path.Combine(GetSourceRoot(), "CodeAlta.Orchestration", "Runtime", "SessionRuntimeService.cs"));
 
-        StringAssert.Contains(runtimeSource, "var agentId = await _threadActors.GetOrCreate(thread.ThreadId).QueryAsync(");
-        StringAssert.Contains(runtimeSource, "var runId = await _agentHub.RunAsync(agentId, sendOptions, cancellationToken)");
+        StringAssert.Contains(runtimeSource, "var sessionHandleId = await _threadActors.GetOrCreate(thread.ThreadId).QueryAsync(");
+        StringAssert.Contains(runtimeSource, "var runId = await _agentHub.RunAsync(sessionHandleId, sendOptions, cancellationToken)");
         StringAssert.Contains(runtimeSource, "await MarkActiveRunIfStillInFlightAsync(thread.ThreadId, runId, runStartedAt, cancellationToken)");
         StringAssert.Contains(runtimeSource, "var entry = await GetActiveCoordinatorSessionForSteeringAsync(thread, options, actorCancellationToken)");
-        StringAssert.Contains(runtimeSource, "return await _agentHub.SteerAsync(agentId, steerOptions, cancellationToken)");
+        StringAssert.Contains(runtimeSource, "return await _agentHub.SteerAsync(sessionHandleId, steerOptions, cancellationToken)");
         StringAssert.Contains(runtimeSource, "@event => _ = PostAgentEventToActorAsync(actor, thread.ThreadId, projector, @event)");
         StringAssert.Contains(runtimeSource, "projector.Project(@event);");
         StringAssert.Contains(runtimeSource, "var actor = _threadActors.GetOrCreate(threadId);");

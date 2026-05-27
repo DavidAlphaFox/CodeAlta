@@ -8,11 +8,22 @@ namespace CodeAlta.Orchestration;
 public abstract record OrchestrationEvent(DateTimeOffset Timestamp);
 
 /// <summary>
+/// Emitted when the runtime attaches a provider runtime to an active CodeAlta session.
+/// </summary>
+public sealed record AgentSessionAttachedEvent(
+    DateTimeOffset Timestamp,
+    AgentSessionHandleId SessionHandleId,
+    string SessionId,
+    AgentBackendId ProviderId,
+    string? ParentSessionId)
+    : OrchestrationEvent(Timestamp);
+
+/// <summary>
 /// Emitted when the hub submits a send/steer operation and receives a backend run id.
 /// </summary>
 public sealed record RunStartedEvent(
     DateTimeOffset Timestamp,
-    AgentId AgentId,
+    AgentSessionHandleId SessionHandleId,
     AgentRunId RunId)
     : OrchestrationEvent(Timestamp);
 
@@ -21,7 +32,7 @@ public sealed record RunStartedEvent(
 /// </summary>
 public sealed record RunCompletedEvent(
     DateTimeOffset Timestamp,
-    AgentId AgentId,
+    AgentSessionHandleId SessionHandleId,
     AgentRunId RunId)
     : OrchestrationEvent(Timestamp);
 
@@ -30,6 +41,6 @@ public sealed record RunCompletedEvent(
 /// </summary>
 public sealed record RunFailedEvent(
     DateTimeOffset Timestamp,
-    AgentId AgentId,
+    AgentSessionHandleId SessionHandleId,
     string Message)
     : OrchestrationEvent(Timestamp);

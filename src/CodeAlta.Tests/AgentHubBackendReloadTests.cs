@@ -1,6 +1,6 @@
 using CodeAlta.Agent;
-using CodeAlta.Orchestration.Runtime;
 using CodeAlta.Orchestration;
+using CodeAlta.Orchestration.Runtime;
 
 namespace CodeAlta.Tests;
 
@@ -8,261 +8,226 @@ namespace CodeAlta.Tests;
 public sealed class AgentHubBackendReloadTests
 {
     [TestMethod]
-    public async Task UnloadBackendAsync_DisposesCachedBackendWithoutActiveSession()
+    public async Task StartSessionAsync_UsesProviderKeyAndReturnsTransientHandle()
     {
-        using var temp = TempDirectory.Create();
-        var backendFactory = new AgentBackendFactory();
-        var backend = new ReloadableBackend();
-        backendFactory.Register("reloadable", () => backend);
+        var providerA = new TrackingBackend("provider-a");
+        var providerB = new TrackingBackend("provider-b");
+        var factory = new AgentBackendFactory();
+        factory.Register("provider-a", () => providerA);
+        factory.Register("provider-b", () => providerB);
 
-        await using var hub = new AgentHub(backendFactory);
+        await using var hub = new AgentHub(factory);
 
-        var sessions = new List<AgentSessionMetadata>();
-        await foreach (var session in hub.ListSessionsAsync(new AgentBackendId("reloadable")).ConfigureAwait(false))
+        var handle = await hub.StartSessionAsync(CreateOptions("provider-b")).ConfigureAwait(false);
+
+        Assert.AreNotEqual(default, handle.HandleId);
+        Assert.AreEqual("provider-b-session-1", handle.SessionId);
+        Assert.AreEqual(new AgentBackendId("provider-b"), handle.ProviderId);
+        Assert.AreEqual(0, providerA.StartCount);
+        Assert.AreEqual(1, providerB.StartCount);
+        Assert.AreEqual("provider-b", providerB.LastCreateOptions?.ProviderKey);
+
+        await hub.StopSessionAsync(handle.HandleId).ConfigureAwait(false);
+
+        Assert.AreEqual(1, providerB.StopCount);
+        Assert.AreEqual(1, providerB.DisposeCount);
+    }
+
+    [TestMethod]
+    public async Task RunAsync_SerializesSameSessionButAllowsDifferentSessionsToRunConcurrently()
+    {
+        var backends = new List<TrackingBackend>();
+        var factory = new AgentBackendFactory();
+        factory.Register("provider", () =>
         {
-            sessions.Add(session);
-        }
-        Assert.AreEqual(0, sessions.Count);
+            var backend = new TrackingBackend("provider") { CreateBlockingSessions = true };
+            backends.Add(backend);
+            return backend;
+        });
 
-        var unloaded = await hub.UnloadBackendAsync(new AgentBackendId("reloadable")).ConfigureAwait(false);
+        await using var hub = new AgentHub(factory);
+        var first = await hub.StartSessionAsync(CreateOptions("provider")).ConfigureAwait(false);
+        var second = await hub.StartSessionAsync(CreateOptions("provider")).ConfigureAwait(false);
+        var firstSession = (BlockingSession)backends[0].LastSession!;
+        var secondSession = (BlockingSession)backends[1].LastSession!;
 
-        Assert.IsTrue(unloaded);
-        Assert.AreEqual(1, backend.StopCount);
-        Assert.AreEqual(1, backend.DisposeCount);
+        var firstRun = hub.RunAsync(first.HandleId, CreateSendOptions("first"));
+        await firstSession.FirstSendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+
+        var sameSessionRun = hub.RunAsync(first.HandleId, CreateSendOptions("same-session"));
+        await Task.Delay(100).ConfigureAwait(false);
+        Assert.IsFalse(sameSessionRun.IsCompleted, "A second run for the same session should wait for the session run gate.");
+
+        var otherSessionRunTask = hub.RunAsync(second.HandleId, CreateSendOptions("other-session"));
+        await secondSession.FirstSendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        secondSession.ReleaseFirstSend.TrySetResult();
+        var otherSessionRun = await otherSessionRunTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        Assert.AreEqual(new AgentRunId(secondSession.FirstRunId), otherSessionRun);
+
+        firstSession.ReleaseFirstSend.TrySetResult();
+        Assert.AreEqual(new AgentRunId(firstSession.FirstRunId), await firstRun.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false));
+        Assert.AreEqual(new AgentRunId(firstSession.SecondRunId), await sameSessionRun.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false));
+        Assert.AreEqual(2, firstSession.SendCount);
     }
 
     [TestMethod]
-    public async Task UnloadBackendAsync_ThrowsWhenBackendHasActiveSession()
+    public async Task SteerAbortAndCompactUsePerSessionCoordination()
     {
-        using var temp = TempDirectory.Create();
-        var backendFactory = new AgentBackendFactory();
-        var backend = new ReloadableBackend();
-        backendFactory.Register("reloadable", () => backend);
+        var backend = new TrackingBackend("provider") { CreateBlockingSessions = true };
+        var factory = new AgentBackendFactory();
+        factory.Register("provider", () => backend);
 
-        await using var hub = new AgentHub(backendFactory);
-        var agent = await hub.RegisterAgentAsync(new AgentBackendId("reloadable"))
-            .ConfigureAwait(false);
-        _ = await hub.StartSessionAsync(
-                agent.AgentId,
-                new AgentSessionCreateOptions
-                {
-                    WorkingDirectory = Environment.CurrentDirectory,
-                    OnPermissionRequest = static (_, _) =>
-                        Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
-                })
-            .ConfigureAwait(false);
+        await using var hub = new AgentHub(factory);
+        var handle = await hub.StartSessionAsync(CreateOptions("provider")).ConfigureAwait(false);
+        var session = (BlockingSession)backend.LastSession!;
 
-        var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
-                () => hub.UnloadBackendAsync(new AgentBackendId("reloadable")))
-            .ConfigureAwait(false);
-
-        StringAssert.Contains(exception.Message, "active sessions");
-    }
-
-    [TestMethod]
-    public async Task SteerAsync_DoesNotBlockBehindActiveRunGate()
-    {
-        using var temp = TempDirectory.Create();
-        var backendFactory = new AgentBackendFactory();
-        var backend = new BlockingSteerBackend();
-        backendFactory.Register("blocking-steer", () => backend);
-
-        await using var hub = new AgentHub(backendFactory);
-        var agent = await hub.RegisterAgentAsync(new AgentBackendId("blocking-steer"))
-            .ConfigureAwait(false);
-        _ = await hub.StartSessionAsync(
-                agent.AgentId,
-                new AgentSessionCreateOptions
-                {
-                    WorkingDirectory = Environment.CurrentDirectory,
-                    OnPermissionRequest = static (_, _) =>
-                        Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
-                })
-            .ConfigureAwait(false);
-
-        var runTask = hub.RunAsync(
-            agent.AgentId,
-            new AgentSendOptions
-            {
-                Input = AgentInput.Text("Initial prompt"),
-            });
-        _ = await backend.Session.SendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        var run = hub.RunAsync(handle.HandleId, CreateSendOptions("run"));
+        await session.FirstSendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         var steerRunId = await hub.SteerAsync(
-                agent.AgentId,
+                handle.HandleId,
                 new AgentSteerOptions
                 {
-                    Input = AgentInput.Text("Steer prompt"),
-                    ExpectedRunId = new AgentRunId("blocking-run"),
+                    Input = AgentInput.Text("steer"),
+                    ExpectedRunId = new AgentRunId(session.FirstRunId),
                 })
+            .WaitAsync(TimeSpan.FromSeconds(5))
             .ConfigureAwait(false);
+        Assert.AreEqual(new AgentRunId(session.FirstRunId), steerRunId);
 
-        Assert.AreEqual(new AgentRunId("blocking-run"), steerRunId);
-        Assert.AreEqual(1, backend.Session.SteerCallCount);
+        await hub.AbortAsync(handle.HandleId).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        Assert.AreEqual(1, session.AbortCount);
 
-        backend.Session.ReleaseSend.TrySetResult();
-        var completedRunId = await runTask.ConfigureAwait(false);
-        Assert.AreEqual(new AgentRunId("blocking-run"), completedRunId);
+        var compact = hub.CompactAsync(handle.HandleId);
+        await Task.Delay(100).ConfigureAwait(false);
+        Assert.IsFalse(compact.IsCompleted, "Compaction should wait for the same session's active run gate.");
+
+        session.ReleaseFirstSend.TrySetResult();
+        await run.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        var outcome = await compact.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+
+        Assert.AreEqual(1, session.CompactCount);
+        Assert.IsTrue(outcome?.Success);
+    }
+
+    [TestMethod]
+    public async Task ParentAndChildSessionsHaveIndependentRunGatesAndLineageEvents()
+    {
+        var backends = new List<TrackingBackend>();
+        var factory = new AgentBackendFactory();
+        factory.Register("provider", () =>
+        {
+            var backend = new TrackingBackend("provider") { CreateBlockingSessions = true };
+            backends.Add(backend);
+            return backend;
+        });
+
+        await using var hub = new AgentHub(factory);
+        var parent = await hub.StartSessionAsync(CreateOptions("provider", threadId: "parent-session")).ConfigureAwait(false);
+        var child = await hub.StartSessionAsync(CreateOptions("provider", threadId: "child-session", parentSessionId: parent.SessionId)).ConfigureAwait(false);
+        var parentSession = (BlockingSession)backends[0].LastSession!;
+
+        var parentRun = hub.RunAsync(parent.HandleId, CreateSendOptions("parent"));
+        await parentSession.FirstSendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+
+        var childSession = (BlockingSession)backends[1].LastSession!;
+        var childRunTask = hub.RunAsync(child.HandleId, CreateSendOptions("child"));
+        await childSession.FirstSendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        childSession.ReleaseFirstSend.TrySetResult();
+        var childRunId = await childRunTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        Assert.AreEqual(new AgentRunId(childSession.FirstRunId), childRunId);
+        Assert.IsFalse(parentRun.IsCompleted, "Child sessions must not share the parent session run gate.");
+
+        parentSession.ReleaseFirstSend.TrySetResult();
+        await parentRun.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+
+        var events = await CollectEventsAsync(hub, 6).ConfigureAwait(false);
+        Assert.IsTrue(events.OfType<AgentSessionAttachedEvent>().Any(e => e.SessionHandleId == parent.HandleId && e.ParentSessionId is null));
+        Assert.IsTrue(events.OfType<AgentSessionAttachedEvent>().Any(e => e.SessionHandleId == child.HandleId && e.ParentSessionId == parent.SessionId));
+        Assert.IsTrue(events.OfType<RunCompletedEvent>().Any(e => e.SessionHandleId == parent.HandleId));
+        Assert.IsTrue(events.OfType<RunCompletedEvent>().Any(e => e.SessionHandleId == child.HandleId));
     }
 
     [TestMethod]
     public async Task StopSessionAsync_WaitsForActiveRunBeforeDisposingSession()
     {
-        using var temp = TempDirectory.Create();
-        var backendFactory = new AgentBackendFactory();
-        var backend = new BlockingSteerBackend();
-        backendFactory.Register("blocking-steer", () => backend);
+        var backend = new TrackingBackend("provider") { CreateBlockingSessions = true };
+        var factory = new AgentBackendFactory();
+        factory.Register("provider", () => backend);
 
-        await using var hub = new AgentHub(backendFactory);
-        var agent = await hub.RegisterAgentAsync(new AgentBackendId("blocking-steer"))
-            .ConfigureAwait(false);
-        _ = await hub.StartSessionAsync(
-                agent.AgentId,
-                new AgentSessionCreateOptions
-                {
-                    WorkingDirectory = Environment.CurrentDirectory,
-                    OnPermissionRequest = static (_, _) =>
-                        Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
-                })
-            .ConfigureAwait(false);
+        await using var hub = new AgentHub(factory);
+        var handle = await hub.StartSessionAsync(CreateOptions("provider")).ConfigureAwait(false);
+        var session = (BlockingSession)backend.LastSession!;
 
-        var runTask = hub.RunAsync(
-            agent.AgentId,
-            new AgentSendOptions
-            {
-                Input = AgentInput.Text("Initial prompt"),
-            });
-        _ = await backend.Session.SendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        var runTask = hub.RunAsync(handle.HandleId, CreateSendOptions("run"));
+        await session.FirstSendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
-        var stopTask = hub.StopSessionAsync(agent.AgentId);
+        var stopTask = hub.StopSessionAsync(handle.HandleId);
         Assert.IsFalse(stopTask.IsCompleted);
 
-        backend.Session.ReleaseSend.TrySetResult();
+        session.ReleaseFirstSend.TrySetResult();
 
-        var completedRunId = await runTask.ConfigureAwait(false);
-        await stopTask.ConfigureAwait(false);
+        await runTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        await stopTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
-        Assert.AreEqual(new AgentRunId("blocking-run"), completedRunId);
-        Assert.AreEqual(1, backend.Session.DisposeCount);
+        Assert.AreEqual(1, session.DisposeCount);
+        Assert.AreEqual(1, backend.DisposeCount);
     }
 
-    [TestMethod]
-    public async Task ListSessionsAsync_CachesProcessBackedBackendSessions()
-    {
-        using var temp = TempDirectory.Create();
-        var backendFactory = new AgentBackendFactory();
-        var backend = new CountingSessionBackend(AgentBackendIds.Codex)
+    private static AgentSessionCreateOptions CreateOptions(string providerKey, string? threadId = null, string? parentSessionId = null)
+        => new()
         {
-            Sessions =
-            [
-                CreateSession("session-a", @"C:\repo-a", "owner/repo-a", "main"),
-                CreateSession("session-b", @"C:\repo-b", "owner/repo-b", "dev"),
-            ],
+            ThreadId = threadId,
+            ParentSessionId = parentSessionId,
+            ProviderKey = providerKey,
+            WorkingDirectory = Environment.CurrentDirectory,
+            OnPermissionRequest = static (_, _) => Task.FromResult(new AgentPermissionDecision(AgentPermissionDecisionKind.AllowOnce)),
         };
-        backendFactory.Register(AgentBackendIds.Codex, () => backend);
 
-        await using var hub = new AgentHub(backendFactory);
+    private static AgentSendOptions CreateSendOptions(string text)
+        => new() { Input = AgentInput.Text(text) };
 
-        var first = await CollectSessionsAsync(hub.ListSessionsAsync(AgentBackendIds.Codex)).ConfigureAwait(false);
-        var filtered = await CollectSessionsAsync(hub.ListSessionsAsync(
-                AgentBackendIds.Codex,
-                new AgentSessionListFilter(Cwd: @"C:\repo-b")))
-            .ConfigureAwait(false);
-        var second = await CollectSessionsAsync(hub.ListSessionsAsync(AgentBackendIds.Codex)).ConfigureAwait(false);
-
-        Assert.AreEqual(1, backend.ListSessionsCount);
-        Assert.AreEqual(2, first.Count);
-        Assert.AreEqual(1, filtered.Count);
-        Assert.AreEqual("session-b", filtered[0].SessionId);
-        Assert.AreEqual(2, second.Count);
-    }
-
-    [TestMethod]
-    public async Task ListSessionsAsync_CachesRegularBackendSessions()
+    private static async Task<IReadOnlyList<OrchestrationEvent>> CollectEventsAsync(AgentHub hub, int count)
     {
-        using var temp = TempDirectory.Create();
-        var backendFactory = new AgentBackendFactory();
-        var backendId = new AgentBackendId("regular");
-        var backend = new CountingSessionBackend(backendId)
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var events = new List<OrchestrationEvent>();
+        await foreach (var @event in hub.StreamEventsAsync(cts.Token).ConfigureAwait(false))
         {
-            Sessions = [CreateSession("session-a", @"C:\repo-a", "owner/repo-a", "main")],
-        };
-        backendFactory.Register(backendId, () => backend);
-
-        await using var hub = new AgentHub(backendFactory);
-
-        _ = await CollectSessionsAsync(hub.ListSessionsAsync(backendId)).ConfigureAwait(false);
-        _ = await CollectSessionsAsync(hub.ListSessionsAsync(backendId)).ConfigureAwait(false);
-
-        Assert.AreEqual(1, backend.ListSessionsCount);
-    }
-
-    [TestMethod]
-    public async Task DeleteSessionAsync_InvalidatesProcessBackedSessionCache()
-    {
-        using var temp = TempDirectory.Create();
-        var backendFactory = new AgentBackendFactory();
-        var backend = new CountingSessionBackend(AgentBackendIds.Copilot)
-        {
-            Sessions =
-            [
-                CreateSession("session-a", @"C:\repo-a", "owner/repo-a", "main"),
-                CreateSession("session-b", @"C:\repo-b", "owner/repo-b", "dev"),
-            ],
-        };
-        backendFactory.Register(AgentBackendIds.Copilot, () => backend);
-
-        await using var hub = new AgentHub(backendFactory);
-
-        _ = await CollectSessionsAsync(hub.ListSessionsAsync(AgentBackendIds.Copilot)).ConfigureAwait(false);
-        var deleted = await hub.DeleteSessionAsync(AgentBackendIds.Copilot, "session-a").ConfigureAwait(false);
-        var afterDelete = await CollectSessionsAsync(hub.ListSessionsAsync(AgentBackendIds.Copilot)).ConfigureAwait(false);
-
-        Assert.IsTrue(deleted);
-        Assert.AreEqual(2, backend.ListSessionsCount);
-        Assert.AreEqual(1, afterDelete.Count);
-        Assert.AreEqual("session-b", afterDelete[0].SessionId);
-    }
-
-    private static AgentSessionMetadata CreateSession(
-        string sessionId,
-        string cwd,
-        string repository,
-        string branch)
-        => new(
-            sessionId,
-            DateTimeOffset.UnixEpoch,
-            DateTimeOffset.UnixEpoch,
-            Context: new AgentSessionContext(
-                Cwd: cwd,
-                GitRoot: cwd,
-                Repository: repository,
-                Branch: branch),
-            WorkspacePath: cwd);
-
-    private static async Task<IReadOnlyList<AgentSessionMetadata>> CollectSessionsAsync(
-        IAsyncEnumerable<AgentSessionMetadata> sessions)
-    {
-        var results = new List<AgentSessionMetadata>();
-        await foreach (var session in sessions.ConfigureAwait(false))
-        {
-            results.Add(session);
+            events.Add(@event);
+            if (events.Count >= count)
+            {
+                break;
+            }
         }
 
-        return results;
+        return events;
     }
 
-    private sealed class ReloadableBackend : IAgentBackend
+    private sealed class TrackingBackend(string providerId) : IAgentBackend
     {
-        public AgentBackendId BackendId => new("reloadable");
+        private int _sessionCounter;
 
-        public string DisplayName => "Reloadable";
+        public AgentBackendId BackendId { get; } = new(providerId);
+
+        public string DisplayName => BackendId.Value;
+
+        public bool CreateBlockingSessions { get; init; }
+
+        public int StartCount { get; private set; }
 
         public int StopCount { get; private set; }
 
         public int DisposeCount { get; private set; }
 
-        public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public AgentSessionCreateOptions? LastCreateOptions { get; private set; }
+
+        public IAgentSession? LastSession { get; private set; }
+
+        public Task StartAsync(CancellationToken cancellationToken = default)
+        {
+            StartCount++;
+            return Task.CompletedTask;
+        }
 
         public Task StopAsync(CancellationToken cancellationToken = default)
         {
@@ -271,133 +236,67 @@ public sealed class AgentHubBackendReloadTests
         }
 
         public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<AgentModelInfo>>([new AgentModelInfo("model-a")]);
+            => Task.FromResult<IReadOnlyList<AgentModelInfo>>([]);
 
         public async IAsyncEnumerable<AgentSessionMetadata> ListSessionsAsync(
             AgentSessionListFilter? filter = null,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await Task.CompletedTask;
+            await Task.CompletedTask.ConfigureAwait(false);
             yield break;
         }
+
+        public Task<bool> DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
 
         public Task<IAgentSession> CreateSessionAsync(
             AgentSessionCreateOptions options,
             CancellationToken cancellationToken = default)
-            => Task.FromResult<IAgentSession>(new ReloadableSession(this));
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            LastCreateOptions = options;
+            var sessionNumber = Interlocked.Increment(ref _sessionCounter);
+            LastSession = CreateBlockingSessions
+                ? new BlockingSession(BackendId, options.ThreadId ?? $"{BackendId.Value}-session-{sessionNumber}")
+                : new ImmediateSession(BackendId, options.ThreadId ?? $"{BackendId.Value}-session-{sessionNumber}");
+            return Task.FromResult(LastSession);
+        }
 
         public Task<IAgentSession> ResumeSessionAsync(
             string sessionId,
             AgentSessionResumeOptions options,
             CancellationToken cancellationToken = default)
-            => Task.FromResult<IAgentSession>(new ReloadableSession(this, sessionId));
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+            ArgumentNullException.ThrowIfNull(options);
+            LastCreateOptions = options;
+            LastSession = CreateBlockingSessions
+                ? new BlockingSession(BackendId, sessionId)
+                : new ImmediateSession(BackendId, sessionId);
+            return Task.FromResult(LastSession);
+        }
 
         public ValueTask DisposeAsync()
         {
             DisposeCount++;
             return ValueTask.CompletedTask;
         }
-
-        private sealed class ReloadableSession : IAgentSession
-        {
-            private readonly ReloadableBackend _backend;
-
-            public ReloadableSession(ReloadableBackend backend, string? sessionId = null)
-            {
-                _backend = backend;
-                SessionId = sessionId ?? "reloadable-session";
-            }
-
-            public AgentBackendId BackendId => _backend.BackendId;
-
-            public string SessionId { get; }
-
-            public string? WorkspacePath => null;
-
-            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-
-            public async IAsyncEnumerable<AgentEvent> StreamEventsAsync(
-                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-            {
-                await Task.CompletedTask.ConfigureAwait(false);
-                yield break;
-            }
-
-            public IDisposable Subscribe(Action<AgentEvent> handler)
-            {
-                ArgumentNullException.ThrowIfNull(handler);
-                return DisposableAction.Create(static () => { });
-            }
-
-            public Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default)
-                => Task.FromResult(new AgentRunId("reloadable-run"));
-
-            public Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
-                => throw new NotSupportedException();
-
-            public Task AbortAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-            public Task CompactAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-            public Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(CancellationToken cancellationToken = default)
-                => Task.FromResult<IReadOnlyList<AgentEvent>>([]);
-        }
     }
 
-    private sealed class BlockingSteerBackend : IAgentBackend
+    private abstract class TestSession(AgentBackendId backendId, string sessionId) : IAgentSession
     {
-        public AgentBackendId BackendId => new("blocking-steer");
+        private readonly List<AgentEvent> _history = [];
+        private readonly List<Action<AgentEvent>> _subscribers = [];
+        private readonly object _subscriberLock = new();
 
-        public string DisplayName => "Blocking Steer";
+        public AgentBackendId BackendId { get; } = backendId;
 
-        public BlockingSteerSession Session { get; } = new();
-
-        public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<AgentModelInfo>>([new AgentModelInfo("model-a")]);
-
-        public async IAsyncEnumerable<AgentSessionMetadata> ListSessionsAsync(
-            AgentSessionListFilter? filter = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await Task.CompletedTask;
-            yield break;
-        }
-
-        public Task<IAgentSession> CreateSessionAsync(
-            AgentSessionCreateOptions options,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult<IAgentSession>(Session);
-
-        public Task<IAgentSession> ResumeSessionAsync(
-            string sessionId,
-            AgentSessionResumeOptions options,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult<IAgentSession>(Session);
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
-    private sealed class BlockingSteerSession : IAgentSession
-    {
-        public TaskCompletionSource<bool> SendStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public TaskCompletionSource ReleaseSend { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public int SteerCallCount { get; private set; }
-
-        public int DisposeCount { get; private set; }
-
-        public AgentBackendId BackendId => new("blocking-steer");
-
-        public string SessionId => "blocking-steer-session";
+        public string SessionId { get; } = sessionId;
 
         public string? WorkspacePath => null;
+
+        public int DisposeCount { get; private set; }
 
         public ValueTask DisposeAsync()
         {
@@ -408,6 +307,7 @@ public sealed class AgentHubBackendReloadTests
         public async IAsyncEnumerable<AgentEvent> StreamEventsAsync(
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             await Task.CompletedTask.ConfigureAwait(false);
             yield break;
         }
@@ -415,90 +315,112 @@ public sealed class AgentHubBackendReloadTests
         public IDisposable Subscribe(Action<AgentEvent> handler)
         {
             ArgumentNullException.ThrowIfNull(handler);
-            return DisposableAction.Create(static () => { });
+            lock (_subscriberLock)
+            {
+                _subscribers.Add(handler);
+            }
+
+            return new DisposableAction(() =>
+            {
+                lock (_subscriberLock)
+                {
+                    _subscribers.Remove(handler);
+                }
+            });
         }
 
-        public async Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default)
-        {
-            SendStarted.TrySetResult(true);
-            await ReleaseSend.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-            return new AgentRunId("blocking-run");
-        }
+        public abstract Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default);
 
-        public Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
-        {
-            SteerCallCount++;
-            return Task.FromResult(options.ExpectedRunId ?? new AgentRunId("blocking-run"));
-        }
+        public virtual Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
+            => Task.FromResult(options.ExpectedRunId ?? new AgentRunId("steer-run"));
 
-        public Task AbortAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public virtual Task AbortAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task CompactAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public virtual Task CompactAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<AgentEvent>>([]);
-    }
+            => Task.FromResult<IReadOnlyList<AgentEvent>>(_history.ToArray());
 
-    private sealed class CountingSessionBackend(AgentBackendId backendId) : IAgentBackend
-    {
-        public AgentBackendId BackendId { get; } = backendId;
-
-        public string DisplayName => BackendId.Value;
-
-        public int ListSessionsCount { get; private set; }
-
-        public List<AgentSessionMetadata> Sessions { get; set; } = [];
-
-        public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<AgentModelInfo>>([]);
-
-        public async IAsyncEnumerable<AgentSessionMetadata> ListSessionsAsync(
-            AgentSessionListFilter? filter = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        protected void Publish(AgentEvent @event)
         {
-            ListSessionsCount++;
-            await Task.CompletedTask;
-            foreach (var session in Sessions)
+            _history.Add(@event);
+            Action<AgentEvent>[] subscribers;
+            lock (_subscriberLock)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                yield return session;
+                subscribers = _subscribers.ToArray();
+            }
+
+            foreach (var subscriber in subscribers)
+            {
+                subscriber(@event);
             }
         }
+    }
 
-        public Task<bool> DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+    private sealed class ImmediateSession(AgentBackendId backendId, string sessionId) : TestSession(backendId, sessionId)
+    {
+        private int _runCounter;
+
+        public override Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
-            var removed = Sessions.RemoveAll(session => string.Equals(session.SessionId, sessionId, StringComparison.Ordinal)) > 0;
-            return Task.FromResult(removed);
+            var runId = new AgentRunId($"{SessionId}-run-{Interlocked.Increment(ref _runCounter)}");
+            Publish(new AgentSessionUpdateEvent(BackendId, SessionId, DateTimeOffset.UtcNow, runId, AgentSessionUpdateKind.Idle, null));
+            return Task.FromResult(runId);
+        }
+    }
+
+    private sealed class BlockingSession(AgentBackendId backendId, string sessionId) : TestSession(backendId, sessionId), IAgentCompactionOutcomeProvider
+    {
+        public string FirstRunId => $"{SessionId}-run-1";
+
+        public string SecondRunId => $"{SessionId}-run-2";
+
+        public TaskCompletionSource<bool> FirstSendStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseFirstSend { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int SendCount { get; private set; }
+
+        public int AbortCount { get; private set; }
+
+        public int CompactCount { get; private set; }
+
+        public override async Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default)
+        {
+            var count = ++SendCount;
+            var runId = new AgentRunId(count == 1 ? FirstRunId : SecondRunId);
+            if (count == 1)
+            {
+                FirstSendStarted.TrySetResult(true);
+                await ReleaseFirstSend.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            Publish(new AgentSessionUpdateEvent(BackendId, SessionId, DateTimeOffset.UtcNow, runId, AgentSessionUpdateKind.Idle, null));
+            return runId;
         }
 
-        public Task<IAgentSession> CreateSessionAsync(
-            AgentSessionCreateOptions options,
-            CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        public override Task AbortAsync(CancellationToken cancellationToken = default)
+        {
+            AbortCount++;
+            return Task.CompletedTask;
+        }
 
-        public Task<IAgentSession> ResumeSessionAsync(
-            string sessionId,
-            AgentSessionResumeOptions options,
-            CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        public override Task CompactAsync(CancellationToken cancellationToken = default)
+        {
+            CompactCount++;
+            return Task.CompletedTask;
+        }
 
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public Task<AgentCompactionOutcome?> CompactWithOutcomeAsync(CancellationToken cancellationToken = default)
+        {
+            CompactCount++;
+            return Task.FromResult<AgentCompactionOutcome?>(new AgentCompactionOutcome(true, "Compacted."));
+        }
     }
 
     private sealed class DisposableAction(Action dispose) : IDisposable
     {
         private bool _disposed;
-
-        public static IDisposable Create(Action dispose)
-        {
-            ArgumentNullException.ThrowIfNull(dispose);
-            return new DisposableAction(dispose);
-        }
 
         public void Dispose()
         {
@@ -509,26 +431,6 @@ public sealed class AgentHubBackendReloadTests
 
             _disposed = true;
             dispose();
-        }
-    }
-
-    private sealed class TempDirectory(string path) : IDisposable
-    {
-        public string Path { get; } = path;
-
-        public static TempDirectory Create()
-        {
-            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"codealta-agenthub-tests-{Guid.NewGuid():N}");
-            Directory.CreateDirectory(path);
-            return new TempDirectory(path);
-        }
-
-        public void Dispose()
-        {
-            if (Directory.Exists(Path))
-            {
-                Directory.Delete(Path, recursive: true);
-            }
         }
     }
 }

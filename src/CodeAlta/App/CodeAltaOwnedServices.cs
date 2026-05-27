@@ -255,7 +255,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
                 continue;
             }
 
-            await AgentHub.UnloadBackendAsync(descriptor.BackendId, cancellationToken).ConfigureAwait(false);
             _backendFactory.Unregister(descriptor.BackendId);
             _modelProviderRegistry.Unregister(descriptor.ProviderId);
         }
@@ -284,7 +283,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
             var backendId = AcpAgentBackendFactoryExtensions.CreateBackendId(acpOptions.AgentId);
             expectedBackendIds.Add(backendId.Value);
 
-            await AgentHub.UnloadBackendAsync(backendId, cancellationToken).ConfigureAwait(false);
             _backendFactory.RegisterOrReplaceAcp(acpOptions);
         }
 
@@ -299,7 +297,6 @@ internal sealed class CodeAltaOwnedServices : IAsyncDisposable
                 continue;
             }
 
-            await AgentHub.UnloadBackendAsync(descriptor.BackendId, cancellationToken).ConfigureAwait(false);
             _backendFactory.Unregister(descriptor.BackendId);
         }
 

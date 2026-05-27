@@ -417,7 +417,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
     /// <summary>
     /// Ensures that the thread has an active coordinator session.
     /// </summary>
-    public async Task<AgentId> EnsureCoordinatorSessionAsync(
+    public async Task<AgentSessionHandleId> EnsureCoordinatorSessionAsync(
         SessionViewDescriptor thread,
         SessionExecutionOptions options,
         CancellationToken cancellationToken = default)
@@ -435,7 +435,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             .ConfigureAwait(false);
     }
 
-    private async ValueTask<AgentId> EnsureCoordinatorSessionCoreAsync(
+    private async ValueTask<AgentSessionHandleId> EnsureCoordinatorSessionCoreAsync(
         SessionViewDescriptor thread,
         SessionExecutionOptions options,
         CancellationToken cancellationToken = default)
@@ -451,13 +451,13 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         var tools = options.Tools;
 
         ThreadSessionEntry? previousEntry = null;
-        AgentId agentId;
+        AgentSessionHandleId sessionHandleId;
 
         if (!string.IsNullOrWhiteSpace(thread.ThreadId) &&
             _entries.TryGetValue(thread.ThreadId, out var existing) &&
             existing.Matches(options))
         {
-            return existing.AgentId;
+            return existing.SessionHandleId;
         }
 
         if (!string.IsNullOrWhiteSpace(thread.ThreadId))
@@ -469,12 +469,6 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         {
             await previousEntry.DisposeAsync(_agentHub).ConfigureAwait(false);
         }
-
-        var identity = await _agentHub.RegisterAgentAsync(
-                options.BackendId,
-                cancellationToken)
-            .ConfigureAwait(false);
-        agentId = identity.AgentId;
 
         var previousThreadId = string.IsNullOrWhiteSpace(thread.ThreadId) ? null : thread.ThreadId;
         var replacingDraftSession = previousThreadId is not null && ShouldReplaceDraftSession(thread, options.BackendId);
@@ -490,6 +484,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         var sessionOptions = new AgentSessionResumeOptions
         {
             ThreadId = requestedThreadId,
+            ParentSessionId = NormalizeOptionalText(thread.ParentThreadId),
             Title = NormalizeOptionalText(thread.Title),
             ProviderKey = options.ProviderKey ?? thread.ResolvedProviderKey,
             Model = options.Model,
@@ -510,26 +505,29 @@ public sealed class SessionRuntimeService : IAsyncDisposable
 
         if (startNewSession)
         {
-            var createdSessionId = await _agentHub.StartSessionAsync(agentId, sessionOptions, cancellationToken).ConfigureAwait(false);
-            thread.ThreadId = string.IsNullOrWhiteSpace(createdSessionId)
+            var handle = await _agentHub.StartSessionAsync(sessionOptions, cancellationToken).ConfigureAwait(false);
+            sessionHandleId = handle.HandleId;
+            thread.ThreadId = string.IsNullOrWhiteSpace(handle.SessionId)
                 ? previousThreadId ?? thread.ThreadId
-                : createdSessionId;
+                : handle.SessionId;
         }
         else
         {
-            string resumedSessionId;
+            AgentSessionHandle handle;
             try
             {
-                resumedSessionId = await _agentHub.ResumeSessionAsync(agentId, thread.ThreadId, sessionOptions, cancellationToken).ConfigureAwait(false);
+                handle = await _agentHub.ResumeSessionAsync(thread.ThreadId, sessionOptions, cancellationToken).ConfigureAwait(false);
             }
             catch (KeyNotFoundException) when (canStartReplacementSession)
             {
-                resumedSessionId = await _agentHub.StartSessionAsync(agentId, sessionOptions, cancellationToken).ConfigureAwait(false);
+                handle = await _agentHub.StartSessionAsync(sessionOptions, cancellationToken).ConfigureAwait(false);
             }
+
+            sessionHandleId = handle.HandleId;
 
             if (previousThreadId is null)
             {
-                thread.ThreadId = resumedSessionId;
+                thread.ThreadId = handle.SessionId;
             }
         }
 
@@ -557,14 +555,14 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             runtimeEvent => _events.TryPublish(runtimeEvent),
             @event => entry?.ObserveEvent(@event));
         var subscription = await _agentHub.SubscribeSessionEventsAsync(
-                agentId,
+                sessionHandleId,
                 @event => _ = PostAgentEventToActorAsync(actor, thread.ThreadId, projector, @event),
                 cancellationToken)
             .ConfigureAwait(false);
 
         entry = new ThreadSessionEntry(
             thread.ThreadId,
-            agentId,
+            sessionHandleId,
             thread.Kind,
             thread.Status,
             options.BackendId,
@@ -584,7 +582,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
 
         _entries[thread.ThreadId] = entry;
 
-        return agentId;
+        return sessionHandleId;
     }
 
     /// <summary>
@@ -603,14 +601,14 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         try
         {
             var threadStateUpdated = false;
-            var agentId = await _threadActors.GetOrCreate(thread.ThreadId).QueryAsync(
+            var sessionHandleId = await _threadActors.GetOrCreate(thread.ThreadId).QueryAsync(
                     async actorCancellationToken =>
                     {
-                        var ensuredAgentId = await EnsureCoordinatorSessionCoreAsync(thread, options, actorCancellationToken).ConfigureAwait(false);
+                        var ensuredHandleId = await EnsureCoordinatorSessionCoreAsync(thread, options, actorCancellationToken).ConfigureAwait(false);
                         thread.MarkStarted(DateTimeOffset.UtcNow);
                         threadStateUpdated = true;
 
-                        return ensuredAgentId;
+                        return ensuredHandleId;
                     },
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -621,7 +619,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             }
 
             var runStartedAt = DateTimeOffset.UtcNow;
-            var runId = await _agentHub.RunAsync(agentId, sendOptions, cancellationToken).ConfigureAwait(false);
+            var runId = await _agentHub.RunAsync(sessionHandleId, sendOptions, cancellationToken).ConfigureAwait(false);
             if (await MarkActiveRunIfStillInFlightAsync(thread.ThreadId, runId, runStartedAt, cancellationToken).ConfigureAwait(false))
             {
                 PublishRunSubmittedEvent(thread.ThreadId, runId, runStartedAt);
@@ -782,16 +780,16 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(steerOptions);
 
-        var agentId = await _threadActors.GetOrCreate(thread.ThreadId).QueryAsync(
+        var sessionHandleId = await _threadActors.GetOrCreate(thread.ThreadId).QueryAsync(
                 async actorCancellationToken =>
                 {
                     var entry = await GetActiveCoordinatorSessionForSteeringAsync(thread, options, actorCancellationToken).ConfigureAwait(false);
-                    return entry.AgentId;
+                    return entry.SessionHandleId;
                 },
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return await _agentHub.SteerAsync(agentId, steerOptions, cancellationToken).ConfigureAwait(false);
+        return await _agentHub.SteerAsync(sessionHandleId, steerOptions, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -864,7 +862,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
                     async actorCancellationToken =>
                     {
                         var entry = await GetEntryAsync(threadId, actorCancellationToken).ConfigureAwait(false);
-                        await _agentHub.AbortAsync(entry.AgentId, actorCancellationToken).ConfigureAwait(false);
+                        await _agentHub.AbortAsync(entry.SessionHandleId, actorCancellationToken).ConfigureAwait(false);
                     },
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -1046,8 +1044,8 @@ public sealed class SessionRuntimeService : IAsyncDisposable
                         AgentSessionUpdateKind.CompactionStarted,
                         $"Manual compaction requested for '{thread.Title}'."));
 
-                    var agentId = await EnsureCoordinatorSessionCoreAsync(thread, options, actorCancellationToken).ConfigureAwait(false);
-                    var outcome = await _agentHub.CompactAsync(agentId, actorCancellationToken).ConfigureAwait(false);
+                    var sessionHandleId = await EnsureCoordinatorSessionCoreAsync(thread, options, actorCancellationToken).ConfigureAwait(false);
+                    var outcome = await _agentHub.CompactAsync(sessionHandleId, actorCancellationToken).ConfigureAwait(false);
                     if (outcome is not null)
                     {
                         _events.TryPublish(new WorkThreadHostEvent(
@@ -1077,7 +1075,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
                 async actorCancellationToken =>
                 {
                     var entry = await GetEntryAsync(threadId, actorCancellationToken).ConfigureAwait(false);
-                    var history = await _agentHub.GetSessionHistoryAsync(entry.AgentId, actorCancellationToken).ConfigureAwait(false);
+                    var history = await _agentHub.GetSessionHistoryAsync(entry.SessionHandleId, actorCancellationToken).ConfigureAwait(false);
                     return entry.Projector.ProjectHistory(history);
                 },
                 cancellationToken)
@@ -1107,27 +1105,17 @@ public sealed class SessionRuntimeService : IAsyncDisposable
     private static bool CanCreateSessionWithRequestedThreadId(AgentBackendId backendId)
         => !string.Equals(backendId.Value, AgentBackendIds.Codex.Value, StringComparison.OrdinalIgnoreCase);
 
-    private async Task<bool> CanStartReplacementSessionForMissingResumeAsync(
+    private static Task<bool> CanStartReplacementSessionForMissingResumeAsync(
         AgentBackendId backendId,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (IsProviderManagedBackend(backendId) || !CanCreateSessionWithRequestedThreadId(backendId))
         {
-            return false;
+            return Task.FromResult(false);
         }
 
-        try
-        {
-            return await _agentHub.UsesSharedSessionMetadataStoreAsync(backendId, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch
-        {
-            return false;
-        }
+        return Task.FromResult(true);
     }
 
     private async Task<ProjectDescriptor?> ResolveProjectAsync(SessionViewDescriptor thread, CancellationToken cancellationToken)
@@ -1327,7 +1315,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         {
             var runStartedAt = DateTimeOffset.UtcNow;
             var runId = await _agentHub.RunAsync(
-                    work.AgentId,
+                    work.SessionHandleId,
                     new AgentSendOptions { Input = AgentInput.Text(work.Prompt.Prompt) },
                     CancellationToken.None)
                 .ConfigureAwait(false);
@@ -1374,7 +1362,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
                     await _threadCatalog.JournalStore.AppendStateAsync(entry.ToDescriptor(), localState, actorCancellationToken).ConfigureAwait(false);
                     entry.BeginQueueDrain();
                     PublishQueueChanged(threadId, localState, item, timestamp, isEnqueued: false);
-                    return new QueuedPromptDrainWork(entry.AgentId, CloneQueuedPrompt(item));
+                    return new QueuedPromptDrainWork(entry.SessionHandleId, CloneQueuedPrompt(item));
                 },
                 CancellationToken.None)
             .ConfigureAwait(false);
@@ -2047,7 +2035,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
     {
         public ThreadSessionEntry(
             string threadId,
-            AgentId agentId,
+            AgentSessionHandleId sessionHandleId,
             WorkThreadKind kind,
             WorkThreadStatus status,
             AgentBackendId backendId,
@@ -2066,7 +2054,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             IDisposable subscription)
         {
             ThreadId = threadId;
-            AgentId = agentId;
+            SessionHandleId = sessionHandleId;
             Kind = kind;
             Status = status;
             BackendId = backendId;
@@ -2087,7 +2075,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
 
         public string ThreadId { get; }
 
-        public AgentId AgentId { get; }
+        public AgentSessionHandleId SessionHandleId { get; }
 
         public WorkThreadKind Kind { get; }
 
@@ -2258,7 +2246,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             => new(
                 SourceThreadId: ThreadId,
                 SourceProjectId: ProjectId,
-                SourceAgentId: AgentId.ToString(),
+                SourceAgentId: SessionHandleId.ToString(),
                 ParentThreadId: ParentThreadId!,
                 Kind: kind,
                 Body: body,
@@ -2305,11 +2293,11 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         public async Task DisposeAsync(AgentHub hub)
         {
             Subscription.Dispose();
-            await hub.StopSessionAsync(AgentId).ConfigureAwait(false);
+            await hub.StopSessionAsync(SessionHandleId).ConfigureAwait(false);
         }
     }
 
-    private sealed record QueuedPromptDrainWork(AgentId AgentId, WorkThreadQueuedPrompt Prompt);
+    private sealed record QueuedPromptDrainWork(AgentSessionHandleId SessionHandleId, WorkThreadQueuedPrompt Prompt);
 
     private sealed record ParentNotificationPayload(string Kind, string Body);
 
