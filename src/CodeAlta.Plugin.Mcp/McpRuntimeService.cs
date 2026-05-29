@@ -211,6 +211,67 @@ internal sealed class McpRuntimeService : IAsyncDisposable
         };
     }
 
+    public async Task<McpRuntimeToolSearchResult> ListToolsForServersAsync(
+        McpRuntimeRequest request,
+        IReadOnlyCollection<string> serverKeys,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(serverKeys);
+        if (serverKeys.Count == 0)
+        {
+            return new McpRuntimeToolSearchResult();
+        }
+
+        var requestedServers = serverKeys
+            .Where(static key => !string.IsNullOrWhiteSpace(key))
+            .Select(static key => key.Trim())
+            .ToHashSet(StringComparer.Ordinal);
+        if (requestedServers.Count == 0)
+        {
+            return new McpRuntimeToolSearchResult();
+        }
+
+        var context = LoadContext(request);
+        var diagnostics = new List<McpRuntimeDiagnostic>();
+        var tools = new List<McpRuntimeTool>();
+        foreach (var server in context.Config.EffectiveServers)
+        {
+            if (!requestedServers.Remove(server.Definition.Key))
+            {
+                continue;
+            }
+
+            var state = await GetServerStateAsync(context, server, cancellationToken).ConfigureAwait(false);
+            if (state.Diagnostic is not null)
+            {
+                diagnostics.Add(state.Diagnostic);
+                continue;
+            }
+
+            tools.AddRange(state.Tools.Where(static tool => tool.Enabled));
+        }
+
+        foreach (var missing in requestedServers.OrderBy(static key => key, StringComparer.Ordinal))
+        {
+            diagnostics.Add(new McpRuntimeDiagnostic
+            {
+                Code = "server_not_found",
+                Server = missing,
+                Message = $"MCP server '{missing}' is not configured in the effective MCP configuration.",
+            });
+        }
+
+        return new McpRuntimeToolSearchResult
+        {
+            Tools = tools
+                .OrderBy(static tool => tool.Server, StringComparer.Ordinal)
+                .ThenBy(static tool => tool.Name, StringComparer.Ordinal)
+                .ToArray(),
+            Diagnostics = diagnostics,
+        };
+    }
+
     public async Task<McpRuntimeServerTestResult> TestServerAsync(
         McpRuntimeRequest request,
         string serverKey,

@@ -158,8 +158,25 @@ public sealed class McpRuntimeServiceTests
 
             [plugins.mcp.servers.tiny]
             direct_tools = ["echo"]
+            allowed_tools = ["echo"]
             """);
         var plugin = new McpPlugin();
+        var inactiveContext = new PluginBeforeAgentRunContext
+        {
+            Plugin = CreatePluginDescriptor(),
+            Services = NoopPluginServices.Create(),
+            ProjectPath = project.Path,
+        };
+
+        Assert.IsNull(await plugin.OnBeforeAgentRunAsync(inactiveContext, CancellationToken.None));
+
+        var contribution = plugin.GetAltaCommands().Single();
+        var stdout = new StringWriter(CultureInfo.InvariantCulture);
+        var stderr = new StringWriter(CultureInfo.InvariantCulture);
+        var app = new CommandApp("alta", "test") { contribution.CreateCommandNode(CreateAltaContext(stdout, stderr, project.Path)) };
+        var activateExitCode = await app.RunAsync(["mcp", "activate", "tiny"], new CommandRunConfig { Out = TextWriter.Null, Error = stderr });
+        Assert.AreEqual(0, activateExitCode, stderr.ToString());
+
         var context = new PluginBeforeAgentRunContext
         {
             Plugin = CreatePluginDescriptor(),
@@ -180,6 +197,18 @@ public sealed class McpRuntimeServiceTests
             CancellationToken.None);
         Assert.IsTrue(result.Success, result.Error);
         Assert.AreEqual("echo:hi", Assert.IsInstanceOfType<AgentToolResultItem.Text>(result.Items.Single()).Value);
+
+        var prompt = await plugin.GetSystemPromptContributions().Single().Content(
+            new PluginSystemPromptContext
+            {
+                Plugin = CreatePluginDescriptor(),
+                Services = NoopPluginServices.Create(),
+                ProjectPath = project.Path,
+            },
+            CancellationToken.None);
+        Assert.IsNotNull(prompt);
+        StringAssert.Contains(prompt, "- Active: `tiny`(1)");
+        StringAssert.Contains(prompt, "- Inactive (`alta mcp activate <id>*`): (none)");
     }
 
     [TestMethod]

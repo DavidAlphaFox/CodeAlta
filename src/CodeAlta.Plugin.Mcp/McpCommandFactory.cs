@@ -17,11 +17,22 @@ internal static class McpCommandFactory
     public static Command CreateCommand(PluginAltaCommandContext context)
         => CreateCommand(context, new McpCommandFactoryOptions());
 
+    public static Command CreateCommand(PluginAltaCommandContext context, McpActivationState activationState)
+        => CreateCommand(context, new McpCommandFactoryOptions(), activationState);
+
     internal static Command CreateCommand(PluginAltaCommandContext context, McpCommandFactoryOptions options)
+        => CreateCommand(context, options, activationState: null);
+
+    private static Command CreateCommand(PluginAltaCommandContext context, McpCommandFactoryOptions options, McpActivationState? activationState)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(options);
         var command = Group("mcp", "Inspect and manage configured Model Context Protocol servers.");
+        if (activationState is not null)
+        {
+            command.Add(CreateActivateCommand(context, options, activationState));
+        }
+
         command.Add(CreateListCommand(context, options));
         command.Add(CreateStatusCommand(context, options));
         command.Add(CreateConfigCommand(context, options));
@@ -32,6 +43,52 @@ internal static class McpCommandFactory
             "Configuration commands read fixed CodeAlta MCP config paths: project .alta/mcp.json and global ~/.alta/mcp.json.",
             "Tool commands lazily connect to configured stdio and HTTP/SSE MCP servers with bounded startup and tool-call timeouts.",
             "Examples: `alta mcp list`; `alta mcp tool search`; `alta mcp tool describe --server memory --tool read_graph`; `alta mcp tool call --server memory --tool echo --arguments {\"text\":\"hi\"}`.");
+        return command;
+    }
+
+    private static Command CreateActivateCommand(PluginAltaCommandContext context, McpCommandFactoryOptions options, McpActivationState activationState)
+    {
+        var serverKeys = new List<string>();
+        var command = Leaf("activate", "Activate configured MCP servers for the current session so their tools are registered on agent runs.");
+        command.Add("<id>*", "MCP server ids to activate.", value =>
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                serverKeys.Add(value.Trim());
+            }
+        });
+        command.Add((_, _) =>
+        {
+            if (serverKeys.Count == 0)
+            {
+                return ValueTask.FromResult(WriteError(context, "missing_server", "Specify at least one MCP server id to activate."));
+            }
+
+            var snapshot = Discover(context, options);
+            var configured = snapshot.EffectiveServers
+                .Select(static server => server.Definition.Key)
+                .ToHashSet(StringComparer.Ordinal);
+            var missing = serverKeys.Where(key => !configured.Contains(key)).Distinct(StringComparer.Ordinal).OrderBy(static key => key, StringComparer.Ordinal).ToArray();
+            if (missing.Length > 0)
+            {
+                return ValueTask.FromResult(WriteError(context, "server_not_found", "MCP server(s) are not configured: " + string.Join(", ", missing)));
+            }
+
+            var projectDirectory = ResolveProjectDirectory(context);
+            var scopeKey = McpActivationState.ResolveScopeKey(context.Services.Sessions.SelectedSessionId, projectDirectory);
+            var activated = activationState.ActivateServers(scopeKey, serverKeys);
+            WriteRecord(context.Stdout, new
+            {
+                type = "alta.mcp.activate",
+                version = 1,
+                correlationId = context.CorrelationId,
+                activatedServers = serverKeys.Distinct(StringComparer.Ordinal).OrderBy(static key => key, StringComparer.Ordinal).ToArray(),
+                activeServers = activated,
+                note = "MCP tools from active servers are registered on the next agent run as mcp__<server>__<tool>.",
+            });
+            return ValueTask.FromResult(0);
+        });
+        AddHelpText(command, "Examples: `alta mcp activate memory`; `alta mcp activate github docs`.");
         return command;
     }
 

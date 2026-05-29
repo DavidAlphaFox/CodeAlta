@@ -1,6 +1,6 @@
 # MCP support
 
-CodeAlta ships MCP support as a trusted built-in plugin (`CodeAlta.Plugin.Mcp`). The surface is configuration discovery, policy overlay, direct policy-controlled MCP agent tools, prompt guidance, `alta mcp ...` commands, explicit runtime calls through `alta mcp tool ...`, and the TUI MCP Servers dialog. Direct dynamic agent-tool registration exposes enabled/config-controlled MCP tools where policy allows it.
+CodeAlta ships MCP support as a trusted built-in plugin (`CodeAlta.Plugin.Mcp`). The surface is configuration discovery, policy overlay, session-activated MCP agent tools, prompt guidance, `alta mcp ...` commands, explicit runtime calls through `alta mcp tool ...`, and the TUI MCP Servers dialog. Dynamic agent-tool registration exposes enabled/config-controlled MCP tools only for MCP servers activated in the current session.
 
 ## Configuration files and overlay
 
@@ -87,7 +87,7 @@ Implemented policy behavior:
 - the dialog's per-tool enablement table writes/removes `disabled_tools` entries only;
 - `startup_timeout_ms`, per-server `startup_timeout_ms`, `tool_timeout_ms`, per-server `tool_timeout_ms`, and `max_tool_output_chars` bound runtime operations and output;
 - `discover_in_prompt`, `prompt_max_servers`, and `prompt_max_tools` bound MCP prompt guidance;
-- `direct_exposure`, `direct_tool_threshold`, and per-server `direct_exposure`/`direct_tools` are the policy controls for direct MCP agent-tool exposure. Supported `direct_exposure` values are `none`, `allowlist`, `auto`, and `all`; `auto` exposes explicit `direct_tools`/`allowed_tools` and otherwise exposes all enabled tools only when the total enabled tool count is within `direct_tool_threshold`. Every enabled/config-controlled MCP tool that passes policy is exposed as a first-class `AgentToolDefinition` using the stable alias described below.
+- `direct_exposure`, `direct_tool_threshold`, and per-server `direct_exposure`/`direct_tools` are retained policy controls for non-progressive direct-tool selection paths. Progressive session activation does not activate servers automatically from these settings; after a server is activated, every enabled/config-controlled MCP tool that passes server/tool policy is exposed as a first-class `AgentToolDefinition` using the stable alias described below.
 
 ## `alta mcp` commands
 
@@ -107,6 +107,7 @@ alta mcp config sources --scope project
 Mutation commands:
 
 ```text
+alta mcp activate <server> [<server>...]
 alta mcp server add <server> --command <command> --arg <arg> --env KEY=VALUE --cwd <dir> --scope project
 alta mcp server add <server> --url https://example.test/mcp --header Authorization=Bearer... --scope global
 alta mcp server remove <server> --scope project
@@ -114,7 +115,7 @@ alta mcp server enable <server> --scope project
 alta mcp server disable <server> --global
 ```
 
-`server add` and `server remove` mutate only the selected JSON MCP file. `server enable` and `server disable` mutate TOML policy only and preserve JSON server definitions. Removing a global-only server from inside a project requires `--scope global` so a project context does not accidentally delete global user configuration.
+`activate` mutates only in-memory session activation state; on the next agent run, tools from activated servers are registered as `mcp__<server>__<tool>` after normal MCP policy filters. `server add` and `server remove` mutate only the selected JSON MCP file. `server enable` and `server disable` mutate TOML policy only and preserve JSON server definitions. Removing a global-only server from inside a project requires `--scope global` so a project context does not accidentally delete global user configuration.
 
 Runtime tool commands:
 
@@ -141,7 +142,7 @@ Runtime diagnostics redact sensitive values before they reach command output or 
 
 Tool-call results preserve `isError` from MCP. Text content becomes `contentText` and `content` blocks; structured content is included after redaction when it fits the output character budget. Image, audio, embedded-resource, resource-link, and unknown non-text content are summarized instead of embedding raw payloads. Output beyond `max_tool_output_chars` is truncated and marked with `truncated = true`.
 
-Servers that cannot connect or list tools are reported as unavailable for that runtime request and do not contribute enabled tools to direct-agent-tool enumeration or search/describe/call results. Runtime state is explicit and finite; direct tools may be refreshed by enumerating policy-controlled tools at agent-run/plugin-tool enumeration time. `tool-list-changed` notifications and a process-wide long-lived MCP connection manager are follow-up work only if direct-tool freshness requires them.
+Servers that cannot connect or list tools are reported as unavailable for that runtime request and do not contribute enabled tools to activated-agent-tool enumeration or search/describe/call results. Runtime state is explicit and finite; activated tools are refreshed by enumerating policy-controlled tools at agent-run time. `tool-list-changed` notifications and a process-wide long-lived MCP connection manager are follow-up work only if tool freshness requires them.
 
 ## TUI dialog and status indicator
 
@@ -163,22 +164,24 @@ Use `alta mcp server add/remove/...` or **Open JSON Config** for advanced JSON s
 The MCP implementation is a built-in trusted plugin, enabled by default through the same built-in plugin infrastructure as the GitHub and statistics plugins. It contributes:
 
 - an `alta mcp` root command with mutating command policy;
-- dynamic developer prompt guidance that advertises configured MCP servers and direct-tool availability;
-- direct `AgentToolDefinition` contributions for every enabled/config-controlled MCP tool where policy allows exposure;
+- compact dynamic developer prompt guidance that advertises active/inactive configured MCP servers and the `alta mcp activate <id>*` path;
+- direct `AgentToolDefinition` contributions for enabled/config-controlled MCP tools on session-activated servers;
 - shared discovery/runtime services consumed by direct tools and `alta`, plus management snapshots consumed by the TUI dialog, status indicator, and prompt guidance.
 
 Reusable MCP configuration, policy, runtime, and management code lives in `src/CodeAlta.Plugin.Mcp/`. TUI-specific composition, status indicator rendering, and the dialog live in `src/CodeAlta/`. Do not move reusable MCP runtime orchestration into frontend controls.
 
-## Direct MCP agent-tool behavior
+## Progressive MCP agent-tool behavior
 
-Direct dynamic `AgentToolDefinition` exposure is shipped behavior:
+Progressive dynamic `AgentToolDefinition` exposure is shipped behavior:
 
-- the MCP plugin enumerates configured MCP servers through the existing discovery/runtime path before each agent run;
-- every enabled tool that passes global/server policy (`enabled`, `allowed_tools`, `disabled_tools`, `direct_exposure`, `direct_tools`, and the configured threshold rules) is exposed as a direct agent tool;
+- the MCP plugin prompt contribution reads configured MCP servers without connecting and emits a compact active/inactive server inventory, for example: `MCP servers (+#tools): Active memory(8); Inactive docs`;
+- `alta mcp activate <server> [<server>...]` marks configured servers active for the current session (falling back to project scope when no session is available);
+- before each agent run, the MCP plugin connects only to activated servers and lists their tools;
+- every enabled tool on an activated server that passes global/server policy (`enabled`, `allowed_tools`, `disabled_tools`) is exposed as a direct agent tool;
 - the deterministic `mcp__<server>__<tool>` alias is used as `AgentToolSpec.Name`, with the same sanitization and collision hashing used by runtime command output;
 - the MCP `inputSchema` is passed through as the tool input schema;
 - direct tool handlers delegate to `McpRuntimeService.CallToolAsync(serverKey, toolName, arguments, ...)`, preserving tool timeout, redaction, `isError`, structured content, and truncation behavior;
-- startup/list-tools diagnostics are reported through the per-run MCP prompt guidance without leaking headers, environment values, arguments, or tool output secrets;
+- startup/list-tools diagnostics are reported through per-run MCP prompt guidance without leaking headers, environment values, arguments, or tool output secrets;
 - direct tools refresh at agent-run enumeration time. `tool-list-changed` notifications and a long-lived MCP connection manager are optional follow-ups only if finite refresh is insufficient.
 
 ## Deferred/future work

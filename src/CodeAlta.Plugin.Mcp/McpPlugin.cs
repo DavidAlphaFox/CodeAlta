@@ -16,6 +16,8 @@ namespace CodeAlta.Plugin.Mcp;
 [Plugin("mcp", DisplayName = "MCP", Description = "Connects CodeAlta to configured Model Context Protocol servers.")]
 public sealed class McpPlugin : PluginBase
 {
+    private readonly McpActivationState _activationState = new();
+
     private static readonly PluginKeyBinding ManageServersKeyBinding = new()
     {
         DisplayText = "Ctrl+G Ctrl+Y",
@@ -70,7 +72,7 @@ public sealed class McpPlugin : PluginBase
                 IsMutating = true,
                 SupportsCatalogOnlyContext = false,
             },
-            CreateCommandNode = McpCommandFactory.CreateCommand,
+            CreateCommandNode = context => McpCommandFactory.CreateCommand(context, _activationState),
         };
     }
 
@@ -122,8 +124,20 @@ public sealed class McpPlugin : PluginBase
     {
         ArgumentNullException.ThrowIfNull(context);
         var projectPath = ResolveProjectPath(context.ProjectPath, context.Services.Workspace.SelectedProjectPath, null);
+        var activationScope = ResolveActivationScopeKey(context, projectPath);
+        var activeServers = _activationState.GetActiveServers(activationScope);
+        if (activeServers.Count == 0)
+        {
+            return null;
+        }
+
         await using var runtime = new McpRuntimeService();
-        var direct = await runtime.ListDirectToolsAsync(new McpRuntimeRequest { ProjectDirectory = projectPath }, cancellationToken).ConfigureAwait(false);
+        var direct = await runtime.ListToolsForServersAsync(new McpRuntimeRequest { ProjectDirectory = projectPath }, activeServers, cancellationToken).ConfigureAwait(false);
+        _activationState.UpdateToolCounts(
+            activationScope,
+            direct.Tools
+                .GroupBy(static tool => tool.Server, StringComparer.Ordinal)
+                .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal));
         if (direct.Tools.Count == 0 && direct.Diagnostics.Count == 0)
         {
             return null;
@@ -136,7 +150,7 @@ public sealed class McpPlugin : PluginBase
         };
     }
 
-    private static ValueTask<string?> CreatePromptDiscoveryAsync(PluginSystemPromptContext context, CancellationToken cancellationToken)
+    private ValueTask<string?> CreatePromptDiscoveryAsync(PluginSystemPromptContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
@@ -147,50 +161,44 @@ public sealed class McpPlugin : PluginBase
             return new ValueTask<string?>((string?)null);
         }
 
-        var activeServers = snapshot.Servers
-            .Where(static server => server.State == McpManagementServerState.Configured)
-            .Take(Math.Max(1, snapshot.Policy.PromptMaxServers))
+        var configuredServers = snapshot.Servers
+            .Where(static server => server.State == McpManagementServerState.Configured && server.PolicyEnabled != false)
+            .OrderBy(static server => server.Key, StringComparer.Ordinal)
             .ToArray();
+        if (configuredServers.Length == 0)
+        {
+            return new ValueTask<string?>((string?)null);
+        }
+
+        var activationScope = ResolveActivationScopeKey(context, projectPath);
+        var activeKeys = _activationState.GetActiveServers(activationScope).ToHashSet(StringComparer.Ordinal);
+        var configuredKeys = configuredServers.Select(static server => server.Key).ToHashSet(StringComparer.Ordinal);
+        var validActiveKeys = activeKeys.Where(configuredKeys.Contains).OrderBy(static server => server, StringComparer.Ordinal).ToArray();
+        if (validActiveKeys.Length != activeKeys.Count)
+        {
+            _activationState.ReplaceActiveServers(activationScope, validActiveKeys);
+            activeKeys = validActiveKeys.ToHashSet(StringComparer.Ordinal);
+        }
+
+        var activeServers = configuredServers.Where(server => activeKeys.Contains(server.Key)).ToArray();
+        var inactiveServers = configuredServers.Where(server => !activeKeys.Contains(server.Key)).ToArray();
+        var toolCounts = _activationState.GetToolCounts(activationScope);
+        var maxServers = Math.Max(1, snapshot.Policy.PromptMaxServers);
         var builder = new StringBuilder();
-        builder.AppendLine("Configured MCP tools are exposed directly as `mcp__<server>__<tool>` where policy allows. Use `alta mcp tool search`, `alta mcp tool describe --server <server> --tool <tool>`, and `alta mcp tool call --server <server> --tool <tool> --arguments {}` for discovery, schema inspection, diagnostics, or manual calls.");
-        foreach (var server in activeServers)
-        {
-            builder.Append("- ");
-            builder.Append(server.DisplayName);
-            builder.Append(": ");
-            builder.Append(server.Transport == McpManagementTransport.Stdio ? "stdio" : "http/sse");
-            builder.Append(" from ");
-            builder.Append(server.SourceScope == McpManagementScope.Project ? "project" : "global");
-            if (server.DisabledTools.Count > 0)
-            {
-                builder.Append("; disabled tools: ");
-                builder.AppendJoin(", ", server.DisabledTools.Take(Math.Max(1, snapshot.Policy.PromptMaxTools)));
-                if (server.DisabledTools.Count > snapshot.Policy.PromptMaxTools)
-                {
-                    builder.Append(", …");
-                }
-            }
-
-            if (server.AllowedTools.Count > 0)
-            {
-                builder.Append("; allowed tools: ");
-                builder.AppendJoin(", ", server.AllowedTools.Take(Math.Max(1, snapshot.Policy.PromptMaxTools)));
-                if (server.AllowedTools.Count > snapshot.Policy.PromptMaxTools)
-                {
-                    builder.Append(", …");
-                }
-            }
-
-            builder.AppendLine();
-        }
-
-        if (snapshot.Summary.ConfiguredServerCount > activeServers.Length)
-        {
-            builder.AppendLine("- Additional MCP servers are omitted from this prompt summary; run `alta mcp status` for all configured and disabled servers.");
-        }
+        builder.AppendLine("MCP servers (+#tools):");
+        builder.Append("- Active: ");
+        AppendServerList(builder, activeServers, maxServers, toolCounts, includeToolCounts: true);
+        builder.AppendLine();
+        builder.Append("- Inactive (`alta mcp activate <id>*`): ");
+        AppendServerList(builder, inactiveServers, maxServers, toolCounts, includeToolCounts: false);
 
         return new ValueTask<string?>(builder.ToString().TrimEnd());
     }
+
+    internal static string ResolveActivationScopeKey(PluginOperationContext context, string? projectPath)
+        => McpActivationState.ResolveScopeKey(
+            string.IsNullOrWhiteSpace(context.SessionId) ? context.Services.Sessions.SelectedSessionId : context.SessionId,
+            projectPath);
 
     internal static string? ResolveProjectPath(string? primary, string? secondary, string? fallback)
     {
@@ -213,6 +221,44 @@ public sealed class McpPlugin : PluginBase
         return new AgentToolDefinition(
             new AgentToolSpec(tool.Alias, description, tool.InputSchema.Clone()),
             async (invocation, cancellationToken) => await InvokeDirectToolAsync(tool.Server, tool.Name, projectPath, invocation, cancellationToken).ConfigureAwait(false));
+    }
+
+    private static void AppendServerList(
+        StringBuilder builder,
+        IReadOnlyList<McpManagementServerSnapshot> servers,
+        int maxServers,
+        IReadOnlyDictionary<string, int> toolCounts,
+        bool includeToolCounts)
+    {
+        if (servers.Count == 0)
+        {
+            builder.Append("(none)");
+            return;
+        }
+
+        var displayed = servers.Take(maxServers).ToArray();
+        for (var index = 0; index < displayed.Length; index++)
+        {
+            if (index > 0)
+            {
+                builder.Append(", ");
+            }
+
+            builder.Append('`').Append(displayed[index].Key).Append('`');
+            if (includeToolCounts)
+            {
+                builder.Append('(');
+                builder.Append(toolCounts.TryGetValue(displayed[index].Key, out var count) ? count.ToString(System.Globalization.CultureInfo.InvariantCulture) : "?");
+                builder.Append(')');
+            }
+        }
+
+        if (servers.Count > displayed.Length)
+        {
+            builder.Append(", …(+");
+            builder.Append((servers.Count - displayed.Length).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            builder.Append(')');
+        }
     }
 
     private static string CreateToolDescription(McpRuntimeTool tool)
