@@ -468,7 +468,7 @@ public sealed class McpManagementServiceTests
     }
 
     [TestMethod]
-    public void Dialog_TestServerButtonKeepsRowsAfterCompletion()
+    public void Dialog_AutomaticToolDiscoveryKeepsRowsAfterCompletion()
     {
         using var home = TempDirectory.Create();
         using var project = TempDirectory.Create();
@@ -483,10 +483,9 @@ public sealed class McpManagementServiceTests
             { "mcpServers": { "remote": { "url": "ftp://example.invalid/mcp" } } }
             """);
         var service = new McpManagementService();
-        var useProjectRequest = true;
         var dialog = new McpServersDialog(
             service,
-            () => new McpManagementRequest { ProjectDirectory = useProjectRequest ? project.Path : null, UserHomeDirectory = home.Path },
+            () => new McpManagementRequest { ProjectDirectory = project.Path, UserHomeDirectory = home.Path },
             static (_, _) => Task.CompletedTask,
             static () => null,
             static () => null);
@@ -507,18 +506,18 @@ public sealed class McpManagementServiceTests
             TickTerminalApp(app);
             var row = GetDialogRows(dialog).Single(row => GetDialogRowEntry(row).Key == "remote");
             var detailBeforeTest = GetCurrentDetailVisual(dialog);
-            Assert.IsInstanceOfType<TabControl>(detailBeforeTest);
-            useProjectRequest = false;
-
-            var testServerButton = FindDialogButton(dialog, "Test Server");
-            app.Focus(testServerButton);
-            ((InMemoryTerminalBackend)session.Instance.Backend).PushEvent(new TerminalKeyEvent { Key = TerminalKey.Enter });
+            Assert.IsInstanceOfType<Grid>(detailBeforeTest);
+            var tabBeforeTest = FindDetailTabControl(dialog);
+            Assert.AreEqual(3, tabBeforeTest.Tabs.Count);
+            Assert.AreEqual("Config", GetHeaderText(tabBeforeTest.Tabs[0].Header));
+            StringAssert.StartsWith(GetHeaderText(tabBeforeTest.Tabs[1].Header), "Tools");
+            Assert.AreEqual("Details", GetHeaderText(tabBeforeTest.Tabs[2].Header));
             PumpTerminalUntil(app, () => GetDialogRowEntry(row).LastTestStatus != McpManagementTestStatus.NotRun, TimeSpan.FromSeconds(10));
 
             var rows = GetDialogRows(dialog);
             Assert.IsTrue(rows.Count > 0);
             var updatedRow = rows.Single(row => GetDialogRowEntry(row).Key == "remote");
-            Assert.AreSame(row, updatedRow, "Test Server should update the selected row in place instead of replacing the sidebar item.");
+            Assert.AreSame(row, updatedRow, "Automatic tool discovery should update the selected row in place instead of replacing the sidebar item.");
             var remote = GetDialogRowEntry(updatedRow);
             Assert.AreEqual(McpManagementTestStatus.Failed, remote.LastTestStatus);
             for (var i = 0; i < 20; i++)
@@ -527,8 +526,8 @@ public sealed class McpManagementServiceTests
             }
 
             Assert.AreEqual(rows.Count, GetRenderedDialogRowCount(dialog), "The sidebar should still have rendered rows after the Test Server result is applied.");
-            Assert.AreSame(detailBeforeTest, GetCurrentDetailVisual(dialog), "The Test Server result should not rebuild the selected details tab control.");
-            Assert.IsInstanceOfType<TabControl>(GetCurrentDetailVisual(dialog), "The details pane should keep rendering the selected server tabs after Test Server completes.");
+            Assert.AreSame(detailBeforeTest, GetCurrentDetailVisual(dialog), "The automatic tool discovery result should not rebuild the selected details pane.");
+            Assert.AreSame(tabBeforeTest, FindDetailTabControl(dialog), "The details pane should keep rendering the selected server tabs after automatic discovery completes.");
         }
         finally
         {
@@ -665,18 +664,18 @@ public sealed class McpManagementServiceTests
             TickTerminalApp(app);
             var row = GetDialogRows(dialog).Single(row => GetDialogRowEntry(row).Key == "tiny");
 
-            var testServerButton = FindDialogButton(dialog, "Test Server");
+            var testServerButton = FindDialogButton(dialog, "Test");
             app.Focus(testServerButton);
             ((InMemoryTerminalBackend)session.Instance.Backend).PushEvent(new TerminalKeyEvent { Key = TerminalKey.Enter });
             PumpTerminalUntil(app, () => GetDialogRowEntry(row).LastTestStatus == McpManagementTestStatus.Succeeded, TimeSpan.FromSeconds(10));
 
-            var detailPane = Assert.IsInstanceOfType<TabControl>(GetCurrentDetailVisual(dialog));
+            var detailPane = FindDetailTabControl(dialog);
             for (var i = 0; i < 5; i++)
             {
                 TickTerminalApp(app);
             }
 
-            Assert.AreSame(detailPane, GetCurrentDetailVisual(dialog), "The Test Server completion should not replace the selected details tab control before the user changes tabs.");
+            Assert.AreSame(detailPane, FindDetailTabControl(dialog), "The Test Server completion should not replace the selected details tab control before the user changes tabs.");
             app.Focus(detailPane);
             ((InMemoryTerminalBackend)session.Instance.Backend).PushEvent(new TerminalKeyEvent { Key = TerminalKey.Right });
             TickTerminalApp(app);
@@ -685,7 +684,7 @@ public sealed class McpManagementServiceTests
                 TickTerminalApp(app);
             }
 
-            var currentDetailPane = GetCurrentDetailVisual(dialog);
+            var currentDetailPane = FindDetailTabControl(dialog);
             Assert.AreSame(detailPane, currentDetailPane, "Switching to the Tools tab should keep the selected details tab control attached.");
             Assert.AreEqual(1, detailPane.SelectedIndex);
             var toolsScrollViewer = detailPane.EnumerateVisualsDepthFirst().OfType<ScrollViewer>().SingleOrDefault(viewer => viewer.Content is DataGridControl);
@@ -768,11 +767,22 @@ public sealed class McpManagementServiceTests
         return (Visual)detailHost.GetType().GetField("_currentChild", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(detailHost)!;
     }
 
+    private static TabControl FindDetailTabControl(McpServersDialog dialog)
+        => GetCurrentDetailVisual(dialog).EnumerateVisualsDepthFirst().OfType<TabControl>().Single();
+
+    private static string GetHeaderText(Visual header)
+        => header switch
+        {
+            TextBlock textBlock => textBlock.Text ?? string.Empty,
+            Markup markup => markup.Text ?? string.Empty,
+            _ => header.ToString() ?? string.Empty,
+        };
+
     private static Task InvokeTestServerAsync(McpServersDialog dialog, object row)
     {
         var method = typeof(McpServersDialog).GetMethod("TestServerAsync", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.IsNotNull(method);
-        return (Task)method.Invoke(dialog, [row])!;
+        return (Task)method.Invoke(dialog, [row, false])!;
     }
 
     private static void PumpTerminalUntil(TerminalApp app, Func<bool> predicate, TimeSpan timeout)

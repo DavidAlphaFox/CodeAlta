@@ -29,12 +29,14 @@ internal sealed class McpServersDialog
     private readonly Markup _summaryMarkup;
     private readonly Markup _statusMarkup;
     private readonly Visual _detailHost;
+    private readonly HashSet<string> _automaticToolDiscoveryKeys = new(StringComparer.OrdinalIgnoreCase);
     private int _selectedDetailTabIndex;
     private readonly object _testServerSyncRoot = new();
     private McpServerRow? _cachedDetailPaneRow;
     private Visual? _cachedDetailPane;
     private McpManagementSnapshot? _snapshot;
     private CancellationTokenSource? _activeTestServerCancellation;
+    private McpServerRow? _activeTestServerRow;
     private bool _isClosed;
     private string _summaryText = "[dim]MCP configuration has not been loaded yet.[/]";
     private string _statusText = "[dim]Use Refresh to reload MCP JSON config and TOML policy.[/]";
@@ -79,9 +81,16 @@ internal sealed class McpServersDialog
             () =>
             {
                 var index = _selectedServerIndex.Value;
-                return index >= 0 && index < _servers.Count
-                    ? BuildDetailPane(_servers[index])
-                    : BuildEmptyState();
+                if (index < 0 || index >= _servers.Count)
+                {
+                    CancelCurrentTestServerOperationIfDifferent(null);
+                    return BuildEmptyState();
+                }
+
+                var row = _servers[index];
+                CancelCurrentTestServerOperationIfDifferent(row);
+                StartAutomaticToolDiscovery(row);
+                return BuildDetailPane(row);
             })
         {
             HorizontalAlignment = Align.Stretch,
@@ -356,9 +365,11 @@ internal sealed class McpServersDialog
             return _cachedDetailPane;
         }
 
+        _selectedDetailTabIndex = Math.Clamp(_selectedDetailTabIndex, 0, 2);
         var tabControl = new TabControl(
-                new TabPage("Details", CreateDetailScrollViewer(BuildVersionedDetailContent(row, BuildDetailsVisual))),
-                new TabPage(BuildToolsTabHeader(row), BuildVersionedDetailContent(row, BuildToolsVisual)))
+                new TabPage("Config", CreateDetailScrollViewer(BuildVersionedDetailContent(row, BuildConfigVisual))),
+                new TabPage(BuildToolsTabHeader(row), BuildVersionedDetailContent(row, BuildToolsVisual)),
+                new TabPage("Details", CreateDetailScrollViewer(BuildVersionedDetailContent(row, BuildDetailsVisual))))
             {
                 AllowTabDragReorder = false,
                 SelectedIndex = _selectedDetailTabIndex,
@@ -372,9 +383,20 @@ internal sealed class McpServersDialog
                 _selectedDetailTabIndex = e.NewIndex;
             }
         });
+        var layout = new Grid
+            {
+                HorizontalAlignment = Align.Stretch,
+                VerticalAlignment = Align.Stretch,
+            }
+            .Rows(
+                new RowDefinition { Height = GridLength.Auto },
+                new RowDefinition { Height = GridLength.Star(1) })
+            .Columns(new ColumnDefinition { Width = GridLength.Star(1) });
+        layout.Cell(BuildVersionedDetailContent(row, BuildDetailHeader), 0, 0);
+        layout.Cell(tabControl, 1, 0);
         _cachedDetailPaneRow = row;
-        _cachedDetailPane = tabControl;
-        return tabControl;
+        _cachedDetailPane = layout;
+        return layout;
     }
 
     private static Visual BuildVersionedDetailContent(McpServerRow row, Func<McpServerRow, Visual> build)
@@ -395,19 +417,31 @@ internal sealed class McpServersDialog
             return BuildToolsTabTitle(row.Entry);
         });
 
-    private Visual BuildDetailsVisual(McpServerRow row)
+    private Visual BuildDetailHeader(McpServerRow row)
     {
         var entry = row.Entry;
         var canEditPolicy = !row.IsDraft && entry.State is (McpManagementServerState.Configured or McpManagementServerState.Disabled);
         var canTestServer = canEditPolicy && entry.Transport is not null;
-        var enablement = new HStack(
+        var enablementAndActions = new HStack(
             new CheckBox("Enabled").IsChecked(row.EnabledState).IsEnabled(canEditPolicy),
             new Button("Apply")
                 .Tone(ControlTone.Success)
                 .IsEnabled(() => canEditPolicy && row.EnabledState.Value != (entry.PolicyEnabled != false))
                 .Click(() => ApplyEnablement(row)),
+            new Button("Test")
+                .IsEnabled(canTestServer)
+                .Click(() => _ = TestServerAsync(row, automatic: false)),
+            new Button($"{NerdFont.MdRefresh} Refresh")
+                .Tone(ControlTone.Primary)
+                .Click(() => Reload(entry.Key)),
+            new Button($"{NerdFont.MdCodeJson} JSON")
+                .IsEnabled(!string.IsNullOrWhiteSpace(entry.SourcePath))
+                .Click(() => _ = OpenFileAsync(entry.SourcePath, "MCP JSON config")),
+            new Button($"{NerdFont.MdFileCogOutline} Policy")
+                .IsEnabled(_snapshot is not null)
+                .Click(() => _ = OpenSelectedPolicyAsync()),
             new Markup(() => !canEditPolicy
-                ? "[dim]Enablement is available for effective configured servers only.[/]"
+                ? "[dim]Read-only row[/]"
                 : row.EnabledState.Value == (entry.PolicyEnabled != false)
                     ? "[dim]Saved[/]"
                     : "[warning]Unsaved policy change[/]") { Wrap = false })
@@ -415,33 +449,28 @@ internal sealed class McpServersDialog
             Spacing = 1,
         };
 
-        var jsonButton = new Button($"{NerdFont.MdCodeJson} Open JSON Config")
-            .IsEnabled(!string.IsNullOrWhiteSpace(entry.SourcePath))
-            .Click(() => _ = OpenFileAsync(entry.SourcePath, "MCP JSON config"));
-        var policyButton = new Button($"{NerdFont.MdFileCogOutline} Open Policy TOML")
-            .IsEnabled(_snapshot is not null)
-            .Click(() => _ = OpenSelectedPolicyAsync());
-        var refreshButton = new Button($"{NerdFont.MdRefresh} Refresh")
-            .Tone(ControlTone.Primary)
-            .Click(() => Reload(entry.Key));
-        var testServerButton = new Button("Test Server")
-            .IsEnabled(canTestServer)
-            .Click(() => _ = TestServerAsync(row));
-
-        var actions = new VStack(
-            new HStack(jsonButton, policyButton, refreshButton, testServerButton) { Spacing = 1 },
-            new Markup("[dim]Add/Edit/Remove remain in `alta mcp server ...`. Test Server lists tools with configured timeouts. HTTP/SSE uses static headers from JSON config; OAuth UX is deferred.[/]") { Wrap = true })
+        return new VStack(
+            new Markup(BuildCompactSelectedTitleMarkup(entry)) { Wrap = false },
+            enablementAndActions)
         {
             HorizontalAlignment = Align.Stretch,
             Spacing = 1,
         };
+    }
 
+    private Visual BuildConfigVisual(McpServerRow row)
+        => new VStack(
+            CreateSection("Editable JSON Server", BuildServerEditVisual(row)))
+        {
+            HorizontalAlignment = Align.Stretch,
+            VerticalAlignment = Align.Start,
+            Spacing = 1,
+        };
+
+    private Visual BuildDetailsVisual(McpServerRow row)
+    {
+        var entry = row.Entry;
         return new VStack(
-            new Markup(BuildSelectedTitleMarkup(entry)) { Wrap = true },
-            new Markup(BuildStateMarkup(entry)) { Wrap = true },
-            CreateSection("Editable JSON Server", BuildServerEditVisual(row)),
-            CreateSection("Enablement", enablement),
-            CreateSection("Actions", actions),
             CreateSection("Normalized Details", BuildPropertiesGrid(entry)),
             CreateSection("Policy", new Markup(BuildPolicyMarkup(entry, _snapshot)) { Wrap = true }),
             CreateSection("Diagnostics", new Markup(BuildDiagnosticsMarkup(entry)) { Wrap = true }))
@@ -581,15 +610,19 @@ internal sealed class McpServersDialog
         }
     }
 
-    private Task TestServerAsync(McpServerRow row)
+    private Task TestServerAsync(McpServerRow row, bool automatic)
     {
         if (row.Entry.State is not (McpManagementServerState.Configured or McpManagementServerState.Disabled))
         {
-            _statusText = "[warning]Select a configured MCP server before testing.[/]";
+            if (!automatic)
+            {
+                _statusText = "[warning]Select a configured MCP server before testing.[/]";
+            }
+
             return Task.CompletedTask;
         }
 
-        var testCancellation = BeginTestServerOperation();
+        var testCancellation = BeginTestServerOperation(row);
         if (testCancellation is null)
         {
             return Task.CompletedTask;
@@ -598,8 +631,52 @@ internal sealed class McpServersDialog
         var serverKey = row.Entry.Key;
         var request = _createRequest();
         var cancellationToken = testCancellation.Token;
-        _statusText = $"[dim]Testing MCP server {AnsiMarkup.Escape(serverKey)}...[/]";
-        return Task.Run(() => RunTestServerAsync(row, serverKey, request, testCancellation, cancellationToken));
+        _statusText = automatic
+            ? $"[dim]Loading MCP tools for {AnsiMarkup.Escape(serverKey)}...[/]"
+            : $"[dim]Testing MCP server {AnsiMarkup.Escape(serverKey)}...[/]";
+        return Task.Run(() => RunTestServerAsync(row, serverKey, request, testCancellation, cancellationToken, automatic));
+    }
+
+    private void StartAutomaticToolDiscovery(McpServerRow row)
+    {
+        if (!ShouldAutomaticallyDiscoverTools(row))
+        {
+            return;
+        }
+
+        if (!TryReserveAutomaticToolDiscovery(row.Entry))
+        {
+            return;
+        }
+
+        _ = TestServerAsync(row, automatic: true);
+    }
+
+    private static bool ShouldAutomaticallyDiscoverTools(McpServerRow row)
+        => !row.IsDraft &&
+           row.Entry.Tools.Count == 0 &&
+           row.Entry.PolicyEnabled != false &&
+           row.Entry.State == McpManagementServerState.Configured &&
+           row.Entry.Transport is not null &&
+           row.Entry.LastTestStatus == McpManagementTestStatus.NotRun;
+
+    private static string CreateAutomaticToolDiscoveryKey(McpManagementServerSnapshot entry)
+        => string.Concat(entry.SourceScope?.ToString() ?? "unknown", ":", entry.Key);
+
+    private bool TryReserveAutomaticToolDiscovery(McpManagementServerSnapshot entry)
+    {
+        lock (_testServerSyncRoot)
+        {
+            return _automaticToolDiscoveryKeys.Add(CreateAutomaticToolDiscoveryKey(entry));
+        }
+    }
+
+    private void ReleaseAutomaticToolDiscovery(McpManagementServerSnapshot entry)
+    {
+        lock (_testServerSyncRoot)
+        {
+            _automaticToolDiscoveryKeys.Remove(CreateAutomaticToolDiscoveryKey(entry));
+        }
     }
 
     private async Task RunTestServerAsync(
@@ -607,7 +684,8 @@ internal sealed class McpServersDialog
         string serverKey,
         McpManagementRequest request,
         CancellationTokenSource testCancellation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool automatic)
     {
         try
         {
@@ -633,9 +711,12 @@ internal sealed class McpServersDialog
                     return;
                 }
 
-                ApplyTestResult(row, result);
+                ApplyTestResult(row, result, selectUpdatedRow: !automatic || ReferenceEquals(GetSelectedRow(), row));
                 _statusText = statusText;
-                _dialog.App?.Focus(_serverList);
+                if (!automatic)
+                {
+                    _dialog.App?.Focus(_serverList);
+                }
             });
         }
         catch (Exception ex)
@@ -657,11 +738,16 @@ internal sealed class McpServersDialog
         }
         finally
         {
+            if (automatic && cancellationToken.IsCancellationRequested && !IsClosed())
+            {
+                ReleaseAutomaticToolDiscovery(row.Entry);
+            }
+
             EndTestServerOperation(testCancellation);
         }
     }
 
-    private CancellationTokenSource? BeginTestServerOperation()
+    private CancellationTokenSource? BeginTestServerOperation(McpServerRow row)
     {
         CancellationTokenSource? previous;
         var current = new CancellationTokenSource();
@@ -675,6 +761,7 @@ internal sealed class McpServersDialog
 
             previous = _activeTestServerCancellation;
             _activeTestServerCancellation = current;
+            _activeTestServerRow = row;
         }
 
         CancelTestServerOperation(previous);
@@ -696,6 +783,7 @@ internal sealed class McpServersDialog
             if (ReferenceEquals(_activeTestServerCancellation, cancellation))
             {
                 _activeTestServerCancellation = null;
+                _activeTestServerRow = null;
             }
         }
 
@@ -710,6 +798,25 @@ internal sealed class McpServersDialog
             _isClosed = true;
             cancellation = _activeTestServerCancellation;
             _activeTestServerCancellation = null;
+            _activeTestServerRow = null;
+        }
+
+        CancelTestServerOperation(cancellation);
+    }
+
+    private void CancelCurrentTestServerOperationIfDifferent(McpServerRow? row)
+    {
+        CancellationTokenSource? cancellation;
+        lock (_testServerSyncRoot)
+        {
+            if (_activeTestServerRow is null || ReferenceEquals(_activeTestServerRow, row))
+            {
+                return;
+            }
+
+            cancellation = _activeTestServerCancellation;
+            _activeTestServerCancellation = null;
+            _activeTestServerRow = null;
         }
 
         CancelTestServerOperation(cancellation);
@@ -731,7 +838,7 @@ internal sealed class McpServersDialog
         }
     }
 
-    private void ApplyTestResult(McpServerRow testedRow, McpManagementServerTestResult result)
+    private void ApplyTestResult(McpServerRow testedRow, McpManagementServerTestResult result, bool selectUpdatedRow)
     {
         var index = IndexOfRow(testedRow);
         if (index < 0)
@@ -764,7 +871,10 @@ internal sealed class McpServersDialog
 
         row.UpdateEntry(updated);
         UpdateSnapshotServer(index, updated);
-        SetSelectedServerIndex(index);
+        if (selectUpdatedRow)
+        {
+            SetSelectedServerIndex(index);
+        }
     }
 
     private void UpdateSnapshotServer(int index, McpManagementServerSnapshot updated)
@@ -974,24 +1084,20 @@ internal sealed class McpServersDialog
         return builder.ToString();
     }
 
-    private static string BuildSelectedTitleMarkup(McpManagementServerSnapshot entry)
+    private static string BuildCompactSelectedTitleMarkup(McpManagementServerSnapshot entry)
     {
         var (tone, icon) = GetStatusToneAndIcon(entry.State);
-        return $"[{tone}]{icon} {AnsiMarkup.Escape(entry.DisplayName)}[/] [dim]· {AnsiMarkup.Escape(FormatStateText(entry.State))}[/]";
-    }
-
-    private static string BuildStateMarkup(McpManagementServerSnapshot entry)
-    {
         var builder = new StringBuilder();
-        builder.Append("[bold]State:[/] ").Append(AnsiMarkup.Escape(FormatStateText(entry.State)));
+        builder.Append('[').Append(tone).Append(']').Append(icon).Append(' ').Append(AnsiMarkup.Escape(entry.DisplayName)).Append("[/]");
+        builder.Append(" [dim]· ").Append(AnsiMarkup.Escape(FormatStateText(entry.State))).Append("[/]");
         if (!string.IsNullOrWhiteSpace(entry.StateReason))
         {
-            builder.Append(" — ").Append(AnsiMarkup.Escape(entry.StateReason));
+            builder.Append(" [dim]· ").Append(AnsiMarkup.Escape(entry.StateReason)).Append("[/]");
         }
 
         if (entry.OverridesGlobal)
         {
-            builder.Append(" [warning](overrides global)[/]");
+            builder.Append(" [warning]overrides global[/]");
         }
 
         return builder.ToString();
