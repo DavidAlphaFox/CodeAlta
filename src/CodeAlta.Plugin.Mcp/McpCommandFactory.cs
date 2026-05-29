@@ -57,11 +57,11 @@ internal static class McpCommandFactory
                 serverKeys.Add(value.Trim());
             }
         });
-        command.Add((_, _) =>
+        command.Add(async (_, _) =>
         {
             if (serverKeys.Count == 0)
             {
-                return ValueTask.FromResult(WriteError(context, "missing_server", "Specify at least one MCP server id to activate."));
+                return WriteError(context, "missing_server", "Specify at least one MCP server id to activate.");
             }
 
             var snapshot = Discover(context, options);
@@ -71,12 +71,28 @@ internal static class McpCommandFactory
             var missing = serverKeys.Where(key => !configured.Contains(key)).Distinct(StringComparer.Ordinal).OrderBy(static key => key, StringComparer.Ordinal).ToArray();
             if (missing.Length > 0)
             {
-                return ValueTask.FromResult(WriteError(context, "server_not_found", "MCP server(s) are not configured: " + string.Join(", ", missing)));
+                return WriteError(context, "server_not_found", "MCP server(s) are not configured: " + string.Join(", ", missing));
             }
 
             var projectDirectory = ResolveProjectDirectory(context);
             var scopeKey = ResolveActivationScopeKey(context, projectDirectory);
             var activated = activationState.ActivateServers(scopeKey, serverKeys);
+            await using var runtime = new McpRuntimeService();
+            var direct = await runtime.ListToolsForServersAsync(
+                    CreateRuntimeRequest(context, options),
+                    activated,
+                    context.CancellationToken)
+                .ConfigureAwait(false);
+            activationState.UpdateToolCounts(
+                scopeKey,
+                direct.Tools
+                    .GroupBy(static tool => tool.Server, StringComparer.Ordinal)
+                    .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal));
+            foreach (var diagnostic in direct.Diagnostics)
+            {
+                WriteRecord(context.Stdout, CreateDiagnosticRecord(context, diagnostic));
+            }
+
             WriteRecord(context.Stdout, new
             {
                 type = "alta.mcp.activate",
@@ -84,9 +100,11 @@ internal static class McpCommandFactory
                 correlationId = context.CorrelationId,
                 activatedServers = serverKeys.Distinct(StringComparer.Ordinal).OrderBy(static key => key, StringComparer.Ordinal).ToArray(),
                 activeServers = activated,
-                note = "MCP tools from active servers are registered on the next agent run as mcp__<server>__<tool>.",
+                activeToolCount = direct.Tools.Count,
+                diagnosticCount = direct.Diagnostics.Count,
+                note = "MCP tools from active servers were loaded now and are registered on the next agent run as mcp__<server>__<tool>.",
             });
-            return ValueTask.FromResult(0);
+            return 0;
         });
         AddHelpText(command, "Examples: `alta mcp activate memory`; `alta mcp activate github docs`.");
         return command;

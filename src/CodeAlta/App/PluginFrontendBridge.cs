@@ -40,13 +40,13 @@ internal sealed class PluginFrontendBridge
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    public IReadOnlyList<PluginStatusItem> GetStatusItems(PluginUiRegion region)
-        => _runtime.Adapter.GetStatusItems(_runtime.ActivePlugins, region, CreateOptions())
+    public IReadOnlyList<PluginStatusItem> GetStatusItems(PluginUiRegion region, string? sessionId = null)
+        => _runtime.Adapter.GetStatusItems(_runtime.ActivePlugins, region, CreateOptions(sessionId))
             .Where(static item => !string.IsNullOrWhiteSpace(item.Text))
             .ToArray();
 
-    public IReadOnlyList<Visual> CreateVisuals(PluginUiRegion region)
-        => _runtime.Adapter.CreateVisuals(_runtime.ActivePlugins, region, CreateOptions());
+    public IReadOnlyList<Visual> CreateVisuals(PluginUiRegion region, string? sessionId = null)
+        => _runtime.Adapter.CreateVisuals(_runtime.ActivePlugins, region, CreateOptions(sessionId));
 
     public Task<(IReadOnlyList<PluginRenderResult> Results, IReadOnlyList<PluginRuntimeDiagnostic> Diagnostics)> RenderAsync(
         PluginUiRegion region,
@@ -66,13 +66,14 @@ internal sealed class PluginFrontendBridge
         return result.Result;
     }
 
-    private PluginAdapterOperationOptions CreateOptions()
+    private PluginAdapterOperationOptions CreateOptions(string? sessionId = null)
     {
         var project = _getCurrentProject();
         return new PluginAdapterOperationOptions
         {
             ProjectId = project?.Id,
             ProjectPath = project?.ProjectPath,
+            SessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId,
             HasInteractiveUi = true,
         };
     }

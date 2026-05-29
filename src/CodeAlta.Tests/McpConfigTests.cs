@@ -3,6 +3,8 @@ using System.Text.Json;
 using CodeAlta.Plugin.Mcp;
 using CodeAlta.Plugins.Abstractions;
 using XenoAtom.CommandLine;
+using XenoAtom.Terminal.UI;
+using XenoAtom.Terminal.UI.Controls;
 
 namespace CodeAlta.Tests;
 
@@ -678,7 +680,7 @@ public sealed class McpConfigTests
         File.WriteAllText(
             Path.Combine(project.Path, ".alta", "mcp.json"),
             """
-            { "mcpServers": { "docs": { "url": "https://example.test/mcp" } } }
+            { "mcpServers": { "docs": { "command": "__missing_codealta_mcp_test_server__" } } }
             """);
         var snapshot = new McpManagementService().RefreshSnapshot(new McpManagementRequest { ProjectDirectory = project.Path });
 
@@ -704,7 +706,101 @@ public sealed class McpConfigTests
         Assert.AreEqual("MCP 1/1 · tools pending", label);
     }
 
-    private static PluginAltaCommandContext CreateAltaContext(TextWriter stdout, TextWriter stderr, string? projectPath)
+    [TestMethod]
+    public async Task StatusVisual_UpdatesFromBindableStateAfterSessionActivation()
+    {
+        using var project = TempDirectory.Create();
+        Directory.CreateDirectory(Path.Combine(project.Path, ".alta"));
+        File.WriteAllText(
+            Path.Combine(project.Path, ".alta", "mcp.json"),
+            """
+            { "mcpServers": { "docs": { "url": "https://example.test/mcp" } } }
+            """);
+        var plugin = new McpPlugin();
+        var statusContribution = plugin.GetUiContributions().OfType<PluginVisualContribution>().Single();
+        var visual = statusContribution.CreateVisual!(CreateVisualContext(project.Path, "session-a"));
+        Assert.IsNotNull(visual);
+        Assert.IsInstanceOfType<Button>(visual);
+        var button = (Button)visual;
+        Assert.IsInstanceOfType<TextBlock>(button.Content);
+        var textBlock = (TextBlock)button.Content!;
+        Assert.AreEqual("MCP 1/1 · tools not loaded", textBlock.Text);
+
+        var changedCount = 0;
+        void OnValueChanged(Binding binding)
+        {
+            if (binding.Owner.GetType().IsGenericType && binding.Owner.GetType().GetGenericTypeDefinition() == typeof(State<>))
+            {
+                changedCount++;
+            }
+        }
+
+        var stdout = new StringWriter(CultureInfo.InvariantCulture);
+        var stderr = new StringWriter(CultureInfo.InvariantCulture);
+        var app = new CommandApp("alta", "test")
+        {
+            plugin.GetAltaCommands().Single().CreateCommandNode(CreateAltaContext(stdout, stderr, project.Path, sourceSessionId: "session-a")),
+        };
+
+        BindingManager.Current.ValueChanged += OnValueChanged;
+        try
+        {
+            var exitCode = await app.RunAsync(["mcp", "activate", "docs"], new CommandRunConfig { Out = TextWriter.Null, Error = stderr });
+            Assert.AreEqual(0, exitCode, stderr.ToString());
+        }
+        finally
+        {
+            BindingManager.Current.ValueChanged -= OnValueChanged;
+        }
+
+        Assert.IsTrue(changedCount > 0, "MCP activation should invalidate bindable UI state.");
+        Assert.AreEqual("MCP 1/1 · active tools 0", ReadStatusText(statusContribution.CreateVisual!(CreateVisualContext(project.Path, "session-a"))!));
+    }
+
+    [TestMethod]
+    public void StatusVisual_UpdatesFromBindableStateAfterToolCountsLoad()
+    {
+        using var project = TempDirectory.Create();
+        Directory.CreateDirectory(Path.Combine(project.Path, ".alta"));
+        File.WriteAllText(
+            Path.Combine(project.Path, ".alta", "mcp.json"),
+            """
+            { "mcpServers": { "docs": { "url": "https://example.test/mcp" } } }
+            """);
+        var activationState = new McpActivationState();
+        var statusRevision = new State<int>(0);
+        activationState.Changed += _ => statusRevision.Value++;
+        var visual = McpPlugin.CreateStatusIndicator(
+            CreateVisualContext(project.Path, "session-a"),
+            new McpManagementService(),
+            activationState,
+            statusRevision);
+        Assert.IsNotNull(visual);
+        Assert.AreEqual("MCP 1/1 · tools not loaded", ReadStatusText(visual));
+
+        var scopeKey = McpActivationState.ResolveScopeKey("session-a", project.Path);
+        activationState.ActivateServers(scopeKey, ["docs"]);
+        Assert.AreEqual(1, statusRevision.Value);
+        Assert.AreEqual(
+            "MCP 1/1 · tools pending",
+            ReadStatusText(McpPlugin.CreateStatusIndicator(CreateVisualContext(project.Path, "session-a"), new McpManagementService(), activationState, statusRevision)!));
+
+        activationState.UpdateToolCounts(scopeKey, new Dictionary<string, int>(StringComparer.Ordinal) { ["docs"] = 7 });
+        Assert.AreEqual(2, statusRevision.Value);
+        Assert.AreEqual(
+            "MCP 1/1 · active tools 7",
+            ReadStatusText(McpPlugin.CreateStatusIndicator(CreateVisualContext(project.Path, "session-a"), new McpManagementService(), activationState, statusRevision)!));
+    }
+
+    private static string? ReadStatusText(Visual visual)
+    {
+        Assert.IsInstanceOfType<Button>(visual);
+        var button = (Button)visual;
+        Assert.IsInstanceOfType<TextBlock>(button.Content);
+        return ((TextBlock)button.Content!).Text;
+    }
+
+    private static PluginAltaCommandContext CreateAltaContext(TextWriter stdout, TextWriter stderr, string? projectPath, string? sourceSessionId = null)
         => new()
         {
             Plugin = CreatePluginDescriptor(),
@@ -712,9 +808,22 @@ public sealed class McpConfigTests
             Scope = PluginScope.Global,
             CorrelationId = "corr-1",
             WorkingDirectory = projectPath,
+            SourceSessionId = sourceSessionId,
             Stdin = TextReader.Null,
             Stdout = stdout,
             Stderr = stderr,
+        };
+
+    private static PluginVisualContext CreateVisualContext(string projectPath, string? sessionId = null)
+        => new()
+        {
+            Plugin = CreatePluginDescriptor(),
+            Services = NoopPluginServices.Create(),
+            Scope = PluginScope.Global,
+            ProjectPath = projectPath,
+            SessionId = sessionId,
+            Region = PluginUiRegion.SessionStatus,
+            HasInteractiveUi = true,
         };
 
     private static PluginSystemPromptContext CreatePromptContext(string projectPath)

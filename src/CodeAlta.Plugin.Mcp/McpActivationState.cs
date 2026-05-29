@@ -5,6 +5,8 @@ internal sealed class McpActivationState
     private readonly object _syncRoot = new();
     private readonly Dictionary<string, McpActivationScopeState> _scopes = new(StringComparer.Ordinal);
 
+    internal event Action<string>? Changed;
+
     public IReadOnlyList<string> GetActiveServers(string scopeKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scopeKey);
@@ -31,6 +33,8 @@ internal sealed class McpActivationState
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scopeKey);
         ArgumentNullException.ThrowIfNull(serverKeys);
+        IReadOnlyList<string> activeServers;
+        var changed = false;
         lock (_syncRoot)
         {
             var state = GetOrCreateScope(scopeKey);
@@ -38,21 +42,30 @@ internal sealed class McpActivationState
             {
                 if (!string.IsNullOrWhiteSpace(serverKey))
                 {
-                    state.ActiveServers.Add(serverKey.Trim());
+                    changed |= state.ActiveServers.Add(serverKey.Trim());
                 }
             }
 
-            return state.ActiveServers.OrderBy(static server => server, StringComparer.Ordinal).ToArray();
+            activeServers = state.ActiveServers.OrderBy(static server => server, StringComparer.Ordinal).ToArray();
         }
+
+        if (changed)
+        {
+            Changed?.Invoke(scopeKey);
+        }
+
+        return activeServers;
     }
 
     public void ReplaceActiveServers(string scopeKey, IEnumerable<string> serverKeys)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scopeKey);
         ArgumentNullException.ThrowIfNull(serverKeys);
+        var changed = false;
         lock (_syncRoot)
         {
             var state = GetOrCreateScope(scopeKey);
+            var previousServers = state.ActiveServers.ToHashSet(StringComparer.Ordinal);
             state.ActiveServers.Clear();
             foreach (var serverKey in serverKeys)
             {
@@ -62,10 +75,17 @@ internal sealed class McpActivationState
                 }
             }
 
+            changed = !previousServers.SetEquals(state.ActiveServers);
+
             foreach (var serverKey in state.ToolCounts.Keys.Except(state.ActiveServers, StringComparer.Ordinal).ToArray())
             {
-                state.ToolCounts.Remove(serverKey);
+                changed |= state.ToolCounts.Remove(serverKey);
             }
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke(scopeKey);
         }
     }
 
@@ -73,13 +93,24 @@ internal sealed class McpActivationState
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scopeKey);
         ArgumentNullException.ThrowIfNull(counts);
+        var changed = false;
         lock (_syncRoot)
         {
             var state = GetOrCreateScope(scopeKey);
             foreach (var serverKey in state.ActiveServers)
             {
-                state.ToolCounts[serverKey] = counts.TryGetValue(serverKey, out var count) ? count : 0;
+                var count = counts.TryGetValue(serverKey, out var value) ? value : 0;
+                if (!state.ToolCounts.TryGetValue(serverKey, out var previous) || previous != count)
+                {
+                    state.ToolCounts[serverKey] = count;
+                    changed = true;
+                }
             }
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke(scopeKey);
         }
     }
 

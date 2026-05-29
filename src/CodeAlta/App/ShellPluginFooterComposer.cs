@@ -34,14 +34,14 @@ internal static class ShellPluginFooterComposer
         };
     }
 
-    public static Visual? ComposeStatusItems(PluginHostBridge? pluginHostBridge, PluginUiRegion region)
+    public static Visual? ComposeStatusItems(PluginHostBridge? pluginHostBridge, PluginUiRegion region, string? sessionId = null)
     {
         if (pluginHostBridge is null)
         {
             return null;
         }
 
-        var items = pluginHostBridge.GetStatusItems(region);
+        var items = pluginHostBridge.GetStatusItems(region, sessionId);
         if (items.Count == 0)
         {
             return null;
@@ -53,17 +53,17 @@ internal static class ShellPluginFooterComposer
         };
     }
 
-    public static Visual? ComposeRegion(PluginHostBridge? pluginHostBridge, PluginUiRegion region)
+    public static Visual? ComposeRegion(PluginHostBridge? pluginHostBridge, PluginUiRegion region, string? sessionId = null)
     {
         if (pluginHostBridge is null)
         {
             return null;
         }
 
-        var visuals = new[] { ComposeStatusItems(pluginHostBridge, region) }
+        var visuals = new[] { ComposeStatusItems(pluginHostBridge, region, sessionId) }
             .Where(static visual => visual is not null)
             .Cast<Visual>()
-            .Concat(pluginHostBridge.CreateVisuals(region))
+            .Concat(pluginHostBridge.CreateVisuals(region, sessionId))
             .ToArray();
         return visuals.Length switch
         {

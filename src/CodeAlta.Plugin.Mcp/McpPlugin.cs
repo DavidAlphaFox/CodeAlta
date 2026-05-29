@@ -18,6 +18,7 @@ public sealed class McpPlugin : PluginBase
 {
     private readonly McpActivationState _activationState = new();
     private readonly McpManagementService _managementService = new();
+    private readonly State<int> _statusRevision = new(0);
 
     private static readonly PluginKeyBinding ManageServersKeyBinding = new()
     {
@@ -26,6 +27,14 @@ public sealed class McpPlugin : PluginBase
             new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
             new KeyGesture(TerminalChar.CtrlY, TerminalModifiers.Ctrl)),
     };
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="McpPlugin"/> class.
+    /// </summary>
+    public McpPlugin()
+    {
+        _activationState.Changed += _ => IncrementStatusRevision();
+    }
 
     /// <inheritdoc />
     public override IEnumerable<PluginCommandContribution> GetCommands()
@@ -56,7 +65,7 @@ public sealed class McpPlugin : PluginBase
             Region = PluginUiRegion.SessionStatus,
             Name = "mcp-status",
             Order = 100,
-            CreateVisual = context => CreateStatusIndicator(context, _managementService, _activationState),
+            CreateVisual = context => CreateStatusIndicator(context, _managementService, _activationState, _statusRevision),
         };
     }
 
@@ -89,8 +98,13 @@ public sealed class McpPlugin : PluginBase
             .Show();
     }
 
-    private static Visual? CreateStatusIndicator(PluginVisualContext context, McpManagementService managementService, McpActivationState activationState)
+    internal static Visual? CreateStatusIndicator(PluginVisualContext context, McpManagementService managementService, McpActivationState activationState, State<int> statusRevision)
     {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(managementService);
+        ArgumentNullException.ThrowIfNull(activationState);
+        ArgumentNullException.ThrowIfNull(statusRevision);
+
         var projectPath = ResolveProjectPath(context.ProjectPath, context.Services.Workspace.SelectedProjectPath, null);
         var snapshot = ResolveStatusSnapshot(managementService, projectPath);
         if (!snapshot.Summary.HasConfiguration && snapshot.Summary.ConfiguredServerCount == 0 && snapshot.Summary.InvalidSourceCount == 0)
@@ -99,13 +113,58 @@ public sealed class McpPlugin : PluginBase
         }
 
         var activationScope = ResolveActivationScopeKey(context, projectPath);
-        var activeServers = activationState.GetActiveServers(activationScope);
-        var label = CreateStatusLabel(snapshot, activationState.GetToolCounts(activationScope), activeServers);
-        var button = new Button(label)
-            .Tone(snapshot.Summary.UnavailableServerCount > 0 ? ControlTone.Warning : ControlTone.Default);
+        var button = new Button(new TextBlock(() =>
+            {
+                _ = statusRevision.Value;
+                return CreateStatusVisualState(managementService, activationState, activationScope, projectPath).Label;
+            })
+            {
+                Wrap = false,
+                IsSelectable = false,
+            })
+            .Tone(() =>
+            {
+                _ = statusRevision.Value;
+                return CreateStatusVisualState(managementService, activationState, activationScope, projectPath).Tone;
+            });
         button.Click(() => ShowManagementDialog(context, managementService, button));
         return button;
     }
+
+    private void IncrementStatusRevision()
+    {
+        var dispatcher = _statusRevision.Dispatcher;
+        if (dispatcher.CheckAccess())
+        {
+            _statusRevision.Value++;
+            return;
+        }
+
+        try
+        {
+            dispatcher.Post(() => _statusRevision.Value++);
+        }
+        catch (InvalidOperationException)
+        {
+            // No interactive TerminalApp is attached. The in-memory activation state is still current,
+            // and the next UI composition will read it directly.
+        }
+    }
+
+    private static McpStatusVisualState CreateStatusVisualState(
+        McpManagementService managementService,
+        McpActivationState activationState,
+        string activationScope,
+        string? projectPath)
+    {
+        var currentSnapshot = ResolveStatusSnapshot(managementService, projectPath);
+        var activeServers = activationState.GetActiveServers(activationScope);
+        return new McpStatusVisualState(
+            CreateStatusLabel(currentSnapshot, activationState.GetToolCounts(activationScope), activeServers),
+            currentSnapshot.Summary.UnavailableServerCount > 0 ? ControlTone.Warning : ControlTone.Default);
+    }
+
+    private readonly record struct McpStatusVisualState(string Label, ControlTone Tone);
 
     internal static string CreateStatusLabel(
         McpManagementSnapshot snapshot,

@@ -115,7 +115,7 @@ alta mcp server enable <server> --scope project
 alta mcp server disable <server> --global
 ```
 
-`activate` mutates only in-memory session activation state; on the next agent run, tools from activated servers are registered as `mcp__<server>__<tool>` after normal MCP policy filters. `server add` and `server remove` mutate only the selected JSON MCP file. `server enable` and `server disable` mutate TOML policy only and preserve JSON server definitions. Removing a global-only server from inside a project requires `--scope global` so a project context does not accidentally delete global user configuration.
+`activate` mutates only in-memory session activation state and immediately enumerates tools from active servers so the UI can show whether activation took effect. On the next agent run, the same activated servers are refreshed and registered as `mcp__<server>__<tool>` after normal MCP policy filters. `server add` and `server remove` mutate only the selected JSON MCP file. `server enable` and `server disable` mutate TOML policy only and preserve JSON server definitions. Removing a global-only server from inside a project requires `--scope global` so a project context does not accidentally delete global user configuration.
 
 Runtime tool commands:
 
@@ -142,7 +142,7 @@ Runtime diagnostics redact sensitive values before they reach command output or 
 
 Tool-call results preserve `isError` from MCP. Text content becomes `contentText` and `content` blocks; structured content is included after redaction when it fits the output character budget. Image, audio, embedded-resource, resource-link, and unknown non-text content are summarized instead of embedding raw payloads. Output beyond `max_tool_output_chars` is truncated and marked with `truncated = true`.
 
-Servers that cannot connect or list tools are reported as unavailable for that runtime request and do not contribute enabled tools to activated-agent-tool enumeration or search/describe/call results. Runtime state is explicit and finite; activated tools are refreshed by enumerating policy-controlled tools at agent-run time. `tool-list-changed` notifications and a process-wide long-lived MCP connection manager are follow-up work only if tool freshness requires them.
+Servers that cannot connect or list tools are reported as unavailable for that runtime request and do not contribute enabled tools to activation-time status, activated-agent-tool enumeration, or search/describe/call results. Runtime state is explicit and finite; activated tools are eagerly enumerated when `alta mcp activate ...` runs for immediate status feedback, then refreshed again at agent-run time. `tool-list-changed` notifications and a process-wide long-lived MCP connection manager are follow-up work only if tool freshness requires them.
 
 ## TUI dialog and status indicator
 
@@ -153,7 +153,7 @@ Open the MCP Servers dialog through any of these entry points:
 - `Ctrl+G Ctrl+Y` (not `Ctrl+G Ctrl+M`, because some terminals report Enter as `Ctrl+M`);
 - the clickable MCP status indicator when a cached MCP snapshot exists and MCP JSON/TOML configuration is present.
 
-The dialog and status indicator share `McpManagementService`. `Refresh` reads the fixed JSON config files and TOML policy without connecting to servers. The server list includes effective servers, disabled servers, invalid/missing config rows, and global definitions shadowed by project config. Dialog counts are cached snapshot counts; the status indicator uses cached exposed/total counts when a dialog test has run, otherwise it reports session activation state as `tools pending`, `active tools N`, or `tools not loaded` so activation-time tool enumeration is not shown as a misleading `0/0`. Enabled configured servers with no cached test result start a background, cancellable tool discovery when selected so the **Tools (N)** tab is prefilled without blocking rendering, close, or application shutdown.
+The dialog and status indicator share `McpManagementService`. `Refresh` reads the fixed JSON config files and TOML policy without connecting to servers. The server list includes effective servers, disabled servers, invalid/missing config rows, and global definitions shadowed by project config. Dialog counts are cached snapshot counts; the status indicator uses cached exposed/total counts when a dialog test has run, otherwise it reports session activation state as `tools pending`, `active tools N`, or `tools not loaded`; `tools pending` should be transient and is replaced after activation-time or agent-run tool enumeration updates the bindable status state. Enabled configured servers with no cached test result start a background, cancellable tool discovery when selected so the **Tools (N)** tab is prefilled without blocking rendering, close, or application shutdown.
 
 For a selected configured server, the dialog shows compact enablement/actions above the tab strip. The first **Config** tab contains editable JSON server fields. The **Tools (N)** tab contains discovered tool policy controls. The following **Details** tab contains normalized/redacted connection fields, source scope/path/format, policy values, and diagnostics. Rendering and refresh use cached/discovered config snapshots and do not synchronously connect to servers; background prefill and the explicit **Test** action connect to the selected stdio or HTTP/SSE server with configured timeouts, update cached exposed/total tool counts, and surface success, failure, timeout, cancellation, and auth/unavailable diagnostics without blocking normal config refresh/rendering. The top-level **Add**, **Save**, and **Remove** actions create/update/remove JSON server definitions in the selected project/global scope. Editable arguments use semicolon-separated values; env/header fields use semicolon-separated `KEY=VALUE` pairs and support `${NAME}` environment-variable placeholders. Redacted placeholders must be replaced before saving so the dialog does not overwrite secrets with `[redacted]`. The compact Enabled checkbox writes server `enabled` policy. The discovered tools table shows Enabled, raw MCP name/title, and policy status. Toggling a tool writes/removes that raw tool name in `disabled_tools`; it does not edit JSON server definitions.
 
@@ -175,14 +175,14 @@ Reusable MCP configuration, policy, runtime, and management code lives in `src/C
 Progressive dynamic `AgentToolDefinition` exposure is shipped behavior:
 
 - the MCP plugin prompt contribution reads configured MCP servers without connecting and emits a compact active/inactive server inventory, for example: `MCP servers: Active memory; Inactive docs`;
-- `alta mcp activate <server> [<server>...]` marks configured servers active for the current session (falling back to project scope when no session is available);
-- before each agent run, the MCP plugin connects only to activated servers and lists their tools;
+- `alta mcp activate <server> [<server>...]` marks configured servers active for the current session (falling back to project scope when no session is available) and immediately lists tools for active servers to update activation status;
+- before each agent run, the MCP plugin connects only to activated servers and refreshes their tools;
 - every enabled tool on an activated server that passes global/server policy (`enabled`, `allowed_tools`, `disabled_tools`) is exposed as a direct agent tool;
 - the deterministic `mcp__<server>__<tool>` alias is used as `AgentToolSpec.Name`, with the same sanitization and collision hashing used by runtime command output;
 - the MCP `inputSchema` is passed through as the tool input schema;
 - direct tool handlers delegate to `McpRuntimeService.CallToolAsync(serverKey, toolName, arguments, ...)`, preserving tool timeout, redaction, `isError`, structured content, and truncation behavior;
 - startup/list-tools diagnostics are reported through per-run MCP prompt guidance without leaking headers, environment values, arguments, or tool output secrets;
-- direct tools refresh at agent-run enumeration time. `tool-list-changed` notifications and a long-lived MCP connection manager are optional follow-ups only if finite refresh is insufficient.
+- direct tools are enumerated on activation for immediate status feedback and refreshed at agent-run enumeration time. `tool-list-changed` notifications and a long-lived MCP connection manager are optional follow-ups only if finite refresh is insufficient.
 
 ## Deferred/future work
 

@@ -49,11 +49,11 @@ internal sealed class PluginHostBridge
     public IReadOnlyList<string> GetPromptPlaceholderContributions()
         => _frontend.GetPromptPlaceholderContributions();
 
-    public IReadOnlyList<PluginStatusItem> GetStatusItems(PluginUiRegion region)
-        => _frontend.GetStatusItems(region);
+    public IReadOnlyList<PluginStatusItem> GetStatusItems(PluginUiRegion region, string? sessionId = null)
+        => _frontend.GetStatusItems(region, sessionId);
 
-    public IReadOnlyList<Visual> CreateVisuals(PluginUiRegion region)
-        => _frontend.CreateVisuals(region);
+    public IReadOnlyList<Visual> CreateVisuals(PluginUiRegion region, string? sessionId = null)
+        => _frontend.CreateVisuals(region, sessionId);
 
     public Task<(IReadOnlyList<PluginRenderResult> Results, IReadOnlyList<PluginRuntimeDiagnostic> Diagnostics)> RenderAsync(
         PluginUiRegion region,

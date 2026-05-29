@@ -176,6 +176,12 @@ public sealed class McpRuntimeServiceTests
         var app = new CommandApp("alta", "test") { contribution.CreateCommandNode(CreateAltaContext(stdout, stderr, project.Path)) };
         var activateExitCode = await app.RunAsync(["mcp", "activate", "tiny"], new CommandRunConfig { Out = TextWriter.Null, Error = stderr });
         Assert.AreEqual(0, activateExitCode, stderr.ToString());
+        using (var activateRecord = JsonDocument.Parse(stdout.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries).Last()))
+        {
+            Assert.AreEqual("alta.mcp.activate", activateRecord.RootElement.GetProperty("type").GetString());
+            Assert.AreEqual(1, activateRecord.RootElement.GetProperty("activeToolCount").GetInt32());
+            Assert.AreEqual(0, activateRecord.RootElement.GetProperty("diagnosticCount").GetInt32());
+        }
 
         var context = new PluginBeforeAgentRunContext
         {
