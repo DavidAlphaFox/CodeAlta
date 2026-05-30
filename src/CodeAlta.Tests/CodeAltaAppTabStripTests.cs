@@ -599,6 +599,7 @@ public sealed class CodeAltaAppTabStripTests
                 static (_, _) => { },
                 static (_, _) => { },
                 static (onAccepted, placeholder) => SessionWorkspaceView.CreateStyledPromptEditor(onAccepted, null, null, placeholder)),
+            UserPromptSelectorController.Create(static _ => { }),
             ModelProviderSelectorController.Create(static _ => { }, static _ => { }, static _ => { }, static () => { }),
             SessionTabHostController.Create(selectTab ?? (static _ => { })),
             NullProjectFileSearchService.Instance,

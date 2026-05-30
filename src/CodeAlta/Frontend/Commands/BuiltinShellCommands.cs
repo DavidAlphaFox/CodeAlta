@@ -23,6 +23,10 @@ internal static class BuiltinShellCommands
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
         new KeyGesture(TerminalChar.CtrlR, TerminalModifiers.Ctrl));
 
+    public static readonly KeySequence PromptsShortcutSequence = new(
+        new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
+        new KeyGesture(TerminalChar.CtrlH, TerminalModifiers.Ctrl));
+
     public static readonly KeySequence ModelsShortcutSequence = new(
         new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
         new KeyGesture(TerminalChar.CtrlO, TerminalModifiers.Ctrl));
@@ -135,6 +139,7 @@ internal static class BuiltinShellCommands
     internal static readonly ShellCommand Skills = Dialog("CodeAlta.Skills.Manage", "Skills", "Browse discovered skills, validation diagnostics, source precedence, and provenance.", "skills", ShellCommandHelpCategory.General, SkillsShortcutSequence, static context => context.Dialogs.OpenSkillsAsync(), searchText: "skill");
     internal static readonly ShellCommand Plugins = Dialog("CodeAlta.Plugins.Manage", "Plugins", "Open plugin management and inspect plugin state, diagnostics, and contributions.", "plugins", ShellCommandHelpCategory.General, PluginsShortcutSequence, static context => context.Dialogs.OpenPluginsAsync(), searchText: "plugin");
     internal static readonly ShellCommand WorkspaceSettings = Dialog("CodeAlta.Workspace.Settings", "Workspace Settings", "Open workspace settings for the navigator and UI theme.", "settings", ShellCommandHelpCategory.General, WorkspaceSettingsShortcutSequence, static context => { context.Dialogs.OpenWorkspaceSettings(); return Task.CompletedTask; }, searchText: "workspace_settings");
+    internal static readonly ShellCommand Prompts = Dialog("CodeAlta.Prompts.Manage", "Prompts", "Create, edit, delete, and inspect user prompts from built-in, global, and project instruction roots.", "prompt", ShellCommandHelpCategory.General, PromptsShortcutSequence, static context => context.Dialogs.OpenPromptsAsync(), searchText: "prompts user_prompt instructions system_prompt");
     internal static readonly ShellCommand Providers = Dialog("CodeAlta.Providers.Manage", "Model Providers", "Configure enabled model providers, credentials, and connection details.", "model_providers", ShellCommandHelpCategory.General, ModelProvidersShortcutSequence, static context => context.Dialogs.OpenModelProvidersAsync(), searchText: "providers");
     internal static readonly ShellCommand Models = Dialog("CodeAlta.Models.Browse", "Models", "Browse provider models and enriched model metadata, then select one for the current prompt or session.", "models", ShellCommandHelpCategory.Inspection, ModelsShortcutSequence, static context => { context.Dialogs.OpenModels(); return Task.CompletedTask; }, ShellCommandPlacement.PromptEditor, searchText: "model_list");
     internal static readonly ShellCommand ApplicationLogs = Dialog("CodeAlta.ApplicationLogs.Open", "Show Logs", "Open application logs captured for the current UI thread.", "logs", ShellCommandHelpCategory.Inspection, ApplicationLogsShortcutSequence, static context => { context.Dialogs.OpenApplicationLogs(); return Task.CompletedTask; }, searchText: "show_logs");
@@ -307,6 +312,7 @@ internal static class BuiltinShellCommands
         yield return Skills;
         yield return Plugins;
         yield return WorkspaceSettings;
+        yield return Prompts;
         yield return FocusSidebar;
         yield return ToggleNavigator;
         yield return FocusPrompt;

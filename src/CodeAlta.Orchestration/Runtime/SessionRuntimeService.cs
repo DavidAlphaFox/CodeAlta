@@ -198,6 +198,11 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             session.ReasoningEffort = reasoningEffort;
         }
 
+        if (!string.IsNullOrWhiteSpace(localState.UserPromptName))
+        {
+            session.UserPromptName = localState.UserPromptName.Trim();
+        }
+
         if (localState.MessageCount is { } messageCount)
         {
             session.MessageCount = messageCount;
@@ -342,6 +347,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             LatestSummary = "Global overview and coordination session.",
             ModelId = options.Model,
             ReasoningEffort = options.ReasoningEffort,
+            UserPromptName = NormalizeOptionalText(options.UserPromptName),
         };
 
         try
@@ -400,6 +406,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             LatestSummary = $"Project session for {project.DisplayName}.",
             ModelId = options.Model,
             ReasoningEffort = options.ReasoningEffort,
+            UserPromptName = NormalizeOptionalText(options.UserPromptName),
         };
 
         try
@@ -446,7 +453,8 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(options.WorkingDirectory);
 
         var project = await ResolveProjectAsync(session, cancellationToken).ConfigureAwait(false);
-        var instructions = _instructionTemplateProvider.BuildCoordinatorInstructions(session, project);
+        session.UserPromptName = NormalizeOptionalText(options.UserPromptName) ?? session.UserPromptName;
+        var instructions = _instructionTemplateProvider.BuildCoordinatorInstructions(session, project, options.Model, session.UserPromptName);
         var providerProviderId = new ModelProviderId(options.ProviderId.Value);
         var developerInstructions = UsesProviderManagedSkills(providerProviderId) ? null : instructions.DeveloperInstructions;
         var additionalDeveloperInstructions = AppendPromptPart(BuildParentNotificationGuidance(session), options.AdditionalDeveloperInstructions);
@@ -457,7 +465,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
 
         if (!string.IsNullOrWhiteSpace(session.SessionId) &&
             _entries.TryGetValue(session.SessionId, out var existing) &&
-            existing.Matches(options))
+            existing.Matches(options, session.UserPromptName))
         {
             return existing.SessionHandleId;
         }
@@ -524,6 +532,9 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         session.ProviderId = options.ProviderId.Value;
         session.ProviderKey = options.ProviderKey ?? options.ProviderId.Value;
         session.WorkingDirectory = options.WorkingDirectory;
+        session.ModelId = options.Model;
+        session.ReasoningEffort = options.ReasoningEffort;
+        session.UserPromptName = NormalizeOptionalText(options.UserPromptName) ?? session.UserPromptName;
         await UpsertSessionMetadataAsync(session, options, cancellationToken).ConfigureAwait(false);
         await UpdateSessionLocalStateAsync(session, cancellationToken).ConfigureAwait(false);
         if (startNewSession)
@@ -565,6 +576,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             options.WorkingDirectory,
             options.Model,
             options.ReasoningEffort,
+            session.UserPromptName,
             options.AdditionalSystemMessage,
             options.AdditionalDeveloperInstructions,
             CreateToolSignatures(options.Tools),
@@ -918,6 +930,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         localState.ProviderKey = session.ResolvedProviderKey;
         localState.ModelId = session.ModelId;
         localState.ReasoningEffort = session.ReasoningEffort;
+        localState.UserPromptName = NormalizeOptionalText(session.UserPromptName);
         localState.Archived = session.Status == SessionViewStatus.Archived;
         localState.MessageCount = session.MessageCount;
         localState.ParentSessionId = session.ParentSessionId;
@@ -1642,6 +1655,11 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             {
                 session.MessageCount = localState.MessageCount;
             }
+
+            if (!string.IsNullOrWhiteSpace(localState.UserPromptName))
+            {
+                session.UserPromptName = localState.UserPromptName.Trim();
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Text.Json.JsonException)
         {
@@ -2002,6 +2020,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         localState.ProviderKey = session.ResolvedProviderKey;
         localState.ModelId = session.ModelId;
         localState.ReasoningEffort = session.ReasoningEffort;
+        localState.UserPromptName = NormalizeOptionalText(session.UserPromptName);
         localState.Archived = session.Status == SessionViewStatus.Archived;
         localState.MessageCount = session.MessageCount;
         localState.ParentSessionId = session.ParentSessionId;
@@ -2026,6 +2045,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             string workingDirectory,
             string? model,
             AgentReasoningEffort? reasoningEffort,
+            string? userPromptName,
             string? additionalSystemMessage,
             string? additionalDeveloperInstructions,
             IReadOnlyList<string> toolSignatures,
@@ -2046,6 +2066,7 @@ public sealed class SessionRuntimeService : IAsyncDisposable
             WorkingDirectory = workingDirectory;
             Model = model;
             ReasoningEffort = reasoningEffort;
+            UserPromptName = NormalizeOptionalText(userPromptName);
             AdditionalSystemMessage = additionalSystemMessage;
             AdditionalDeveloperInstructions = additionalDeveloperInstructions;
             ToolSignatures = toolSignatures;
@@ -2080,6 +2101,8 @@ public sealed class SessionRuntimeService : IAsyncDisposable
         public string? Model { get; }
 
         public AgentReasoningEffort? ReasoningEffort { get; }
+
+        public string? UserPromptName { get; }
 
         public string? AdditionalSystemMessage { get; }
 
@@ -2125,16 +2148,19 @@ public sealed class SessionRuntimeService : IAsyncDisposable
                 LastActiveAt = LastTerminalEventAt == DateTimeOffset.MinValue ? CreatedAt : LastTerminalEventAt,
                 ModelId = Model,
                 ReasoningEffort = ReasoningEffort,
+                UserPromptName = UserPromptName,
             };
 
-        public bool Matches(SessionExecutionOptions options)
+        public bool Matches(SessionExecutionOptions options, string? userPromptName)
         {
+            var resolvedUserPromptName = NormalizeOptionalText(options.UserPromptName) ?? NormalizeOptionalText(userPromptName);
             return !IsTerminated
                 && string.Equals(ProviderId.Value, options.ProviderId.Value, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(ProviderKey, options.ProviderKey ?? options.ProviderId.Value, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(WorkingDirectory, options.WorkingDirectory, StringComparison.Ordinal)
                 && string.Equals(Model, options.Model, StringComparison.Ordinal)
                 && ReasoningEffort == options.ReasoningEffort
+                && string.Equals(UserPromptName, resolvedUserPromptName, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(AdditionalSystemMessage, options.AdditionalSystemMessage, StringComparison.Ordinal)
                 && string.Equals(AdditionalDeveloperInstructions, options.AdditionalDeveloperInstructions, StringComparison.Ordinal)
                 && ToolSignatures.SequenceEqual(CreateToolSignatures(options.Tools), StringComparer.Ordinal);

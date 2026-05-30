@@ -17,7 +17,8 @@ Start with the first two pages, then use the topic pages as a reference while yo
 
 1. [Getting Started](getting-started.md): install the tool, launch it, configure the first provider, and send a first prompt.
 2. [Model Providers](model-providers.md): understand the default `config.toml`, common provider types, credentials, models, reasoning settings, and provider testing.
-3. [Workspace and Dialogs](workspace.md): learn the main terminal screen, timeline, prompt editor, file picker, logs, settings, and management dialogs.
+3. [Prompts and Instructions](prompts.md): select and customize user prompts, understand system prompts, and use global/project instruction roots.
+4. [Workspace and Dialogs](workspace.md): learn the main terminal screen, timeline, prompt editor, file picker, logs, settings, and management dialogs.
 
 ## Daily workflow topics
 

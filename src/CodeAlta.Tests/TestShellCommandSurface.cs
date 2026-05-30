@@ -23,6 +23,7 @@ internal static class TestShellCommandSurface
                 static () => [],
                 static (_, _) => Task.CompletedTask,
                 static () => Task.CompletedTask,
+                static () => Task.CompletedTask,
                 static () => { },
                 static () => { },
                 static () => { },

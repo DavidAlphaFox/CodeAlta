@@ -18,6 +18,7 @@ internal static class CodeAltaShellViewFactory
         ArgumentNullException.ThrowIfNull(options.WorkspaceChromeController);
         ArgumentNullException.ThrowIfNull(options.PromptComposerController);
         ArgumentNullException.ThrowIfNull(options.QueuedPromptController);
+        ArgumentNullException.ThrowIfNull(options.UserPromptSelectorController);
         ArgumentNullException.ThrowIfNull(options.ModelProviderSelectorController);
         ArgumentNullException.ThrowIfNull(options.SessionTabHostController);
         ArgumentNullException.ThrowIfNull(options.ProjectFileSearchService);
@@ -34,6 +35,7 @@ internal static class CodeAltaShellViewFactory
             options.WorkspaceChromeController,
             options.PromptComposerController,
             options.QueuedPromptController,
+            options.UserPromptSelectorController,
             options.ModelProviderSelectorController,
             options.SessionTabHostController,
             options.ProjectFileSearchService,

@@ -57,6 +57,9 @@ public sealed class SessionViewYamlSerializer
         [JsonPropertyName("latest_summary")]
         public string? LatestSummary { get; set; }
 
+        [JsonPropertyName("user_prompt")]
+        public string? UserPromptName { get; set; }
+
         [JsonPropertyName("message_count")]
         public int? MessageCount { get; set; }
     }
@@ -118,6 +121,7 @@ public sealed class SessionViewYamlSerializer
             LastActiveAt = frontMatter.LastActiveAt ?? default,
             StartedAt = frontMatter.StartedAt,
             LatestSummary = frontMatter.LatestSummary,
+            UserPromptName = frontMatter.UserPromptName,
             MessageCount = frontMatter.MessageCount,
             MarkdownBody = document.Body,
         };
@@ -165,6 +169,7 @@ public sealed class SessionViewYamlSerializer
             LastActiveAt = descriptor.LastActiveAt,
             StartedAt = descriptor.StartedAt,
             LatestSummary = descriptor.LatestSummary,
+            UserPromptName = descriptor.UserPromptName,
             MessageCount = descriptor.MessageCount,
         };
 

@@ -3,6 +3,7 @@ doc:
   - {path: getting-started.md, title: "<i class='bi bi-rocket-takeoff' aria-hidden='true'></i> Getting Started"}
   - {path: principles.md, title: "<i class='bi bi-compass' aria-hidden='true'></i> Principles"}
   - {path: model-providers.md, title: "<i class='bi bi-cpu' aria-hidden='true'></i> Model Providers"}
+  - {path: prompts.md, title: "<i class='bi bi-chat-square-text' aria-hidden='true'></i> Prompts and Instructions"}
   - {path: workspace.md, title: "<i class='bi bi-display' aria-hidden='true'></i> Workspace and Dialogs"}
   - {path: sessions.md, title: "<i class='bi bi-diagram-3' aria-hidden='true'></i> Sessions and Delegation"}
   - {path: plugins/readme.md, title: "<i class='bi bi-puzzle' aria-hidden='true'></i> Plugins", folder: true}

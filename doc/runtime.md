@@ -129,12 +129,22 @@ The `alta` live tool is injected for configured provider ids that support host t
 
 MCP uses progressive, policy-controlled `AgentToolDefinition` registration for session-activated MCP servers, with `alta mcp tool search|describe|call` remaining available for discovery, diagnostics, and manual invocation. The compact MCP prompt inventory is built from configuration without connecting; activated servers are connected lazily on agent runs, apply TOML policy (`enabled`, `allowed_tools`, `disabled_tools`, timeouts, output caps), and redact diagnostics/results. Timeline refinements for friendly direct-tool labels and automatic refresh on `tool-list-changed` notifications are follow-up work. See [MCP support](mcp.md).
 
-## System prompt and instruction composition
+## System prompts, user prompts, and instruction composition
 
-System prompts are file-backed and layered from shipped, user, project, and plugin resource roots. `SystemPromptBuilder` composes:
+Instruction resources are file-backed under `instructions/` roots:
 
-- native system prompt content;
-- developer prompt parts;
+- built-in content: `content/instructions/`;
+- user-global content: `~/.alta/instructions/`;
+- project-local content: `<project>/.alta/instructions/`.
+
+Each root can contain `system/<id>.system-prompt.md`, `prompts/<id>.prompt.md`, and an optional `template.yml`. Source precedence is deterministic: built-in < global < project. A later source with the same id overrides the earlier source.
+
+System prompts carry the invariant host/agent behavior. User prompts are selectable session profiles with required `name` frontmatter for UI display, optional `description`, optional `system` (default `default`), and a Markdown body that is included in the composed developer instructions. The selected user prompt determines the system prompt id unless a runtime/template system override is supplied.
+
+`SystemPromptBuilder` composes:
+
+- native system prompt content selected from `instructions/system`;
+- the selected user prompt body from `instructions/prompts`;
 - generated runtime/tool guidance;
 - skills metadata when CodeAlta can manage skill activation for the selected session;
 - project-context sections and file/reference context;
@@ -142,7 +152,7 @@ System prompts are file-backed and layered from shipped, user, project, and plug
 
 `AgentInstructionComposer` then adds agent-runtime context and project instruction files unless equivalent content is already present. Provider-managed skill sessions may omit CodeAlta-managed skill advertisements while still receiving parent/additional developer guidance that orchestration explicitly supplies.
 
-Instruction composition should remain deterministic and file-backed. Avoid embedding large static prompt strings directly in orchestration code when they belong in prompt resources.
+Instruction composition should remain deterministic and file-backed. Avoid embedding large static prompt strings directly in orchestration code when they belong in instruction resources.
 
 ## Compaction
 

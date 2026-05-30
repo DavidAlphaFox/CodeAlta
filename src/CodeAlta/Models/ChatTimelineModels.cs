@@ -37,6 +37,11 @@ namespace CodeAlta.Models
         public override string ToString() => Label;
     }
 
+    public sealed record UserPromptOption(string PromptName, string Label, string SourceLabel, string SystemPromptName, string? Description, bool IsBuiltIn)
+    {
+        public override string ToString() => Label;
+    }
+
     internal sealed record ChatMarkdownEntry(DocumentFlowItem Item, MarkdownControl Markdown, Markup TimestampText, Markup HeaderText)
     {
         public IReadOnlyList<MarkdownControl> DetailMarkdownControls { get; init; } = [];

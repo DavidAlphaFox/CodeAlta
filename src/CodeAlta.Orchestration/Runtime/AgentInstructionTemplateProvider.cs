@@ -1,7 +1,7 @@
+using System.Text;
 using CodeAlta.Catalog;
 using CodeAlta.Catalog.Skills;
 using CodeAlta.Orchestration.Runtime.SystemPrompts;
-using System.Text;
 
 namespace CodeAlta.Orchestration.Runtime;
 
@@ -18,7 +18,8 @@ public sealed class AgentInstructionTemplateProvider
     /// Initializes a new instance of the <see cref="AgentInstructionTemplateProvider"/> class.
     /// </summary>
     /// <param name="skillCatalog">Optional skill catalog used to advertise available skills.</param>
-    /// <param name="catalogOptions">Optional catalog options used to resolve user/global skill roots.</param>
+    /// <param name="catalogOptions">Optional catalog options used to resolve user/global skill and prompt roots.</param>
+    /// <param name="contentLocator">Optional prompt content locator.</param>
     public AgentInstructionTemplateProvider(
         SkillCatalog? skillCatalog = null,
         CatalogOptions? catalogOptions = null,
@@ -34,17 +35,17 @@ public sealed class AgentInstructionTemplateProvider
     /// </summary>
     /// <param name="session">The active session view.</param>
     /// <param name="project">The owning project, if any.</param>
-    /// <returns>
-    /// An instruction bundle containing no overrides so provider defaults remain active
-    /// while orchestration-specific prompting is disabled.
-    /// </returns>
+    /// <param name="model">The selected model id, if known.</param>
+    /// <param name="selectedPromptName">The selected user prompt name, if any.</param>
+    /// <returns>The file-backed instruction bundle selected for the session.</returns>
     public AgentInstructionBundle BuildCoordinatorInstructions(
         SessionViewDescriptor session,
         ProjectDescriptor? project,
-        string? model = null)
+        string? model = null,
+        string? selectedPromptName = null)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var bundle = BuildPromptBundle(session, project, model);
+        var bundle = BuildPromptBundle(session, project, model, selectedPromptName);
         return new AgentInstructionBundle
         {
             SystemMessage = bundle.SystemMessage,
@@ -58,17 +59,17 @@ public sealed class AgentInstructionTemplateProvider
     /// </summary>
     /// <param name="session">The active session view.</param>
     /// <param name="project">The owning project, if any.</param>
-    /// <returns>
-    /// An instruction bundle containing no overrides so provider defaults remain active
-    /// while orchestration-specific prompting is disabled.
-    /// </returns>
+    /// <param name="model">The selected model id, if known.</param>
+    /// <param name="selectedPromptName">The selected user prompt name, if any.</param>
+    /// <returns>The file-backed instruction bundle selected for the session.</returns>
     public AgentInstructionBundle BuildGeneralInstructions(
         SessionViewDescriptor session,
         ProjectDescriptor? project,
-        string? model = null)
+        string? model = null,
+        string? selectedPromptName = null)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var bundle = BuildPromptBundle(session, project, model);
+        var bundle = BuildPromptBundle(session, project, model, selectedPromptName);
         return new AgentInstructionBundle
         {
             SystemMessage = bundle.SystemMessage,
@@ -80,7 +81,8 @@ public sealed class AgentInstructionTemplateProvider
     private SystemPromptBundle BuildPromptBundle(
         SessionViewDescriptor session,
         ProjectDescriptor? project,
-        string? model = null)
+        string? model = null,
+        string? selectedPromptName = null)
     {
         var projectRoots = string.IsNullOrWhiteSpace(project?.ProjectPath)
             ? Array.Empty<string>()
@@ -95,6 +97,9 @@ public sealed class AgentInstructionTemplateProvider
             Project = project,
             WorkingDirectory = session.WorkingDirectory,
             ProjectRoots = projectRoots,
+            SelectedPromptName = selectedPromptName ?? session.UserPromptName,
+            UserProfileRoot = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            UserCodeAltaRoot = _catalogOptions?.GlobalRoot,
             AvailableSkillsMarkdown = BuildSkillsDeveloperInstructions(session, project),
         });
     }

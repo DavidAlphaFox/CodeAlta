@@ -43,7 +43,8 @@ internal sealed class SessionCommandCoordinator
         PluginHostBridge? pluginHostBridge = null,
         IServiceProvider? altaServices = null,
         IReadOnlySet<string>? altaToolProviderIds = null,
-        Func<bool>? getAlwaysEnqueue = null)
+        Func<bool>? getAlwaysEnqueue = null,
+        Func<string?>? getPreferredUserPromptName = null)
         : this(
             runtimeService,
             catalogOptions,
@@ -60,7 +61,8 @@ internal sealed class SessionCommandCoordinator
             pluginHostBridge,
             altaServices,
             altaToolProviderIds,
-            getAlwaysEnqueue)
+            getAlwaysEnqueue,
+            getPreferredUserPromptName)
     {
     }
 
@@ -78,7 +80,8 @@ internal sealed class SessionCommandCoordinator
         PluginHostBridge? pluginHostBridge = null,
         IServiceProvider? altaServices = null,
         IReadOnlySet<string>? altaToolProviderIds = null,
-        Func<bool>? getAlwaysEnqueue = null)
+        Func<bool>? getAlwaysEnqueue = null,
+        Func<string?>? getPreferredUserPromptName = null)
     {
         ArgumentNullException.ThrowIfNull(runtimeService);
         ArgumentNullException.ThrowIfNull(providerDescriptors);
@@ -101,7 +104,7 @@ internal sealed class SessionCommandCoordinator
         _pluginHostBridge = pluginHostBridge;
         var permissionRequests = new SessionPermissionRequestCoordinator(sessionSelection, commandContext);
         var userInputRequests = new SessionUserInputRequestCoordinator(sessionSelection, commandContext);
-        _executionOptionsFactory = new SessionExecutionOptionsFactory(catalogOptions, modelProviderStates, sessionSelection, permissionRequests, userInputRequests, altaServices, altaToolProviderIds);
+        _executionOptionsFactory = new SessionExecutionOptionsFactory(catalogOptions, modelProviderStates, sessionSelection, permissionRequests, userInputRequests, getPreferredUserPromptName, altaServices, altaToolProviderIds);
         _promptDispatchCoordinator = new SessionPromptDispatchCoordinator(
             runtimeService,
             _executionOptionsFactory,

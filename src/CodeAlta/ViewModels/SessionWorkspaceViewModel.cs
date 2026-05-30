@@ -6,6 +6,7 @@ namespace CodeAlta.ViewModels;
 
 public sealed partial class SessionWorkspaceViewModel
 {
+    private Action<int>? _userPromptSelectionChanged;
     private Action<int>? _modelProviderSelectionChanged;
     private Action<int>? _modelSelectionChanged;
     private Action<int>? _reasoningSelectionChanged;
@@ -15,9 +16,11 @@ public sealed partial class SessionWorkspaceViewModel
     {
         ModelProviderStatusMarkup = string.Empty;
         ProviderSummaryMarkup = string.Empty;
+        SelectedUserPromptIndex = -1;
         SelectedModelProviderIndex = -1;
         SelectedModelIndex = -1;
         SelectedReasoningIndex = -1;
+        UserPromptOptions = [];
         ModelProviderOptions = [];
         ModelOptions = [];
         ReasoningOptions = [];
@@ -31,6 +34,9 @@ public sealed partial class SessionWorkspaceViewModel
     public partial string ProviderSummaryMarkup { get; set; }
 
     [Bindable]
+    public partial bool CanSelectUserPrompt { get; set; }
+
+    [Bindable]
     public partial bool CanSelectModelProvider { get; set; }
 
     [Bindable]
@@ -38,6 +44,12 @@ public sealed partial class SessionWorkspaceViewModel
 
     [Bindable]
     public partial bool CanSelectReasoning { get; set; }
+
+    [Bindable]
+    public partial IReadOnlyList<UserPromptOption> UserPromptOptions { get; set; }
+
+    [Bindable]
+    public partial int SelectedUserPromptIndex { get; set; }
 
     [Bindable]
     public partial IReadOnlyList<ModelProviderOption> ModelProviderOptions { get; set; }
@@ -84,11 +96,19 @@ public sealed partial class SessionWorkspaceViewModel
         _reasoningSelectionChanged = reasoningSelectionChanged;
     }
 
+    internal void SetUserPromptSelectionChangedHandler(Action<int>? userPromptSelectionChanged)
+    {
+        _userPromptSelectionChanged = userPromptSelectionChanged;
+    }
+
     internal IDisposable SuppressSelectionChangedNotifications()
     {
         _suppressSelectionChangedNotifications++;
         return new SelectionChangedNotificationSuppression(this);
     }
+
+    partial void OnSelectedUserPromptIndexChanged(int value)
+        => NotifySelectionChanged(_userPromptSelectionChanged, value);
 
     partial void OnSelectedModelProviderIndexChanged(int value)
         => NotifySelectionChanged(_modelProviderSelectionChanged, value);

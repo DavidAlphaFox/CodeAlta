@@ -13,6 +13,7 @@ using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
 using XenoAtom.Terminal.UI.Commands;
 using XenoAtom.Terminal.UI.Hosting;
+using XenoAtom.Terminal.UI.Styling;
 
 namespace CodeAlta.Tests;
 
@@ -273,6 +274,60 @@ public sealed class SessionWorkspaceViewTests
     }
 
     [TestMethod]
+    public void BottomBarPromptAndModelButtons_OpenDialogs()
+    {
+        var promptOpenCount = 0;
+        var modelOpenCount = 0;
+        var workspaceViewModel = new SessionWorkspaceViewModel();
+        var promptComposerViewModel = new PromptComposerViewModel();
+        var userPromptSelectorView = new UserPromptSelectorView(
+            workspaceViewModel,
+            UserPromptSelectorController.Create(static _ => { }, () => promptOpenCount++));
+        var modelProviderSelectorView = new ModelProviderSelectorView(
+            workspaceViewModel,
+            promptComposerViewModel,
+            ModelProviderSelectorController.Create(
+                static _ => { },
+                static _ => { },
+                static _ => { },
+                static () => { },
+                () => modelOpenCount++));
+        var promptButton = userPromptSelectorView.PromptDialogButton;
+        var modelButton = modelProviderSelectorView.ModelsDialogButton;
+
+        Assert.AreEqual("Prompt->", GetButtonText(promptButton));
+        Assert.AreEqual("Model->", GetButtonText(modelButton));
+        Assert.AreEqual(ControlTone.Default, promptButton.Tone);
+        Assert.AreEqual(ControlTone.Default, modelButton.Tone);
+
+        var root = new HStack(userPromptSelectorView.Root, modelProviderSelectorView.Root);
+        using var terminalSession = Terminal.Open(new InMemoryTerminalBackend(new TerminalSize(120, 40)), new TerminalOptions { ImplicitStartInput = true }, force: true);
+        var app = new TerminalApp(
+            root,
+            terminalSession.Instance,
+            new TerminalAppOptions
+            {
+                HostKind = TerminalHostKind.Fullscreen,
+            });
+
+        InvokeTerminalApp(app, "BeginRun");
+        try
+        {
+            app.Focus(promptButton);
+            DispatchKeyEvent(app, TerminalKey.Enter);
+            app.Focus(modelButton);
+            DispatchKeyEvent(app, TerminalKey.Enter);
+
+            Assert.AreEqual(1, promptOpenCount);
+            Assert.AreEqual(1, modelOpenCount);
+        }
+        finally
+        {
+            InvokeTerminalApp(app, "EndRun");
+        }
+    }
+
+    [TestMethod]
     public void FocusModelProviderSelector_FocusesProviderSelect()
     {
         var view = CreateSessionWorkspaceView();
@@ -479,6 +534,12 @@ public sealed class SessionWorkspaceViewTests
         return (int)field.GetValue(select)!;
     }
 
+    private static string GetButtonText(Button button)
+        => Assert.IsInstanceOfType<TextBlock>(button.Content).Text!;
+
+    private static void DispatchKeyEvent(TerminalApp app, TerminalKey key)
+        => InvokeTerminalApp(app, "DispatchKeyEvent", new TerminalKeyEvent { Key = key }, true);
+
     private static PromptStripItem CreatePromptStripItem(string id)
         => new(PromptStripItemKind.QueuedPrompt, id, id, id, ImageCount: 0, RemainingCount: null);
 
@@ -510,6 +571,7 @@ public sealed class SessionWorkspaceViewTests
                 static (_, _) => { },
                 static (_, _) => { },
                 static (onAccepted, placeholder) => SessionWorkspaceView.CreateStyledPromptEditor(onAccepted, null, null, placeholder)),
+            UserPromptSelectorController.Create(static _ => { }),
             modelProviderSelectorController ?? ModelProviderSelectorController.Create(static _ => { }, static _ => { }, static _ => { }, static () => { }),
             sessionTabHostController ?? SessionTabHostController.Create(static _ => { }),
             projectFileSearchService ?? NullProjectFileSearchService.Instance,

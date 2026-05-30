@@ -1,6 +1,6 @@
 version: 1
-base: team-default
-instruction: team-reviewer
+system: team-default
+prompt: team-reviewer
 skills: true
 project_context: true
 runtime_context: true

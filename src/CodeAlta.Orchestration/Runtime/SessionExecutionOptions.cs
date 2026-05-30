@@ -38,6 +38,11 @@ public sealed class SessionExecutionOptions
     public AgentReasoningEffort? ReasoningEffort { get; init; }
 
     /// <summary>
+    /// Gets or initializes the selected user prompt identifier.
+    /// </summary>
+    public string? UserPromptName { get; init; }
+
+    /// <summary>
     /// Gets or initializes custom tools available to the coordinator session.
     /// </summary>
     public IReadOnlyList<AgentToolDefinition>? Tools { get; init; }

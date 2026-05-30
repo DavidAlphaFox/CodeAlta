@@ -12,6 +12,8 @@ internal sealed class SessionState
 
     public AgentReasoningEffort? ReasoningEffort { get; set; }
 
+    public string? UserPromptName { get; set; }
+
     public string PromptDraftText { get; set; } = string.Empty;
 
     public List<PromptImageAttachment> PromptImageAttachments { get; } = [];

@@ -28,6 +28,7 @@ internal sealed class SessionWorkspaceView
     private readonly SessionWorkspaceChromeController _chromeController;
     private readonly PromptComposerViewController _promptComposerController;
     private readonly QueuedPromptStripController _queuedPromptController;
+    private readonly UserPromptSelectorController _userPromptController;
     private readonly ModelProviderSelectorController _modelProviderController;
     private readonly IProjectFileSearchService _projectFileSearchService;
     private readonly Func<string?> _getPromptReferenceProjectRoot;
@@ -51,6 +52,7 @@ internal sealed class SessionWorkspaceView
         SessionWorkspaceChromeController chromeController,
         PromptComposerViewController promptComposerController,
         QueuedPromptStripController queuedPromptController,
+        UserPromptSelectorController userPromptController,
         ModelProviderSelectorController modelProviderController,
         SessionTabHostController tabHostController,
         IProjectFileSearchService projectFileSearchService,
@@ -66,6 +68,7 @@ internal sealed class SessionWorkspaceView
             chromeController,
             promptComposerController,
             queuedPromptController,
+            userPromptController,
             modelProviderController,
             tabHostController,
             projectFileSearchService,
@@ -85,6 +88,7 @@ internal sealed class SessionWorkspaceView
         SessionWorkspaceChromeController chromeController,
         PromptComposerViewController promptComposerController,
         QueuedPromptStripController queuedPromptController,
+        UserPromptSelectorController userPromptController,
         ModelProviderSelectorController modelProviderController,
         SessionTabHostController tabHostController,
         IProjectFileSearchService projectFileSearchService,
@@ -101,6 +105,7 @@ internal sealed class SessionWorkspaceView
         ArgumentNullException.ThrowIfNull(chromeController);
         ArgumentNullException.ThrowIfNull(promptComposerController);
         ArgumentNullException.ThrowIfNull(queuedPromptController);
+        ArgumentNullException.ThrowIfNull(userPromptController);
         ArgumentNullException.ThrowIfNull(modelProviderController);
         ArgumentNullException.ThrowIfNull(tabHostController);
         ArgumentNullException.ThrowIfNull(projectFileSearchService);
@@ -116,6 +121,7 @@ internal sealed class SessionWorkspaceView
         _chromeController = chromeController;
         _promptComposerController = promptComposerController;
         _queuedPromptController = queuedPromptController;
+        _userPromptController = userPromptController;
         _modelProviderController = modelProviderController;
         _projectFileSearchService = projectFileSearchService;
         _getPromptReferenceProjectRoot = getPromptReferenceProjectRoot;
@@ -160,6 +166,9 @@ internal sealed class SessionWorkspaceView
 
     private PromptComposerView _promptComposerView => ActivePromptPanel.Composer;
 
+    private Select<UserPromptOption> UserPromptSelect
+        => ActivePromptPanel.UserPromptSelectorView.PromptSelect;
+
     private Select<ModelProviderOption> ModelProviderSelect
         => ActivePromptPanel.ModelProviderSelectorView.ModelProviderSelect;
 
@@ -198,6 +207,9 @@ internal sealed class SessionWorkspaceView
     public void OpenExpandedPromptDialog()
         => ActivePromptPanel.Composer.OpenExpandedPromptDialog();
 
+    public void FocusUserPromptSelector()
+        => SessionPaneLayout.App?.Focus(UserPromptSelect);
+
     public void FocusModelProviderSelector()
         => SessionPaneLayout.App?.Focus(ModelProviderSelect);
 
@@ -211,10 +223,18 @@ internal sealed class SessionWorkspaceView
         SyncActivePromptPanelProjection();
     }
 
+    public void SyncUserPromptSelectorItems(SessionWorkspaceViewModel workspaceViewModel)
+    {
+        ArgumentNullException.ThrowIfNull(workspaceViewModel);
+
+        SyncActivePromptPanelProjection();
+    }
+
     public void SyncActivePromptPanelProjection()
     {
         var panel = ActivePromptPanel;
         panel.ChromeState.ApplyProjection(_shellViewModel, _workspaceViewModel, _promptComposerViewModel, preserveAlwaysEnqueue: true);
+        panel.UserPromptSelectorView.SyncItems(panel.WorkspaceViewModel);
         panel.ModelProviderSelectorView.SyncItems(panel.WorkspaceViewModel);
     }
 
@@ -228,6 +248,7 @@ internal sealed class SessionWorkspaceView
         var shellViewModel = chromeState.ShellViewModel;
         var workspaceViewModel = chromeState.WorkspaceViewModel;
         var promptComposerViewModel = chromeState.PromptComposerViewModel;
+        workspaceViewModel.SetUserPromptSelectionChangedHandler(_userPromptController.SelectPrompt);
         workspaceViewModel.SetModelProviderSelectionChangedHandlers(
             _modelProviderController.SelectProvider,
             _modelProviderController.SelectModel,
@@ -254,6 +275,9 @@ internal sealed class SessionWorkspaceView
                 $"Show information about the selected session ({SessionInfoShortcutSequence}).",
                 () => _chromeController.ToggleSessionInfoPopup(sessionInfoButton!),
                 button => button.IsEnabled(workspaceViewModel.Bind.CanShowSessionInfo));
+        var userPromptSelectorView = new UserPromptSelectorView(
+            workspaceViewModel,
+            _userPromptController);
         var modelProviderSelectorView = new ModelProviderSelectorView(
             workspaceViewModel,
             promptComposerViewModel,
@@ -288,8 +312,16 @@ internal sealed class SessionWorkspaceView
         {
             Spacing = 2,
         };
+        var selectionLeft = new HStack(
+        [
+            userPromptSelectorView.Root,
+            modelProviderSelectorView.Root,
+        ])
+        {
+            Spacing = 2,
+        };
         var selectionLine = new StatusBar()
-            .LeftText(modelProviderSelectorView.Root)
+            .LeftText(selectionLeft)
             .RightText(selectionRight);
         var root = new DockLayout(
             top: new VStack([queuedPromptList, promptImageStrip, statusLine]) { Spacing = 0 },
@@ -307,6 +339,7 @@ internal sealed class SessionWorkspaceView
             promptComposerView.SendButton,
             promptComposerView.ExpandButton,
             promptComposerView,
+            userPromptSelectorView,
             modelProviderSelectorView,
             chromeState);
     }

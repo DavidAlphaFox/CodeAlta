@@ -67,6 +67,9 @@ internal sealed class SessionPromptChromeState
         using var _ = target.SuppressSelectionChangedNotifications();
         target.ModelProviderStatusMarkup = source.ModelProviderStatusMarkup;
         target.ProviderSummaryMarkup = source.ProviderSummaryMarkup;
+        target.CanSelectUserPrompt = source.CanSelectUserPrompt;
+        target.UserPromptOptions = source.UserPromptOptions;
+        target.SelectedUserPromptIndex = source.SelectedUserPromptIndex;
         target.CanSelectModelProvider = source.CanSelectModelProvider;
         target.CanSelectModel = source.CanSelectModel;
         target.CanSelectReasoning = source.CanSelectReasoning;

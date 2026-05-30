@@ -159,6 +159,7 @@ public sealed class SessionExecutionOptionsFactoryTests
             selection,
             new SessionPermissionRequestCoordinator(selection, commandContext),
             new SessionUserInputRequestCoordinator(selection, commandContext),
+            null,
             services,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ModelProviderIds.Codex.Value });
     }

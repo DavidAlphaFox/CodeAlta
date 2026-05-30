@@ -44,6 +44,9 @@ internal sealed class ModelProviderSelectorView
         AlwaysEnqueueCheckBox = new CheckBox("AlwaysQueue")
             .IsChecked(promptComposerViewModel.Bind.AlwaysEnqueue)
             .IsEnabled(promptComposerViewModel.Bind.CanAlwaysEnqueue);
+        ModelsDialogButton = new Button(new TextBlock("Model->") { Wrap = false, IsSelectable = false })
+            .Click(controller.OpenModels);
+        var modelsDialogButtonHost = ModelsDialogButton.Tooltip(new TextBlock("Open the models dialog."));
         var compactSessionButton = new Button(new TextBlock($"{NerdFont.MdSelectCompare}"))
             .Click(controller.CompactSession)
             .IsEnabled(promptComposerViewModel.Bind.CanCompact)
@@ -51,6 +54,7 @@ internal sealed class ModelProviderSelectorView
 
         Root = new HStack(
         [
+            modelsDialogButtonHost,
             ModelProviderSelect,
             ChatModelSelect,
             ChatReasoningSelect,
@@ -63,6 +67,8 @@ internal sealed class ModelProviderSelectorView
     }
 
     public Visual Root { get; }
+
+    public Button ModelsDialogButton { get; }
 
     public Select<ModelProviderOption> ModelProviderSelect { get; }
 

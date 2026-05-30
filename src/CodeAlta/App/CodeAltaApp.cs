@@ -28,7 +28,7 @@ using XenoAtom.Terminal.UI.Threading;
 
 namespace CodeAlta.Views;
 
-// CodeAltaApp intentionally remains the TUI shell composition root Add behavior to named owners first
+// CodeAltaApp intentionally remains the TUI shell composition root. Add behavior to named owners first.
 internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycle
 {
     internal static readonly Logger UiLogger = LogManager.GetLogger("CodeAlta.UI");
@@ -63,6 +63,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private readonly SidebarCoordinator _sidebarCoordinator;
     private readonly NavigatorActionCoordinator _navigatorActionCoordinator;
     private readonly ModelProviderSelectorCoordinator _modelProviderSelectorCoordinator;
+    private readonly UserPromptSelectorCoordinator _userPromptSelectorCoordinator;
     private readonly SessionTabStripCoordinator _sessionTabStripCoordinator;
     private readonly InMemoryShellTabService _shellTabService = new();
     private readonly ShellAnimationRuntime _shellAnimationRuntime = new();
@@ -73,8 +74,10 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private readonly WorkspaceRefreshContext _workspaceRefreshContext;
     private readonly ProviderFrontendCoordinator _providerUi;
     private readonly ProviderDialogCoordinator _providerDialogCoordinator;
+    private readonly PromptDialogCoordinator _promptDialogCoordinator;
     private readonly FileEditorWorkspaceCoordinator _fileEditorWorkspaceCoordinator;
     private readonly InitialCatalogStateCoordinator _initialCatalogStateCoordinator;
+    private readonly Action _openModels;
     private CodeAltaShellView? _shellView;
     private SessionWorkspaceView? _sessionWorkspaceView;
     private SessionUsagePresenter? _sessionUsagePresenter;
@@ -189,6 +192,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         _sidebarCoordinator = composition.SidebarCoordinator;
         _navigatorActionCoordinator = composition.NavigatorActionCoordinator;
         _modelProviderSelectorCoordinator = composition.ModelProviderSelectorCoordinator;
+        _userPromptSelectorCoordinator = composition.UserPromptSelectorCoordinator;
+        _openModels = composition.ModelCatalogCoordinator.Open;
         _projectionCoordinator = new ShellProjectionCoordinator(
             _frontendEvents,
             _workspaceCoordinator,
@@ -208,6 +213,12 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             _providerUi,
             () => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()),
             GetDialogAnchor);
+        _promptDialogCoordinator = new PromptDialogCoordinator(
+            _catalogOptions,
+            GetSelectedProject,
+            GetDialogAnchor,
+            () => { _userPromptSelectorCoordinator.RefreshPrompts(); _sessionWorkspaceView?.SyncActivePromptPanelProjection(); },
+            (message, tone) => SetStatus(message, tone: tone));
         _fileEditorWorkspaceCoordinator = new FileEditorWorkspaceCoordinator(
             projectFileSearchService,
             _shellTabService,
@@ -245,7 +256,7 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
         var sessionSvc = new DelegatingShellSessionCommandService(GetSelectedSession, EnsureSessionTab);
         var dialogs = new DelegatingShellDialogCommandService(
             () => DialogBoundsResolver.ResolveAppBounds(SessionInput), () => SessionInput, () => _sessionStateCoordinator.Projects,
-            OpenFolderAsync, OpenModelProvidersAsync, () => new AboutDialog(() => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()), GetDialogAnchor, _shellAnimationRuntime.WelcomePhase01, updateService).Show(), composition.ModelCatalogCoordinator.Open, _sidebarCoordinator.OpenLogs, _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
+            OpenFolderAsync, OpenModelProvidersAsync, OpenPromptsAsync, () => new AboutDialog(() => DialogBoundsResolver.ResolveAppBounds(GetDialogAnchor()), GetDialogAnchor, _shellAnimationRuntime.WelcomePhase01, updateService).Show(), composition.ModelCatalogCoordinator.Open, _sidebarCoordinator.OpenLogs, _fileEditorWorkspaceCoordinator.ShowOpenFilePickerAsync,
             SkillsManagementCoordinatorFactory.Create(_ownedServices, _catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync, _sessionCommandCoordinator.ActivateSelectedSkillAsync, SetStatus),
             PluginManagementCoordinatorFactory.Create(_catalogOptions, GetSelectedProject, GetDialogAnchor, _fileEditorWorkspaceCoordinator.OpenFilePathAsync),
             _sidebarCoordinator.OpenNavigatorSettings,
@@ -442,9 +453,21 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     private string? ResolvePromptRoot()
         => PromptReferenceProjectRootResolver.Resolve(GetSelectedSession(), GetProjectById, GetSelectedProject, _catalogOptions.GlobalRoot);
 
-    internal void RefreshModelProviderSelectorsForDraftScope(ModelProviderId? id = null) => _modelProviderSelectorCoordinator.RefreshForDraftScope(id);
-    internal void RefreshModelProviderSelectorsForSession(OpenSessionState tab) => _modelProviderSelectorCoordinator.RefreshForSession(tab);
+    internal void RefreshModelProviderSelectorsForDraftScope(ModelProviderId? id = null)
+    {
+        _userPromptSelectorCoordinator.RefreshForDraftScope();
+        _modelProviderSelectorCoordinator.RefreshForDraftScope(id);
+    }
+
+    internal void RefreshModelProviderSelectorsForSession(OpenSessionState tab)
+    {
+        _userPromptSelectorCoordinator.RefreshForSession(tab);
+        _modelProviderSelectorCoordinator.RefreshForSession(tab);
+    }
+
     internal void SyncModelProviderSelectorItems() => _sessionWorkspaceView?.SyncModelProviderSelectorItems(_sessionWorkspaceViewModel);
+    internal void SyncUserPromptSelectorItems() => _sessionWorkspaceView?.SyncUserPromptSelectorItems(_sessionWorkspaceViewModel);
+    private void OnUserPromptSelectionChanged(int newIndex) => _userPromptSelectorCoordinator.OnPromptSelectionChanged(newIndex);
     private void OnModelProviderSelectionChanged(int newIndex) => ObserveUiTask(() => _modelProviderSelectorCoordinator.OnModelProviderSelectionChangedAsync(newIndex), "change the selected provider");
     private void OnModelSelectionChanged(int newIndex) => _modelProviderSelectorCoordinator.OnModelSelectionChanged(newIndex);
     private void OnReasoningSelectionChanged(int newIndex) => _modelProviderSelectorCoordinator.OnReasoningSelectionChanged(newIndex);
@@ -484,7 +507,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
             WorkspaceChromeController = SessionWorkspaceChromeController.Create(() => CreateUsageComputedVisual(EnsureSessionUsagePresenter().BuildIndicatorVisual), () => ShellPluginFooterComposer.ComposeRegion(pb, PluginUiRegion.SessionStatus, GetSelectedSession()?.SessionId), anchor => EnsureSessionInfoPresenter().TogglePopup(anchor), () => ObserveUiTask(OpenModelProvidersAsync, "open model providers")),
             PromptComposerController = PromptComposerViewController.Create(acceptedPrompt => ObserveUiTask(() => _shellCommandSurfaceCoordinator.HandleAcceptedPromptAsync(acceptedPrompt), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.SubmitCurrentPromptAsync(steer: false), "submit the current prompt"), () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.AbortSelectedSessionAsync(), "abort the selected session"), openHelp, showPalette),
             QueuedPromptController = QueuedPromptStripController.Create(markdown => (_sessionWorkspaceView?.SessionPaneLayout.App)?.Terminal.Clipboard.TrySetText(markdown), queuedPromptId => ObserveUiTask(() => _sessionCommandCoordinator.ConvertSelectedSessionQueuedPromptToSteerAsync(queuedPromptId), "convert the queued prompt to steer"), pendingSteerId => _sessionCommandCoordinator.DeleteSelectedSessionPendingSteer(pendingSteerId), queuedPromptId => _sessionCommandCoordinator.DeleteSelectedSessionQueuedPrompt(queuedPromptId), (queuedPromptId, remainingCount) => _sessionCommandCoordinator.UpdateSelectedSessionQueuedPromptCount(queuedPromptId, remainingCount), (queuedPromptId, text) => _sessionCommandCoordinator.UpdateSelectedSessionQueuedPromptText(queuedPromptId, text), (onAccepted, placeholder) => SessionWorkspaceView.CreateStyledPromptEditor(onAccepted, openHelp, showPalette, pfs, promptRoot, pec, placeholder)),
-            ModelProviderSelectorController = ModelProviderSelectorController.Create(OnModelProviderSelectionChanged, OnModelSelectionChanged, OnReasoningSelectionChanged, () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.CompactSelectedSessionAsync(), "compact the selected session")),
+            UserPromptSelectorController = UserPromptSelectorController.Create(OnUserPromptSelectionChanged, () => ObserveUiTask(OpenPromptsAsync, "open prompts")),
+            ModelProviderSelectorController = ModelProviderSelectorController.Create(OnModelProviderSelectionChanged, OnModelSelectionChanged, OnReasoningSelectionChanged, () => ObserveUiTask(() => _shellCommandSurfaceCoordinator.CompactSelectedSessionAsync(), "compact the selected session"), _openModels),
             SessionTabHostController = SessionTabHostController.Create(selectedIndex => _sessionTabStripCoordinator.ObserveBoundSelection(selectedIndex)),
             ProjectFileSearchService = pfs,
             GetPromptReferenceProjectRoot = promptRoot,
@@ -739,6 +763,8 @@ internal sealed class CodeAltaApp : IAsyncDisposable, IShellFrontendHostLifecycl
     }
 
     internal Task OpenModelProvidersAsync() => _providerDialogCoordinator.OpenAsync();
+
+    internal Task OpenPromptsAsync() => _promptDialogCoordinator.OpenAsync();
 
     internal void FocusSidebar() { SyncSidebarSelectionToCurrentState(); ApplyPendingSidebarSelection(); _sidebarCoordinator.View.Tree.App?.Focus(_sidebarCoordinator.View.Tree); }
     private async Task CloseSessionTabAsync(string sessionId)

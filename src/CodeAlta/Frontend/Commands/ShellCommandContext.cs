@@ -255,6 +255,8 @@ internal interface IShellDialogCommandService
 
     Task OpenModelProvidersAsync();
 
+    Task OpenPromptsAsync();
+
     void OpenAbout();
 
     void OpenModels();
@@ -287,6 +289,7 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
     private readonly Func<IReadOnlyList<ProjectDescriptor>> _getProjects;
     private readonly Func<string, bool, Task> _openFolderAsync;
     private readonly Func<Task> _openModelProvidersAsync;
+    private readonly Func<Task> _openPromptsAsync;
     private readonly Action _openAbout;
     private readonly Action _openModels;
     private readonly Action _openApplicationLogs;
@@ -305,6 +308,7 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
         Func<IReadOnlyList<ProjectDescriptor>> getProjects,
         Func<string, bool, Task> openFolderAsync,
         Func<Task> openModelProvidersAsync,
+        Func<Task> openPromptsAsync,
         Action openAbout,
         Action openModels,
         Action openApplicationLogs,
@@ -322,6 +326,7 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
         ArgumentNullException.ThrowIfNull(getProjects);
         ArgumentNullException.ThrowIfNull(openFolderAsync);
         ArgumentNullException.ThrowIfNull(openModelProvidersAsync);
+        ArgumentNullException.ThrowIfNull(openPromptsAsync);
         ArgumentNullException.ThrowIfNull(openAbout);
         ArgumentNullException.ThrowIfNull(openModels);
         ArgumentNullException.ThrowIfNull(openApplicationLogs);
@@ -338,6 +343,7 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
         _getProjects = getProjects;
         _openFolderAsync = openFolderAsync;
         _openModelProvidersAsync = openModelProvidersAsync;
+        _openPromptsAsync = openPromptsAsync;
         _openAbout = openAbout;
         _openModels = openModels;
         _openApplicationLogs = openApplicationLogs;
@@ -360,6 +366,8 @@ internal sealed class DelegatingShellDialogCommandService : IShellDialogCommandS
     public Task OpenFolderAsync(string path, bool trustFolder) => _openFolderAsync(path, trustFolder);
 
     public Task OpenModelProvidersAsync() => _openModelProvidersAsync();
+
+    public Task OpenPromptsAsync() => _openPromptsAsync();
 
     public void OpenAbout() => _openAbout();
 

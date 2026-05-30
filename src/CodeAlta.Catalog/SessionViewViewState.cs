@@ -260,6 +260,12 @@ public sealed class SessionViewLocalState
     public AgentReasoningEffort? ReasoningEffort { get; set; }
 
     /// <summary>
+    /// Gets or sets the selected user prompt identifier.
+    /// </summary>
+    [JsonPropertyName("user_prompt")]
+    public string? UserPromptName { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether the session is archived locally.
     /// </summary>
     [JsonPropertyName("archived")]
@@ -304,6 +310,11 @@ public sealed class SessionViewLocalState
         if (MessageCount is < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(MessageCount), MessageCount, "MessageCount cannot be negative.");
+        }
+
+        if (UserPromptName is not null && string.IsNullOrWhiteSpace(UserPromptName))
+        {
+            throw new ArgumentException("User prompt name must be non-empty when present.", nameof(UserPromptName));
         }
 
         if (CreatedBy is not null && string.IsNullOrWhiteSpace(CreatedBy.Kind))
@@ -509,6 +520,12 @@ public sealed class SessionViewPreference
     /// </summary>
     [JsonPropertyName("model_id")]
     public string? ModelId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the preferred user prompt identifier.
+    /// </summary>
+    [JsonPropertyName("user_prompt")]
+    public string? UserPromptName { get; set; }
 
     /// <summary>
     /// Gets or sets the preferred reasoning effort.

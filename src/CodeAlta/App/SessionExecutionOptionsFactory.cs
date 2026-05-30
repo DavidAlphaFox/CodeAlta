@@ -16,6 +16,7 @@ internal sealed class SessionExecutionOptionsFactory
     private readonly SessionSelectionContext _sessionSelection;
     private readonly SessionPermissionRequestCoordinator _permissionRequests;
     private readonly SessionUserInputRequestCoordinator _userInputRequests;
+    private readonly Func<string?>? _preferredUserPromptProvider;
     private readonly IServiceProvider? _altaServices;
     private readonly IReadOnlySet<string> _altaToolProviderIds;
 
@@ -25,6 +26,7 @@ internal sealed class SessionExecutionOptionsFactory
         SessionSelectionContext sessionSelection,
         SessionPermissionRequestCoordinator permissionRequests,
         SessionUserInputRequestCoordinator userInputRequests,
+        Func<string?>? preferredUserPromptProvider = null,
         IServiceProvider? altaServices = null,
         IReadOnlySet<string>? altaToolProviderIds = null)
     {
@@ -39,6 +41,7 @@ internal sealed class SessionExecutionOptionsFactory
         _sessionSelection = sessionSelection;
         _permissionRequests = permissionRequests;
         _userInputRequests = userInputRequests;
+        _preferredUserPromptProvider = preferredUserPromptProvider;
         _altaServices = altaServices;
         _altaToolProviderIds = altaToolProviderIds ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
@@ -66,6 +69,7 @@ internal sealed class SessionExecutionOptionsFactory
             ProjectRoots = projectRoots,
             Model = model,
             ReasoningEffort = reasoning,
+            UserPromptName = NormalizeOptionalText(_preferredUserPromptProvider?.Invoke()),
             Tools = CreateAltaTools(
                 providerId,
                 sourceSessionIdProvider: sourceSessionIdProvider,
@@ -92,6 +96,7 @@ internal sealed class SessionExecutionOptionsFactory
             ProjectRoots = projectRoots,
             Model = tab.ModelId,
             ReasoningEffort = tab.ReasoningEffort,
+            UserPromptName = NormalizeOptionalText(tab.UserPromptName ?? session.UserPromptName),
             Tools = CreateAltaTools(
                 providerId,
                 sourceSessionIdProvider: () => session.SessionId,
@@ -152,6 +157,9 @@ internal sealed class SessionExecutionOptionsFactory
             _ => session.WorkingDirectory,
         };
     }
+
+    private static string? NormalizeOptionalText(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private IReadOnlyList<string> ResolveProjectRoots(SessionViewDescriptor session)
     {

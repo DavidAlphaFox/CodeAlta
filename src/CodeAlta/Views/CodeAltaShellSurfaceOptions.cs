@@ -23,6 +23,8 @@ internal sealed class CodeAltaShellSurfaceOptions
 
     public required QueuedPromptStripController QueuedPromptController { get; init; }
 
+    public required UserPromptSelectorController UserPromptSelectorController { get; init; }
+
     public required ModelProviderSelectorController ModelProviderSelectorController { get; init; }
 
     public required SessionTabHostController SessionTabHostController { get; init; }

@@ -54,6 +54,12 @@ internal sealed class OpenSessionState
         set => Session.ReasoningEffort = value;
     }
 
+    public string? UserPromptName
+    {
+        get => Session.UserPromptName;
+        set => Session.UserPromptName = value;
+    }
+
     public bool HistoryLoaded
     {
         get => Session.HistoryLoaded;

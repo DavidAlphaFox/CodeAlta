@@ -134,10 +134,13 @@ internal sealed class ModelProviderPreferenceCoordinator
 
         if (rememberProjectPreference)
         {
-            viewState.ProjectPreferences[BuildProjectPreferenceKey(draftProjectId)] = new SessionViewPreference
+            var preferenceKey = BuildProjectPreferenceKey(draftProjectId);
+            viewState.ProjectPreferences.TryGetValue(preferenceKey, out var existingPreference);
+            viewState.ProjectPreferences[preferenceKey] = new SessionViewPreference
             {
                 ProviderKey = providerId.Value,
                 ModelId = normalizedModelId,
+                UserPromptName = existingPreference?.UserPromptName,
                 ReasoningEffort = reasoningEffort,
             };
             viewState.UpdatedAt = DateTimeOffset.UtcNow;
@@ -154,7 +157,8 @@ internal sealed class ModelProviderPreferenceCoordinator
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
         var normalizedModel = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
-        if (normalizedModel is null && reasoningEffort is null)
+        viewState.SessionPreferences.TryGetValue(sessionId, out var existingPreference);
+        if (normalizedModel is null && reasoningEffort is null && string.IsNullOrWhiteSpace(existingPreference?.UserPromptName))
         {
             viewState.SessionPreferences.Remove(sessionId);
         }
@@ -163,6 +167,7 @@ internal sealed class ModelProviderPreferenceCoordinator
             viewState.SessionPreferences[sessionId] = new SessionViewPreference
             {
                 ModelId = normalizedModel,
+                UserPromptName = existingPreference?.UserPromptName,
                 ReasoningEffort = reasoningEffort,
             };
         }

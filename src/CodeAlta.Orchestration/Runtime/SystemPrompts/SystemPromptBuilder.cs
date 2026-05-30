@@ -13,7 +13,7 @@ namespace CodeAlta.Orchestration.Runtime.SystemPrompts;
 public sealed class SystemPromptBuilder
 {
     private const string DefaultName = "default";
-    private static readonly string[] KnownTopLevelEntries = ["base", "instructions", "template.yml"];
+    private static readonly string[] KnownTopLevelEntries = ["system", "prompts", "template.yml"];
     private readonly ISystemPromptContentLocator _contentLocator;
 
     /// <summary>
@@ -42,6 +42,8 @@ public sealed class SystemPromptBuilder
         var projectRoot = NormalizeOptionalRoot(request.Project?.ProjectPath ?? FirstNonBlank(request.ProjectRoots));
         var roots = _contentLocator.GetRoots(new SystemPromptDiscoveryContext
         {
+            UserProfileRoot = request.UserProfileRoot,
+            UserCodeAltaRoot = request.UserCodeAltaRoot,
             ProjectRoot = projectRoot,
             ProjectPromptResourcesTrusted = projectRoot is not null,
         });
@@ -50,33 +52,43 @@ public sealed class SystemPromptBuilder
         WarnForIgnoredFiles(roots, diagnostics);
 
         var template = ResolveTemplate(roots, request, diagnostics);
-        var baseResolution = ResolveResource(roots, "base", ".system-prompt.md", template.BaseName, diagnostics);
-        var instructionResolution = ResolveResource(roots, "instructions", ".instructions.md", template.InstructionName, diagnostics);
+        var promptResolution = ResolveResource(roots, "prompts", ".prompt.md", template.InstructionName, diagnostics, SystemPromptResourceKind.UserPrompt);
 
-        if (baseResolution.Selected is null)
+        if (promptResolution.Selected is null)
         {
-            throw new InvalidOperationException($"Missing required base system prompt 'base/{template.BaseName}.system-prompt.md'.");
+            throw new InvalidOperationException($"Missing required user prompt 'prompts/{template.InstructionName}.prompt.md'.");
         }
 
-        if (instructionResolution.Selected is null)
+        var selectedSystemOverride = NormalizeName(request.SelectedBaseName);
+        var selectedSystemName = selectedSystemOverride ?? promptResolution.Selected.SystemPromptName ?? template.BaseName;
+        var selectedSystemReason = selectedSystemOverride is not null
+            ? "runtime"
+            : promptResolution.Selected.SystemPromptName is not null
+                ? $"prompt:{template.InstructionName}"
+                : template.BaseReason;
+        var systemResolution = ResolveResource(roots, "system", ".system-prompt.md", selectedSystemName, diagnostics, SystemPromptResourceKind.SystemPrompt);
+
+        if (systemResolution.Selected is null)
         {
-            throw new InvalidOperationException($"Missing required session instructions 'instructions/{template.InstructionName}.instructions.md'.");
+            throw new InvalidOperationException($"Missing required system prompt 'system/{selectedSystemName}.system-prompt.md'.");
         }
 
         var parts = new List<SystemPromptManifestPart>();
-        var systemMessage = baseResolution.Selected.Body.Trim();
-        parts.Add(CreateResourcePart(baseResolution.Selected, "base", template.BaseName, "system", 100, "selected", baseResolution.ReplacedPath));
-        foreach (var skipped in baseResolution.Skipped)
+        var systemMessage = systemResolution.Selected.Body.Trim();
+        parts.Add(CreateResourcePart(systemResolution.Selected, "system", selectedSystemName, "system", 100, "selected", systemResolution.ReplacedPath));
+        foreach (var skipped in systemResolution.Skipped)
         {
-            parts.Add(CreateResourcePart(skipped.Resource, "base", template.BaseName, "system", 100, skipped.Status, null));
+            parts.Add(CreateResourcePart(skipped.Resource, "system", selectedSystemName, "system", 100, skipped.Status, null));
         }
 
         var developerParts = new List<RenderedPromptPart>();
-        AddDeveloperPart(developerParts, parts, CreateResourcePart(instructionResolution.Selected, "instruction", template.InstructionName, "developer", 300, "selected", instructionResolution.ReplacedPath), "Session Instructions", instructionResolution.Selected.Body);
-        foreach (var skipped in instructionResolution.Skipped)
+        AddDeveloperPart(developerParts, parts, CreateResourcePart(promptResolution.Selected, "prompt", template.InstructionName, "developer", 300, "selected", promptResolution.ReplacedPath), "User Prompt", promptResolution.Selected.Body);
+        foreach (var skipped in promptResolution.Skipped)
         {
-            parts.Add(CreateResourcePart(skipped.Resource, "instruction", template.InstructionName, "developer", 300, skipped.Status, null));
+            parts.Add(CreateResourcePart(skipped.Resource, "prompt", template.InstructionName, "developer", 300, skipped.Status, null));
         }
+
+        template = template with { BaseName = selectedSystemName, BaseReason = selectedSystemReason };
 
         if (template.PartOptions.RuntimeContext)
         {
@@ -152,18 +164,18 @@ public sealed class SystemPromptBuilder
             throw new InvalidOperationException($"Shipped prompt root '{roots.ShippedPromptRoot}' was not found.");
         }
 
-        var basePath = Path.Combine(roots.ShippedPromptRoot, "base", "default.system-prompt.md");
-        if (!File.Exists(basePath))
+        var systemPath = Path.Combine(roots.ShippedPromptRoot, "system", "default.system-prompt.md");
+        if (!File.Exists(systemPath))
         {
-            diagnostics.Add(SystemPromptDiagnostic.Error("missing_shipped_base", $"Required shipped base system prompt '{basePath}' was not found.", basePath));
-            throw new InvalidOperationException($"Required shipped base system prompt '{basePath}' was not found.");
+            diagnostics.Add(SystemPromptDiagnostic.Error("missing_shipped_system", $"Required shipped system prompt '{systemPath}' was not found.", systemPath));
+            throw new InvalidOperationException($"Required shipped system prompt '{systemPath}' was not found.");
         }
 
-        var instructionPath = Path.Combine(roots.ShippedPromptRoot, "instructions", "default.instructions.md");
-        if (!File.Exists(instructionPath))
+        var promptPath = Path.Combine(roots.ShippedPromptRoot, "prompts", "default.prompt.md");
+        if (!File.Exists(promptPath))
         {
-            diagnostics.Add(SystemPromptDiagnostic.Error("missing_shipped_instructions", $"Required shipped default session instructions '{instructionPath}' were not found.", instructionPath));
-            throw new InvalidOperationException($"Required shipped default session instructions '{instructionPath}' were not found.");
+            diagnostics.Add(SystemPromptDiagnostic.Error("missing_shipped_prompt", $"Required shipped default user prompt '{promptPath}' was not found.", promptPath));
+            throw new InvalidOperationException($"Required shipped default user prompt '{promptPath}' was not found.");
         }
     }
 
@@ -174,7 +186,7 @@ public sealed class SystemPromptBuilder
             foreach (var directory in Directory.EnumerateDirectories(root.Path))
             {
                 var name = Path.GetFileName(directory);
-                if (!string.Equals(name, "base", StringComparison.OrdinalIgnoreCase) && !string.Equals(name, "instructions", StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(name, "system", StringComparison.OrdinalIgnoreCase) && !string.Equals(name, "prompts", StringComparison.OrdinalIgnoreCase))
                 {
                     diagnostics.Add(SystemPromptDiagnostic.Warning("ignored_unknown_prompt_folder", $"Ignoring unknown prompt resource folder '{directory}'.", directory));
                 }
@@ -193,8 +205,8 @@ public sealed class SystemPromptBuilder
                 }
             }
 
-            WarnWrongSuffix(root.Path, "base", ".system-prompt.md", diagnostics);
-            WarnWrongSuffix(root.Path, "instructions", ".instructions.md", diagnostics);
+            WarnWrongSuffix(root.Path, "system", ".system-prompt.md", diagnostics);
+            WarnWrongSuffix(root.Path, "prompts", ".prompt.md", diagnostics);
         }
     }
 
@@ -247,9 +259,10 @@ public sealed class SystemPromptBuilder
             result = result with { BaseName = request.SelectedBaseName.Trim(), BaseReason = "runtime" };
         }
 
-        if (!string.IsNullOrWhiteSpace(request.SelectedInstructionName))
+        var selectedPromptName = NormalizeName(request.SelectedPromptName) ?? NormalizeName(request.SelectedInstructionName);
+        if (selectedPromptName is not null)
         {
-            result = result with { InstructionName = request.SelectedInstructionName.Trim(), InstructionReason = "runtime" };
+            result = result with { InstructionName = selectedPromptName, InstructionReason = "runtime" };
         }
 
         result = result with { PartOptions = request.PartOptionsOverride?.MergeOver(result.PartOptions) ?? result.PartOptions };
@@ -285,7 +298,9 @@ public sealed class SystemPromptBuilder
 
                     break;
                 case "base":
+                case "system":
                 case "instruction":
+                case "prompt":
                     break;
                 case "skills":
                     options = options with { Skills = ParseBool(values[key], key, path, diagnostics, ref hasErrors) };
@@ -306,8 +321,8 @@ public sealed class SystemPromptBuilder
         }
 
         return new ParsedTemplate(
-            NormalizeName(values.GetValueOrDefault("base")),
-            NormalizeName(values.GetValueOrDefault("instruction")),
+            NormalizeName(values.GetValueOrDefault("system")) ?? NormalizeName(values.GetValueOrDefault("base")),
+            NormalizeName(values.GetValueOrDefault("prompt")) ?? NormalizeName(values.GetValueOrDefault("instruction")),
             options,
             hasErrors);
     }
@@ -324,10 +339,10 @@ public sealed class SystemPromptBuilder
         return null;
     }
 
-    private static ResourceResolution ResolveResource(SystemPromptContentRoots roots, string folder, string suffix, string name, List<SystemPromptDiagnostic> diagnostics)
+    private static ResourceResolution ResolveResource(SystemPromptContentRoots roots, string folder, string suffix, string name, List<SystemPromptDiagnostic> diagnostics, SystemPromptResourceKind resourceKind)
     {
         var candidates = EnumerateExistingRoots(roots)
-            .Select(root => LoadResource(root, folder, suffix, name, diagnostics))
+            .Select(root => LoadResource(root, folder, suffix, name, diagnostics, resourceKind))
             .Where(static resource => resource is not null)
             .Cast<PromptResource>()
             .OrderBy(static resource => resource.Precedence)
@@ -351,7 +366,7 @@ public sealed class SystemPromptBuilder
         return new ResourceResolution(selected, replaced, skipped);
     }
 
-    private static PromptResource? LoadResource(PromptRoot root, string folder, string suffix, string name, List<SystemPromptDiagnostic> diagnostics)
+    private static PromptResource? LoadResource(PromptRoot root, string folder, string suffix, string name, List<SystemPromptDiagnostic> diagnostics, SystemPromptResourceKind resourceKind)
     {
         var path = Path.Combine(root.Path, folder, name + suffix);
         if (!File.Exists(path))
@@ -371,9 +386,12 @@ public sealed class SystemPromptBuilder
         }
 
         var (frontmatter, body) = SplitFrontmatter(text, path, diagnostics);
+        var allowedFields = resourceKind == SystemPromptResourceKind.UserPrompt
+            ? new HashSet<string>(["name", "description", "system", "version", "max_tokens", "id", "kind", "path"], StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(["description", "version", "max_tokens", "id", "kind", "path"], StringComparer.OrdinalIgnoreCase);
         foreach (var key in frontmatter.Keys)
         {
-            if (key is not ("description" or "version" or "max_tokens" or "id" or "kind" or "path"))
+            if (!allowedFields.Contains(key))
             {
                 diagnostics.Add(SystemPromptDiagnostic.Warning("unknown_frontmatter_field", $"Prompt resource '{path}' contains unknown frontmatter field '{key}'.", path));
             }
@@ -386,9 +404,21 @@ public sealed class SystemPromptBuilder
         if (string.IsNullOrWhiteSpace(body))
         {
             diagnostics.Add(SystemPromptDiagnostic.Error("empty_prompt_resource", $"Prompt resource '{path}' is empty.", path));
+            return null;
         }
 
-        return new PromptResource(root.SourceKind, root.Precedence, path, body.Trim(), frontmatter.GetValueOrDefault("description"), HashText(body.Trim()));
+        var displayName = NormalizeName(frontmatter.GetValueOrDefault("name"));
+        if (resourceKind == SystemPromptResourceKind.UserPrompt && displayName is null)
+        {
+            diagnostics.Add(SystemPromptDiagnostic.Error("missing_prompt_name", $"User prompt '{path}' is missing required frontmatter field 'name'.", path));
+            return null;
+        }
+
+        var systemPromptName = resourceKind == SystemPromptResourceKind.UserPrompt
+            ? NormalizeName(frontmatter.GetValueOrDefault("system")) ?? DefaultName
+            : null;
+        var trimmed = body.Trim();
+        return new PromptResource(root.SourceKind, root.Precedence, path, trimmed, frontmatter.GetValueOrDefault("description"), displayName, systemPromptName, HashText(trimmed));
     }
 
     private static Dictionary<string, string> ParseFlatKeyValueFile(string text, List<SystemPromptDiagnostic> diagnostics, string path, bool allowFrontmatterDelimiters)
@@ -446,7 +476,7 @@ public sealed class SystemPromptBuilder
 
     private static SystemPromptManifestPart CreateResourcePart(PromptResource resource, string kind, string name, string target, int order, string status, string? replaces)
         => new(
-            Key: $"{(kind == "base" ? "base" : "instructions")}/{name}",
+            Key: kind == "system" ? $"system/{name}" : $"prompts/{name}",
             Kind: kind,
             Name: name,
             Target: target,
@@ -727,10 +757,11 @@ public sealed class SystemPromptBuilder
 
     private sealed record PromptRoot(string SourceKind, int Precedence, string Path);
     private sealed record TemplateSource(string SourceKind, string Path);
-    private sealed record PromptResource(string SourceKind, int Precedence, string Path, string Body, string? Description, string Hash);
+    private sealed record PromptResource(string SourceKind, int Precedence, string Path, string Body, string? Description, string? DisplayName, string? SystemPromptName, string Hash);
     private sealed record ResourceResolution(PromptResource? Selected, string? ReplacedPath, IReadOnlyList<SkippedResource> Skipped);
     private sealed record SkippedResource(PromptResource Resource, string Status);
     private sealed record RenderedPromptPart(string Key, string Markdown);
+    private enum SystemPromptResourceKind { SystemPrompt, UserPrompt }
     private sealed record ParsedTemplate(string? BaseName, string? InstructionName, PartialSystemPromptPartOptions Options, bool HasErrors)
     {
         public static ParsedTemplate Error { get; } = new(null, null, PartialSystemPromptPartOptions.Empty, true);
@@ -771,6 +802,15 @@ public sealed class SystemPromptBuildRequest
 
     /// <summary>Gets an optional selected session instruction name override.</summary>
     public string? SelectedInstructionName { get; init; }
+
+    /// <summary>Gets an optional selected user prompt name override.</summary>
+    public string? SelectedPromptName { get; init; }
+
+    /// <summary>Gets the optional user profile root used to resolve <c>~/.alta</c>.</summary>
+    public string? UserProfileRoot { get; init; }
+
+    /// <summary>Gets the optional CodeAlta user-global root used to resolve prompt overrides.</summary>
+    public string? UserCodeAltaRoot { get; init; }
 
     /// <summary>Gets optional prompt part overrides.</summary>
     public PartialSystemPromptPartOptions? PartOptionsOverride { get; init; }

@@ -18,6 +18,7 @@ namespace CodeAlta.App;
 internal sealed class CodeAltaFrontendComposition
 {
     public required ModelProviderPreferenceCoordinator ModelProviderPreferences { get; init; }
+    public required UserPromptPreferenceCoordinator UserPromptPreferences { get; init; }
     public required CodeAltaShellController ShellController { get; init; }
     public required RuntimeEventPump RuntimeEventPump { get; init; }
     public required TerminalLoopCoordinator TerminalLoopCoordinator { get; init; }
@@ -39,6 +40,7 @@ internal sealed class CodeAltaFrontendComposition
     public required SidebarCoordinator SidebarCoordinator { get; init; }
     public required NavigatorActionCoordinator NavigatorActionCoordinator { get; init; }
     public required ModelProviderSelectorCoordinator ModelProviderSelectorCoordinator { get; init; }
+    public required UserPromptSelectorCoordinator UserPromptSelectorCoordinator { get; init; }
     public required ModelCatalogCoordinator ModelCatalogCoordinator { get; init; }
     public required IModelProviderPreferencePort ModelProviderPreferencePort { get; init; }
     public required ModelProviderSelectorStateStore ModelProviderSelectorStateStore { get; init; }
@@ -100,6 +102,7 @@ internal sealed class CodeAltaFrontendComposition
             frontend.UpdatePromptImageAttachmentsUi);
         var configStore = new CodeAltaConfigStore(catalogOptions);
         var modelProviderPreferences = new ModelProviderPreferenceCoordinator(configStore, CodeAlta.Views.CodeAltaApp.UiLogger);
+        var userPromptPreferences = new UserPromptPreferenceCoordinator();
         var altaToolProviderIds = ResolveAltaToolProviderIds(configStore);
         var altaServices = new AltaServiceCollection()
             .Add(catalogOptions)
@@ -242,6 +245,17 @@ internal sealed class CodeAltaFrontendComposition
                     ? null
                     : sessionStateCoordinator.GetSelectedProject()?.Id),
             pluginHostBridge is null ? null : pluginHostBridge.GetPromptPlaceholderContributions);
+        var userPromptSelectorCoordinator = new UserPromptSelectorCoordinator(
+            sessionWorkspaceViewModel,
+            catalogOptions,
+            sessionSelectionContext,
+            userPromptPreferences,
+            workspaceRefreshContext,
+            () => sessionStateCoordinator.ViewState,
+            () => _ = frontend.PersistViewStateAsync(),
+            session => _ = sessionStateCoordinator.PersistSessionLocalStateAsync(session),
+            frontend.SyncUserPromptSelectorItems,
+            frontend.SetStatus);
         var modelCatalogCoordinator = new ModelCatalogCoordinator(
             modelProviderStates,
             modelProviderSelectorCoordinator,
@@ -367,11 +381,13 @@ internal sealed class CodeAltaFrontendComposition
             pluginHostBridge,
             altaServices,
             altaToolProviderIds,
-            frontend.GetAlwaysEnqueue);
+            frontend.GetAlwaysEnqueue,
+            userPromptSelectorCoordinator.GetPreferredUserPromptName);
 
         return new CodeAltaFrontendComposition
         {
             ModelProviderPreferences = modelProviderPreferences,
+            UserPromptPreferences = userPromptPreferences,
             ShellController = shellController,
             RuntimeEventPump = runtimeEventPump,
             TerminalLoopCoordinator = terminalLoopCoordinator,
@@ -393,6 +409,7 @@ internal sealed class CodeAltaFrontendComposition
             SidebarCoordinator = sidebarCoordinator,
             NavigatorActionCoordinator = navigatorActionCoordinator,
             ModelProviderSelectorCoordinator = modelProviderSelectorCoordinator,
+            UserPromptSelectorCoordinator = userPromptSelectorCoordinator,
             ModelCatalogCoordinator = modelCatalogCoordinator,
             ModelProviderPreferencePort = modelProviderPreferencePort,
             ModelProviderSelectorStateStore = modelProviderSelectorStateContext,

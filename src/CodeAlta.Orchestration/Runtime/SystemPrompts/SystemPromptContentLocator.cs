@@ -1,7 +1,7 @@
 namespace CodeAlta.Orchestration.Runtime.SystemPrompts;
 
 /// <summary>
-/// Resolves CodeAlta system prompt content roots and shipped content paths.
+/// Resolves CodeAlta instruction content roots and shipped content paths.
 /// </summary>
 public interface ISystemPromptContentLocator
 {
@@ -16,7 +16,7 @@ public interface ISystemPromptContentLocator
     /// <summary>
     /// Resolves a path under the shipped prompt resource root.
     /// </summary>
-    /// <param name="relativePromptPath">Relative path under <c>content/system_prompts</c>.</param>
+    /// <param name="relativePromptPath">Relative path under <c>content/instructions</c>.</param>
     /// <returns>The absolute path.</returns>
     /// <exception cref="ArgumentException">Thrown when the path is empty or escapes the prompt root.</exception>
     string ResolveBuiltInPromptPath(string relativePromptPath);
@@ -103,16 +103,16 @@ public sealed class FileSystemPromptContentLocator : ISystemPromptContentLocator
         var projectRoot = NormalizeOptionalRoot(context.ProjectRoot);
 
         return new SystemPromptContentRoots(
-            ShippedPromptRoot: Path.Combine(appBaseDirectory, "content", "system_prompts"),
+            ShippedPromptRoot: Path.Combine(appBaseDirectory, "content", "instructions"),
             ShippedDocsRoot: Path.Combine(appBaseDirectory, "content", "docs"),
-            UserPromptRoot: Path.Combine(userCodeAltaRoot, "system_prompts"),
-            ProjectPromptRoot: projectRoot is null ? null : Path.Combine(projectRoot, ".alta", "system_prompts"),
+            UserPromptRoot: Path.Combine(userCodeAltaRoot, "instructions"),
+            ProjectPromptRoot: projectRoot is null ? null : Path.Combine(projectRoot, ".alta", "instructions"),
             ProjectPromptResourcesTrusted: context.ProjectPromptResourcesTrusted);
     }
 
     /// <inheritdoc />
     public string ResolveBuiltInPromptPath(string relativePromptPath)
-        => ResolveUnderRoot(Path.Combine(GetAppBaseDirectory(), "content", "system_prompts"), relativePromptPath);
+        => ResolveUnderRoot(Path.Combine(GetAppBaseDirectory(), "content", "instructions"), relativePromptPath);
 
     /// <inheritdoc />
     public string ResolveBuiltInDocPath(string fileName)
