@@ -1328,6 +1328,84 @@ public sealed class AgentSessionTests
     }
 
     [TestMethod]
+    public async Task AgentSession_ReplaySynthesizesErroredToolResultForMissingToolOutput()
+    {
+        using var temp = TestTempDirectory.Create();
+        var store = new FileSystemAgentSessionStore(new AgentRuntimePathLayout(Path.Combine(temp.Path, "machine", "agents")));
+        var provider = CreateProvider();
+        var summary = CreateSummary("session-replay-missing-tool-output");
+        var state = CreateState("session-replay-missing-tool-output");
+        await store.UpsertSessionAsync(summary).ConfigureAwait(false);
+        await store.UpsertStateAsync(state).ConfigureAwait(false);
+
+        using var arguments = JsonDocument.Parse("""{"path":"sample.txt"}""");
+        var assistantMessage = new AgentConversationMessage(
+            AgentConversationRole.Assistant,
+            [
+                new AgentMessagePart.Text("I need to inspect a file."),
+                new AgentMessagePart.ToolCall("call-missing-output", "inspect_file", arguments.RootElement.Clone()),
+            ]);
+        var runId = new AgentRunId("run-missing-output");
+        var persistedHistory = new AgentEvent[]
+        {
+            new AgentRawEvent(
+                ModelProviderIds.OpenAIResponses,
+                summary.SessionId,
+                DateTimeOffset.UtcNow,
+                "local.userMessage",
+                JsonSerializer.SerializeToElement(AgentInput.Text("Inspect sample.txt"), AgentJsonSerializerContext.Default.AgentInput),
+                runId),
+            new AgentRawEvent(
+                ModelProviderIds.OpenAIResponses,
+                summary.SessionId,
+                DateTimeOffset.UtcNow,
+                "local.assistantMessage",
+                JsonSerializer.SerializeToElement(assistantMessage, AgentJsonSerializerContext.Default.AgentConversationMessage),
+                runId),
+        };
+
+        await using var resumedSession = new AgentSession(
+            ModelProviderIds.OpenAIResponses,
+            provider,
+            summary,
+            state,
+            persistedHistory,
+            store,
+            new ScriptedTurnExecutor(
+                (request, _, _) =>
+                {
+                    Assert.AreEqual(4, request.Conversation.Count);
+                    Assert.AreEqual(AgentConversationRole.User, request.Conversation[0].Role);
+                    Assert.AreEqual(AgentConversationRole.Assistant, request.Conversation[1].Role);
+                    Assert.AreEqual(AgentConversationRole.Tool, request.Conversation[2].Role);
+                    Assert.AreEqual(AgentConversationRole.User, request.Conversation[3].Role);
+
+                    var recovered = Assert.IsInstanceOfType<AgentMessagePart.ToolResult>(request.Conversation[2].Parts.Single());
+                    Assert.AreEqual("call-missing-output", recovered.CallId);
+                    Assert.IsFalse(recovered.Result.Success);
+                    StringAssert.Contains(recovered.Result.Error, "interrupted tool call 'inspect_file'");
+                    var output = Assert.IsInstanceOfType<AgentToolResultItem.Text>(recovered.Result.Items.Single());
+                    StringAssert.Contains(output.Value, "aborted");
+
+                    return Task.FromResult(
+                        new AgentTurnResponse
+                        {
+                            AssistantMessage = new AgentConversationMessage(
+                                AgentConversationRole.Assistant,
+                                [new AgentMessagePart.Text("Recovered and continuing.")]),
+                        });
+                }),
+            CreateOptions(provider, temp.Path));
+
+        _ = await resumedSession.SendAsync(
+                new AgentSendOptions
+                {
+                    Input = AgentInput.Text("Continue."),
+                })
+            .ConfigureAwait(false);
+    }
+
+    [TestMethod]
     public async Task AgentSession_SendAsync_ResolvesEquivalentModelIdsForUsageLimits()
     {
         using var temp = TestTempDirectory.Create();

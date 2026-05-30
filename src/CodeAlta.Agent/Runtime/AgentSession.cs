@@ -652,7 +652,13 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
     }
 
     private AgentInlineMediaPruneResult CreateProviderConversation()
-        => AgentMediaCompaction.PruneInlineImages(_conversation, ShouldPreserveInlineMediaForActiveRun);
+    {
+        var pruned = AgentMediaCompaction.PruneInlineImages(_conversation, ShouldPreserveInlineMediaForActiveRun);
+        var normalized = AgentConversationToolCallRecovery.NormalizeForReplay(pruned.Messages);
+        return ReferenceEquals(normalized, pruned.Messages)
+            ? pruned
+            : pruned with { Messages = normalized };
+    }
 
     private static AgentSessionUsage? CreateConversationUsageSnapshot(
         string? systemMessage,
@@ -3016,7 +3022,8 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             }
         }
 
-        return conversation;
+        var normalized = AgentConversationToolCallRecovery.NormalizeForReplay(conversation);
+        return ReferenceEquals(normalized, conversation) ? conversation : [.. normalized];
     }
 
     private static AgentCompactionSnapshot CreateCompactionSnapshot(
