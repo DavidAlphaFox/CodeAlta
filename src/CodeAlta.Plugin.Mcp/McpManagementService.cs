@@ -251,17 +251,29 @@ public sealed record McpManagementServerSnapshot
     /// <summary>Gets redacted stdio arguments.</summary>
     public IReadOnlyList<string> Args { get; init; } = [];
 
+    /// <summary>Gets unredacted stdio arguments for edit forms. Do not use this value in command output or diagnostics.</summary>
+    public IReadOnlyList<string>? EditableArgs { get; init; }
+
     /// <summary>Gets the configured working directory.</summary>
     public string? Cwd { get; init; }
 
     /// <summary>Gets redacted environment variables.</summary>
     public IReadOnlyDictionary<string, string> Env { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
 
+    /// <summary>Gets unredacted environment variables for edit forms. Do not use this value in command output or diagnostics.</summary>
+    public IReadOnlyDictionary<string, string>? EditableEnv { get; init; }
+
     /// <summary>Gets the redacted remote endpoint URL.</summary>
     public string? Url { get; init; }
 
+    /// <summary>Gets the unredacted remote endpoint URL for edit forms. Do not use this value in command output or diagnostics.</summary>
+    public string? EditableUrl { get; init; }
+
     /// <summary>Gets redacted remote headers.</summary>
     public IReadOnlyDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>Gets unredacted remote headers for edit forms. Do not use this value in command output or diagnostics.</summary>
+    public IReadOnlyDictionary<string, string>? EditableHeaders { get; init; }
 
     /// <summary>Gets whether the server is enabled by effective policy.</summary>
     public bool? PolicyEnabled { get; init; }
@@ -1045,10 +1057,14 @@ public sealed class McpManagementService
             ShadowedGlobalPath = effective.ShadowedGlobalDefinition?.SourcePath,
             Command = definition.Transport == McpTransportKind.Stdio ? definition.Command : null,
             Args = definition.Transport == McpTransportKind.Stdio ? McpRedactor.RedactArguments(definition.Args) : [],
+            EditableArgs = definition.Transport == McpTransportKind.Stdio ? definition.Args.ToArray() : [],
             Cwd = definition.Cwd,
             Env = definition.Env.Count > 0 ? McpRedactor.RedactDictionary(definition.Env) : new Dictionary<string, string>(StringComparer.Ordinal),
+            EditableEnv = definition.Env.Count > 0 ? new Dictionary<string, string>(definition.Env, StringComparer.Ordinal) : new Dictionary<string, string>(StringComparer.Ordinal),
             Url = definition.Transport == McpTransportKind.Http ? McpRedactor.RedactUrl(definition.Url) : null,
+            EditableUrl = definition.Transport == McpTransportKind.Http ? definition.Url : null,
             Headers = definition.Headers.Count > 0 ? McpRedactor.RedactDictionary(definition.Headers) : new Dictionary<string, string>(StringComparer.Ordinal),
+            EditableHeaders = definition.Headers.Count > 0 ? new Dictionary<string, string>(definition.Headers, StringComparer.Ordinal) : new Dictionary<string, string>(StringComparer.Ordinal),
             PolicyEnabled = policyEnabled,
             PolicyRequired = serverPolicy?.Required,
             DirectExposure = serverPolicy?.DirectExposure ?? policy.DirectExposure,
@@ -1076,10 +1092,14 @@ public sealed class McpManagementService
             SourceFormat = MapFormat(definition.SourceFlavor),
             Command = definition.Transport == McpTransportKind.Stdio ? definition.Command : null,
             Args = definition.Transport == McpTransportKind.Stdio ? McpRedactor.RedactArguments(definition.Args) : [],
+            EditableArgs = definition.Transport == McpTransportKind.Stdio ? definition.Args.ToArray() : [],
             Cwd = definition.Cwd,
             Env = definition.Env.Count > 0 ? McpRedactor.RedactDictionary(definition.Env) : new Dictionary<string, string>(StringComparer.Ordinal),
+            EditableEnv = definition.Env.Count > 0 ? new Dictionary<string, string>(definition.Env, StringComparer.Ordinal) : new Dictionary<string, string>(StringComparer.Ordinal),
             Url = definition.Transport == McpTransportKind.Http ? McpRedactor.RedactUrl(definition.Url) : null,
+            EditableUrl = definition.Transport == McpTransportKind.Http ? definition.Url : null,
             Headers = definition.Headers.Count > 0 ? McpRedactor.RedactDictionary(definition.Headers) : new Dictionary<string, string>(StringComparer.Ordinal),
+            EditableHeaders = definition.Headers.Count > 0 ? new Dictionary<string, string>(definition.Headers, StringComparer.Ordinal) : new Dictionary<string, string>(StringComparer.Ordinal),
             PolicyEnabled = serverPolicy?.Enabled ?? policy.Enabled,
             PolicyRequired = serverPolicy?.Required,
             DirectExposure = serverPolicy?.DirectExposure ?? policy.DirectExposure,

@@ -79,9 +79,13 @@ public sealed class McpManagementServiceTests
         Assert.AreEqual("https://example.test/mcp?token=[redacted]", remote.Url);
         Assert.AreEqual("[redacted]", remote.Headers["Authorization"]);
         Assert.AreEqual("visible", remote.Headers["X-Test"]);
+        Assert.AreEqual("https://example.test/mcp?token=secret", remote.EditableUrl);
+        Assert.AreEqual("Bearer token", remote.EditableHeaders!["Authorization"]);
+        Assert.AreEqual("visible", remote.EditableHeaders["X-Test"]);
         CollectionAssert.Contains(remote.DisabledTools.ToArray(), "danger");
         var shared = snapshot.Servers.First(server => server.Key == "shared" && server.State == McpManagementServerState.Configured);
         Assert.AreEqual("[redacted]", shared.Env["API_TOKEN"]);
+        Assert.AreEqual("abc123", shared.EditableEnv!["API_TOKEN"]);
         Assert.IsTrue(invalidSnapshot.Servers.Any(server => server.State == McpManagementServerState.InvalidConfig));
         Assert.IsTrue(missingSnapshot.Servers.Any(server => server.State == McpManagementServerState.MissingConfig));
     }
@@ -150,6 +154,40 @@ public sealed class McpManagementServiceTests
         Assert.AreEqual(McpManagementTransport.Http, server.Transport);
         Assert.AreEqual("https://example.test/mcp", server.Url);
         Assert.AreEqual("[redacted]", server.Headers["Authorization"]);
+        Assert.AreEqual("Bearer ${DOCS_TOKEN}", server.EditableHeaders!["Authorization"]);
+    }
+
+    [TestMethod]
+    public void Dialog_EditFieldsUseUnredactedSnapshotValues()
+    {
+        var row = CreateDialogRow(new McpManagementServerSnapshot
+        {
+            Key = "remote",
+            DisplayName = "remote",
+            State = McpManagementServerState.Configured,
+            Transport = McpManagementTransport.Http,
+            Args = ["--token", "[redacted]"],
+            EditableArgs = ["--token", "argument-secret"],
+            Env = new Dictionary<string, string>(StringComparer.Ordinal) { ["API_TOKEN"] = "[redacted]" },
+            EditableEnv = new Dictionary<string, string>(StringComparer.Ordinal) { ["API_TOKEN"] = "env-secret" },
+            Url = "https://example.test/mcp?token=[redacted]",
+            EditableUrl = "https://example.test/mcp?token=url-secret",
+            Headers = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Authorization"] = "[redacted]",
+                ["X-Test"] = "visible",
+            },
+            EditableHeaders = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Authorization"] = "Bearer header-secret",
+                ["X-Test"] = "visible",
+            },
+        });
+
+        Assert.AreEqual("--token; argument-secret", GetDialogRowStateValue(row, "ArgsState"));
+        Assert.AreEqual("API_TOKEN=env-secret", GetDialogRowStateValue(row, "EnvState"));
+        Assert.AreEqual("https://example.test/mcp?token=url-secret", GetDialogRowStateValue(row, "UrlState"));
+        Assert.AreEqual("Authorization=Bearer header-secret; X-Test=visible", GetDialogRowStateValue(row, "HeadersState"));
     }
 
     [TestMethod]
@@ -751,6 +789,31 @@ public sealed class McpManagementServiceTests
         var property = row.GetType().GetProperty("Entry", BindingFlags.Instance | BindingFlags.Public);
         Assert.IsNotNull(property);
         return (McpManagementServerSnapshot)property.GetValue(row)!;
+    }
+
+    private static object CreateDialogRow(McpManagementServerSnapshot entry)
+    {
+        var rowType = typeof(McpServersDialog).GetNestedType("McpServerRow", BindingFlags.NonPublic);
+        Assert.IsNotNull(rowType);
+        var row = Activator.CreateInstance(
+            rowType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: [entry, false],
+            culture: null);
+        Assert.IsNotNull(row);
+        return row;
+    }
+
+    private static string GetDialogRowStateValue(object row, string propertyName)
+    {
+        var property = row.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+        Assert.IsNotNull(property);
+        var state = property.GetValue(row);
+        Assert.IsNotNull(state);
+        var valueProperty = state.GetType().GetProperty("Value", BindingFlags.Instance | BindingFlags.Public);
+        Assert.IsNotNull(valueProperty);
+        return (string?)valueProperty.GetValue(state) ?? string.Empty;
     }
 
     private static Button FindDialogButton(McpServersDialog dialog, string text)

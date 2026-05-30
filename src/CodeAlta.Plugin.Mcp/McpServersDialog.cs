@@ -513,11 +513,11 @@ internal sealed class McpServersDialog
         AddEditRow(form, ref rowIndex, "Command", new TextBox(row.CommandState.Bind.Value).IsEnabled(() => row.TransportState.Value == McpManagementTransport.Stdio).Stretch(), new TextBlock("stdio"));
         AddEditRow(form, ref rowIndex, "Arguments", new TextBox(row.ArgsState.Bind.Value).IsEnabled(() => row.TransportState.Value == McpManagementTransport.Stdio).Stretch(), new TextBlock("separate with ;"));
         AddEditRow(form, ref rowIndex, "Working Dir", new TextBox(row.CwdState.Bind.Value).IsEnabled(() => row.TransportState.Value == McpManagementTransport.Stdio).Stretch(), CreateSpacer());
-        AddEditRow(form, ref rowIndex, "Environment", new TextBox(row.EnvState.Bind.Value).IsEnabled(() => row.TransportState.Value == McpManagementTransport.Stdio).IsPassword(row.HasRedactedEnv).PasswordRevealMode(PasswordRevealMode.WhileFocused).Stretch(), new TextBlock("KEY=VALUE; ..."));
+        AddEditRow(form, ref rowIndex, "Environment", new TextBox(row.EnvState.Bind.Value).IsEnabled(() => row.TransportState.Value == McpManagementTransport.Stdio).Stretch(), new TextBlock("KEY=VALUE; ..."));
         AddEditRow(form, ref rowIndex, "URL", new TextBox(row.UrlState.Bind.Value).IsEnabled(() => row.TransportState.Value == McpManagementTransport.Http).Stretch(), new TextBlock("http/sse"));
-        AddEditRow(form, ref rowIndex, "Headers", new TextBox(row.HeadersState.Bind.Value).IsEnabled(() => row.TransportState.Value == McpManagementTransport.Http).IsPassword(row.HasRedactedHeaders).PasswordRevealMode(PasswordRevealMode.WhileFocused).Stretch(), new TextBlock("KEY=VALUE; ..."));
+        AddEditRow(form, ref rowIndex, "Headers", new TextBox(row.HeadersState.Bind.Value).IsEnabled(() => row.TransportState.Value == McpManagementTransport.Http).Stretch(), new TextBlock("KEY=VALUE; ..."));
 
-        var guidance = new Markup("[dim]Save writes the selected JSON config scope. Arguments use semicolon-separated values. Env/header fields use semicolon-separated KEY=VALUE pairs and support ${NAME} environment-variable placeholders. Redacted placeholders must be replaced before saving to avoid overwriting secrets.[/]")
+        var guidance = new Markup("[dim]Save writes the selected JSON config scope. Arguments use semicolon-separated values. Env/header fields use semicolon-separated KEY=VALUE pairs and support ${NAME} environment-variable placeholders.[/]")
         {
             Wrap = true,
         };
@@ -1295,13 +1295,6 @@ internal sealed class McpServersDialog
             return false;
         }
 
-        if (!row.IsDraft && HasRedactedPlaceholder(row))
-        {
-            edit = null!;
-            errorMessage = "Replace redacted placeholders before saving, or open the JSON config to edit secrets directly.";
-            return false;
-        }
-
         try
         {
             var isStdio = row.TransportState.Value == McpManagementTransport.Stdio;
@@ -1345,15 +1338,6 @@ internal sealed class McpServersDialog
             return false;
         }
     }
-
-    private static bool HasRedactedPlaceholder(McpServerRow row)
-        => ContainsRedactedPlaceholder(row.ArgsState.Value ?? string.Empty) ||
-           ContainsRedactedPlaceholder(row.EnvState.Value ?? string.Empty) ||
-           ContainsRedactedPlaceholder(row.UrlState.Value ?? string.Empty) ||
-           ContainsRedactedPlaceholder(row.HeadersState.Value ?? string.Empty);
-
-    private static bool ContainsRedactedPlaceholder(string value)
-        => value.Contains("[redacted]", StringComparison.OrdinalIgnoreCase);
 
     internal static IReadOnlyList<string> ParseList(string text)
         => SplitEntries(text).ToArray();
@@ -1629,13 +1613,11 @@ internal sealed class McpServersDialog
             ScopeState = new State<McpManagementScope>(entry.SourceScope ?? McpManagementScope.Project);
             TransportState = new State<McpManagementTransport>(entry.Transport ?? McpManagementTransport.Stdio);
             CommandState = new State<string?>(entry.Command ?? string.Empty);
-            ArgsState = new State<string?>(string.Join("; ", entry.Args));
+            ArgsState = new State<string?>(string.Join("; ", entry.EditableArgs ?? entry.Args));
             CwdState = new State<string?>(entry.Cwd ?? string.Empty);
-            EnvState = new State<string?>(FormatEditableDictionary(entry.Env));
-            UrlState = new State<string?>(entry.Url ?? string.Empty);
-            HeadersState = new State<string?>(FormatEditableDictionary(entry.Headers));
-            HasRedactedEnv = ContainsRedactedPlaceholder(EnvState.Value ?? string.Empty);
-            HasRedactedHeaders = ContainsRedactedPlaceholder(HeadersState.Value ?? string.Empty);
+            EnvState = new State<string?>(FormatEditableDictionary(entry.EditableEnv ?? entry.Env));
+            UrlState = new State<string?>(entry.EditableUrl ?? entry.Url ?? string.Empty);
+            HeadersState = new State<string?>(FormatEditableDictionary(entry.EditableHeaders ?? entry.Headers));
         }
 
         public McpManagementServerSnapshot Entry { get; private set; }
@@ -1674,10 +1656,6 @@ internal sealed class McpServersDialog
         public State<string?> UrlState { get; }
 
         public State<string?> HeadersState { get; }
-
-        public bool HasRedactedEnv { get; }
-
-        public bool HasRedactedHeaders { get; }
     }
 
     private sealed record ScopeOption(string Label, McpManagementScope Scope)
