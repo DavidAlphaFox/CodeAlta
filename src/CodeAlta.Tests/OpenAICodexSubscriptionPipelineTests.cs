@@ -57,6 +57,8 @@ public sealed class OpenAICodexSubscriptionPipelineTests
         Assert.AreEqual("acct_123", handler.Requests[0]["ChatGPT-Account-Id"]);
         Assert.AreEqual("codealta", handler.Requests[0]["originator"]);
         Assert.AreEqual("responses=experimental", handler.Requests[0]["OpenAI-Beta"]);
+        Assert.AreEqual("session_456", handler.Requests[0]["session-id"]);
+        Assert.AreEqual("session_456", handler.Requests[0]["thread-id"]);
         Assert.AreEqual("session_456", handler.Requests[0]["session_id"]);
         Assert.AreEqual("session_456", handler.Requests[0]["x-client-request-id"]);
         Assert.AreEqual("true", handler.Requests[0]["X-OpenAI-Fedramp"]);

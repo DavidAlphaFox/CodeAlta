@@ -24,6 +24,7 @@ internal sealed class OpenAICodexSubscriptionWebSocketSession : IOpenAIResponses
     private const string WebSocketConnectionLimitReachedCode = "websocket_connection_limit_reached";
     private const string WebSocketConnectionLimitReachedMessage = "Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue.";
     private const string CodexTurnStateHeaderName = "x-codex-turn-state";
+    private static readonly TimeSpan DefaultConnectTimeout = TimeSpan.FromSeconds(15);
 
     private readonly Uri _baseUri;
     private readonly OpenAICodexSubscriptionOptions _options;
@@ -229,7 +230,12 @@ internal sealed class OpenAICodexSubscriptionWebSocketSession : IOpenAIResponses
 
         try
         {
-            await webSocket.ConnectAsync(ResolveWebSocketUri(_baseUri), cancellationToken).ConfigureAwait(false);
+            await ConnectWithTimeoutAsync(
+                    webSocket,
+                    ResolveWebSocketUri(_baseUri),
+                    DefaultConnectTimeout,
+                    cancellationToken)
+                .ConfigureAwait(false);
             CaptureResponseTurnState(webSocket.HttpResponseHeaders);
             CaptureHandshakeSideChannels(webSocket.HttpResponseHeaders);
             return webSocket;
@@ -254,6 +260,8 @@ internal sealed class OpenAICodexSubscriptionWebSocketSession : IOpenAIResponses
         options.SetRequestHeader("Authorization", $"Bearer {accessToken}");
         options.SetRequestHeader("OpenAI-Beta", ResponsesWebSocketsBetaHeader);
         options.SetRequestHeader("originator", "codealta");
+        options.SetRequestHeader("session-id", _sessionId);
+        options.SetRequestHeader("thread-id", _sessionId);
         options.SetRequestHeader("session_id", _sessionId);
         options.SetRequestHeader("x-client-request-id", _sessionId);
         options.SetRequestHeader("User-Agent", _userAgentApplicationId);
@@ -347,6 +355,40 @@ internal sealed class OpenAICodexSubscriptionWebSocketSession : IOpenAIResponses
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    internal static async Task ConnectWithTimeoutAsync(
+        ClientWebSocket webSocket,
+        Uri uri,
+        TimeSpan connectTimeout,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(webSocket);
+        ArgumentNullException.ThrowIfNull(uri);
+
+        if (connectTimeout == Timeout.InfiniteTimeSpan)
+        {
+            await webSocket.ConnectAsync(uri, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (connectTimeout <= TimeSpan.Zero)
+        {
+            throw new TimeoutException("Codex subscription WebSocket did not connect before the configured connect timeout elapsed.");
+        }
+
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(connectTimeout);
+        try
+        {
+            await webSocket.ConnectAsync(uri, timeoutSource.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && timeoutSource.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"Codex subscription WebSocket did not connect within {connectTimeout}.",
+                ex);
         }
     }
 

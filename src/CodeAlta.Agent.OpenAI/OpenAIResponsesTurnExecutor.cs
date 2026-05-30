@@ -2202,7 +2202,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
             return "stream_closed_before_terminal";
         }
 
-        if (IsWebSocketReceiveIdleTimeout(exception))
+        if (IsWebSocketTransportTimeout(exception))
         {
             return "stream_idle_timeout";
         }
@@ -2292,7 +2292,7 @@ internal sealed class OpenAIResponsesTurnExecutor(
             return true;
         }
 
-        if (IsWebSocketReceiveIdleTimeout(exception))
+        if (IsWebSocketTransportTimeout(exception))
         {
             return true;
         }
@@ -2364,15 +2364,16 @@ internal sealed class OpenAIResponsesTurnExecutor(
             or "cyber_policy";
     }
 
-    private static bool IsWebSocketReceiveIdleTimeout(Exception exception)
+    private static bool IsWebSocketTransportTimeout(Exception exception)
     {
         if (exception is TimeoutException &&
-            exception.Message.Contains("Codex subscription WebSocket did not receive", StringComparison.OrdinalIgnoreCase))
+            (exception.Message.Contains("Codex subscription WebSocket did not receive", StringComparison.OrdinalIgnoreCase) ||
+             exception.Message.Contains("Codex subscription WebSocket did not connect", StringComparison.OrdinalIgnoreCase)))
         {
             return true;
         }
 
-        return exception.InnerException is not null && IsWebSocketReceiveIdleTimeout(exception.InnerException);
+        return exception.InnerException is not null && IsWebSocketTransportTimeout(exception.InnerException);
     }
 
     private static bool IsNonRetryableCodexSubscriptionLimit(Exception exception)
