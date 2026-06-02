@@ -674,16 +674,47 @@ public sealed class AltaLiveToolTests
             [
                 new AltaAskAnswer { QuestionIndex = 0, SelectedChoiceIndexes = [0] },
                 new AltaAskAnswer { QuestionIndex = 1, FreeformText = "Line 1\n- bullet" },
-            ]);
+            ],
+            new AltaAskFileReview
+            {
+                FileModifiedAndSaved = true,
+                Comments =
+                [
+                    new AltaAskFileComment { Line = 125, Text = "Consider this branch." },
+                ],
+            });
 
         StringAssert.StartsWith(markdown, "# Ask response");
         StringAssert.Contains(markdown, "File: `src/CodeˋAlta/File.cs`");
         StringAssert.Contains(markdown, "Use \\*this\\* plan?");
         StringAssert.Contains(markdown, "Approve\\_now");
+        StringAssert.Contains(markdown, "## File User Comments");
+        StringAssert.Contains(markdown, "The file has been modified by the user and saved on disk.");
+        StringAssert.Contains(markdown, "Line 125:");
+        StringAssert.Contains(markdown, "Consider this branch.");
         StringAssert.Contains(markdown, "````text");
         StringAssert.Contains(markdown, "Line 1\n- bullet");
         StringAssert.Contains(markdown, "No answer provided.");
         Assert.IsFalse(markdown.Contains("askId", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
+    public void AltaAskAnswerMarkdownFormatter_OmitsFileReviewDetailsWithoutFile()
+    {
+        var request = CreateAskRequest("No file");
+
+        var markdown = AltaAskAnswerMarkdownFormatter.Format(
+            request,
+            [new AltaAskAnswer { QuestionIndex = 0, SelectedChoiceIndexes = [0] }],
+            new AltaAskFileReview
+            {
+                FileModifiedAndSaved = true,
+                Comments = [new AltaAskFileComment { Line = 125, Text = "Comment" }],
+            });
+
+        Assert.IsFalse(markdown.Contains("File:", StringComparison.Ordinal));
+        Assert.IsFalse(markdown.Contains("## File User Comments", StringComparison.Ordinal));
+        Assert.IsFalse(markdown.Contains("Line 125:", StringComparison.Ordinal));
     }
 
     [TestMethod]

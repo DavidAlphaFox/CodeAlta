@@ -6,6 +6,11 @@ using CodeAlta.Models;
 using CodeAlta.ViewModels;
 using CodeAlta.Views;
 using XenoAtom.Logging;
+using XenoAtom.Terminal;
+using XenoAtom.Terminal.UI;
+using XenoAtom.Terminal.UI.Commands;
+using XenoAtom.Terminal.UI.Controls;
+using XenoAtom.Terminal.UI.Input;
 using XenoAtom.Terminal.UI.Styling;
 
 namespace CodeAlta.App;
@@ -68,13 +73,16 @@ internal sealed class AskModeCoordinator : IDisposable
         {
             _sessionState.OpenSession(sessionId);
             var form = new AskQuestionFormView(ask);
-            form.Submitted += (_, answers) => _ = UiTaskDiagnostics.ObserveAsync(
-                () => SubmitAsync(ask, session, tab, answers),
-                "submit ask response",
-                _setStatus);
-            form.CancelRequested += (_, _) => ShowCancelConfirmation(ask, form);
             var fileReview = AskFileReviewView.Create(ask.Request.File, GetAskFileRootCandidates(session));
-            if (!_workspaceViewModel.TryEnterAskMode(sessionId, form.Root, fileReview))
+            if (fileReview is not null)
+            {
+                form.AddFileReviewCommands(fileReview);
+                fileReview.AddQuestionFocusCommand(form);
+            }
+
+            form.Submitted += (_, answers) => HandleSubmitRequest(ask, session, tab, form, fileReview, answers);
+            form.CancelRequested += (_, _) => HandleCancelRequest(ask, form, fileReview);
+            if (!_workspaceViewModel.TryEnterAskMode(sessionId, form.Root, fileReview?.Root))
             {
                 ClearActive();
                 return false;
@@ -111,14 +119,60 @@ internal sealed class AskModeCoordinator : IDisposable
         }
     }
 
-    private async Task SubmitAsync(AltaQueuedAsk ask, SessionViewDescriptor session, OpenSessionState tab, IReadOnlyList<AltaAskAnswer> answers)
+    private void HandleSubmitRequest(
+        AltaQueuedAsk ask,
+        SessionViewDescriptor session,
+        OpenSessionState tab,
+        AskQuestionFormView form,
+        AskFileReviewView? fileReview,
+        IReadOnlyList<AltaAskAnswer> answers)
     {
         if (!IsActive(ask))
         {
             return;
         }
 
-        var markdown = AltaAskAnswerMarkdownFormatter.Format(ask.Request, answers);
+        if (fileReview?.HasUnsavedChanges == true)
+        {
+            ShowUnsavedFileDialog(
+                "Submit Ask",
+                "The attached file has unsaved edits. Save them before submitting the ask response?",
+                "Save and submit",
+                ControlTone.Primary,
+                "Submit without saving",
+                ControlTone.Warning,
+                form.Tabs,
+                () =>
+                {
+                    if (!fileReview.TrySave(out var error))
+                    {
+                        _setStatus($"Failed to save attached ask file: {error}", false, StatusTone.Error);
+                        return;
+                    }
+
+                    ObserveSubmit(ask, session, tab, answers, fileReview);
+                },
+                () => ObserveSubmit(ask, session, tab, answers, fileReview));
+            return;
+        }
+
+        ObserveSubmit(ask, session, tab, answers, fileReview);
+    }
+
+    private void ObserveSubmit(AltaQueuedAsk ask, SessionViewDescriptor session, OpenSessionState tab, IReadOnlyList<AltaAskAnswer> answers, AskFileReviewView? fileReview)
+        => _ = UiTaskDiagnostics.ObserveAsync(
+            () => SubmitAsync(ask, session, tab, answers, fileReview?.CreateReviewSnapshot()),
+            "submit ask response",
+            _setStatus);
+
+    private async Task SubmitAsync(AltaQueuedAsk ask, SessionViewDescriptor session, OpenSessionState tab, IReadOnlyList<AltaAskAnswer> answers, AltaAskFileReview? fileReview)
+    {
+        if (!IsActive(ask))
+        {
+            return;
+        }
+
+        var markdown = AltaAskAnswerMarkdownFormatter.Format(ask.Request, answers, fileReview);
         try
         {
             RestoreNormalProjection(ask.SessionId);
@@ -135,6 +189,40 @@ internal sealed class AskModeCoordinator : IDisposable
             _setStatus($"Failed to submit ask response: {ex.Message}", false, StatusTone.Error);
             _ = TryPresentPendingAsk(ask.SessionId);
         }
+    }
+
+    private void HandleCancelRequest(AltaQueuedAsk ask, AskQuestionFormView form, AskFileReviewView? fileReview)
+    {
+        if (!IsActive(ask))
+        {
+            return;
+        }
+
+        if (fileReview?.HasUnsavedChanges == true)
+        {
+            ShowUnsavedFileDialog(
+                "Cancel Ask",
+                "The attached file has unsaved edits. Save them before exiting ask mode?",
+                "Save and exit",
+                ControlTone.Primary,
+                "Exit without saving",
+                ControlTone.Error,
+                form.Tabs,
+                () =>
+                {
+                    if (!fileReview.TrySave(out var error))
+                    {
+                        _setStatus($"Failed to save attached ask file: {error}", false, StatusTone.Error);
+                        return;
+                    }
+
+                    Cancel(ask);
+                },
+                () => Cancel(ask));
+            return;
+        }
+
+        ShowCancelConfirmation(ask, form);
     }
 
     private void Cancel(AltaQueuedAsk ask)
@@ -174,6 +262,74 @@ internal sealed class AskModeCoordinator : IDisposable
             _workspaceViewModel.GetAskModeBounds,
             () => form.Tabs)
             .Show();
+    }
+
+    private void ShowUnsavedFileDialog(
+        string title,
+        string message,
+        string saveText,
+        ControlTone saveTone,
+        string discardText,
+        ControlTone discardTone,
+        Visual focusTarget,
+        Action saveAndContinue,
+        Action discardAndContinue)
+    {
+        Dialog? dialog = null;
+        var closeButton = new Button(new TextBlock($"{NerdFont.MdClose} Close"));
+        closeButton.Click(Close);
+
+        var keepButton = new Button("Keep answering");
+        keepButton.Click(Close);
+
+        var discardButton = new Button(discardText) { Tone = discardTone };
+        discardButton.Click(() =>
+        {
+            Close();
+            discardAndContinue();
+        });
+
+        var saveButton = new Button(saveText) { Tone = saveTone };
+        saveButton.Click(() =>
+        {
+            Close();
+            saveAndContinue();
+        });
+
+        var buttons = new HStack(keepButton, discardButton, saveButton)
+        {
+            HorizontalAlignment = Align.End,
+            Spacing = 2,
+        };
+
+        dialog = new Dialog()
+            .Title(title)
+            .TopRightText(closeButton)
+            .IsModal(true)
+            .Padding(1)
+            .Content(new DockLayout()
+                .Content(new ScrollViewer(new TextBlock(message).Wrap(true), focusable: false).Stretch())
+                .Bottom(buttons)
+                .HorizontalAlignment(Align.Stretch)
+                .VerticalAlignment(Align.Stretch));
+        ResponsiveDialogSize.Apply(dialog, _workspaceViewModel.GetAskModeBounds(), minWidth: 56, minHeight: 9, widthFactor: 0.34, heightFactor: 0.28);
+        dialog.AddCommand(new Command
+        {
+            Id = "CodeAlta.Ask.UnsavedFile.Close",
+            LabelMarkup = "Keep answering",
+            DescriptionMarkup = "Close the save prompt and return to ask mode.",
+            Gesture = new KeyGesture(TerminalKey.Escape),
+            Importance = CommandImportance.Primary,
+            Execute = _ => Close(),
+        });
+        dialog.Show();
+
+        void Close()
+        {
+            var app = dialog?.App;
+            dialog?.Close();
+            app?.Focus(focusTarget);
+        }
     }
 
     private bool TryGetIdleSession(string sessionId, out SessionViewDescriptor session, out OpenSessionState tab)

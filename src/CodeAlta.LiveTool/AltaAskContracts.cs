@@ -85,6 +85,30 @@ public sealed record AltaAskAnswer
 }
 
 /// <summary>
+/// Describes user edits and line comments captured while reviewing an attached ask file.
+/// </summary>
+public sealed record AltaAskFileReview
+{
+    /// <summary>Gets a value indicating whether the attached file was modified by the user and saved on disk.</summary>
+    public bool FileModifiedAndSaved { get; init; }
+
+    /// <summary>Gets submitted comments attached to file lines.</summary>
+    public IReadOnlyList<AltaAskFileComment> Comments { get; init; } = [];
+}
+
+/// <summary>
+/// Describes a submitted comment attached to one line of an ask file.
+/// </summary>
+public sealed record AltaAskFileComment
+{
+    /// <summary>Gets the one-based line number the comment was attached to.</summary>
+    public int Line { get; init; }
+
+    /// <summary>Gets the submitted comment text.</summary>
+    public string Text { get; init; } = string.Empty;
+}
+
+/// <summary>
 /// Describes a queued ask instance.
 /// </summary>
 public sealed record AltaQueuedAsk
@@ -415,6 +439,14 @@ public static class AltaAskAnswerMarkdownFormatter
     /// <param name="answers">The answers supplied by the user.</param>
     /// <returns>Markdown suitable for a normal user prompt.</returns>
     public static string Format(AltaAskRequest request, IReadOnlyList<AltaAskAnswer> answers)
+        => Format(request, answers, fileReview: null);
+
+    /// <summary>Formats ask answers and attached-file review comments as Markdown without exposing the ask id.</summary>
+    /// <param name="request">The original ask request.</param>
+    /// <param name="answers">The answers supplied by the user.</param>
+    /// <param name="fileReview">The optional attached-file review details captured in the UI.</param>
+    /// <returns>Markdown suitable for a normal user prompt.</returns>
+    public static string Format(AltaAskRequest request, IReadOnlyList<AltaAskAnswer> answers, AltaAskFileReview? fileReview)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(answers);
@@ -429,6 +461,7 @@ public static class AltaAskAnswerMarkdownFormatter
         {
             builder.Append("File: `").Append(EscapeCodeSpan(request.File.Path!)).AppendLine("`");
             builder.AppendLine();
+            AppendFileReview(builder, fileReview);
         }
 
         builder.AppendLine("## Answers");
@@ -454,6 +487,39 @@ public static class AltaAskAnswerMarkdownFormatter
         }
 
         return builder.ToString().TrimEnd() + Environment.NewLine;
+    }
+
+    private static void AppendFileReview(StringBuilder builder, AltaAskFileReview? fileReview)
+    {
+        var comments = fileReview?.Comments ?? [];
+        if (fileReview is null || (!fileReview.FileModifiedAndSaved && comments.Count == 0))
+        {
+            return;
+        }
+
+        builder.AppendLine("## File User Comments");
+        builder.AppendLine();
+        if (fileReview.FileModifiedAndSaved)
+        {
+            builder.AppendLine("The file has been modified by the user and saved on disk.");
+            if (comments.Count > 0)
+            {
+                builder.AppendLine();
+            }
+        }
+
+        for (var index = 0; index < comments.Count; index++)
+        {
+            var comment = comments[index];
+            builder.Append("Line ").Append(Math.Max(1, comment.Line)).AppendLine(":");
+            AppendFreeform(builder, comment.Text);
+            if (index + 1 < comments.Count)
+            {
+                builder.AppendLine();
+            }
+        }
+
+        builder.AppendLine();
     }
 
     private static void AppendAnswer(StringBuilder builder, AltaAskQuestion question, AltaAskAnswer answer)

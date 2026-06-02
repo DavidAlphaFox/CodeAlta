@@ -132,12 +132,19 @@ public sealed class AskQuestionFormViewTests
         var fileReviewSource = File.ReadAllText(Path.Combine(GetCodeAltaSourceRoot(), "Views", "AskFileReviewView.cs"));
 
         StringAssert.Contains(coordinatorSource, "AskFileReviewView.Create(ask.Request.File, GetAskFileRootCandidates(session))");
-        StringAssert.Contains(coordinatorSource, "TryEnterAskMode(sessionId, form.Root, fileReview)");
+        StringAssert.Contains(coordinatorSource, "form.AddFileReviewCommands(fileReview)");
+        StringAssert.Contains(coordinatorSource, "TryEnterAskMode(sessionId, form.Root, fileReview?.Root)");
         StringAssert.Contains(workspaceViewModelSource, "Func<string, Visual, Visual?, bool>? _enterAskMode");
         StringAssert.Contains(tabHostSource, "splitter.First = fileReview");
         Assert.IsFalse(tabHostSource.Contains("AskFileReviewRatio", StringComparison.Ordinal));
-        StringAssert.Contains(fileReviewSource, "new CodeEditor()");
-        StringAssert.Contains(fileReviewSource, "File context replaces the session timeline while this ask is open");
+        StringAssert.Contains(fileReviewSource, "new CodeEditor(new CodeEditorConfig");
+        StringAssert.Contains(fileReviewSource, "CodeAlta.Ask.FileComment.Insert");
+        StringAssert.Contains(fileReviewSource, "CodeAlta.Ask.FileComment.Clear");
+        StringAssert.Contains(fileReviewSource, "TextEditorAutoSizeMode.Height");
+        StringAssert.Contains(fileReviewSource, "File context:");
+        StringAssert.Contains(fileReviewSource, "Clear comments");
+        StringAssert.Contains(fileReviewSource, "TrySave");
+        StringAssert.Contains(fileReviewSource, "CreateReviewSnapshot");
     }
 
     private static AltaQueuedAsk CreateQueuedAsk(AltaAskRequest request)

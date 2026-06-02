@@ -73,6 +73,28 @@ internal sealed class AskQuestionFormView
 
     public IReadOnlyList<bool> Visited => _visited;
 
+    public void AddFileReviewCommands(AskFileReviewView fileReview)
+    {
+        ArgumentNullException.ThrowIfNull(fileReview);
+        Root.AddCommand(fileReview.CreateSaveCommand());
+        Root.AddCommand(fileReview.CreateClearCommentsCommand());
+        Root.AddCommand(fileReview.CreateFocusEditorCommand());
+        Root.AddCommand(new Command
+        {
+            Id = "CodeAlta.Ask.FocusQuestions",
+            LabelMarkup = "Focus ask questions",
+            DescriptionMarkup = "Move focus back to the active ask question.",
+            Sequence = new KeySequence(
+                new KeyGesture(TerminalChar.CtrlG, TerminalModifiers.Ctrl),
+                new KeyGesture(TerminalChar.CtrlN, TerminalModifiers.Ctrl)),
+            Presentation = CommandPresentation.None,
+            Execute = _ => FocusCurrentQuestionInput(),
+        });
+    }
+
+    public void FocusCurrentQuestionInput()
+        => FocusSelectedQuestionInput();
+
     public void Next()
     {
         MarkVisited();
