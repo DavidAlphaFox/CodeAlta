@@ -3,13 +3,19 @@ using System.Text;
 
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：会话日志文件的追加/前置写入，带路径粒度锁与文件访问重试
 internal sealed class AgentSessionJournalFile
 {
+    // 说明：Windows 错误码 - 文件共享冲突
     private const int SharingViolation = 32;
+    // 说明：Windows 错误码 - 文件锁冲突
     private const int LockViolation = 33;
+    // 说明：文件操作重试间隔
     private static readonly TimeSpan FileRetryDelay = TimeSpan.FromMilliseconds(10);
+    // 说明：按文件路径维护的信号量字典，保证同路径操作串行
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _pathLocks = new(StringComparer.Ordinal);
 
+    // 函数功能：无条件追加多行文本到指定文件
     public async Task AppendLinesAsync(
         string path,
         IReadOnlyList<string> lines,
@@ -23,6 +29,7 @@ internal sealed class AgentSessionJournalFile
                 cancellationToken)
             .ConfigureAwait(false);
 
+    // 函数功能：在满足 shouldAppendAsync 条件时才追加多行文本，持路径锁执行
     public async Task AppendLinesIfAsync(
         string path,
         IReadOnlyList<string> lines,
@@ -58,6 +65,7 @@ internal sealed class AgentSessionJournalFile
             .ConfigureAwait(false);
     }
 
+    // 函数功能：确保文件首行符合预期，不符时写入 firstLine（文件为空则直接写，否则前置插入）
     public async Task EnsureFirstLineAsync(
         string path,
         string firstLine,
@@ -81,6 +89,7 @@ internal sealed class AgentSessionJournalFile
             .ConfigureAwait(false);
     }
 
+    // 函数功能：先确保首行存在，再追加多行文本，两步操作在同一路径锁内原子完成
     public async Task AppendLinesWithRequiredFirstLineAsync(
         string path,
         string firstLine,
@@ -115,6 +124,7 @@ internal sealed class AgentSessionJournalFile
             .ConfigureAwait(false);
     }
 
+    // 函数功能：追加单行文本到文件，委托给 AppendLinesAsync 实现
     public Task AppendLineAsync(
         string path,
         string line,
@@ -122,6 +132,7 @@ internal sealed class AgentSessionJournalFile
         CancellationToken cancellationToken)
         => AppendLinesAsync(path, [line], encoding, cancellationToken);
 
+    // 函数功能：核心追加实现，以追加模式打开文件流并逐行写入，支持文件访问重试
     private static async Task AppendLinesCoreAsync(
         string path,
         IReadOnlyList<string> lines,
@@ -149,6 +160,7 @@ internal sealed class AgentSessionJournalFile
             .ConfigureAwait(false);
     }
 
+    // 函数功能：核心实现，读取现有首行并判断是否需要写入/前置 firstLine
     private static async Task EnsureFirstLineCoreAsync(
         string path,
         string firstLine,
@@ -196,6 +208,7 @@ internal sealed class AgentSessionJournalFile
             .ConfigureAwait(false);
     }
 
+    // 函数功能：将流清空并写入首行（适用于新文件或需整体覆盖的场景）
     private static async Task WriteFirstLineAsync(
         FileStream stream,
         string firstLine,
@@ -210,6 +223,7 @@ internal sealed class AgentSessionJournalFile
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：通过临时文件将 firstLine 前置到已有文件内容头部，完成后替换原文件
     private static async Task PrependFirstLineAsync(
         FileStream stream,
         string directory,
@@ -255,6 +269,7 @@ internal sealed class AgentSessionJournalFile
         }
     }
 
+    // 函数功能：对指定路径加锁后执行无返回值异步操作，确保同路径串行
     public async Task WithPathLockAsync(
         string path,
         Func<Task> action,
@@ -271,6 +286,7 @@ internal sealed class AgentSessionJournalFile
             .ConfigureAwait(false);
     }
 
+    // 函数功能：对指定路径加锁后执行有返回值异步操作，返回 action 的结果
     public async Task<T> WithPathLockAsync<T>(
         string path,
         Func<Task<T>> action,
@@ -291,6 +307,7 @@ internal sealed class AgentSessionJournalFile
         }
     }
 
+    // 函数功能：执行无返回值文件操作，遇文件访问冲突时自动重试
     internal static async Task RetryFileOperationAsync(Func<Task> action, CancellationToken cancellationToken)
     {
         await RetryFileOperationAsync(
@@ -303,9 +320,11 @@ internal sealed class AgentSessionJournalFile
             .ConfigureAwait(false);
     }
 
+    // 函数功能：执行有返回值文件操作，无最大重试时限，委托给带超时版本实现
     internal static async Task<T> RetryFileOperationAsync<T>(Func<Task<T>> action, CancellationToken cancellationToken)
         => await RetryFileOperationAsync(action, maxRetryTime: null, cancellationToken).ConfigureAwait(false);
 
+    // 函数功能：带可选最大重试时限的核心重试实现，捕获 IOException/UnauthorizedAccessException 并延迟重试
     internal static async Task<T> RetryFileOperationAsync<T>(
         Func<Task<T>> action,
         TimeSpan? maxRetryTime,
@@ -340,9 +359,11 @@ internal sealed class AgentSessionJournalFile
         }
     }
 
+    // 函数功能：判断最大重试时限是否已到期
     private static bool HasRetryWindowElapsed(long startedAt, TimeSpan? maxRetryTime)
         => maxRetryTime is not null && TimeProvider.System.GetElapsedTime(startedAt) >= maxRetryTime.Value;
 
+    // 函数功能：判断 IOException 是否由文件共享/锁冲突引起（可重试）
     private static bool IsRetryableFileAccessException(IOException ex)
     {
         var errorCode = ex.HResult & 0xFFFF;

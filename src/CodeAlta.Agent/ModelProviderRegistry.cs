@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：以 Provider ID 为键的内存模型提供者注册表，支持注册、注销、运行时懒加载及异步释放
 /// <summary>
 /// In-memory model provider registry keyed by configured provider id.
 /// </summary>
@@ -90,6 +91,7 @@ public sealed class ModelProviderRegistry : IModelProviderRegistry, IAsyncDispos
         return false;
     }
 
+    // 函数功能：接口显式实现，将可空版本的 TryGetProvider 适配为接口要求的非空 out 参数形式
     bool IModelProviderRegistry.TryGetProvider(ModelProviderId providerId, out ModelProviderDescriptor descriptor)
     {
         if (TryGetProvider(providerId, out var found))
@@ -172,6 +174,7 @@ public sealed class ModelProviderRegistry : IModelProviderRegistry, IAsyncDispos
         }
     }
 
+    // 函数功能：校验工厂创建的运行时不为 null 且 Provider ID 与描述符一致，否则抛出 InvalidOperationException
     private static IModelProviderRuntime ValidateRuntime(ModelProviderDescriptor expectedDescriptor, IModelProviderRuntime? runtime)
     {
         if (runtime is null)
@@ -188,6 +191,7 @@ public sealed class ModelProviderRegistry : IModelProviderRegistry, IAsyncDispos
         return runtime;
     }
 
+    // 函数功能：同步阻塞地释放运行时资源（注册表内部替换旧运行时时调用）
     private static void DisposeRuntime(IModelProviderRuntime? runtime)
     {
         if (runtime is not null)
@@ -196,6 +200,7 @@ public sealed class ModelProviderRegistry : IModelProviderRegistry, IAsyncDispos
         }
     }
 
+    // 类型：内部注册条目，持有描述符、工厂函数及已创建的运行时实例（懒初始化）
     private readonly record struct Registration(
         ModelProviderDescriptor Descriptor,
         Func<IModelProviderRuntime> Factory,

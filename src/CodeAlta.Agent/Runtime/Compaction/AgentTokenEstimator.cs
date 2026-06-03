@@ -2,8 +2,10 @@ using System.Text;
 
 namespace CodeAlta.Agent.Runtime.Compaction;
 
+// 模块功能：基于启发式规则估算对话 prompt 的 token 用量，支持窗口快照与历史操作快照两种快速路径
 internal static class AgentTokenEstimator
 {
+    // 函数功能：估算完整 prompt 的 token 数，优先使用窗口快照或上次操作快照，回退到逐消息累计估算
     public static AgentTokenEstimate EstimatePromptTokens(
         string? systemMessage,
         string? developerInstructions,
@@ -43,6 +45,7 @@ internal static class AgentTokenEstimator
         return new AgentTokenEstimate(Math.Max(estimatedTokens, 1), "local-heuristic", IsEstimated: true);
     }
 
+    // 函数功能：估算单条对话消息的 token 数，含固定开销 6 个 token
     public static long EstimateMessage(AgentConversationMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -56,15 +59,19 @@ internal static class AgentTokenEstimator
         return total;
     }
 
+    // 函数功能：估算压缩检查点摘要的 token 数，含 16 个固定开销
     public static long EstimateCheckpointTokens(string summary)
         => EstimateText(summary) + 16;
 
+    // 函数功能：估算任意文本的 token 数，null 或空时返回 0
     public static long EstimateTextTokens(string? text)
         => EstimateText(text);
 
+    // 函数功能：判断对话首条消息是否为压缩检查点摘要
     private static bool HasLeadingCheckpoint(IReadOnlyList<AgentConversationMessage> conversation)
         => conversation.Count > 0 && AgentCompactionCheckpoint.TryExtractSummary(conversation[0]) is not null;
 
+    // 函数功能：尝试利用窗口快照（provider 上报的当前 token 数）加上尾部本地估算构建估算结果
     private static bool TryGetWindowSnapshotEstimate(
         IReadOnlyList<AgentConversationMessage> conversation,
         AgentSessionUsage? usage,
@@ -100,6 +107,7 @@ internal static class AgentTokenEstimator
         return true;
     }
 
+    // 函数功能：尝试用上一次操作的输入/输出 token 之和加上末尾新消息的估算构建估算结果
     private static bool TryGetLastOperationWindowEstimate(
         IReadOnlyList<AgentConversationMessage> conversation,
         AgentOperationUsageSnapshot lastOperation,
@@ -132,6 +140,7 @@ internal static class AgentTokenEstimator
         return true;
     }
 
+    // 函数功能：按消息部件类型分发并估算其 token 数，图片固定 1024，未知类型返回 4
     private static long EstimatePart(AgentMessagePart part)
     {
         return part switch
@@ -146,6 +155,7 @@ internal static class AgentTokenEstimator
         };
     }
 
+    // 函数功能：估算 Data 部件的 token 数，图片固定 1024，其他按 Base64 长度除以 8 估算
     private static long EstimateData(AgentMessagePart.Data data)
     {
         var metadataTokens = EstimateText(data.Name) + EstimateText(data.MediaType) + 8;
@@ -157,6 +167,7 @@ internal static class AgentTokenEstimator
         return metadataTokens + Math.Max(data.Base64Data.Length / 8, 32);
     }
 
+    // 函数功能：将工具结果的所有文本项与错误信息拼接后估算 token 数
     private static long EstimateToolResult(AgentToolResult result)
     {
         var builder = new StringBuilder();
@@ -184,9 +195,11 @@ internal static class AgentTokenEstimator
     private static long EstimateText(string? text)
         => string.IsNullOrWhiteSpace(text) ? 0 : TokenEstimator.Estimate(text.AsSpan().Trim());
 
+    // 函数功能：对两个可空 long 求和，至少有一个有值时返回结果，否则返回 null
     private static long? Sum(long? left, long? right)
         => left.HasValue || right.HasValue ? (left ?? 0) + (right ?? 0) : null;
 
+    // 函数功能：从末尾向前查找最后一条 Assistant 角色消息的索引，未找到返回 -1
     private static int FindLastAssistantMessageIndex(IReadOnlyList<AgentConversationMessage> conversation)
     {
         for (var index = conversation.Count - 1; index >= 0; index--)

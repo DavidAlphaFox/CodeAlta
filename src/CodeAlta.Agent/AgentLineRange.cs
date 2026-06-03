@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent;
 
+// 模块功能：表示文本文档中的行范围（起止行均从 1 开始计数）
 /// <summary>
 /// Represents a line range in a text document.
 /// </summary>

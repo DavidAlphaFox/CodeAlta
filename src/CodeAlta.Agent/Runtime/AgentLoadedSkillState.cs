@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：描述已为 Agent 运行时会话激活的单个技能状态，包含路径、来源、激活方式及可用性信息
 /// <summary>
 /// Represents one skill that has been activated for a agent runtime session.
 /// </summary>

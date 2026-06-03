@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：描述已存储或活跃中的 CodeAlta Agent 会话元数据及各运行时特定详情类型
 /// <summary>
 /// Describes a stored or active CodeAlta agent session.
 /// </summary>
@@ -33,6 +34,7 @@ public sealed record AgentSessionMetadata(
     string? CreatedBySessionId = null,
     AgentRunId? CreatedByRunId = null);
 
+// 类型：Provider/Runtime 特定会话元数据详情基类，通过 $type 区分 Codex、Copilot 等子类型
 /// <summary>
 /// Base type for provider/runtime-specific session metadata details.
 /// </summary>
@@ -42,6 +44,7 @@ public sealed record AgentSessionMetadata(
 [JsonDerivedType(typeof(RawApiSessionMetadataDetails), "rawApi")]
 public abstract record AgentSessionMetadataDetails;
 
+// 类型：Codex 特定会话元数据，包含提供者标识、来源、状态、是否临时会话等信息
 /// <summary>
 /// Codex-specific session metadata details.
 /// </summary>
@@ -58,6 +61,7 @@ public sealed record CodexSessionMetadataDetails(
     string? SessionName = null)
     : AgentSessionMetadataDetails;
 
+// 类型：Copilot 特定会话元数据，标记会话是否在远端运行
 /// <summary>
 /// Copilot-specific session metadata details.
 /// </summary>
@@ -66,6 +70,7 @@ public sealed record CopilotSessionMetadataDetails(
     bool IsRemote = false)
     : AgentSessionMetadataDetails;
 
+// 类型：原始 API 运行时特定会话元数据，记录提供者显示名、基础 URI、提供者会话 ID 及本地标题
 /// <summary>
 /// Provider-backed agent-runtime session metadata details.
 /// </summary>

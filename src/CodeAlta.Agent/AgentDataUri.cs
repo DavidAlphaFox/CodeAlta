@@ -1,7 +1,9 @@
 namespace CodeAlta.Agent;
 
+// 模块功能：解析 data URI 中的 base64 编码内容，提取媒体类型与 base64 数据字符串
 internal static class AgentDataUri
 {
+    // 函数功能：尝试从 data URI 字符串中解析 base64 载荷；成功时输出 mediaType 与 base64Data，否则返回 false
     public static bool TryParseBase64(string value, out string mediaType, out string base64Data)
     {
         mediaType = string.Empty;

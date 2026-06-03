@@ -11,6 +11,7 @@ using CodeAlta.Agent.Runtime.Tools;
 
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：基于本地原始 API 的 Agent 会话实现，负责管理对话历史、工具调用、流式事件推送及上下文压缩（Compaction）全流程。
 /// <summary>
 /// Shared session implementation for provider-backed local raw-API agents.
 /// </summary>
@@ -54,6 +55,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
     private CancellationTokenSource? _activeRunCancellation;
     private bool _disposed;
 
+    // 函数功能：构造 AgentSession，初始化提供者、历史记录、对话快照、事件通道及压缩摘要器；从历史中重建已加载技能状态。
     /// <summary>
     /// Initializes a new instance of the <see cref="AgentSession"/> class.
     /// </summary>
@@ -109,6 +111,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         Provider = provider;
     }
 
+    // 说明：当前会话所绑定的模型提供者运行时描述符。
     /// <summary>
     /// Gets the configured provider descriptor.
     /// </summary>
@@ -123,6 +126,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
     /// <inheritdoc />
     public string? WorkspacePath => _summary.WorkingDirectory;
 
+    // 函数功能：以异步枚举方式持续产出 AgentEvent，直到事件通道被关闭或取消。
     /// <inheritdoc />
     public async IAsyncEnumerable<AgentEvent> StreamEventsAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -133,6 +137,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：注册事件订阅者；返回 IDisposable，释放时自动注销，可多路并发订阅。
     /// <inheritdoc />
     public IDisposable Subscribe(Action<AgentEvent> handler)
     {
@@ -144,6 +149,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return new SubscriberLease(() => _subscribers.TryRemove(key, out _));
     }
 
+    // 函数功能：启动一轮 Agent 运行：写入用户消息、进入工具调用循环（含转向输入、压缩触发、溢出恢复），直到模型不再产出工具调用后发出 Idle 事件并返回 runId。
     /// <inheritdoc />
     public async Task<AgentRunId> SendAsync(AgentSendOptions options, CancellationToken cancellationToken = default)
     {
@@ -460,6 +466,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：向当前活动运行注入转向输入（用户插话）；若无活动运行或 runId 不匹配则抛出异常，返回活动 runId。
     /// <inheritdoc />
     public async Task<AgentRunId> SteerAsync(AgentSteerOptions options, CancellationToken cancellationToken = default)
     {
@@ -491,6 +498,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：请求取消当前活动运行，通过触发 CancellationTokenSource 实现。
     /// <inheritdoc />
     public Task AbortAsync(CancellationToken cancellationToken = default)
     {
@@ -499,10 +507,12 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return Task.CompletedTask;
     }
 
+    // 函数功能：手动触发上下文压缩（不返回结果），委托给 CompactWithOutcomeAsync 实现。
     /// <inheritdoc />
     public Task CompactAsync(CancellationToken cancellationToken = default)
         => CompactWithOutcomeAsync(cancellationToken);
 
+    // 函数功能：手动触发上下文压缩并返回压缩结果（压缩前后 token 数、移除消息数等）；若无可压缩内容则返回"Nothing to compact"。
     /// <inheritdoc />
     public async Task<AgentCompactionOutcome?> CompactWithOutcomeAsync(CancellationToken cancellationToken = default)
     {
@@ -540,6 +550,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：返回当前会话的完整事件历史快照（只读副本）。
     /// <inheritdoc />
     public Task<IReadOnlyList<AgentEvent>> GetHistoryAsync(CancellationToken cancellationToken = default)
     {
@@ -548,6 +559,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return Task.FromResult<IReadOnlyList<AgentEvent>>([.. _history]);
     }
 
+    // 函数功能：异步释放会话资源：取消活动运行、清理提供者会话（如支持）、释放 CancellationTokenSource 及信号量，并关闭事件通道。
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
@@ -574,6 +586,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：合并内置工具集与会话自定义工具集，返回本次运行可用的完整工具列表。
     private IReadOnlyList<AgentToolDefinition> BuildAvailableTools()
     {
         var builtIns = AgentBuiltInToolFactory.CreateDefaultTools(
@@ -591,6 +604,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             : builtIns;
     }
 
+    // 函数功能：将开发者指令与运行时上下文字符串合并为一段完整的开发者提示文本，任一为空时直接返回另一方。
     private static string CombineDeveloperInstructions(string? developerInstructions, string runtimeContext)
     {
         if (string.IsNullOrWhiteSpace(developerInstructions))
@@ -610,6 +624,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
                """;
     }
 
+    // 函数功能：返回在最近一次压缩完成前已激活的技能列表，用于在系统提示中集成技能内容；若尚未压缩则返回空列表。
     private IReadOnlyList<AgentLoadedSkillState> GetPromptIntegratedLoadedSkills()
     {
         if (_state.LoadedSkills.Count == 0 || _state.LastCompactedAt is not { } lastCompactedAt)
@@ -622,6 +637,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             .ToArray();
     }
 
+    // 函数功能：构建向提供者发送的单次 Turn 请求对象，含模型信息、系统提示、对话历史和工具列表；conversation 为 null 时从内部状态构建。
     private AgentTurnRequest CreateTurnRequest(
         AgentRunId runId,
         string? systemMessage,
@@ -651,6 +667,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         };
     }
 
+    // 函数功能：基于当前对话列表生成提交给提供者的对话视图：先裁剪活动运行外的内联图片，再修复不完整工具结果，返回修剪结果。
     private AgentInlineMediaPruneResult CreateProviderConversation()
     {
         var pruned = AgentMediaCompaction.PruneInlineImages(_conversation, ShouldPreserveInlineMediaForActiveRun);
@@ -663,6 +680,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             : pruned with { Messages = normalized };
     }
 
+    // 函数功能：基于当前对话估算活跃上下文窗口 token 数，并将估算结果附加到 usage 快照后返回；usage 为 null 则返回 null。
     private static AgentSessionUsage? CreateConversationUsageSnapshot(
         string? systemMessage,
         string? developerInstructions,
@@ -695,6 +713,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return AgentUsageFactory.AttachMessageCount(usageWithWindow, conversation.Count);
     }
 
+    // 函数功能：为对话 token 估算选择基准 usage；当提供者延续模式仅上报增量用量且当前窗口变小时，回退到上一个更大的窗口快照作为估算基础。
     private static AgentSessionUsage SelectUsageForConversationEstimate(
         AgentSessionUsage? previousUsage,
         AgentSessionUsage usage,
@@ -720,6 +739,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         };
     }
 
+    // 函数功能：将用户输入转为对话消息追加到对话列表，发出原始事件和内容完成事件；若输入中含技能激活标记则同时记录技能激活事件并持久化状态。
     private async Task AppendUserMessageAsync(AgentInput input, AgentRunId runId, string? askId, CancellationToken cancellationToken)
     {
         var message = new AgentConversationMessage(
@@ -782,6 +802,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：在状态门控下取出所有待处理的转向输入，逐一调用 AppendUserMessageAsync 追加；若无待处理输入则返回 false。
     private async Task<bool> AppendPendingSteerInputsAsync(AgentRunId runId, CancellationToken cancellationToken)
     {
         List<AgentInput>? pendingInputs = null;
@@ -809,6 +830,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return true;
     }
 
+    // 函数功能：在状态门控下清除活动运行标记（runId、对话起始索引、CancellationSource、待处理转向队列），幂等且安全。
     private async Task CompleteActiveRunAsync(AgentRunId runId, CancellationToken cancellationToken)
     {
         await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -830,6 +852,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：重新估算当前对话的 token 用量并更新内部状态与摘要；若对话中含工具消息则额外发出临时性用量更新事件。
     private async Task RefreshEstimatedUsageAsync(
         AgentRunId runId,
         string? systemMessage,
@@ -888,6 +911,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         await _store.UpsertSessionAsync(_summary, cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：若本次运行产生了文件变更，将 Unified Diff 封装为 DiffUpdated 事件追加到历史，供前端展示。
     private async Task AppendTurnDiffUpdatedAsync(
         AgentTurnFileChangeTracker fileChangeTracker,
         AgentRunId runId,
@@ -910,6 +934,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         await AppendEventsAsync([diffUpdated], cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：将模型响应追加到对话，更新会话状态与摘要（标题、摘要、用量），并为文本/推理/工具调用等各类消息片段分别发出对应事件。
     private async Task AppendAssistantMessageAsync(
         AgentTurnResponse response,
         AgentRunId runId,
@@ -1028,6 +1053,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         await _store.UpsertSessionAsync(_summary, cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：接收提供者流式增量数据，封装为临时性 AgentContentDeltaEvent 发布给订阅者（不持久化）。
     private async ValueTask OnStreamingDeltaAsync(
         AgentRunId runId,
         AgentTurnDelta delta,
@@ -1047,6 +1073,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         await AppendEventsAsync([@event], AgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：处理提供者会话更新事件：若包含 discardDraft 指令则先清除对应的草稿增量历史，再将更新事件以临时模式发布。
     private async ValueTask OnSessionUpdateAsync(
         AgentRunId runId,
         AgentTurnSessionUpdate update,
@@ -1070,6 +1097,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         await AppendEventsAsync([@event], AgentEventPersistenceMode.TransientOnly, cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：为流式增量事件构建 details JSON 对象；将 attemptId 和 draft 标志合并写入，纯草稿且无附加信息时可直接返回 null。
     private static JsonElement? CreateStreamingDeltaDetails(AgentTurnDelta delta)
     {
         if (delta.Details is not null &&
@@ -1110,6 +1138,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
     }
 
+    // 函数功能：从历史列表末尾向前扫描，移除属于指定 attemptId 的所有草稿增量事件（被丢弃的 draft 数据清理）。
     private void RemoveTransientDraftDeltas(string attemptId)
     {
         for (var index = _history.Count - 1; index >= 0; index--)
@@ -1123,6 +1152,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：从会话更新的 details JSON 中解析 discardDraft 标志和 draftAttemptId，用于决定是否清除草稿增量。
     private static bool TryGetDiscardDraftAttemptId(JsonElement? details, out string attemptId)
     {
         attemptId = string.Empty;
@@ -1137,6 +1167,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
                !string.IsNullOrWhiteSpace(attemptId);
     }
 
+    // 函数功能：从增量事件的 details JSON 中读取 draft 标志和 attemptId，用于识别可丢弃的草稿增量。
     private static bool TryGetDraftAttemptId(JsonElement? details, out string attemptId)
     {
         attemptId = string.Empty;
@@ -1150,6 +1181,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
                !string.IsNullOrWhiteSpace(attemptId);
     }
 
+    // 函数功能：从 JsonElement 中安全读取非空字符串属性，失败时 value 为空字符串并返回 false。
     private static bool TryGetStringProperty(JsonElement element, string propertyName, out string value)
     {
         if (element.TryGetProperty(propertyName, out var property) &&
@@ -1164,6 +1196,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return false;
     }
 
+    // 函数功能：从 JsonElement 中安全读取布尔属性，失败时 value 为 false 并返回 false。
     private static bool TryGetBooleanProperty(JsonElement element, string propertyName, out bool value)
     {
         if (element.TryGetProperty(propertyName, out var property) &&
@@ -1177,6 +1210,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return false;
     }
 
+    // 函数功能：在每次运行开始时发出模型选择事件（包含 providerKey、modelId、reasoningEffort），供前端展示当前使用的模型。
     private async Task AppendModelSelectionEventAsync(AgentRunId runId, CancellationToken cancellationToken)
     {
         var modelId = NormalizeOptionalText(_options.Model) ?? NormalizeOptionalText(_summary.ModelId);
@@ -1191,6 +1225,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         await AppendEventsAsync([update], cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：序列化模型选择信息（providerKey、modelId、reasoningEffort）为 JSON 元素，供模型选择事件的 Details 字段使用。
     private JsonElement CreateModelSelectionDetails(string? modelId, AgentReasoningEffort? reasoningEffort)
     {
         using var stream = new MemoryStream();
@@ -1218,9 +1253,11 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
     }
 
+    // 函数功能：将可选文本去除首尾空白后返回；为空白则返回 null。
     private static string? NormalizeOptionalText(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    // 函数功能：当系统提示哈希与上次持久化值不同时，发出 AgentSystemPromptEvent；首次运行标记为 "session_start"，后续变更标记为 "changed"。
     private async Task AppendSystemPromptEventIfChangedAsync(
         AgentRunId runId,
         string? systemMessage,
@@ -1255,6 +1292,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         await AppendEventsAsync([promptEvent], cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：统计系统提示和开发者指令的字符数与估算 token 数，返回 AgentSystemPromptStatistics 供事件携带。
     private static AgentSystemPromptStatistics CreateSystemPromptStatistics(string? systemMessage, string? developerInstructions)
     {
         var systemChars = systemMessage?.Length ?? 0;
@@ -1264,9 +1302,11 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return new AgentSystemPromptStatistics(systemTokens, developerTokens, systemTokens + developerTokens, systemChars, developerChars);
     }
 
+    // 函数功能：对单段文本进行 token 数量估算，溢出时抛出 OverflowException。
     private static int EstimatePromptTokens(string? text)
         => checked((int)TokenEstimator.Estimate(text));
 
+    // 函数功能：将系统提示哈希、提供者渠道映射及 token 统计序列化为版本化 manifest JSON，用于 AgentSystemPromptEvent 的 manifest 字段。
     private static JsonElement CreateSystemPromptManifest(string effectivePromptHash, AgentSystemPromptStatistics statistics)
     {
         using var stream = new MemoryStream();
@@ -1293,11 +1333,13 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
     }
 
+    // 函数功能：以默认持久化模式（DurableCanonical）追加事件列表的重载快捷方法。
     private async Task AppendEventsAsync(
         IReadOnlyList<AgentEvent> events,
         CancellationToken cancellationToken)
         => await AppendEventsAsync(events, AgentEventPersistenceMode.DurableCanonical, cancellationToken).ConfigureAwait(false);
 
+    // 函数功能：将运行异常封装为 AgentErrorEvent 追加到历史；忽略 IO/权限/Disposed 等写入失败，避免覆盖原始异常。
     private async Task AppendRunErrorAsync(AgentRunId runId, Exception exception)
     {
         var message = exception is OperationCanceledException
@@ -1320,6 +1362,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：核心事件追加方法：更新内存历史、按持久化模式写入存储、向事件通道写入并依次通知所有订阅者（订阅者异常不向外传播）。
     private async Task AppendEventsAsync(
         IReadOnlyList<AgentEvent> events,
         AgentEventPersistenceMode persistenceMode,
@@ -1354,6 +1397,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：执行单次模型 Turn；若遇上下文溢出错误则自动触发 Compaction 后重试一次，重试仍溢出则透传异常。
     private async Task<AgentTurnResponse> ExecuteTurnWithOverflowRecoveryAsync(
         AgentTurnRequest request,
         AgentRunId runId,
@@ -1417,6 +1461,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：若当前对话 token 估算值超过压缩比例阈值，则自动触发 CompactCoreAsync；未超阈值或压缩未启用时直接返回。
     private async Task MaybeCompactForThresholdAsync(
         AgentRunId? runId,
         string? systemMessage,
@@ -1463,6 +1508,8 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             .ConfigureAwait(false);
     }
 
+    // 函数功能：核心压缩逻辑：最多三次规划尝试（含 shrink 子尝试），生成摘要检查点后替换对话历史，
+    //          更新状态/摘要并发出压缩完成事件；返回压缩结果，无可压缩内容时返回 null。
     private async Task<AgentCompactionOutcome?> CompactCoreAsync(
         AgentCompactionTrigger trigger,
         AgentRunId? runId,
@@ -1839,6 +1886,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             PostCompactionTokens: result.TokensAfter);
     }
 
+    // 函数功能：根据压缩配置和 token 预算计算摘要生成器的最大输出 token 上限，综合考虑输入上下文比例、目标 token 的摘要份额和模型输出限制。
     private static int GetCompactionSummarizerMaxOutputTokens(
         AgentCompactionSettings settings,
         AgentTokenBudget budget,
@@ -1864,11 +1912,13 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return (int)Math.Clamp(desired, 1L, int.MaxValue);
     }
 
+    // 函数功能：从压缩配置中解析压缩后目标 token 占输入上限的比例，超出最大值时截断。
     private static double ResolvePostCompactionTargetRatio(AgentCompactionSettings settings)
         => settings.PostCompactionTargetRatio > 0
             ? Math.Min(settings.PostCompactionTargetRatio, AgentCompactionSettings.MaxPostCompactionTargetRatio)
             : AgentCompactionSettings.DefaultPostCompactionTargetRatio;
 
+    // 函数功能：将压缩后目标比例乘以输入上下文限制，计算出压缩后期望的 token 绝对数量下界。
     private static long ResolvePostCompactionTargetTokens(AgentCompactionSettings settings, AgentTokenBudget budget)
     {
         var inputContextLimit = budget.InputContextLimit is > 0
@@ -1877,6 +1927,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return Math.Max((long)Math.Floor(inputContextLimit * ResolvePostCompactionTargetRatio(settings)), 1L);
     }
 
+    // 函数功能：根据摘要占目标比例，计算检查点（摘要消息本身）允许占用的最大 token 数。
     private static long ResolveCheckpointTargetTokens(AgentCompactionSettings settings, long postCompactionTargetTokens)
     {
         var summaryShare = settings.SummaryShareOfTarget > 0
@@ -1885,6 +1936,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return Math.Max((long)Math.Floor(postCompactionTargetTokens * summaryShare), 1L);
     }
 
+    // 函数功能：判断摘要检查点是否超出目标份额或占比过大，以决定是否需要进一步 ShrinkSummary 压缩摘要本身。
     private static bool ShouldShrinkCompactionSummary(
         long postCompactionTargetTokens,
         long checkpointTokens,
@@ -1894,6 +1946,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return checkpointTokens > checkpointTargetTokens || checkpointTokens >= relativeSummarySizeThreshold;
     }
 
+    // 函数功能：分析压缩后未达到目标 token 的具体原因（固定提示过大、锚点消息过大、摘要过大、保留消息过多等），返回枚举字符串用于诊断。
     private static string DetermineTargetMissReason(
         AgentCompactionPreparation preparation,
         AgentCompactionResult result,
@@ -1939,6 +1992,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return "input_fit_only";
     }
 
+    // 函数功能：将压缩检查点的全部统计字段序列化为 codealta.localCompaction.v1 格式的 JSON 元素，供 CompactionCompleted 事件携带。
     private static JsonElement CreateCompactionDetailsElement(AgentCompactionCheckpoint checkpoint)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
@@ -2100,6 +2154,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return document.RootElement.Clone();
     }
 
+    // 函数功能：向 Utf8JsonWriter 写入一个字符串数组 JSON 属性。
     private static void WriteStringArray(Utf8JsonWriter writer, string propertyName, IReadOnlyList<string> values)
     {
         writer.WritePropertyName(propertyName);
@@ -2112,11 +2167,13 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         writer.WriteEndArray();
     }
 
+    // 函数功能：检查估算的 prompt token 数是否在预算上限内（无上限时始终视为满足）。
     private static bool FitsResolvedPromptBudget(long promptTokens, AgentTokenBudget budget)
     {
         return budget.InputContextLimit is null || promptTokens <= budget.InputContextLimit.Value;
     }
 
+    // 函数功能：基于压缩后结果和预算创建新的 AgentSessionUsage 快照，标记为 Compaction 范围和 RecoveredHistory 来源。
     private static AgentSessionUsage? CreateCompactionUsage(
         AgentCompactionResult result,
         AgentTokenBudget budget,
@@ -2139,9 +2196,11 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             Details: previousUsage?.Details);
     }
 
+    // 函数功能：统计历史中非流式增量的持久化事件总数，用于确定压缩后事件偏移量。
     private long CountDurableEvents()
         => _history.Count(static @event => @event is not AgentContentDeltaEvent);
 
+    // 函数功能：当对话中存在可裁剪的内联图片时，生成仅针对内联媒体的压缩准备对象（MessagesToSummarize 为空）；否则返回 null。
     private AgentCompactionPreparation? TryCreateInlineMediaCompactionPreparation(
         AgentCompactionTrigger trigger,
         string? systemMessage,
@@ -2179,11 +2238,13 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             PreviousSummary: previousSummary);
     }
 
+    // 函数功能：判断某条消息在压缩后是否应保留内联图片：仅当该消息是对话末尾的用户消息时保留。
     private bool ShouldPreserveInlineMediaInCompactedMessage(AgentConversationMessage message)
         => _conversation.Count > 0 &&
            _conversation[^1].Role is AgentConversationRole.User &&
            ReferenceEquals(message, _conversation[^1]);
 
+    // 函数功能：判断某条消息在当前活动运行期间是否应保留内联图片：仅保留从活动运行起始索引至对话末尾的消息图片。
     private bool ShouldPreserveInlineMediaForActiveRun(AgentConversationMessage message)
     {
         if (_activeRunConversationStartIndex is not { } startIndex)
@@ -2202,12 +2263,14 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return false;
     }
 
+    // 函数功能：在历史中找到最后一条用户内容完成事件的 ContentId，用作压缩锚点。
     private string? FindLatestUserContentId()
         => _history
             .OfType<AgentContentCompletedEvent>()
             .LastOrDefault(static @event => @event.Kind is AgentContentKind.User)
             ?.ContentId;
 
+    // 函数功能：从对话末尾向前取最后一条用户消息中的文本内容，作为压缩摘要的参考请求文本。
     private static string? GetLatestUserRequest(IReadOnlyList<AgentConversationMessage> conversation)
         => conversation
             .Reverse()
@@ -2216,6 +2279,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             .Select(static part => part.Value)
             .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 
+    // 函数功能：将保留消息中的第一条映射到原始事件历史的持久化偏移量，供检查点记录 FirstKeptEventOffset 字段。
     private long? TryResolveFirstKeptEventOffset(IReadOnlyList<AgentConversationMessage> keptMessages)
     {
         if (keptMessages.Count == 0)
@@ -2248,6 +2312,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             : null;
     }
 
+    // 函数功能：遍历持久化历史，按用户/助手/工具消息顺序收集各条原始事件的持久化偏移量，用于将压缩保留消息映射回事件偏移。
     private IReadOnlyList<(long Offset, string BackendEventType)> GetReplayableRawEventOffsets()
     {
         var results = new List<(long Offset, string BackendEventType)>();
@@ -2289,6 +2354,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return results;
     }
 
+    // 函数功能：将 AgentInputItem 列表（文本、图片、文件、目录、选区、技能、@提及等）映射为模型可消费的 AgentMessagePart 列表。
     private static IReadOnlyList<AgentMessagePart> MapInputItems(IReadOnlyList<AgentInputItem> items)
     {
         var parts = new List<AgentMessagePart>(items.Count);
@@ -2346,6 +2412,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return parts;
     }
 
+    // 函数功能：将用户输入列表渲染为可读纯文本（用于 ContentCompleted 事件的文本字段），各输入项以换行分隔。
     private static string RenderUserInput(IReadOnlyList<AgentInputItem> items)
         => string.Join(
             Environment.NewLine,
@@ -2364,11 +2431,13 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
                 _ => string.Empty,
             }));
 
+    // 函数功能：将文件输入渲染为可读字符串，含行范围时附带起止行号。
     private static string RenderFileInput(AgentInputItem.File file)
         => file.LineRange is null
             ? $"File: {file.Path}"
             : $"File: {file.Path} ({file.LineRange.StartLine}-{file.LineRange.EndLine})";
 
+    // 函数功能：将工具返回的结果项拼接为纯文本；无有效文本时退回到错误信息或"(no output)"。
     private static string RenderToolResult(AgentToolResult result)
     {
         var segments = result.Items.Select(static item => item switch
@@ -2383,6 +2452,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             : rendered;
     }
 
+    // 函数功能：若工具输出超过基于上下文预算动态计算的字符上限，则截断为头尾摘录并附上截断说明脚注；技能激活工具不截断。
     private AgentToolResult CreateModelVisibleToolResult(
         AgentMessagePart.ToolCall toolCall,
         AgentToolResult result,
@@ -2412,6 +2482,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         };
     }
 
+    // 函数功能：根据输入上下文预算和当前对话 token 估算，动态计算工具输出可见字符上限；余量不足时返回最小保留量。
     private int ResolveModelVisibleToolResultCharacterLimit(
         string? systemMessage,
         string? developerInstructions,
@@ -2444,6 +2515,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return (int)Math.Min(Math.Max(allowedCharacters, ToolResultTruncationFooterReserve), int.MaxValue);
     }
 
+    // 函数功能：从工具输出中截取头部（70%）和尾部（30%）组成摘录，并在中间插入截断说明脚注，保持总长度在 characterLimit 以内。
     private static string CreateModelVisibleToolResultExcerpt(string toolName, string output, int characterLimit)
     {
         var footer = Environment.NewLine + Environment.NewLine +
@@ -2468,6 +2540,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             : head + footer + Environment.NewLine + Environment.NewLine + tail;
     }
 
+    // 函数功能：将工具执行异常包装为失败的 AgentToolResult，包含工具名称和异常消息，返回给对话用于告知模型。
     private static AgentToolResult CreateToolExecutionFailureResult(string toolName, Exception exception)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(toolName);
@@ -2480,9 +2553,11 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return new AgentToolResult(false, [new AgentToolResultItem.Text(message)], message);
     }
 
+    // 函数功能：从助手消息的文本片段中提取首条非空内容作为会话摘要候选值。
     private static string? ExtractAssistantSummary(AgentConversationMessage message)
         => message.Parts.OfType<AgentMessagePart.Text>().Select(static part => part.Value).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 
+    // 函数功能：根据文件扩展名猜测 MIME 类型，不识别时返回 null。
     private static string? GuessMediaType(string pathOrUri)
         => Path.GetExtension(pathOrUri).ToLowerInvariant() switch
         {
@@ -2497,17 +2572,21 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             _ => null,
         };
 
+    // 函数功能：优先使用指定 mediaType，为空时通过扩展名猜测，最终回退为 application/octet-stream。
     private static string ResolveMediaType(string? mediaType, string pathOrUri)
         => string.IsNullOrWhiteSpace(mediaType)
             ? GuessMediaType(pathOrUri) ?? "application/octet-stream"
             : mediaType.Trim();
 
+    // 函数功能：将 AgentInput 序列化为 JsonElement，用于原始事件的 Raw 字段持久化。
     private static JsonElement SerializeAgentInput(AgentInput input)
         => JsonSerializer.SerializeToElement(input, AgentJsonSerializerContext.Default.AgentInput);
 
+    // 函数功能：将 AgentConversationMessage 序列化为 JsonElement，用于助手/工具原始事件的 Raw 字段持久化。
     private static JsonElement SerializeLocalMessage(AgentConversationMessage message)
         => JsonSerializer.SerializeToElement(message, AgentJsonSerializerContext.Default.AgentConversationMessage);
 
+    // 函数功能：将推理消息中的 protectedData 封装为 JSON 元素；codex 协议下对受保护数据进行脱敏（仅写 redacted 标志）。
     private static JsonElement? CreateReasoningDetails(
         AgentMessagePart.Reasoning reasoning,
         bool redactProtectedData = false)
@@ -2536,6 +2615,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
     }
 
+    // 函数功能：将 Unified Diff 字符串序列化为 JSON 元素，用于 DiffUpdated 事件的 Details 字段。
     private static JsonElement CreateDiffDetails(string diff)
     {
         using var stream = new MemoryStream();
@@ -2549,6 +2629,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
     }
 
+    // 函数功能：将工具调用信息（callId、toolName、arguments、readFiles、modifiedFiles）序列化为 JSON 元素，用于活动事件的 Details 字段。
     private static JsonElement CreateToolCallDetails(AgentMessagePart.ToolCall toolCall, string? workingDirectory)
     {
         var fileActivity = GetToolFileActivity(toolCall, workingDirectory);
@@ -2568,6 +2649,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
     }
 
+    // 函数功能：将工具调用与其执行结果（含可选 diff）序列化为 JSON 元素，用于工具完成活动事件的 Details 字段。
     private static JsonElement CreateToolResultDetails(AgentMessagePart.ToolCall toolCall, AgentToolResult result, string? workingDirectory, string? diff = null)
     {
         var fileActivity = GetToolFileActivity(toolCall, workingDirectory);
@@ -2594,6 +2676,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
     }
 
+    // 函数功能：向 Utf8JsonWriter 写入一个路径字符串数组 JSON 属性（readFiles 或 modifiedFiles）。
     private static void WritePaths(Utf8JsonWriter writer, string propertyName, IReadOnlyList<string> paths)
     {
         writer.WritePropertyName(propertyName);
@@ -2606,6 +2689,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         writer.WriteEndArray();
     }
 
+    // 函数功能：根据工具名称和参数解析该次调用读取/修改的文件绝对路径列表，支持 read_file、grep、write_file、rename 和 apply_patch 等工具。
     private static ToolFileActivity GetToolFileActivity(AgentMessagePart.ToolCall toolCall, string? workingDirectory)
     {
         static string? GetPath(JsonElement arguments, string propertyName)
@@ -2703,6 +2787,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return new ToolFileActivity(readFiles, modifiedFiles);
     }
 
+    // 函数功能：若工具是受追踪的文件修改工具，返回其修改的文件路径列表；否则返回空列表。
     private static IReadOnlyList<string> GetTrackedFileMutationPaths(AgentMessagePart.ToolCall toolCall, string? workingDirectory)
     {
         if (!IsTrackedFileMutationTool(toolCall.Name))
@@ -2713,6 +2798,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return GetToolFileActivity(toolCall, workingDirectory).ModifiedFiles;
     }
 
+    // 函数功能：判断工具名是否属于需要追踪文件变更的修改类工具（write/replace/delete/rename/apply_patch）。
     private static bool IsTrackedFileMutationTool(string toolName)
         => toolName is "write_file" or
             "replace_in_file" or
@@ -2720,9 +2806,11 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             "rename_file_or_dir" or
             "apply_patch";
 
+    // 函数功能：判断工具名是否为技能激活专用工具（codealta_skills_activate）。
     private static bool IsSkillActivationTool(string toolName)
         => string.Equals(toolName, "codealta_skills_activate", StringComparison.Ordinal);
 
+    // 函数功能：从技能激活工具调用结果中解析技能 payload 并构建 AgentLoadedSkillState；payload 为空或技能名缺失时返回 null。
     private static AgentLoadedSkillState? TryCreateLoadedSkillState(
         AgentMessagePart.ToolCall toolCall,
         AgentToolResult result)
@@ -2740,6 +2828,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return TryCreateLoadedSkillState(skillName, null, payload, "model", toolCall.CallId);
     }
 
+    // 函数功能：从用户输入中检测是否包含 <skill_content> 标记，若有则创建用户侧激活的技能状态；否则 activatedSkill 为 null 并返回 false。
     private static bool TryCreateUserActivatedSkillState(
         AgentInput input,
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out AgentLoadedSkillState? activatedSkill)
@@ -2762,6 +2851,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return activatedSkill is not null;
     }
 
+    // 函数功能：解析技能 payload 的 XML 属性（name、path、root、source 等），构建完整的 AgentLoadedSkillState 并验证技能文件可用性。
     private static AgentLoadedSkillState? TryCreateLoadedSkillState(
         string? skillName,
         string? skillPath,
@@ -2806,6 +2896,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return EnsureSkillAvailability(activation);
     }
 
+    // 函数功能：从持久化状态和历史事件中重建已加载技能列表；历史事件中的技能激活记录优先级高于状态快照，同名技能取最新版本。
     private static AgentSessionState RebuildLoadedSkillsState(
         AgentSessionState state,
         IReadOnlyList<AgentEvent> history)
@@ -2858,6 +2949,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         };
     }
 
+    // 函数功能：将新技能合并到现有已加载技能列表（同名替换、按激活时间排序），返回新的有序列表。
     private static IReadOnlyList<AgentLoadedSkillState> MergeLoadedSkill(
         IReadOnlyList<AgentLoadedSkillState> existing,
         AgentLoadedSkillState loadedSkill)
@@ -2871,6 +2963,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return merged;
     }
 
+    // 函数功能：用正则从技能 payload 中匹配 <skill_content> 开标签，并提取其所有 XML 属性到字典（大小写不敏感）。
     private static Dictionary<string, string> TryParseSkillPayloadAttributes(string payload)
     {
         var match = SkillContentTagRegex.Match(payload);
@@ -2888,16 +2981,19 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return attributes;
     }
 
+    // 函数功能：从属性字典中安全读取非空属性值，不存在或为空白时返回 null。
     private static string? GetAttribute(IReadOnlyDictionary<string, string> attributes, string name)
         => attributes.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value)
             ? value
             : null;
 
+    // 函数功能：从 JSON 工具参数对象中安全读取指定字符串属性，不存在或类型不匹配时返回 null。
     private static string? GetArgumentString(JsonElement arguments, string propertyName)
         => arguments.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
 
+    // 函数功能：检测技能文件是否存在于磁盘，更新 IsAvailable 和 MissingReason 字段后返回更新后的技能状态。
     private static AgentLoadedSkillState EnsureSkillAvailability(AgentLoadedSkillState skill)
     {
         if (string.IsNullOrWhiteSpace(skill.SkillFilePath))
@@ -2925,6 +3021,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         };
     }
 
+    // 函数功能：从持久化历史事件重建对话列表：先定位最新有效压缩检查点并恢复其保留消息，再追加检查点之后的用户/助手/工具消息。
     private static List<AgentConversationMessage> ReplayConversation(
         IReadOnlyList<AgentEvent> history,
         AgentSessionState state)
@@ -3030,6 +3127,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return ReferenceEquals(normalized, conversation) ? conversation : [.. normalized];
     }
 
+    // 函数功能：将对话列表序列化为 <compacted_history> 格式的系统消息，用于旧版快照格式（v1 legacy）的压缩摘要。
     private static AgentCompactionSnapshot CreateCompactionSnapshot(
         int includedEventCount,
         IReadOnlyList<AgentConversationMessage> conversation)
@@ -3068,6 +3166,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         };
     }
 
+    // 函数功能：将单条对话消息渲染为「角色: 内容摘要」格式的单行文本，用于旧版压缩快照的简洁摘要行。
     private static string RenderCompactionLine(AgentConversationMessage message)
     {
         var segments = new List<string>(message.Parts.Count);
@@ -3112,6 +3211,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         return $"{role}: {string.Join(" | ", segments)}";
     }
 
+    // 函数功能：将多行/多空白文本压缩为单行，超过 240 字符时截断并追加省略号。
     private static string CompactText(string text)
     {
         var condensed = string.Join(
@@ -3122,6 +3222,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
             : condensed[..237] + "...";
     }
 
+    // 函数功能：在构造函数中同步加载提供者模型目录（若 turnExecutor 实现了 IModelProviderModelCatalog），失败时静默返回空列表。
     private static IReadOnlyList<AgentModelInfo> LoadConstructorModelCache(
         ModelProviderRuntimeDescriptor provider,
         IModelProviderTurnExecutor turnExecutor)
@@ -3141,12 +3242,15 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 类型：记录工具调用涉及的读取文件和修改文件路径列表。
     private sealed record ToolFileActivity(IReadOnlyList<string> ReadFiles, IReadOnlyList<string> ModifiedFiles);
 
+    // 类型：事件订阅租约，释放时自动从订阅者字典中移除对应条目。
     private sealed class SubscriberLease(Action dispose) : IDisposable
     {
         private bool _disposed;
 
+        // 函数功能：幂等释放订阅，调用传入的 dispose 委托注销订阅者。
         public void Dispose()
         {
             if (_disposed)
@@ -3159,6 +3263,7 @@ public sealed class AgentSession : IAgentSession, IAgentCompactionOutcomeProvide
         }
     }
 
+    // 函数功能：懒加载并缓存当前会话的模型元数据（AgentModelInfo）；若模型 ID 为空或无目录能力则返回 null。
     private async Task<AgentModelInfo?> ResolveModelInfoAsync(CancellationToken cancellationToken)
     {
         if (_resolvedModelInfoLoaded)

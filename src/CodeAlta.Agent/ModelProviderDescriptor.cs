@@ -1,10 +1,12 @@
 namespace CodeAlta.Agent;
 
+// 模块功能：描述可在提供者选择器中展示的已配置模型提供者，包含显示名、类型、端点及默认模型等信息
 /// <summary>
 /// Describes a configured model provider that can be surfaced in provider selectors.
 /// </summary>
 public sealed record ModelProviderDescriptor
 {
+    // 函数功能：使用 providerId 与 displayName 构造描述符，providerType 默认回退至 providerId
     /// <summary>
     /// Initializes a new instance of the <see cref="ModelProviderDescriptor" /> class.
     /// </summary>
@@ -15,6 +17,7 @@ public sealed record ModelProviderDescriptor
     {
     }
 
+    // 函数功能：完整构造函数，支持指定 providerType（如 openai-chat/anthropic），空白值回退至 providerId
     /// <summary>
     /// Initializes a new instance of the <see cref="ModelProviderDescriptor" /> class.
     /// </summary>

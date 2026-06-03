@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：规范化的多态 agent 事件模型，作为所有 agent 事件的抽象基类，通过 JSON 多态派发支持多种具体事件类型
 /// <summary>
 /// Base type for a normalized agent event.
 /// </summary>
@@ -31,6 +32,7 @@ public abstract record AgentEvent(
     DateTimeOffset Timestamp,
     AgentRunId? RunId = null);
 
+// 类型：内容通道标识枚举，区分流式或完成内容事件所属的内容类型
 /// <summary>
 /// Identifies the content channel for a streamed or completed content event.
 /// </summary>
@@ -82,6 +84,7 @@ public enum AgentContentKind
     Notice,
 }
 
+// 类型：操作生命周期活动通道标识枚举，区分工具调用、命令执行等各类活动类型
 /// <summary>
 /// Identifies the activity channel for operation lifecycle events.
 /// </summary>
@@ -153,6 +156,7 @@ public enum AgentActivityKind
     ImageGeneration,
 }
 
+// 类型：活动生命周期阶段枚举，表示活动从请求到完成/失败/取消的各阶段
 /// <summary>
 /// Identifies the phase of an activity lifecycle event.
 /// </summary>
@@ -199,6 +203,7 @@ public enum AgentActivityPhase
     Deselected,
 }
 
+// 类型：会话更新事件类型枚举，涵盖会话启动、空闲、模型切换、用量更新等状态
 /// <summary>
 /// Identifies the kind of a session update event.
 /// </summary>
@@ -300,6 +305,7 @@ public enum AgentSessionUpdateKind
     DiffUpdated,
 }
 
+// 类型：通用交互生命周期事件类型枚举，标识权限解析或用户输入解析
 /// <summary>
 /// Identifies the kind of a generic interaction lifecycle event.
 /// </summary>
@@ -316,6 +322,7 @@ public enum AgentInteractionKind
     UserInputResolved,
 }
 
+// 类型：计划变更类型枚举，标识计划被创建、更新或删除
 /// <summary>
 /// Identifies how a plan changed.
 /// </summary>
@@ -337,6 +344,7 @@ public enum AgentPlanChangeKind
     Deleted,
 }
 
+// 类型：计划步骤状态枚举，标识步骤是否待执行、进行中或已完成
 /// <summary>
 /// Identifies the status of a structured plan step.
 /// </summary>
@@ -358,6 +366,7 @@ public enum AgentPlanStepStatus
     Completed,
 }
 
+// 类型：原始提供商事件，当无法映射到标准事件时携带未经处理的 provider 负载
 /// <summary>
 /// A raw, provider-specific event emitted when no normalized mapping exists.
 /// </summary>
@@ -376,6 +385,7 @@ public sealed record AgentRawEvent(
     AgentRunId? RunId = null)
     : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
+// 类型：流式内容增量事件，携带标准化内容通道的实时流片段
 /// <summary>
 /// Streaming delta of normalized content.
 /// </summary>
@@ -400,6 +410,7 @@ public sealed record AgentContentDeltaEvent(
     JsonElement? Details = null)
     : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
+// 类型：内容完成事件，携带某个内容通道的最终完整内容
 /// <summary>
 /// Finalized normalized content.
 /// </summary>
@@ -426,6 +437,7 @@ public sealed record AgentContentCompletedEvent(
     [property: JsonPropertyName("ask_id")] string? AskId = null)
     : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
+// 类型：通用活动生命周期事件，涵盖工具调用、命令、文件变更等操作的各阶段通知
 /// <summary>
 /// Generic activity lifecycle event.
 /// </summary>
@@ -454,6 +466,7 @@ public sealed record AgentActivityEvent(
     JsonElement? Details = null)
     : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
+// 类型：可审计的系统 Prompt 事件，记录每次轮次实际使用的系统提示内容及变更摘要
 /// <summary>
 /// Auditable system prompt event containing the logical prompt applied to a session turn.
 /// </summary>
@@ -484,6 +497,7 @@ public sealed record AgentSystemPromptEvent(
     AgentSystemPromptChangeSummary Change)
     : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
+// 类型：系统 Prompt 事件的 provider 负载映射摘要，描述通道映射方式及是否有损
 /// <summary>
 /// Provider payload mapping summary for a system prompt event.
 /// </summary>
@@ -492,6 +506,7 @@ public sealed record AgentSystemPromptEvent(
 /// <param name="Lossy">Whether the mapping was lossy.</param>
 public sealed record AgentSystemPromptProviderPayloadSummary(string ChannelMapping, bool AppliedToProvider, bool Lossy);
 
+// 类型：系统 Prompt 近似统计数据，包含 token 数量和字符数统计
 /// <summary>
 /// Approximate system prompt statistics.
 /// </summary>
@@ -502,6 +517,7 @@ public sealed record AgentSystemPromptProviderPayloadSummary(string ChannelMappi
 /// <param name="DeveloperChars">Developer character count.</param>
 public sealed record AgentSystemPromptStatistics(int SystemApproxTokens, int DeveloperApproxTokens, int TotalApproxTokens, int SystemChars, int DeveloperChars);
 
+// 类型：系统 Prompt 变更摘要，记录与上一次事件相比新增、删除、修改的 Prompt 部分
 /// <summary>
 /// Change summary for a system prompt event.
 /// </summary>
@@ -511,6 +527,7 @@ public sealed record AgentSystemPromptStatistics(int SystemApproxTokens, int Dev
 /// <param name="ChangedParts">Changed prompt part keys.</param>
 public sealed record AgentSystemPromptChangeSummary(string Kind, IReadOnlyList<string> AddedParts, IReadOnlyList<string> RemovedParts, IReadOnlyList<string> ChangedParts);
 
+// 类型：通用会话更新事件，携带会话状态变化的类型、消息及结构化详情
 /// <summary>
 /// Generic session update event.
 /// </summary>
@@ -533,6 +550,7 @@ public sealed record AgentSessionUpdateEvent(
     AgentSessionUsage? Usage = null)
     : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
+// 类型：结构化计划快照事件，携带当前计划的完整步骤列表和说明
 /// <summary>
 /// Structured plan snapshot event.
 /// </summary>
@@ -549,6 +567,7 @@ public sealed record AgentPlanSnapshotEvent(
     AgentPlanSnapshot Snapshot)
     : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
+// 类型：计划快照负载，包含变更类型、计划说明文本及各步骤列表
 /// <summary>
 /// Structured plan snapshot payload.
 /// </summary>
@@ -560,6 +579,7 @@ public sealed record AgentPlanSnapshot(
     string? Explanation,
     IReadOnlyList<AgentPlanStep>? Steps);
 
+// 类型：计划步骤负载，包含步骤文本和可选状态
 /// <summary>
 /// Structured plan step payload.
 /// </summary>
@@ -569,6 +589,7 @@ public sealed record AgentPlanStep(
     string Text,
     AgentPlanStepStatus? Status);
 
+// 类型：通用交互生命周期事件，标识权限请求或用户输入请求的解析结果
 /// <summary>
 /// Generic interaction lifecycle event.
 /// </summary>
@@ -591,6 +612,7 @@ public sealed record AgentInteractionEvent(
     JsonElement? Details = null)
     : AgentEvent(ProviderId, SessionId, Timestamp, RunId);
 
+// 类型：错误事件，携带错误消息及可选的异常信息，支持 JSON 序列化
 /// <summary>
 /// Represents an error event.
 /// </summary>
@@ -660,6 +682,7 @@ public sealed record AgentErrorEvent : AgentEvent
     public AgentExceptionInfo? ExceptionInfo { get; init; }
 }
 
+// 类型：JSON 安全的异常信息载体，用于序列化传输异常类型、消息、堆栈等诊断数据
 /// <summary>
 /// JSON-safe exception payload.
 /// </summary>
@@ -677,6 +700,7 @@ public sealed record AgentExceptionInfo(
     int? HResult = null,
     AgentExceptionInfo? InnerException = null)
 {
+    // 函数功能：将运行时异常递归转换为 JSON 安全的 AgentExceptionInfo，包含内部异常链
     internal static AgentExceptionInfo FromException(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);

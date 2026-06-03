@@ -6,6 +6,7 @@ using DiffPlex.Model;
 
 namespace CodeAlta.Agent.Diffing;
 
+// 模块功能：基于 DiffPlex 库将两段文本生成标准 unified diff 格式字符串
 /// <summary>
 /// Creates unified diffs using DiffPlex.
 /// </summary>
@@ -66,6 +67,7 @@ public static class UnifiedDiffBuilder
         return builder.ToString();
     }
 
+    // 函数功能：将 DiffPlex 的 DiffResult 转换为带操作符（空格/减号/加号）的行编辑列表
     private static IReadOnlyList<DiffEdit> BuildDiffPlexEdits(DiffResult diffResult)
     {
         var edits = new List<DiffEdit>();
@@ -104,6 +106,7 @@ public static class UnifiedDiffBuilder
         return edits;
     }
 
+    // 函数功能：去除行尾换行符（\r\n、\r 或 \n），返回仅含内容的行文本
     private static string FormatDiffLineText(string value)
         => value.EndsWith("\r\n", StringComparison.Ordinal)
             ? value[..^2]
@@ -111,6 +114,7 @@ public static class UnifiedDiffBuilder
                 ? value[..^1]
                 : value;
 
+    // 函数功能：将编辑列表按变更区域分组为 hunk，附加上下文行并输出 @@ 头信息和行内容
     private static void AppendHunks(StringBuilder builder, IReadOnlyList<DiffEdit> edits, int contextLineCount)
     {
         var oldLineBefore = new int[edits.Count];
@@ -185,6 +189,7 @@ public static class UnifiedDiffBuilder
         }
     }
 
+    // 函数功能：将 hunk 行范围格式化为 unified diff 标准表示（如 "3,5" 或单行时省略计数）
     private static string FormatRange(int start, int count)
     {
         if (count == 0)
@@ -197,8 +202,10 @@ public static class UnifiedDiffBuilder
             : $"{start.ToString(CultureInfo.InvariantCulture)},{count.ToString(CultureInfo.InvariantCulture)}";
     }
 
+    // 函数功能：在 index 基础上添加 contextLineCount 行上下文，不超过 max 边界
     private static int AddContext(int index, int contextLineCount, int max)
         => contextLineCount > max - index ? max : index + contextLineCount;
 
+    // 类型：表示一条差异编辑行，Kind 为操作符（空格/+/-），Line 为行文本
     private sealed record DiffEdit(char Kind, string Line);
 }

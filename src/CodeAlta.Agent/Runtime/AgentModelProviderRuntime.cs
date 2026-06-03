@@ -1,11 +1,13 @@
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：CodeAlta 原生模型提供者运行时，组合描述符、模型目录和轮次执行器，实现完整的提供者生命周期
 /// <summary>
 /// Native CodeAlta model-provider runtime backed by a provider descriptor, model catalog, and turn executor.
 /// </summary>
 public sealed class AgentModelProviderRuntime : IAgentModelProviderRuntime
 {
     private readonly IModelProviderTurnExecutor _turnExecutor;
+    // 说明：记录运行时是否已启动，用于析构时决定是否调用 StopAsync
     private bool _started;
 
     /// <summary>

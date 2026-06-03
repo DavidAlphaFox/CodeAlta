@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent;
 
+// 模块功能：定义列举 Agent 会话时可用的筛选条件，支持按工作目录、git 根目录、仓库和分支过滤
 /// <summary>
 /// Filter used when listing sessions.
 /// </summary>

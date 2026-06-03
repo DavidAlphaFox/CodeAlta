@@ -2,8 +2,10 @@ using CodeAlta.Agent.Runtime.Compaction;
 
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：构建和合并 AgentSessionUsage 用量快照，封装 token 统计、上下文窗口及模型预算信息
 internal static class AgentUsageFactory
 {
+    // 函数功能：根据模型调用的各项 token 数量创建单次操作用量快照，包含上下文窗口和最后一次操作详情
     public static AgentSessionUsage CreateOperationUsage(
         string? modelId,
         AgentModelInfo? modelInfo,
@@ -43,6 +45,7 @@ internal static class AgentUsageFactory
             UpdatedAt: updatedAt);
     }
 
+    // 函数功能：从历史事件列表中提取并合并所有用量更新事件，恢复最新会话用量；无更新时返回 null
     public static AgentSessionUsage? RecoverUsageFromHistory(IReadOnlyList<AgentEvent> history)
     {
         ArgumentNullException.ThrowIfNull(history);
@@ -59,6 +62,7 @@ internal static class AgentUsageFactory
         return usage;
     }
 
+    // 函数功能：将消息数量附加到用量快照的窗口信息中；messageCount 无效或窗口不存在时原样返回
     public static AgentSessionUsage? AttachMessageCount(AgentSessionUsage? usage, int? messageCount)
     {
         if (usage?.Window is null || messageCount is not >= 0)
@@ -78,6 +82,7 @@ internal static class AgentUsageFactory
         };
     }
 
+    // 函数功能：将模型 token 预算（上下文限制、最大输出等）注入到用量快照的窗口信息中
     public static AgentSessionUsage? AttachModelInfo(AgentSessionUsage? usage, AgentModelInfo? modelInfo)
     {
         if (usage is null)
@@ -115,6 +120,7 @@ internal static class AgentUsageFactory
         };
     }
 
+    // 函数功能：将外部估算的上下文窗口用量（token 数和消息数）附加到用量快照；数据不足时原样返回
     public static AgentSessionUsage? AttachWindowEstimate(
         AgentSessionUsage? usage,
         AgentModelInfo? modelInfo,
@@ -163,14 +169,17 @@ internal static class AgentUsageFactory
         };
     }
 
+    // 函数功能：根据模型信息解析 token 预算（输入上下文限制、总上下文包络、最大输出）
     private static AgentTokenBudget GetModelTokenBudget(AgentModelInfo? modelInfo)
     {
         return AgentTokenBudgetResolver.Resolve(modelInfo, AgentCompactionSettings.Default);
     }
 
+    // 函数功能：可空长整数求和，两者均为 null 时返回 null
     private static long? Sum(long? left, long? right)
         => left.HasValue || right.HasValue ? (left ?? 0) + (right ?? 0) : null;
 
+    // 函数功能：将新用量快照合并到当前用量，incoming 字段优先，current 为 null 时直接返回 incoming
     private static AgentSessionUsage MergeUsage(AgentSessionUsage? current, AgentSessionUsage incoming)
     {
         if (current is null)
@@ -188,6 +197,7 @@ internal static class AgentUsageFactory
             Details: incoming.Details ?? current.Details);
     }
 
+    // 函数功能：合并窗口用量快照，incoming 各字段非 null 时覆盖 current 对应字段
     private static AgentWindowUsageSnapshot? MergeWindowUsage(AgentWindowUsageSnapshot? current, AgentWindowUsageSnapshot? incoming)
     {
         if (incoming is null)
@@ -211,6 +221,7 @@ internal static class AgentUsageFactory
         };
     }
 
+    // 函数功能：合并单次操作用量快照，incoming 各字段非 null 时覆盖 current 对应字段
     private static AgentOperationUsageSnapshot? MergeOperationUsage(AgentOperationUsageSnapshot? current, AgentOperationUsageSnapshot? incoming)
     {
         if (incoming is null)

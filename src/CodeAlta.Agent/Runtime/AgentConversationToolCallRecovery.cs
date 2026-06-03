@@ -1,9 +1,11 @@
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：修复对话中工具调用与工具结果的孤立/缺失问题，确保对话可安全回放
 internal static class AgentConversationToolCallRecovery
 {
     private const string RecoveredToolOutputPrefix = "aborted";
 
+    // 函数功能：规范化对话以供回放，删除孤立的工具结果，并在指定索引前为缺失结果补充占位回复
     public static IReadOnlyList<AgentConversationMessage> NormalizeForReplay(
         IReadOnlyList<AgentConversationMessage> conversation,
         int recoverMissingToolResultsBeforeIndex = int.MaxValue)
@@ -66,6 +68,7 @@ internal static class AgentConversationToolCallRecovery
         return normalized ?? conversation;
     }
 
+    // 函数功能：从消息中移除没有对应工具调用的孤立工具结果，消息为空时返回 null
     private static AgentConversationMessage? RemoveOrphanToolResults(
         AgentConversationMessage message,
         HashSet<string> toolCallIds)
@@ -99,6 +102,7 @@ internal static class AgentConversationToolCallRecovery
             : message with { Parts = parts };
     }
 
+    // 函数功能：为助手消息中没有对应结果的工具调用创建"已中止"占位工具结果列表
     private static IReadOnlyList<AgentMessagePart> CreateMissingToolResults(
         IReadOnlyList<AgentMessagePart> parts,
         HashSet<string> toolResultIds)
@@ -118,6 +122,7 @@ internal static class AgentConversationToolCallRecovery
         return toolResults ?? [];
     }
 
+    // 函数功能：为被中断的工具调用生成标准错误占位结果，标记 Success=false 并附带说明信息
     private static AgentToolResult CreateMissingToolResult(AgentMessagePart.ToolCall toolCall)
     {
         var toolName = string.IsNullOrWhiteSpace(toolCall.Name)
@@ -130,6 +135,7 @@ internal static class AgentConversationToolCallRecovery
             Error: message);
     }
 
+    // 函数功能：将对话的前 count 条消息复制到新列表，用于懒写时复制
     private static List<AgentConversationMessage> CopyPriorMessages(
         IReadOnlyList<AgentConversationMessage> conversation,
         int count)
@@ -143,6 +149,7 @@ internal static class AgentConversationToolCallRecovery
         return copy;
     }
 
+    // 函数功能：将消息部分列表的前 count 项复制到新列表，用于懒写时复制
     private static List<AgentMessagePart> CopyPriorParts(
         IReadOnlyList<AgentMessagePart> parts,
         int count)

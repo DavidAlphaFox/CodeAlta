@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：定义持久化到会话日志中的提供商无关会话数据结构，包括摘要和完整状态两个记录
 /// <summary>
 /// Represents the persisted provider-agnostic session summary stored in the session journal.
 /// </summary>
@@ -85,6 +86,7 @@ public sealed record AgentSessionSummary
     public JsonElement? Metadata { get; init; }
 }
 
+// 类型：持久化会话状态，包含提供商信息、压缩检查点偏移量、用量快照及技能列表
 /// <summary>
 /// Represents the persisted provider-agnostic session state stored in the session journal.
 /// </summary>

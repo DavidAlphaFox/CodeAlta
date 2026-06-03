@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：以值类型封装已配置的模型提供者标识符，提供规范化、空值检测与 JSON 转换支持
 /// <summary>
 /// Identifies a configured model provider instance.
 /// </summary>
@@ -11,6 +12,7 @@ namespace CodeAlta.Agent;
 [JsonConverter(typeof(ModelProviderIdJsonConverter))]
 public readonly record struct ModelProviderId
 {
+    // 函数功能：构造 ModelProviderId，对传入值执行 Trim 规范化，空白值抛 ArgumentException
     /// <summary>
     /// Initializes a new instance of the <see cref="ModelProviderId" /> struct.
     /// </summary>
@@ -32,6 +34,7 @@ public readonly record struct ModelProviderId
     /// </summary>
     public bool IsEmpty => string.IsNullOrWhiteSpace(Value);
 
+    // 函数功能：规范化提供者标识符字符串（Trim），null 或空白值抛 ArgumentException，返回规范化结果
     /// <summary>
     /// Normalizes a provider identifier value.
     /// </summary>

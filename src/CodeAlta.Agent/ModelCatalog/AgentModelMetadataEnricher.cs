@@ -1,7 +1,9 @@
 namespace CodeAlta.Agent.ModelCatalog;
 
+// 模块功能：用 models.dev 目录数据和用户覆盖配置为模型列表补充元数据（能力、名称、描述等）
 internal static class AgentModelMetadataEnricher
 {
+    // 函数功能：批量丰富模型列表，对每个模型应用目录数据与覆盖配置
     public static IReadOnlyList<AgentModelInfo> EnrichModels(
         IReadOnlyList<AgentModelInfo> models,
         ModelsDevCatalogService? catalog,
@@ -18,6 +20,7 @@ internal static class AgentModelMetadataEnricher
             .ToArray();
     }
 
+    // 函数功能：对单个模型依次应用 models.dev 目录元数据和用户覆盖配置，若无变化则返回原对象
     public static AgentModelInfo EnrichModel(
         AgentModelInfo model,
         ModelsDevCatalogService? catalog,
@@ -78,6 +81,7 @@ internal static class AgentModelMetadataEnricher
             Capabilities: capabilities ?? model.Capabilities);
     }
 
+    // 函数功能：按模型 Id、DisplayName 和模糊键依次查找覆盖配置，找到则输出配置并返回 true
     private static bool TryGetOverride(
         IReadOnlyDictionary<string, AgentModelOverride>? overrides,
         AgentModelInfo model,
@@ -116,6 +120,7 @@ internal static class AgentModelMetadataEnricher
         return false;
     }
 
+    // 函数功能：将 models.dev 目录中的模型定义写入能力字典（仅填充缺失字段，不覆盖已有值）
     private static void ApplyModelsDevMetadata(
         IDictionary<string, object?> capabilities,
         string modelsDevProviderId,
@@ -144,6 +149,7 @@ internal static class AgentModelMetadataEnricher
         SetIfMissing(capabilities, "maxTokens", model.Limit?.Output);
     }
 
+    // 函数功能：将用户覆盖配置写入能力字典，有值时强制覆盖已有字段
     private static void ApplyOverride(
         IDictionary<string, object?> capabilities,
         AgentModelOverride modelOverride)
@@ -161,6 +167,7 @@ internal static class AgentModelMetadataEnricher
         SetWhenValue(capabilities, "supportsStructuredOutput", modelOverride.SupportsStructuredOutput);
     }
 
+    // 函数功能：仅当键不存在且值非 null 时才向能力字典写入
     private static void SetIfMissing(IDictionary<string, object?> capabilities, string key, object? value)
     {
         if (value is null || capabilities.ContainsKey(key))
@@ -171,6 +178,7 @@ internal static class AgentModelMetadataEnricher
         capabilities[key] = value;
     }
 
+    // 函数功能：仅当值非 null 时向能力字典写入（允许覆盖已有值）
     private static void SetWhenValue(IDictionary<string, object?> capabilities, string key, object? value)
     {
         if (value is not null)

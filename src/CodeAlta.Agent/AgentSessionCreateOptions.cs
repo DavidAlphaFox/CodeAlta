@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent;
 
+// 模块功能：创建 Agent 会话时所需的全部选项，包含会话 ID、模型、工具、MCP 服务器及权限回调等配置
 /// <summary>
 /// Options for creating an agent session.
 /// </summary>

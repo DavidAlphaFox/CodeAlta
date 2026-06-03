@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：记录产生推理内容的提供者/模型来源，并提供安全回放工具
 /// <summary>
 /// Captures the provider/model identity that produced replayable reasoning content.
 /// </summary>
@@ -18,6 +19,7 @@ public sealed record AgentReasoningProvenance(
 /// </summary>
 public static class AgentReasoningReplay
 {
+    // 函数功能：为指定的提供者轮次请求创建推理来源信息，返回 AgentReasoningProvenance
     /// <summary>
     /// Creates reasoning provenance for a provider turn request.
     /// </summary>
@@ -34,6 +36,7 @@ public static class AgentReasoningReplay
             request.ModelId);
     }
 
+    // 函数功能：返回对当前提供者安全的对话列表，将不兼容来源的推理部分降级为文本摘要
     /// <summary>
     /// Returns a provider-safe conversation where reasoning parts from incompatible or unknown providers/models are downgraded.
     /// </summary>
@@ -70,6 +73,7 @@ public static class AgentReasoningReplay
         return sanitizedMessages ?? conversation;
     }
 
+    // 函数功能：将对话列表的前 count 条消息复制到新数组并返回，用于懒写时复制
     private static AgentConversationMessage[] CopyPrefix(
         IReadOnlyList<AgentConversationMessage> conversation,
         int count)
@@ -83,6 +87,7 @@ public static class AgentReasoningReplay
         return copy;
     }
 
+    // 函数功能：对消息的所有部分执行兼容性清洗，通过 out changed 指示是否有修改
     private static IReadOnlyList<AgentMessagePart> SanitizeParts(
         IReadOnlyList<AgentMessagePart> parts,
         AgentTurnRequest request,
@@ -110,6 +115,7 @@ public static class AgentReasoningReplay
         return sanitizedParts ?? parts;
     }
 
+    // 函数功能：将消息部分列表的前 count 项复制到新列表并返回
     private static List<AgentMessagePart> CopyPrefix(IReadOnlyList<AgentMessagePart> parts, int count)
     {
         var copy = new List<AgentMessagePart>(parts.Count);
@@ -121,6 +127,7 @@ public static class AgentReasoningReplay
         return copy;
     }
 
+    // 函数功能：对单个消息部分执行兼容性检查，不兼容的推理部分降级为文本或丢弃；out changed 标记是否变化
     private static AgentMessagePart? SanitizePart(
         AgentMessagePart part,
         AgentTurnRequest request,
@@ -144,6 +151,7 @@ public static class AgentReasoningReplay
             : new AgentMessagePart.Text(CreateReasoningSummaryText(reasoning.Value));
     }
 
+    // 函数功能：检查推理来源是否与当前请求的提供者/传输类型/协议族/模型完全匹配
     private static bool IsCompatible(AgentReasoningProvenance? provenance, AgentTurnRequest request)
     {
         if (provenance is null || string.IsNullOrWhiteSpace(provenance.ModelId) || string.IsNullOrWhiteSpace(request.ModelId))
@@ -157,6 +165,7 @@ public static class AgentReasoningReplay
                string.Equals(provenance.ModelId, request.ModelId, StringComparison.OrdinalIgnoreCase);
     }
 
+    // 函数功能：将推理内容包裹在 XML 摘要标签中，生成降级后的文本表示
     private static string CreateReasoningSummaryText(string value)
         => $"<assistant_reasoning_summary>{value}</assistant_reasoning_summary>";
 }

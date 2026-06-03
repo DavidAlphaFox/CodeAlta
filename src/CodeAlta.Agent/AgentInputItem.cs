@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：定义用户输入项的类型层级，涵盖文本、图片、文件、目录、代码选区、技能引用及 Mention 等形式
 /// <summary>
 /// Represents a typed user input item (text, image, attachment, skill, etc.).
 /// </summary>

@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：定义 Agent 会话持久化的日志存储接口，涵盖会话摘要、事件日志和状态的增删查操作
 /// <summary>
 /// Defines agent-runtime persistence operations for CodeAlta-owned sessions.
 /// </summary>

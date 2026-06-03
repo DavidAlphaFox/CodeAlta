@@ -2,8 +2,10 @@ using System.Text.Json;
 
 namespace CodeAlta.Agent.Runtime.Compaction;
 
+// 模块功能：将对话消息序列规范化为压缩单元列表，合并工具调用交互并折叠重复的低价值操作
 internal static class AgentCompactionCanonicalizer
 {
+    // 函数功能：将消息列表规范化为压缩单元序列，先构建单元再折叠重复低价值单元
     public static IReadOnlyList<AgentCompactionUnit> Normalize(IReadOnlyList<AgentConversationMessage> messages)
     {
         ArgumentNullException.ThrowIfNull(messages);
@@ -17,6 +19,7 @@ internal static class AgentCompactionCanonicalizer
         return CollapseRepeatedLowValueUnits(units);
     }
 
+    // 函数功能：将消息列表转换为压缩单元，Assistant 带工具调用时与紧随其后的工具结果消息合并为 ToolInteractionUnit
     private static IReadOnlyList<AgentCompactionUnit> BuildUnits(IReadOnlyList<AgentConversationMessage> messages)
     {
         var units = new List<AgentCompactionUnit>();
@@ -52,6 +55,7 @@ internal static class AgentCompactionCanonicalizer
         return units;
     }
 
+    // 函数功能：将连续出现的相同低价值工具交互单元折叠为一个带重复计数的单元
     private static IReadOnlyList<AgentCompactionUnit> CollapseRepeatedLowValueUnits(IReadOnlyList<AgentCompactionUnit> units)
     {
         var normalized = new List<AgentCompactionUnit>(units.Count);
@@ -94,6 +98,7 @@ internal static class AgentCompactionCanonicalizer
         return normalized;
     }
 
+    // 函数功能：判断单个工具交互单元是否为低价值可折叠单元，是则输出折叠键（工具名+参数签名）
     private static bool TryGetLowValueCollapseKey(AgentCompactionToolInteractionUnit unit, out string key)
     {
         key = string.Empty;
@@ -127,6 +132,7 @@ internal static class AgentCompactionCanonicalizer
         return true;
     }
 
+    // 函数功能：判断工具结果是否含高信号内容（含错误或关键词如 error/fail/timeout 等）
     private static bool HasHighSignalToolOutput(AgentToolResult result)
     {
         var rendered = string.Join(
@@ -136,6 +142,7 @@ internal static class AgentCompactionCanonicalizer
                ContainsHighSignal(rendered);
     }
 
+    // 函数功能：根据工具名称和参数生成可用于折叠比较的规范化签名字符串，不支持的工具返回 null
     private static string? TryGetToolSignature(string toolName, JsonElement arguments)
     {
         static string? GetString(JsonElement args, string propertyName)
@@ -162,6 +169,7 @@ internal static class AgentCompactionCanonicalizer
         return $"{toolName}|{normalized.Trim()}";
     }
 
+    // 函数功能：检测文本中是否包含预定义的高信号关键词（不区分大小写）
     private static bool ContainsHighSignal(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))

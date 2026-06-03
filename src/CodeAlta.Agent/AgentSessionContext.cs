@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent;
 
+// 模块功能：记录 Agent 会话的仓库与目录上下文信息（工作目录、git 根目录、仓库标识、分支名）
 /// <summary>
 /// Captures repository and directory context for a session.
 /// </summary>

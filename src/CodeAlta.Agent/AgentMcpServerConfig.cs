@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：定义向 Agent 会话公开的 MCP 服务器配置，包含本地 stdio 和远程网络两种形式
 /// <summary>
 /// Describes an MCP server made available to an agent session.
 /// </summary>
@@ -30,6 +31,7 @@ public abstract record AgentMcpServerConfig
     public bool Required { get; init; }
 }
 
+// 类型：本地 stdio 方式启动的 MCP 服务器配置，可指定命令、参数、环境变量与工作目录
 /// <summary>
 /// Describes an MCP server started locally via stdio.
 /// </summary>
@@ -52,6 +54,7 @@ public sealed record AgentLocalMcpServerConfig(string Command) : AgentMcpServerC
     public string? WorkingDirectory { get; init; }
 }
 
+// 类型：远程 MCP 传输协议枚举（Http 或 Sse）
 /// <summary>
 /// Selects the remote MCP transport.
 /// </summary>
@@ -69,6 +72,7 @@ public enum AgentMcpRemoteTransport
     Sse
 }
 
+// 类型：通过网络访问的远程 MCP 服务器配置，支持 HTTP 头、Bearer Token 环境变量等鉴权选项
 /// <summary>
 /// Describes an MCP server reached over the network.
 /// </summary>

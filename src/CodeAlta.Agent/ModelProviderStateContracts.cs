@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent;
 
+// 模块功能：定义模型提供者可用性枚举及状态快照/探针结果的数据契约
 /// <summary>
 /// Describes model-provider readiness.
 /// </summary>
@@ -36,6 +37,7 @@ public enum ModelProviderAvailability
     Failed,
 }
 
+// 类型：模型提供者当前状态的不可变快照，包含可用性、模型列表和选中模型等信息
 /// <summary>
 /// Immutable snapshot of a model provider's current state.
 /// </summary>
@@ -87,6 +89,7 @@ public sealed record ModelProviderStateSnapshot
     public DateTimeOffset ObservedAt { get; init; } = DateTimeOffset.UtcNow;
 }
 
+// 类型：探针调用结果，包含提供者可用性、探测到的模型列表及推荐模型/推理强度
 /// <summary>
 /// Result of probing a model provider runtime.
 /// </summary>

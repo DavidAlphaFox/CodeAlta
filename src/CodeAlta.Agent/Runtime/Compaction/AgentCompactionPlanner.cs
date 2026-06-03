@@ -1,9 +1,12 @@
 namespace CodeAlta.Agent.Runtime.Compaction;
 
+// 模块功能：对话压缩规划器，根据 token 预算计算哪些消息需摘要、哪些需保留
 internal static class AgentCompactionPlanner
 {
+    // 说明：默认允许对超大锚点消息执行缩减
     private const bool DefaultReduceOversizedAnchors = true;
 
+    // 函数功能：根据触发源、会话消息、token 预算和设置，生成压缩准备计划；无需压缩时返回 null
     public static AgentCompactionPreparation? Prepare(
         AgentCompactionTrigger trigger,
         string? systemMessage,
@@ -105,6 +108,7 @@ internal static class AgentCompactionPlanner
             OversizedAnchorMessage: oversizedAnchorMessage);
     }
 
+    // 函数功能：计算压缩后保留消息的目标 token 上限，优先使用覆盖值，其次按上下文限制和比率推算
     private static long ResolveRetainedPromptBudget(
         long tokensBefore,
         long? inputContextLimit,
@@ -129,6 +133,7 @@ internal static class AgentCompactionPlanner
         return Math.Max(resolvedPromptBudget, 1L);
     }
 
+    // 函数功能：按上下文限制与配置比率计算保留预算
     private static long ResolveRetainedPromptBudget(long inputContextLimit, AgentCompactionSettings settings)
     {
         var ratio = settings.PostCompactionTargetRatio > 0
@@ -137,6 +142,7 @@ internal static class AgentCompactionPlanner
         return Math.Max((long)Math.Floor(inputContextLimit * ratio), 1L);
     }
 
+    // 函数功能：构建完整压缩计划，决定锚点前缀组、后缀组及是否跨轮次分割，超大锚点时可缩减
     private static (IReadOnlyList<int> TurnPrefixIndexes, IReadOnlyList<int> SuffixIndexes, bool IsSplitTurn, int? OversizedAnchorGroupIndex) BuildPlan(
         IReadOnlyList<MessageGroup> groups,
         int? anchorGroupIndex,
@@ -184,6 +190,7 @@ internal static class AgentCompactionPlanner
         return ([anchorGroupIndex.Value], suffixIndexes, isSplitTurn, null);
     }
 
+    // 函数功能：构建仅保留锚点的压缩计划，不保留后续消息组
     private static (IReadOnlyList<int> TurnPrefixIndexes, IReadOnlyList<int> SuffixIndexes, bool IsSplitTurn, int? OversizedAnchorGroupIndex) BuildAnchorOnlyPlan(
         IReadOnlyList<MessageGroup> groups,
         int? anchorGroupIndex,
@@ -208,6 +215,7 @@ internal static class AgentCompactionPlanner
         return ([anchorGroupIndex.Value], [], anchorGroupIndex.Value < groups.Count - 1, null);
     }
 
+    // 函数功能：从尾部向前贪心选取连续消息组，使总 token 不超出预算，返回组索引列表
     private static IReadOnlyList<int> BuildContiguousSuffix(
         IReadOnlyList<MessageGroup> groups,
         long availableForRetained,
@@ -263,9 +271,11 @@ internal static class AgentCompactionPlanner
         return suffix;
     }
 
+    // 函数功能：从 startIndex 到末尾生成连续组索引列表
     private static IReadOnlyList<int> BuildSuffixFromStart(IReadOnlyList<MessageGroup> groups, int startIndex)
         => Enumerable.Range(startIndex, groups.Count - startIndex).ToArray();
 
+    // 函数功能：若会话首条消息是压缩检查点，提取其摘要文本并输出有效消息起始索引
     private static string? ExtractLeadingCheckpointSummary(
         IReadOnlyList<AgentConversationMessage> conversation,
         out int startIndex)
@@ -281,6 +291,7 @@ internal static class AgentCompactionPlanner
         return null;
     }
 
+    // 函数功能：将会话消息列表按轮次分组，Tool 消息附加到前一组
     private static List<MessageGroup> BuildGroups(IReadOnlyList<AgentConversationMessage> conversation)
     {
         var groups = new List<MessageGroup>();
@@ -299,6 +310,7 @@ internal static class AgentCompactionPlanner
         return groups;
     }
 
+    // 函数功能：从后向前查找最新含 User 角色消息的组索引，不存在时返回 null
     private static int? FindLatestUserGroupIndex(IReadOnlyList<MessageGroup> groups)
     {
         for (var index = groups.Count - 1; index >= 0; index--)
@@ -312,9 +324,11 @@ internal static class AgentCompactionPlanner
         return null;
     }
 
+    // 函数功能：对指定组索引集合的 token 数求和
     private static long SumTokens(IReadOnlyList<MessageGroup> groups, IEnumerable<int> indexes)
         => indexes.Sum(index => groups[index].Tokens);
 
+    // 函数功能：按给定索引顺序将多个消息组展平为单一消息列表
     private static IReadOnlyList<AgentConversationMessage> FlattenGroups(
         IReadOnlyList<MessageGroup> groups,
         IEnumerable<int> indexes)
@@ -329,16 +343,20 @@ internal static class AgentCompactionPlanner
         return messages;
     }
 
+    // 类型：消息组，将同一轮次的消息及其 token 估算值聚合在一起
     private sealed class MessageGroup
     {
+        // 函数功能：用首条消息和其 token 数初始化消息组
         public MessageGroup(AgentConversationMessage message, long tokens)
         {
             Messages = [message];
             Tokens = tokens;
         }
 
+        // 说明：本组包含的消息列表
         public List<AgentConversationMessage> Messages { get; }
 
+        // 说明：本组的估算 token 总数（可累加）
         public long Tokens { get; set; }
     }
 }

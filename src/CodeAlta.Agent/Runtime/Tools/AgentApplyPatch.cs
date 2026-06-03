@@ -2,8 +2,10 @@ using System.Text;
 
 namespace CodeAlta.Agent.Runtime.Tools;
 
+// 模块功能：实现 apply_patch 工具，将自定义格式的补丁文本解析为操作列表（新增/删除/更新文件）并应用到磁盘
 internal static class AgentApplyPatch
 {
+    // 函数功能：解析补丁输入并依次执行文件新增、删除、更新（含移动）操作，返回包含摘要或错误的工具结果
     public static AgentToolResult Apply(string input, string workingDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(input);
@@ -135,6 +137,7 @@ internal static class AgentApplyPatch
         return new AgentToolResult(true, [new AgentToolResultItem.Text(summaryText)]);
     }
 
+    // 函数功能：解析补丁输入并返回所有被操作（新增/删除/更新/移动目标）的绝对文件路径列表
     public static IReadOnlyList<string> GetTouchedPaths(string input, string workingDirectory)
     {
         if (!TryParse(input, out var document, out _))
@@ -168,9 +171,11 @@ internal static class AgentApplyPatch
         return paths;
     }
 
+    // 函数功能：构造失败的工具结果，携带错误消息
     private static AgentToolResult Failure(string message)
         => new(false, [new AgentToolResultItem.Text(message)], message);
 
+    // 函数功能：将补丁中的相对或绝对路径解析为完整磁盘路径，相对路径从工作目录展开
     private static string ResolvePatchPath(string workingDirectory, string patchPath)
     {
         if (string.IsNullOrWhiteSpace(patchPath))
@@ -186,6 +191,7 @@ internal static class AgentApplyPatch
             : Path.Combine(workingDirectory, patchPath));
     }
 
+    // 函数功能：按顺序将所有 hunk 应用到行列表，从底部往上替换以保持索引稳定；失败时返回错误描述
     private static bool TryApplyHunks(
         List<string> lines,
         IReadOnlyList<PatchHunk> hunks,
@@ -223,6 +229,7 @@ internal static class AgentApplyPatch
         return true;
     }
 
+    // 函数功能：生成 hunk 上下文未匹配时的详细错误信息，包含锚点和上下文预览
     private static string BuildMissingContextError(PatchHunk hunk, IReadOnlyList<string> oldLines)
     {
         var builder = new StringBuilder("The hunk context was not found in the target file.");
@@ -248,6 +255,7 @@ internal static class AgentApplyPatch
         return builder.ToString();
     }
 
+    // 函数功能：在文件行中定位 hunk 上下文的最佳匹配位置，支持锚点引导、文件末尾优先及模糊匹配
     private static bool TryFindHunkMatch(
         IReadOnlyList<string> lines,
         IReadOnlyList<string> hunkLines,
@@ -311,6 +319,7 @@ internal static class AgentApplyPatch
         return false;
     }
 
+    // 函数功能：按顺序在行列表中依次查找所有锚点，返回最后一个锚点之后的行号；任一锚点未找到则失败
     private static bool TryAdvanceToAnchors(
         IReadOnlyList<string> lines,
         IReadOnlyList<string> anchors,
@@ -339,6 +348,7 @@ internal static class AgentApplyPatch
         return true;
     }
 
+    // 函数功能：从 currentIndex 开始在行列表中查找单个锚点文本（精确或去空白），支持从头回退搜索
     private static bool TryFindAnchor(
         IReadOnlyList<string> lines,
         string anchor,
@@ -357,6 +367,7 @@ internal static class AgentApplyPatch
         return false;
     }
 
+    // 函数功能：从 startIndex 开始线性扫描，返回第一个与 expectedLine 按指定容差匹配的行号
     private static bool TryFindLine(
         IReadOnlyList<string> lines,
         string expectedLine,
@@ -377,6 +388,7 @@ internal static class AgentApplyPatch
         return false;
     }
 
+    // 函数功能：从 startIndex 开始按容差级别（精确→去尾空白→去两端空白）逐级扫描 hunk 上下文的匹配位置
     private static bool TryFindMatchFrom(
         int startIndex,
         IReadOnlyList<string> lines,
@@ -399,6 +411,7 @@ internal static class AgentApplyPatch
         return false;
     }
 
+    // 函数功能：检查从 candidate 位置起的连续行是否与 hunkLines 按指定容差全部匹配
     private static bool IsMatchAt(
         IReadOnlyList<string> lines,
         IReadOnlyList<string> hunkLines,
@@ -421,6 +434,7 @@ internal static class AgentApplyPatch
         return true;
     }
 
+    // 函数功能：按指定容差比较两行文本是否相等（精确、去尾空白、去两端空白）
     private static bool LineEquals(string left, string right, LineMatchTolerance tolerance)
         => tolerance switch
         {
@@ -430,6 +444,7 @@ internal static class AgentApplyPatch
             _ => false,
         };
 
+    // 函数功能：将补丁文本解析为 PatchDocument（包含操作列表），格式错误时通过 error 返回描述并返回 false
     private static bool TryParse(string input, out PatchDocument document, out string error)
     {
         var normalized = input.Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -598,6 +613,7 @@ internal static class AgentApplyPatch
         return false;
     }
 
+    // 函数功能：校验补丁路径不为空，失败时通过 error 返回含行号的描述
     private static bool TryValidatePatchPath(string path, ParseState state, out string error)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -610,6 +626,7 @@ internal static class AgentApplyPatch
         return true;
     }
 
+    // 函数功能：解析单条 hunk 行（空行视为上下文行），根据首字符确定 Context/Add/Remove 类型
     private static bool TryParseHunkLine(string line, out PatchLine patchLine, out string error)
     {
         if (line.Length == 0)
@@ -641,11 +658,13 @@ internal static class AgentApplyPatch
         return true;
     }
 
+    // 函数功能：判断行是否为 hunk 头（"@@" 或 "@@ <锚点文本>"）
     private static bool IsHunkHeader(string? line)
         => line is not null &&
            (string.Equals(NormalizeDirectiveLine(line), "@@", StringComparison.Ordinal) ||
             NormalizeDirectiveLine(line).StartsWith("@@ ", StringComparison.Ordinal));
 
+    // 函数功能：从 hunk 头行中提取锚点文本（"@@" 之后的部分），纯 "@@" 行返回 null
     private static string? ParseHunkAnchor(string line)
     {
         var normalized = NormalizeDirectiveLine(line);
@@ -667,6 +686,7 @@ internal static class AgentApplyPatch
         return string.IsNullOrWhiteSpace(anchor) ? null : anchor;
     }
 
+    // 函数功能：判断行是否为文件操作头指令或补丁结束标记
     private static bool IsFileHeaderOrEnd(string? line)
         => line is not null &&
            (TryReadPathDirective(line, "*** Add File: ", out _) ||
@@ -674,12 +694,15 @@ internal static class AgentApplyPatch
             TryReadPathDirective(line, "*** Update File: ", out _) ||
             string.Equals(NormalizeDirectiveLine(line), "*** End Patch", StringComparison.Ordinal));
 
+    // 函数功能：检测补丁文本使用的换行风格（CRLF 或 LF）
     private static string DetectPatchNewline(string text)
         => text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
 
+    // 函数功能：检测文件原始内容使用的换行风格，用于保持更新后文件换行一致
     private static string DetectNewline(string text)
         => text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
 
+    // 函数功能：将文本按换行符拆分为行列表，末尾空行自动去除
     private static List<string> SplitLines(string text)
     {
         if (text.Length == 0)
@@ -697,6 +720,7 @@ internal static class AgentApplyPatch
         return lines;
     }
 
+    // 函数功能：将行列表用指定换行符连接为字符串，hadTrailingNewline 为 true 时在末尾追加换行
     private static string JoinLines(IReadOnlyList<string> lines, string newline, bool hadTrailingNewline)
     {
         if (lines.Count == 0)
@@ -723,6 +747,7 @@ internal static class AgentApplyPatch
         return builder.ToString();
     }
 
+    // 函数功能：将 hunk 的行列表归并为上下文行序列及各删除/插入 chunk，并计算应用后的行数
     private static HunkSection BuildSection(PatchHunk hunk)
     {
         var contextLines = new List<string>(hunk.Lines.Count);
@@ -775,25 +800,34 @@ internal static class AgentApplyPatch
         return new HunkSection([.. contextLines], chunks, resultLineCount);
     }
 
+    // 类型：已解析的完整补丁文档，包含所有文件操作列表
     private sealed record PatchDocument(IReadOnlyList<PatchOperation> Operations)
     {
         public static PatchDocument Empty { get; } = new([]);
     }
 
+    // 类型：补丁操作的抽象基类
     private abstract record PatchOperation;
 
+    // 类型：新增文件操作，包含目标路径和内容行
     private sealed record AddFileOperation(string Path, IReadOnlyList<string> Lines) : PatchOperation;
 
+    // 类型：删除文件操作，包含目标路径
     private sealed record DeleteFileOperation(string Path) : PatchOperation;
 
+    // 类型：更新文件操作，包含源路径、可选移动目标路径及 hunk 列表
     private sealed record UpdateFileOperation(string Path, string? MoveTo, IReadOnlyList<PatchHunk> Hunks) : PatchOperation;
 
+    // 类型：单个 hunk，包含锚点列表、是否优先匹配文件末尾及内容行
     private sealed record PatchHunk(IReadOnlyList<string> Anchors, bool PreferEndOfFile, IReadOnlyList<PatchLine> Lines);
 
+    // 类型：单条补丁行，包含行类型（上下文/新增/删除）及文本
     private readonly record struct PatchLine(PatchLineKind Kind, string Text);
 
+    // 类型：hunk 的结构化表示，包含上下文行、各 chunk 及应用后行数
     private sealed record HunkSection(IReadOnlyList<string> ContextLines, IReadOnlyList<PatchChunk> Chunks, int ResultLineCount);
 
+    // 类型：hunk 内一个连续的删除/插入块，RelativeIndex 为相对上下文行的起始偏移
     private sealed record PatchChunk(int RelativeIndex, IReadOnlyList<string> DeleteLines, IReadOnlyList<string> InsertLines);
 
     private enum PatchLineKind
@@ -806,11 +840,12 @@ internal static class AgentApplyPatch
 
     private enum LineMatchTolerance
     {
-        Exact,
-        TrimEnd,
-        TrimBoth,
+        Exact,    // 完全匹配
+        TrimEnd,  // 忽略行尾空白
+        TrimBoth, // 忽略两端空白
     }
 
+    // 说明：按精确→去尾空白→去两端空白顺序定义行匹配容差的优先级
     private static IReadOnlyList<LineMatchTolerance> LineMatchToleranceOrder { get; } =
     [
         LineMatchTolerance.Exact,
@@ -818,21 +853,28 @@ internal static class AgentApplyPatch
         LineMatchTolerance.TrimBoth,
     ];
 
+    // 类型：补丁文本解析状态机，维护当前行索引并提供行读取与指令匹配方法
     private sealed class ParseState(string[] lines)
     {
         private int _index;
 
+        // 说明：是否已到达输入末尾
         public bool IsAtEnd => _index >= lines.Length;
 
+        // 说明：当前行文本
         public string CurrentLine => lines[_index];
 
+        // 说明：当前行号（从 1 起）
         public int LineNumber => _index + 1;
 
+        // 函数功能：将当前行索引前进一步
         public void Advance() => _index++;
 
+        // 函数功能：检查当前行（规范化后）是否等于指定指令字符串
         public bool IsCurrentDirective(string value)
             => !IsAtEnd && string.Equals(NormalizeDirectiveLine(CurrentLine), value, StringComparison.Ordinal);
 
+        // 函数功能：若当前行等于指定值则消费该行并返回 true，否则返回 false
         public bool TryReadExact(string value)
         {
             if (!IsCurrentDirective(value))
@@ -845,9 +887,11 @@ internal static class AgentApplyPatch
         }
     }
 
+    // 函数功能：对指令行去除首尾空白，用于统一比较补丁指令
     private static string NormalizeDirectiveLine(string line)
         => line.Trim();
 
+    // 函数功能：检查行是否以指定前缀开头，是则提取后续内容为路径并返回 true
     private static bool TryReadPathDirective(string line, string prefix, out string path)
     {
         var normalized = NormalizeDirectiveLine(line);

@@ -3,8 +3,10 @@ using CodeAlta.Agent.Runtime;
 
 namespace CodeAlta.Agent.ModelCatalog;
 
+// 模块功能：提供模型 ID 的规范化、模糊匹配与等价比较能力，支持去除日期后缀和分隔符归一化
 internal static class AgentModelIdentity
 {
+    // 函数功能：在模型列表中查找与给定 modelId 最匹配的条目，先精确匹配后模糊匹配
     public static AgentModelInfo? FindBestMatch(
         IReadOnlyList<AgentModelInfo> models,
         string? modelId)
@@ -31,6 +33,7 @@ internal static class AgentModelIdentity
         return models.FirstOrDefault(model => Matches(model, lookupKeys));
     }
 
+    // 函数功能：判断两个模型标识符在规范化后是否等价（忽略大小写、分隔符和日期后缀）
     public static bool AreEquivalent(string? left, string? right)
     {
         if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
@@ -47,6 +50,7 @@ internal static class AgentModelIdentity
         return leftKeys.Count > 0 && Matches(right, leftKeys);
     }
 
+    // 函数功能：为一组值生成去重后的查找键集合（含原值、规范化值和去日期后缀变体）
     public static IEnumerable<string> GetLookupKeys(params string?[] values)
     {
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -58,6 +62,7 @@ internal static class AgentModelIdentity
         return keys;
     }
 
+    // 函数功能：判断模型的 Id 或 DisplayName 是否与给定查找键集合匹配
     public static bool Matches(AgentModelInfo model, IReadOnlySet<string> lookupKeys)
     {
         ArgumentNullException.ThrowIfNull(model);
@@ -66,6 +71,7 @@ internal static class AgentModelIdentity
         return Matches(model.Id, lookupKeys) || Matches(model.DisplayName, lookupKeys);
     }
 
+    // 函数功能：判断任意字符串值生成的查找键是否与给定键集合有交集
     public static bool Matches(string? value, IReadOnlySet<string> lookupKeys)
     {
         ArgumentNullException.ThrowIfNull(lookupKeys);
@@ -86,6 +92,7 @@ internal static class AgentModelIdentity
         return false;
     }
 
+    // 函数功能：为一组值生成 HashSet 形式的查找键集合（忽略大小写）
     public static HashSet<string> GetLookupKeySet(params string?[] values)
     {
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -97,6 +104,7 @@ internal static class AgentModelIdentity
         return keys;
     }
 
+    // 函数功能：向键集合中添加原值、规范化值以及去除日期后缀后的变体
     private static void AddLookupKeys(ISet<string> keys, string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -127,6 +135,7 @@ internal static class AgentModelIdentity
         }
     }
 
+    // 函数功能：尝试去除形如 "-YYYY-MM-DD" 的日期后缀，不符合格式则返回 null
     private static string? StripDateSuffix(string value)
     {
         const int DateSuffixLength = 11;
@@ -141,6 +150,7 @@ internal static class AgentModelIdentity
             : null;
     }
 
+    // 函数功能：验证给定 span 是否符合 ISO 8601 日期格式（YYYY-MM-DD）
     private static bool IsIsoDate(ReadOnlySpan<char> value)
     {
         return value.Length == 10 &&
@@ -156,6 +166,7 @@ internal static class AgentModelIdentity
                char.IsDigit(value[9]);
     }
 
+    // 函数功能：将标识符规范化为小写、以连字符分隔的形式，忽略其他特殊字符
     private static string NormalizeLookupKey(string value)
     {
         var builder = new StringBuilder(value.Length);

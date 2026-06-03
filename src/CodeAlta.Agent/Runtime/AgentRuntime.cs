@@ -3,6 +3,7 @@ using XenoAtom.Logging;
 
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：CodeAlta 自有会话运行时，负责管理多 provider 注册、模型目录缓存、会话创建/恢复/删除及生命周期控制。
 /// <summary>
 /// CodeAlta-owned session runtime for provider-backed raw-API sessions.
 /// </summary>
@@ -18,6 +19,7 @@ public sealed class AgentRuntime : IAsyncDisposable
     private IAgentSessionJournalStore? _store;
     private bool _started;
 
+    // 函数功能：构造函数，验证参数合法性，初始化 provider 映射表和文件系统路径布局；providerId 用于持久化字段，displayName 为用户界面名称。
     /// <summary>
     /// Initializes a new instance of the <see cref="AgentRuntime"/> class.
     /// </summary>
@@ -78,6 +80,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         }
     }
 
+    // 函数功能：启动运行时（幂等），标记已启动状态；若已启动则直接返回。
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken = default)
     {
@@ -91,6 +94,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         return Task.CompletedTask;
     }
 
+    // 函数功能：停止运行时，将已启动标记重置为 false。
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken = default)
     {
@@ -99,6 +103,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         return Task.CompletedTask;
     }
 
+    // 函数功能：遍历所有 provider 获取模型列表，按 ID 去重并按显示名排序后返回；结果同时写入 _modelCache 供后续使用。
     /// <inheritdoc />
     public async Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(CancellationToken cancellationToken = default)
     {
@@ -150,6 +155,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         return mergedModels;
     }
 
+    // 函数功能：按会话 ID 删除持久化会话，返回是否找到并删除成功。
     /// <inheritdoc />
     public async Task<bool> DeleteSessionAsync(
         string sessionId,
@@ -161,6 +167,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         return await Store.DeleteSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：创建新会话，解析目标 provider，生成 session ID 并持久化 summary 与 state，返回可交互的 IAgentSession。
     /// <inheritdoc />
     public async Task<IAgentSession> CreateSessionAsync(
         AgentSessionCreateOptions options,
@@ -213,6 +220,7 @@ public sealed class AgentRuntime : IAsyncDisposable
             cachedModels: GetCachedModels(registration));
     }
 
+    // 函数功能：恢复已有会话，从 store 读取 summary/state/历史事件，必要时迁移到新 provider 并修复用量数据，返回可继续对话的 IAgentSession。
     /// <inheritdoc />
     public async Task<IAgentSession> ResumeSessionAsync(
         string sessionId,
@@ -264,6 +272,7 @@ public sealed class AgentRuntime : IAsyncDisposable
 
     }
 
+    // 函数功能：释放所有已注册 provider 的 TurnExecutor，支持 IAsyncDisposable 和 IDisposable 两种接口。
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
@@ -281,6 +290,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         }
     }
 
+    // 函数功能：按 providerKey 查找已注册的 provider；为空时选默认或唯一 provider，否则抛异常。
     private AgentRuntimeProviderRegistration ResolveProvider(string? providerKey)
     {
         if (!string.IsNullOrWhiteSpace(providerKey))
@@ -304,6 +314,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         return preferred;
     }
 
+    // 函数功能：恢复会话时选择 provider：优先用 options.ProviderKey，其次沿用 summary 中记录的上次 provider，最后回退到默认。
     private AgentRuntimeProviderRegistration ResolveResumeProvider(
         AgentSessionResumeOptions options,
         AgentSessionSummary summary)
@@ -322,6 +333,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         return ResolveProvider(null);
     }
 
+    // 函数功能：将 summary 迁移至新 provider，更新协议族、providerKey、模型 ID、工作目录等字段，返回新 record 实例。
     private AgentSessionSummary TransferSummaryToProvider(
         AgentSessionSummary summary,
         ModelProviderRuntimeDescriptor provider,
@@ -338,6 +350,7 @@ public sealed class AgentRuntime : IAsyncDisposable
             UpdatedAt = updatedAt,
         };
 
+    // 函数功能：将 state 迁移至新 provider，清除旧 provider 会话 ID 和状态，返回新 record 实例。
     private static AgentSessionState TransferStateToProvider(
         AgentSessionState state,
         ModelProviderRuntimeDescriptor provider,
@@ -351,6 +364,7 @@ public sealed class AgentRuntime : IAsyncDisposable
             UpdatedAt = updatedAt,
         };
 
+    // 函数功能：用 options 中非空的模型 ID、工作目录、标题覆盖 summary 对应字段，其余保持原值。
     private static AgentSessionSummary OverrideSummary(
         AgentSessionSummary summary,
         AgentSessionResumeOptions options)
@@ -363,9 +377,11 @@ public sealed class AgentRuntime : IAsyncDisposable
         };
     }
 
+    // 函数功能：将空白字符串规范化为 null，非空字符串修剪首尾空格后返回。
     private static string? NormalizeOptionalText(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    // 函数功能：从历史事件重建用量数据，与 summary/state 中已有数据比较后择优保留，并附加模型信息；如有变更则持久化，返回修复后的 summary 和 state。
     private async Task<(AgentSessionSummary Summary, AgentSessionState State)> RepairRecoveredUsageAsync(
         AgentSessionSummary summary,
         AgentSessionState state,
@@ -430,6 +446,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         return (summary, state);
     }
 
+    // 函数功能：判断从历史恢复的用量是否应优先于当前记录的用量；比较时间戳，或在当前缺少 Window/LastOperation 等字段时优先恢复值。
     private static bool ShouldPreferRecoveredUsage(AgentSessionUsage? recovered, AgentSessionUsage? current)
     {
         if (recovered is null)
@@ -462,6 +479,7 @@ public sealed class AgentRuntime : IAsyncDisposable
                (current.TokenLimit is null && recovered.TokenLimit is not null);
     }
 
+    // 函数功能：优先从初始化服务的当前状态获取该 provider 的模型列表，命中则刷新缓存；否则返回 _modelCache 中已缓存的列表。
     private IReadOnlyList<AgentModelInfo> GetCachedModels(AgentRuntimeProviderRegistration provider)
     {
         var providerKey = provider.Provider.ProviderKey;
@@ -476,25 +494,31 @@ public sealed class AgentRuntime : IAsyncDisposable
         return _modelCache.TryGetValue(providerKey, out var cached) ? cached : [];
     }
 
+    // 函数功能：取 provider 的 ModelCatalog，若未显式设置则尝试将 TurnExecutor 转型为 IModelProviderModelCatalog 使用。
     private static IModelProviderModelCatalog? ResolveModelCatalog(AgentRuntimeProviderRegistration provider)
         => provider.ModelCatalog ?? provider.TurnExecutor as IModelProviderModelCatalog;
 
+    // 函数功能：检查 summary 的协议族和 providerKey 是否与目标 provider 一致（不区分大小写）。
     private static bool MatchesProvider(AgentSessionSummary summary, ModelProviderRuntimeDescriptor provider)
         => string.Equals(summary.ProtocolFamily, provider.ProtocolFamily, StringComparison.OrdinalIgnoreCase) &&
            string.Equals(summary.ProviderKey, provider.ProviderKey, StringComparison.OrdinalIgnoreCase);
 
+    // 函数功能：检查 state 的协议族和 providerKey 是否与目标 provider 一致（不区分大小写）。
     private static bool MatchesProvider(AgentSessionState state, ModelProviderRuntimeDescriptor provider)
         => string.Equals(state.ProtocolFamily, provider.ProtocolFamily, StringComparison.OrdinalIgnoreCase) &&
            string.Equals(state.ProviderKey, provider.ProviderKey, StringComparison.OrdinalIgnoreCase);
 
+    // 函数功能：将 Uri 格式化为字符串，null 时返回占位符 "<default>"。
     private static string FormatUri(Uri? uri)
         => uri?.ToString() ?? "<default>";
 
+    // 函数功能：以 Info 级别写入结构化日志消息。
     private static void LogInfo(string message)
     {
         Logger.Info(message);
     }
 
+    // 函数功能：以 Warn 级别写入结构化日志消息，附带异常信息。
     private static void LogWarn(Exception exception, string message)
     {
         Logger.Warn(exception, message);

@@ -4,16 +4,23 @@ using System.Threading.Channels;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：模型提供商初始化与目录服务，负责探测各提供商可用性并广播状态变更
 /// <summary>
 /// Default model-provider initialization and model-catalog service.
 /// </summary>
 public sealed class ModelProviderInitializationService : IModelProviderInitializationService
 {
+    // 说明：已注册提供商注册表
     private readonly IModelProviderRegistry _registry;
+    // 说明：初始化选项（探测超时等）
     private readonly ModelProviderInitializationOptions _options;
+    // 说明：保护 _states 和 _refreshTasks 的同步锁
     private readonly object _gate = new();
+    // 说明：各提供商当前状态快照，键为规范化 ProviderId
     private readonly Dictionary<string, ModelProviderStateSnapshot> _states = new(StringComparer.OrdinalIgnoreCase);
+    // 说明：进行中的刷新任务字典，防止重复并发刷新同一提供商
     private readonly Dictionary<string, Task> _refreshTasks = new(StringComparer.OrdinalIgnoreCase);
+    // 说明：状态变更事件的无界 Channel，供订阅方异步消费
     private readonly Channel<ModelProviderStateChanged> _changes = Channel.CreateUnbounded<ModelProviderStateChanged>(
         new UnboundedChannelOptions
         {
@@ -120,6 +127,7 @@ public sealed class ModelProviderInitializationService : IModelProviderInitializ
         return TryGetState(key)?.Models ?? [];
     }
 
+    // 函数功能：启动或复用对指定提供商的刷新任务，已有进行中任务时直接等待其完成
     private Task StartRefreshAsync(ModelProviderDescriptor descriptor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
@@ -141,6 +149,7 @@ public sealed class ModelProviderInitializationService : IModelProviderInitializ
         return refreshTask.WaitAsync(cancellationToken);
     }
 
+    // 函数功能：核心刷新逻辑，探测提供商可用性并发布最终状态；超时或异常时发布失败状态
     private async Task RefreshProviderCoreAsync(ModelProviderDescriptor descriptor, string key)
     {
         try
@@ -210,6 +219,7 @@ public sealed class ModelProviderInitializationService : IModelProviderInitializ
         }
     }
 
+    // 函数功能：为所有已注册提供商补全初始状态快照（未知或禁用）
     private void EnsureDescriptorStates()
     {
         foreach (var descriptor in _registry.ListProviders(includeDisabled: true))
@@ -235,6 +245,7 @@ public sealed class ModelProviderInitializationService : IModelProviderInitializ
         }
     }
 
+    // 函数功能：从注册表获取提供商描述符，未注册时抛出 KeyNotFoundException
     private ModelProviderDescriptor GetProviderDescriptor(ModelProviderId providerId)
     {
         if (_registry.TryGetProvider(providerId, out var descriptor))
@@ -246,6 +257,7 @@ public sealed class ModelProviderInitializationService : IModelProviderInitializ
         throw new KeyNotFoundException($"Model provider '{key}' is not registered.");
     }
 
+    // 函数功能：线程安全地读取指定键的状态快照，不存在时返回 null
     private ModelProviderStateSnapshot? TryGetState(string key)
     {
         lock (_gate)
@@ -254,6 +266,7 @@ public sealed class ModelProviderInitializationService : IModelProviderInitializ
         }
     }
 
+    // 函数功能：发布提供商失败状态快照，包含可用性、状态消息及错误分类
     private void PublishFailureState(
         ModelProviderDescriptor descriptor,
         ModelProviderAvailability availability,
@@ -272,6 +285,7 @@ public sealed class ModelProviderInitializationService : IModelProviderInitializ
         });
     }
 
+    // 函数功能：更新内存状态字典并向 Channel 写入状态变更事件
     private void PublishState(ModelProviderStateSnapshot state)
     {
         var key = ModelProviderId.NormalizeValue(state.ProviderId.Value);
@@ -283,6 +297,7 @@ public sealed class ModelProviderInitializationService : IModelProviderInitializ
         _changes.Writer.TryWrite(new ModelProviderStateChanged(state));
     }
 
+    // 函数功能：根据可用性和模型数量生成可读状态消息，外部已提供消息时直接返回
     private static string BuildStatusMessage(
         ModelProviderDescriptor descriptor,
         ModelProviderAvailability availability,
@@ -306,6 +321,7 @@ public sealed class ModelProviderInitializationService : IModelProviderInitializ
         };
     }
 
+    // 函数功能：将异常分类为 Unsupported 或 Failed，并提取可读消息和错误类别
     private static (ModelProviderAvailability Availability, string StatusMessage, string? ErrorCategory) ClassifyFailure(Exception exception)
     {
         var root = exception.GetBaseException();
@@ -329,6 +345,7 @@ public sealed class ModelProviderInitializationService : IModelProviderInitializ
         return (ModelProviderAvailability.Failed, message, root.GetType().Name);
     }
 
+    // 函数功能：去除消息首尾空白，为空时返回默认失败提示
     private static string CleanMessage(string? message)
         => string.IsNullOrWhiteSpace(message) ? "Provider initialization failed." : message.Trim();
 }

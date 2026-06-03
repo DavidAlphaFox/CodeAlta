@@ -2,6 +2,7 @@ using CodeAlta.Agent.Runtime;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：定义模型提供者的适配器、运行时及轮次执行器核心接口契约
 /// <summary>
 /// Creates runtimes for model provider definitions owned by a host-specific registry builder.
 /// </summary>
@@ -32,6 +33,7 @@ public interface IModelProviderAdapter
         CancellationToken cancellationToken = default);
 }
 
+// 模块功能：已初始化的模型提供者运行时，支持启动/停止/探针/轮次执行器创建
 /// <summary>
 /// Represents an initialized model provider runtime.
 /// </summary>
@@ -66,6 +68,7 @@ public interface IModelProviderRuntime : IAsyncDisposable
     IModelProviderTurnExecutor CreateTurnExecutor();
 }
 
+// 类型：可附加到 Agent 会话运行时的提供者运行时，额外提供运行时描述符和模型目录
 /// <summary>
 /// Represents a provider runtime that can be attached to the agent session runtime.
 /// </summary>
@@ -88,6 +91,7 @@ public interface IAgentModelProviderRuntime : IModelProviderRuntime
     AgentRuntimeProviderRegistration CreateProviderRegistration();
 }
 
+// 类型：直接拥有 Agent 会话创建能力的提供者运行时
 /// <summary>
 /// Represents a model-provider runtime that owns agent session creation directly.
 /// </summary>
@@ -104,6 +108,7 @@ public interface IModelProviderSessionRuntime : IModelProviderRuntime
     Task<IAgentSession> ResumeSessionAsync(string sessionId, AgentSessionResumeOptions options, CancellationToken cancellationToken = default);
 }
 
+// 类型：向模型提供者执行单轮对话请求的执行器接口
 /// <summary>
 /// Executes turns against a model provider.
 /// </summary>

@@ -4,6 +4,7 @@ using Microsoft.Extensions.AI;
 
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：基于 IChatClient 的通用轮次执行器，将 agent 会话请求转换为 IChatClient 流式调用并映射回 agent 事件模型
 /// <summary>
 /// Shared turn executor for provider SDKs that expose <see cref="IChatClient"/>.
 /// </summary>
@@ -28,12 +29,14 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         _listModelsAsync = listModelsAsync;
     }
 
+    // 函数功能：列出指定 provider 支持的模型列表，委托给注入的 _listModelsAsync 实现
     /// <inheritdoc />
     public Task<IReadOnlyList<AgentModelInfo>> ListModelsAsync(
         ModelProviderRuntimeDescriptor provider,
         CancellationToken cancellationToken = default)
         => _listModelsAsync(provider, cancellationToken);
 
+    // 函数功能：执行一次 agent 轮次，流式获取模型响应并通过 onUpdate 回调分发增量，最终返回完整的 AgentTurnResponse
     /// <inheritdoc />
     public async Task<AgentTurnResponse> ExecuteTurnAsync(
         AgentTurnRequest request,
@@ -94,6 +97,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         }
     }
 
+    // 函数功能：根据 AgentTurnRequest 构建 IChatClient 所需的 ChatOptions，包含模型 ID、指令、工具及推理选项
     private static ChatOptions CreateOptions(AgentTurnRequest request)
     {
         var options = new ChatOptions
@@ -110,6 +114,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         return options;
     }
 
+    // 函数功能：将 AgentReasoningEffort 映射为 IChatClient 的 ReasoningOptions，不支持时返回 null
     private static ReasoningOptions? CreateReasoningOptions(AgentTurnRequest request)
     {
         if (request.ReasoningEffort is not { } reasoningEffort ||
@@ -133,6 +138,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         };
     }
 
+    // 函数功能：检查模型是否支持所请求的推理强度级别，None 级别始终返回 false
     private static bool SupportsRequestedReasoningEffort(AgentTurnRequest request, AgentReasoningEffort reasoningEffort)
     {
         if (reasoningEffort == AgentReasoningEffort.None)
@@ -144,6 +150,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
             supportedReasoningEfforts.Contains(reasoningEffort);
     }
 
+    // 函数功能：将 SystemMessage 与 DeveloperInstructions 合并为单一指令字符串，任一为空则只返回另一个
     private static string? ComposeInstructions(AgentTurnRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.SystemMessage))
@@ -167,9 +174,11 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
                 """;
     }
 
+    // 函数功能：将 AgentConversationMessage 转换为 IChatClient 所需的 ChatMessage，含角色和内容映射
     private static ChatMessage MapMessage(AgentConversationMessage message)
         => new(MapRole(message.Role), message.Parts.Select(MapPart).ToList());
 
+    // 函数功能：将 AgentConversationRole 枚举映射为 IChatClient 的 ChatRole，未知角色默认为 User
     private static ChatRole MapRole(AgentConversationRole role)
         => role switch
         {
@@ -180,6 +189,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
             _ => ChatRole.User,
         };
 
+    // 函数功能：将 AgentMessagePart 各子类型映射为对应的 AIContent（文本、推理、工具调用、工具结果、URI、数据）
     private static AIContent MapPart(AgentMessagePart part)
         => part switch
         {
@@ -207,6 +217,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
             _ => new TextContent(string.Empty),
         };
 
+    // 函数功能：规范化 MIME 类型，若 mediaType 为空则尝试从文件名/路径扩展名推断，推断失败返回 application/octet-stream
     private static string NormalizeMediaType(string? mediaType, string? nameOrPath)
     {
         if (!string.IsNullOrWhiteSpace(mediaType))
@@ -217,6 +228,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         return GuessMediaType(nameOrPath) ?? "application/octet-stream";
     }
 
+    // 函数功能：根据文件扩展名猜测 MIME 类型，支持常见图片、PDF 和文本格式，无法识别返回 null
     private static string? GuessMediaType(string? nameOrPath)
         => string.IsNullOrWhiteSpace(nameOrPath)
             ? null
@@ -233,6 +245,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
                 _ => null,
             };
 
+    // 函数功能：将 AgentToolResult 转换为 IChatClient 函数调用结果对象，支持空结果、单文本和多内容项
     private static object? CreateFunctionResult(AgentToolResult result)
     {
         if (result.Items.Count == 0)
@@ -262,6 +275,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         return contentItems;
     }
 
+    // 函数功能：将 JsonElement 格式的工具调用参数反序列化为字符串键字典，非对象类型或 null/undefined 返回 null
     private static IDictionary<string, object?>? DeserializeArguments(JsonElement arguments)
     {
         if (arguments.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
@@ -277,6 +291,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
             : null;
     }
 
+    // 函数功能：从流式响应更新中提取助手文本和推理文本增量，生成对应的 AgentTurnDelta
     private static IEnumerable<AgentTurnDelta> ExtractStreamingDeltas(ChatResponseUpdate update)
     {
         foreach (var content in update.Contents)
@@ -303,6 +318,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         }
     }
 
+    // 函数功能：将 ChatResponse 中的助手消息映射为 AgentConversationMessage，缓冲文本和推理内容后统一刷出，返回消息及各 part 对应的 contentId 列表
     private static (AgentConversationMessage Message, IReadOnlyList<string?> PartContentIds) MapAssistantMessage(
         ChatResponse response,
         AgentTurnRequest request)
@@ -382,6 +398,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         return (new AgentConversationMessage(AgentConversationRole.Assistant, parts), partContentIds);
     }
 
+    // 函数功能：尝试将单个 AIContent 映射为 AgentMessagePart，不支持的内容类型返回 false
     private static bool TryMapAssistantPart(
         AIContent content,
         AgentReasoningProvenance reasoningProvenance,
@@ -412,6 +429,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         return false;
     }
 
+    // 函数功能：将工具调用参数字典序列化为 JsonElement，null 参数时输出空 JSON 对象
     private static JsonElement SerializeArguments(IDictionary<string, object?>? arguments)
     {
         using var stream = new MemoryStream();
@@ -433,6 +451,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
     }
 
+    // 函数功能：从 ChatResponse 的用量信息构建 AgentSessionUsage，响应无用量时返回 null
     private static AgentSessionUsage? CreateUsage(AgentTurnRequest request, ChatResponse response)
     {
         if (response.Usage is null)
@@ -451,6 +470,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
             updatedAt: response.CreatedAt ?? DateTimeOffset.UtcNow);
     }
 
+    // 函数功能：将响应的 responseId 和 conversationId 序列化为 provider 状态 JsonElement，均为空时返回 null
     private static JsonElement? CreateProviderState(ChatResponse response)
     {
         if (string.IsNullOrWhiteSpace(response.ResponseId) &&
@@ -479,12 +499,14 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
     }
 
+    // 函数功能：从助手消息的文本 part 中提取第一段非空文本作为摘要
     private static string? ExtractSummary(AgentConversationMessage message)
         => message.Parts
             .OfType<AgentMessagePart.Text>()
             .Select(static part => part.Value)
             .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 
+    // 函数功能：递归将 JsonElement 转换为 CLR 对象（字典/数组/字符串/数值/布尔/null）
     private static object? ConvertJsonValue(JsonElement value)
         => value.ValueKind switch
         {
@@ -502,6 +524,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
             _ => value.GetRawText(),
         };
 
+    // 函数功能：将 CLR 对象递归写入 Utf8JsonWriter，支持基本类型、字典、集合及常用值类型，不支持的类型抛出 NotSupportedException
     private static void WriteJsonValue(Utf8JsonWriter writer, object? value)
     {
         switch (value)
@@ -558,6 +581,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
         }
     }
 
+    // 函数功能：将运行时异常包装为 AgentTurnExecutionException，并检测是否为上下文溢出错误
     private static AgentTurnExecutionException CreateTurnExecutionException(Exception ex)
         => new(
             new AgentTurnFailure(
@@ -565,6 +589,7 @@ internal sealed class ChatClientTurnExecutor : IModelProviderTurnExecutor, IMode
                 IsContextOverflowMessage(ex.Message)),
             ex);
 
+    // 函数功能：通过关键词匹配判断异常消息是否表示 context 长度溢出错误
     private static bool IsContextOverflowMessage(string? message)
         => !string.IsNullOrWhiteSpace(message) &&
            (message.Contains("context length", StringComparison.OrdinalIgnoreCase) ||

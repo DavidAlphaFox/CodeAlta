@@ -2,6 +2,7 @@ using System.Text.Json;
 
 namespace CodeAlta.Agent.Runtime.Compaction;
 
+// 模块功能：对话压缩摘要器，负责将会话历史浓缩为结构化 Markdown 摘要，支持分块、收缩及超大锚点归约
 internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor executor)
 {
     private const int RecursiveChunkPassLimit = 4;
@@ -80,6 +81,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
 
     private readonly IAgentCompactionSummaryExecutor _executor = executor ?? throw new ArgumentNullException(nameof(executor));
 
+    // 函数功能：对给定的会话历史执行完整摘要流程，提取文件活动并在必要时处理超大锚点，返回压缩结果
     public async Task<AgentCompactionResult> SummarizeAsync(
         ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
@@ -149,6 +151,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         };
     }
 
+    // 函数功能：将已有摘要收缩至目标 Token 数，重写为更紧凑的续接摘要，保留关键续接信息
     public async Task<AgentCompactionResult> ShrinkSummaryAsync(
         ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
@@ -204,6 +207,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         };
     }
 
+    // 函数功能：对单个 preparation 执行摘要，若输入超限则降级为分块流程；返回包含统计信息的 AgentCompactionResult
     private async Task<AgentCompactionResult> SummarizePreparationAsync(
         ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
@@ -311,6 +315,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
             ModelVisibleModifiedFileCount: modelVisibleFileActivity.ModifiedFiles.Count);
     }
 
+    // 函数功能：将待摘要消息分块递归摘要，最终合并保留前后缀的摘要，并汇总统计数据
     private async Task<AgentCompactionResult> SummarizeChunkedAsync(
         ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
@@ -444,6 +449,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
             };
     }
 
+    // 函数功能：根据输入限制将消息列表拆分为分块，若无需拆分则返回原列表
     private IReadOnlyList<IReadOnlyList<AgentConversationMessage>> GetChunksIfNeeded(
         AgentCompactionPreparation preparation,
         string? latestUserRequest,
@@ -470,6 +476,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
                     preparation.OversizedAnchorMessage is not null)
                 .EstimatedInputTokens);
 
+    // 函数功能：计算摘要请求的最大输入 Token 限制，综合考虑上下文窗口与输出预算
     private static long? GetSummaryInputLimit(AgentModelInfo? modelInfo, AgentCompactionSettings settings, int maxOutputTokens)
     {
         var budget = AgentTokenBudgetResolver.Resolve(modelInfo, settings);
@@ -485,6 +492,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return inputLimit;
     }
 
+    // 函数功能：将超大锚点消息序列化后提交给归约流程，返回摘要文本及实际调用次数
     private async Task<(string Synopsis, int InvocationCount)> ReduceOversizedAnchorAsync(
         ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
@@ -521,6 +529,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
             .ConfigureAwait(false);
     }
 
+    // 函数功能：递归归约超大锚点文本（超限时分块处理），调用 LLM 生成结构化 synopsis 并归一化
     private async Task<(string Synopsis, int InvocationCount)> ReduceOversizedAnchorTextAsync(
         ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
@@ -597,6 +606,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return (normalizedSynopsis, 1);
     }
 
+    // 函数功能：组装并提交摘要请求至执行器，返回 LLM 的摘要响应
     private async Task<AgentCompactionSummaryResponse> ExecuteSummaryRequestAsync(
         ModelProviderId ProviderId,
         ModelProviderRuntimeDescriptor provider,
@@ -624,6 +634,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
                 cancellationToken)
             .ConfigureAwait(false);
 
+    // 函数功能：校验摘要是否非空且包含所有必需章节，不合规则抛出 InvalidOperationException
     private static void ValidateSummaryShape(string summary)
     {
         if (string.IsNullOrWhiteSpace(summary))
@@ -637,6 +648,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         }
     }
 
+    // 函数功能：归一化摘要内容，确保所有必需章节存在；若模型输出缺失章节则从历史摘要或原文中补全
     private static string NormalizeSummary(
         string summary,
         string? latestUserRequest,
@@ -723,6 +735,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return builder.ToString().Trim();
     }
 
+    // 函数功能：归一化超大锚点摘要，确保包含所有必需章节；缺失时从历史 synopsis 或原文补全
     private static string NormalizeOversizedAnchorSynopsis(
         string synopsis,
         string serializedAnchor,
@@ -766,6 +779,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return builder.ToString().Trim();
     }
 
+    // 函数功能：合并两个序列化统计对象，将所有计数字段相加，布尔标志取逻辑或
     private static AgentCompactionSerializerStatistics MergeStatistics(
         AgentCompactionSerializerStatistics left,
         AgentCompactionSerializerStatistics right)
@@ -788,6 +802,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
             TotalAttachmentCount: left.TotalAttachmentCount + right.TotalAttachmentCount,
             SerializedAttachmentCount: left.SerializedAttachmentCount + right.SerializedAttachmentCount);
 
+    // 函数功能：从事件历史中逆序提取工具调用产生的文件读写路径，去重后返回 FileActivity
     private static FileActivity ExtractFileActivity(IReadOnlyList<AgentEvent> history)
     {
         var readFiles = new List<string>();
@@ -809,6 +824,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return new FileActivity(readFiles, modifiedFiles);
     }
 
+    // 函数功能：按 Token 预算裁剪文件活动列表，优先保留在最新用户请求中明确提及的文件
     private static FileActivity BudgetFileActivityForSummary(
         FileActivity fileActivity,
         string? latestUserRequest,
@@ -872,6 +888,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return new FileActivity(selectedRead, selectedModified);
     }
 
+    // 函数功能：对路径列表排序，将用户请求中提及的路径置前，其余按原始顺序保留
     private static IEnumerable<string> OrderPathsForSummary(IEnumerable<string> paths, string latestUserRequest)
     {
         return paths
@@ -886,6 +903,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
             .Select(static item => item.Path);
     }
 
+    // 函数功能：判断路径或其文件名是否出现在最新用户请求文本中（大小写不敏感）
     private static bool IsPathMentioned(string latestUserRequest, string path)
     {
         if (string.IsNullOrWhiteSpace(latestUserRequest) || string.IsNullOrWhiteSpace(path))
@@ -903,6 +921,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
             latestUserRequest.Contains(fileName, StringComparison.OrdinalIgnoreCase);
     }
 
+    // 函数功能：从 JSON 工具调用详情中读取指定属性的路径数组，去重后追加到目标集合
     private static void AddPaths(
         JsonElement details,
         string propertyName,
@@ -924,6 +943,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         }
     }
 
+    // 函数功能：生成摘要系统提示，在模板基础上附加输出 Token 上限约束
     private static string CreateSystemPrompt(int maxOutputTokens)
         => $"""
             {SummarySystemPromptTemplate}
@@ -931,6 +951,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
             Keep the output under roughly {maxOutputTokens} tokens.
             """;
 
+    // 函数功能：生成收缩系统提示，指定目标 Token 数及最大输出 Token 上限
     private static string CreateShrinkSystemPrompt(int maxOutputTokens, long checkpointTargetTokens)
         => $"""
             {ShrinkSystemPromptTemplate}
@@ -938,6 +959,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
             Target roughly {checkpointTargetTokens} tokens when possible and never exceed roughly {maxOutputTokens} tokens.
             """;
 
+    // 函数功能：生成超大锚点归约系统提示，在模板基础上附加输出 Token 上限约束
     private static string CreateOversizedAnchorSystemPrompt(int maxOutputTokens)
         => $"""
             {OversizedAnchorSystemPromptTemplate}
@@ -945,6 +967,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
             Keep the output under roughly {maxOutputTokens} tokens.
             """;
 
+    // 函数功能：构建收缩请求的 XML 请求体，包含目标 Token 数、当前摘要及相关文件信息
     private static string BuildShrinkRequestBody(
         string summary,
         string? latestUserRequest,
@@ -961,6 +984,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return builder.ToString();
     }
 
+    // 函数功能：向 StringBuilder 追加一个 XML 标签块，值经过 XML 转义处理
     private static void AppendTag(System.Text.StringBuilder builder, string tagName, string? value)
     {
         builder.Append('<').Append(tagName).AppendLine(">");
@@ -968,6 +992,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         builder.Append("</").Append(tagName).AppendLine(">");
     }
 
+    // 函数功能：检查摘要字符串是否包含所有必需的 Markdown 章节标题
     private static bool HasRequiredSummarySections(string summary)
         => summary.Contains("## Objective", StringComparison.Ordinal) &&
            summary.Contains("## Active User Request", StringComparison.Ordinal) &&
@@ -981,12 +1006,14 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
            summary.Contains("## Critical Context", StringComparison.Ordinal) &&
            summary.Contains("## Relevant Files", StringComparison.Ordinal);
 
+    // 函数功能：检查超大锚点摘要是否包含所有必需的 Markdown 章节标题
     private static bool HasRequiredOversizedAnchorSynopsisSections(string synopsis)
         => synopsis.Contains("## Task", StringComparison.Ordinal) &&
            synopsis.Contains("## Explicit Requirements", StringComparison.Ordinal) &&
            synopsis.Contains("## Files and Identifiers", StringComparison.Ordinal) &&
            synopsis.Contains("## Exact Literals and Errors", StringComparison.Ordinal);
 
+    // 函数功能：将摘要 Markdown 文本解析为章节标题到内容的字典，仅识别受支持的标题
     private static Dictionary<string, string> ParseMarkdownSections(string summary)
     {
         var sections = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -1028,6 +1055,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         }
     }
 
+    // 函数功能：将超大锚点摘要文本解析为章节标题到内容的字典，仅识别受支持的标题
     private static Dictionary<string, string> ParseOversizedAnchorSections(string synopsis)
     {
         var sections = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -1069,6 +1097,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         }
     }
 
+    // 函数功能：判断给定行是否为摘要格式中受支持的 Markdown 章节标题
     private static bool IsSupportedSummaryHeading(string line)
         => line is "## Objective"
             or "## Active User Request"
@@ -1082,21 +1111,25 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
             or "## Critical Context"
             or "## Relevant Files";
 
+    // 函数功能：判断给定行是否为超大锚点摘要格式中受支持的 Markdown 章节标题
     private static bool IsSupportedOversizedAnchorHeading(string line)
         => line is "## Task"
             or "## Explicit Requirements"
             or "## Files and Identifiers"
             or "## Exact Literals and Errors";
 
+    // 函数功能：从章节字典中取出指定标题的内容，字典为空或内容空白时返回 null
     private static string? GetSection(IReadOnlyDictionary<string, string>? sections, string heading)
         => sections is not null && sections.TryGetValue(heading, out var value) && !string.IsNullOrWhiteSpace(value)
             ? value
             : null;
 
+    // 函数功能：从候选字符串数组中返回第一个非空白字符串，全部为空时返回 string.Empty
     private static string FirstNonEmpty(params string?[] candidates)
         => candidates.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim()
            ?? string.Empty;
 
+    // 函数功能：提取文本首段（遇到句号或换行截断），并限制在 maxCharacters 字符内
     private static string ExtractLeadParagraph(string text, int maxCharacters)
     {
         var normalized = NormalizeMultiline(text, maxCharacters);
@@ -1114,6 +1147,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return normalized;
     }
 
+    // 函数功能：将多行文本去空白行后合并为单行，超过 maxCharacters 时截断并加省略号
     private static string NormalizeMultiline(string? text, int maxCharacters)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -1140,6 +1174,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return normalized[..Math.Max(maxCharacters - 3, 1)].TrimEnd() + "...";
     }
 
+    // 函数功能：将文件活动（已修改/已读取）格式化为 Markdown 列表字符串，用于摘要中的相关文件章节
     private static string BuildRelevantFilesSection(FileActivity fileActivity)
     {
         var lines = new List<string>();
@@ -1156,6 +1191,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return lines.Count == 0 ? "- None tracked." : string.Join(Environment.NewLine, lines);
     }
 
+    // 函数功能：当摘要缺少 Critical Context 章节时，从原始草稿摘要截取一段作为兜底内容
     private static string BuildFallbackCriticalContext(string summary, int maxOutputTokens)
     {
         var maxCharacters = Math.Max(Math.Min(maxOutputTokens * 6, 2400), 480);
@@ -1165,6 +1201,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
             : $"- Original draft summary:{Environment.NewLine}{normalized}";
     }
 
+    // 函数功能：向 StringBuilder 追加一个摘要章节（标题+内容），可选是否在末尾追加空行
     private static void AppendSummarySection(
         System.Text.StringBuilder builder,
         string heading,
@@ -1179,6 +1216,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         }
     }
 
+    // 函数功能：构建超大锚点归约请求的 XML 请求体，包含模式（初始/更新）、历史摘要及用户消息内容
     private static string BuildOversizedAnchorRequestBody(string serializedAnchor, string? previousSynopsis)
     {
         var builder = new System.Text.StringBuilder();
@@ -1194,6 +1232,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return builder.ToString();
     }
 
+    // 函数功能：将用户消息各部分（文本、URI 附件、内联数据）序列化为纯文本，用于锚点归约请求
     private static string SerializeOversizedAnchorMessage(AgentConversationMessage message)
     {
         var builder = new System.Text.StringBuilder();
@@ -1216,6 +1255,7 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return builder.ToString().Trim();
     }
 
+    // 函数功能：按字符预算将文本拆分为多块，尽量在换行或空白处断开，返回分块列表
     private static IReadOnlyList<string> SplitTextByBudget(string text, int maxChunkCharacters)
     {
         if (string.IsNullOrWhiteSpace(text) || maxChunkCharacters <= 0 || text.Length <= maxChunkCharacters)
@@ -1250,5 +1290,6 @@ internal sealed class AgentCompactionSummarizer(IAgentCompactionSummaryExecutor 
         return chunks;
     }
 
+    // 类型：记录当前会话中已读取与已修改的文件路径列表
     private sealed record FileActivity(IReadOnlyList<string> ReadFiles, IReadOnlyList<string> ModifiedFiles);
 }

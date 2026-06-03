@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent;
 
+// 模块功能：定义从提供者发出的用户输入请求及其结构化表单、提示、选项与响应类型
 /// <summary>
 /// Represents a user-input request originating from a provider.
 /// </summary>
@@ -58,6 +59,7 @@ public sealed record AgentUserInputOption(
 public sealed record AgentUserInputResponse(
     IReadOnlyDictionary<string, string> Answers);
 
+// 类型：用户输入请求处理委托，接收请求并异步返回用户作答结果
 /// <summary>
 /// User-input request handler delegate.
 /// </summary>

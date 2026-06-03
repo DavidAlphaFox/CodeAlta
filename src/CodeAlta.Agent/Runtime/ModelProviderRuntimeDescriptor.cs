@@ -3,6 +3,7 @@ using CodeAlta.Agent.Runtime.Compaction;
 
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：描述已配置的 Agent 运行时提供商，包含协议族、传输类型、能力配置及压缩设置
 /// <summary>
 /// Describes a configured agent-runtime provider.
 /// </summary>
@@ -54,6 +55,7 @@ public sealed record ModelProviderRuntimeDescriptor
     public JsonElement? Metadata { get; init; }
 }
 
+// 类型：标识提供商传输协议族的枚举（OpenAI/Anthropic/Google 等）
 /// <summary>
 /// Identifies the provider transport family.
 /// </summary>
@@ -85,6 +87,7 @@ public enum AgentTransportKind
     GoogleVertexAI,
 }
 
+// 类型：记录已配置提供商的兼容性特性，如是否支持开发者角色、推理控制和缓存等
 /// <summary>
 /// Captures compatibility features for a configured provider.
 /// </summary>

@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：定义自定义工具及其元数据、调用契约和结果类型，供 Agent 运行时注册和调度
 /// <summary>
 /// Defines a custom tool and its handler.
 /// </summary>
@@ -10,6 +11,7 @@ namespace CodeAlta.Agent;
 /// <param name="Handler">Tool handler.</param>
 public sealed record AgentToolDefinition(AgentToolSpec Spec, AgentToolHandler Handler);
 
+// 类型：工具规格，包含名称（需符合正则）、描述和 JSON 输入 Schema，创建时校验名称合法性
 /// <summary>
 /// Defines tool metadata required for registration with an agent provider.
 /// </summary>
@@ -95,6 +97,7 @@ public sealed record AgentToolSpec
     }
 }
 
+// 类型：描述一次工具调用，包含提供商 ID、会话 ID、调用 ID、工具名、参数及可选进度回调
 /// <summary>
 /// Represents a tool invocation.
 /// </summary>
@@ -113,6 +116,7 @@ public sealed record AgentToolInvocation(
     JsonElement Arguments,
     AgentToolProgressHandler? Progress = null);
 
+// 类型：流式工具进度更新，包含增量文本和可选结构化元数据
 /// <summary>
 /// Represents a streaming tool-progress update.
 /// </summary>
@@ -122,6 +126,7 @@ public sealed record AgentToolProgressUpdate(
     string Delta,
     JsonElement? Details = null);
 
+// 函数功能：流式工具进度回调委托，工具可通过此回调将增量输出推送给调用方
 /// <summary>
 /// Progress callback invoked by tools that can stream incremental output.
 /// </summary>
@@ -131,6 +136,7 @@ public delegate ValueTask AgentToolProgressHandler(
     AgentToolProgressUpdate update,
     CancellationToken cancellationToken);
 
+// 函数功能：工具处理委托，接收调用上下文并异步返回工具执行结果
 /// <summary>
 /// Tool handler delegate.
 /// </summary>
@@ -140,6 +146,7 @@ public delegate Task<AgentToolResult> AgentToolHandler(
     AgentToolInvocation invocation,
     CancellationToken cancellationToken);
 
+// 类型：工具执行结果，包含成功标志、内容项列表和可选错误信息
 /// <summary>
 /// Represents a tool result returned to the provider.
 /// </summary>
@@ -151,6 +158,7 @@ public sealed record AgentToolResult(
     IReadOnlyList<AgentToolResultItem> Items,
     string? Error = null);
 
+// 类型：工具结果内容项基类，支持文本和图片 URL 两种多态子类型
 /// <summary>
 /// Represents a tool result content item.
 /// </summary>

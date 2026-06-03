@@ -3,6 +3,7 @@ using XenoAtom.Logging;
 
 namespace CodeAlta.Agent.ModelCatalog;
 
+// 模块功能：维护 models.dev 目录快照，支持后台定时刷新与本地缓存，为模型元数据提供查询接口
 /// <summary>
 /// Maintains the current models.dev catalog snapshot for local model metadata enrichment.
 /// </summary>
@@ -18,18 +19,30 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
     /// </summary>
     public const string DefaultSnapshotResourceName = "CodeAlta.Agent.Data.models_dev_db.json";
 
+    // 说明：模型目录日志记录器
     private static readonly Logger Logger = LogManager.GetLogger("CodeAlta.ModelCatalog");
 
+    // 说明：保护后台刷新任务字段的锁
     private readonly object _gate = new();
+    // 说明：随程序发布的快照文件路径
     private readonly string _snapshotFilePath;
+    // 说明：内嵌程序集资源名称（旧版兜底）
     private readonly string _snapshotResourceName;
+    // 说明：可选的本地缓存文件路径，为 null 时禁用持久化缓存
     private readonly string? _cacheFilePath;
+    // 说明：远端刷新 API 地址
     private readonly Uri _refreshUri;
+    // 说明：后台刷新间隔，默认 12 小时
     private readonly TimeSpan _refreshInterval;
+    // 说明：用于下载最新目录的 HTTP 客户端
     private readonly HttpClient _httpClient;
+    // 说明：是否由本类自行管理 HttpClient 生命周期
     private readonly bool _ownsHttpClient;
+    // 说明：用于在 DisposeAsync 时取消后台刷新循环
     private readonly CancellationTokenSource _disposeCts = new();
+    // 说明：后台刷新任务引用，null 表示尚未启动
     private Task? _backgroundRefreshTask;
+    // 说明：当前内存中的数据库快照，volatile 保证读可见性
     private volatile ModelsDevDatabase _currentDatabase;
 
     /// <summary>
@@ -41,6 +54,7 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
     {
     }
 
+    // 函数功能：内部构造，支持注入初始数据库快照（主要用于测试），并根据选项初始化所有字段
     internal ModelsDevCatalogService(ModelsDevDatabase? initialDatabase, ModelsDevCatalogServiceOptions? options)
     {
         options ??= new ModelsDevCatalogServiceOptions();
@@ -134,6 +148,7 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
         }
     }
 
+    // 函数功能：加载初始数据库，优先使用本地缓存，无缓存时回退到快照文件
     private ModelsDevDatabase LoadInitialDatabase()
     {
         var snapshot = LoadSnapshotDatabase();
@@ -141,6 +156,7 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
         return cached ?? snapshot;
     }
 
+    // 函数功能：从快照文件加载数据库，文件不存在或异常时回退到内嵌程序集资源
     private ModelsDevDatabase LoadSnapshotDatabase()
     {
         if (File.Exists(_snapshotFilePath))
@@ -159,6 +175,7 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
         return LoadEmbeddedDatabaseFallback();
     }
 
+    // 函数功能：从内嵌程序集资源加载数据库，资源缺失时抛出 InvalidOperationException
     private ModelsDevDatabase LoadEmbeddedDatabaseFallback()
     {
         var assembly = typeof(ModelsDevCatalogService).Assembly;
@@ -172,6 +189,7 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
         return ModelsDevDatabaseJson.Deserialize(stream);
     }
 
+    // 函数功能：尝试从本地缓存文件加载数据库，缓存不存在或解析失败时返回 null
     private ModelsDevDatabase? TryLoadCachedDatabase()
     {
         if (string.IsNullOrWhiteSpace(_cacheFilePath) || !File.Exists(_cacheFilePath))
@@ -191,6 +209,7 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
         }
     }
 
+    // 函数功能：后台刷新循环，立即执行一次后按 _refreshInterval 定时触发
     private async Task RefreshLoopAsync(CancellationToken cancellationToken)
     {
         await RefreshOnceAsync(cancellationToken).ConfigureAwait(false);
@@ -202,6 +221,7 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
         }
     }
 
+    // 函数功能：从远端拉取最新目录并更新内存快照，成功后持久化缓存；HTTP/解析异常仅记录警告
     private async Task RefreshOnceAsync(CancellationToken cancellationToken)
     {
         try
@@ -225,6 +245,7 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
         }
     }
 
+    // 函数功能：将数据库序列化后原子写入缓存文件（先写临时文件再 Move 替换）
     private async Task PersistCacheAsync(ModelsDevDatabase database, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_cacheFilePath))
@@ -261,6 +282,7 @@ public sealed class ModelsDevCatalogService : IAsyncDisposable
     }
 }
 
+// 类型：models.dev 目录服务的配置选项，控制快照路径、缓存路径、刷新地址和间隔等
 /// <summary>
 /// Describes how the models.dev catalog service loads and refreshes snapshots.
 /// </summary>

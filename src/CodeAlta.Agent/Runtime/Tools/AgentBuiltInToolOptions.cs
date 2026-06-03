@@ -2,6 +2,7 @@ using System.Net.Http;
 
 namespace CodeAlta.Agent.Runtime.Tools;
 
+// 模块功能：配置本地原始 API 会话的内置工具参数，含读文件行数限制、Grep 匹配数、WebGet 超时等
 /// <summary>
 /// Configures the default built-in tools for a local raw-API session.
 /// </summary>

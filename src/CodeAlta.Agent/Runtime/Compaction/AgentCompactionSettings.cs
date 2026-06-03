@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent.Runtime.Compaction;
 
+// 模块功能：定义 Agent 运行时压缩行为的规范化配置，包含触发阈值、输出预算和各项比例参数的默认值与上限
 /// <summary>
 /// Normalized agent-runtime compaction settings.
 /// </summary>

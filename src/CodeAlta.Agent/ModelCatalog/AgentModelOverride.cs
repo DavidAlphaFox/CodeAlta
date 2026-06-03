@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent.ModelCatalog;
 
+// 模块功能：描述应用于已发现模型元数据的本地覆盖配置，可覆盖显示名、Token 限制及能力标志等字段
 /// <summary>
 /// Describes a local override applied to discovered model metadata.
 /// </summary>

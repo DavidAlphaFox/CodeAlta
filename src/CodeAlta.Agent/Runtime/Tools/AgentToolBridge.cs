@@ -5,6 +5,7 @@ using Microsoft.Extensions.AI;
 
 namespace CodeAlta.Agent.Runtime.Tools;
 
+// 模块功能：工具定义到 provider 无关聊天工具声明的转换桥，同时负责将工具 Schema 规范化为 OpenAI strict 模式兼容格式。
 /// <summary>
 /// Converts agent tool definitions into provider-agnostic chat-tool declarations.
 /// </summary>
@@ -36,6 +37,7 @@ public static class AgentToolBridge
         "uniqueItems",
     }.ToFrozenSet(StringComparer.Ordinal);
 
+    // 函数功能：将 AgentToolDefinition 列表转换为 AITool 声明列表，自动处理工具名称唯一化；返回空列表当输入为 null 或空。
     /// <summary>
     /// Converts tool definitions into <see cref="AITool"/> declarations.
     /// </summary>
@@ -63,6 +65,7 @@ public static class AgentToolBridge
         return declarations;
     }
 
+    // 函数功能：将工具输入 Schema 转换为 OpenAI strict 模式兼容格式，移除不支持的关键字并将其内容追加到 description，返回新的 JsonElement。
     /// <summary>
     /// Normalizes a tool schema for OpenAI strict function calling.
     /// </summary>
@@ -80,6 +83,7 @@ public static class AgentToolBridge
         return document.RootElement.Clone();
     }
 
+    // 函数功能：构建注册工具名到 AgentToolDefinition 的大小写敏感映射，名称经唯一化处理；输入为 null 或空时返回空字典。
     /// <summary>
     /// Creates a lookup map from registered tool name to the underlying definition.
     /// </summary>
@@ -104,6 +108,7 @@ public static class AgentToolBridge
         return map;
     }
 
+    // 函数功能：将工具名转换为仅含字母数字及 _/- 的注册名，超长时截断至 64 字符，若名称已存在则附加数字后缀保证唯一。
     internal static string GetRegisteredToolName(string toolName, ISet<string>? usedNames = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(toolName);
@@ -164,6 +169,7 @@ public static class AgentToolBridge
         }
     }
 
+    // 函数功能：递归将 JSON Schema 写入 writer 并转换为 OpenAI strict 格式：移除不支持关键字、强制所有属性 required、添加 additionalProperties:false，可选强制 nullable。
     private static void WriteOpenAIStrictSchema(Utf8JsonWriter writer, JsonElement schema, bool forceNullable)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -301,6 +307,7 @@ public static class AgentToolBridge
         writer.WriteEndObject();
     }
 
+    // 函数功能：从 schema 的 required 数组中提取属性名集合，用于判断属性是否为必填。
     private static HashSet<string> GetRequiredPropertyNames(JsonElement schema)
     {
         var requiredNames = new HashSet<string>(StringComparer.Ordinal);
@@ -318,6 +325,7 @@ public static class AgentToolBridge
         return requiredNames;
     }
 
+    // 函数功能：将 anyOf/oneOf/allOf 的变体数组递归写入 strict 格式；appendNullVariant 为 true 时若缺少 null 变体则自动追加。
     private static void WriteSchemaVariantArray(Utf8JsonWriter writer, JsonElement variants, bool appendNullVariant)
     {
         writer.WriteStartArray();
@@ -340,6 +348,7 @@ public static class AgentToolBridge
         writer.WriteEndArray();
     }
 
+    // 函数功能：将 type 字段写为 nullable 形式：字符串时改为 [原类型, "null"] 数组，数组时追加 "null"（如已有则跳过）。
     private static void WriteNullableType(Utf8JsonWriter writer, JsonElement typeElement)
     {
         if (typeElement.ValueKind == JsonValueKind.String)
@@ -384,12 +393,14 @@ public static class AgentToolBridge
         typeElement.WriteTo(writer);
     }
 
+    // 函数功能：判断给定 schema 是否为纯 null 类型（即 { "type": "null" }）。
     private static bool IsNullSchema(JsonElement schema)
         => schema.ValueKind == JsonValueKind.Object &&
            schema.TryGetProperty("type", out var typeProperty) &&
            typeProperty.ValueKind == JsonValueKind.String &&
            string.Equals(typeProperty.GetString(), "null", StringComparison.Ordinal);
 
+    // 函数功能：向 writer 写入 { "type": "null" } 对象，表示 null 类型 schema 变体。
     private static void WriteNullSchema(Utf8JsonWriter writer)
     {
         writer.WriteStartObject();
@@ -397,6 +408,7 @@ public static class AgentToolBridge
         writer.WriteEndObject();
     }
 
+    // 函数功能：判断 schema 的 type 是否为 object（支持字符串和数组两种形式），用于决定是否需要写入 additionalProperties:false。
     private static bool IsObjectType(JsonElement schema)
     {
         if (!schema.TryGetProperty("type", out var typeProperty))
@@ -414,6 +426,7 @@ public static class AgentToolBridge
         };
     }
 
+    // 函数功能：将原始 description 与因 OpenAI strict 不支持而降级的关键字行拼接，返回合并后的描述字符串。
     private static string AppendDescription(string? description, IReadOnlyList<string> extraDescriptionLines)
     {
         if (extraDescriptionLines.Count == 0)

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent.ModelCatalog;
 
+// 模块功能：models.dev 模型目录数据库，持有 provider 与 model 的规范化映射，提供按 provider/model ID 的查找能力。
 /// <summary>
 /// Represents the models.dev provider and model database snapshot.
 /// </summary>
@@ -11,6 +12,7 @@ public sealed class ModelsDevDatabase
 {
     private readonly IReadOnlyDictionary<string, ModelsDevProviderEntry> _providersById;
 
+    // 函数功能：内部构造函数，接收已规范化的 provider 字典和 ID 索引字典，直接赋值，仅供工厂方法调用。
     internal ModelsDevDatabase(
         IReadOnlyDictionary<string, ModelsDevProviderDefinition> providers,
         IReadOnlyDictionary<string, ModelsDevProviderEntry> providersById)
@@ -24,6 +26,7 @@ public sealed class ModelsDevDatabase
     /// </summary>
     public IReadOnlyDictionary<string, ModelsDevProviderDefinition> Providers { get; }
 
+    // 函数功能：按 models.dev provider ID 查找 provider 定义，ID 为空或不存在时返回 false，找到时通过 out 参数返回定义。
     /// <summary>
     /// Tries to resolve a provider by models.dev provider identifier.
     /// </summary>
@@ -48,6 +51,7 @@ public sealed class ModelsDevDatabase
         return false;
     }
 
+    // 函数功能：按 provider ID 和 model ID 查找模型定义，支持多种 lookup key 匹配策略（由 AgentModelIdentity 提供），找到时通过 out 参数返回。
     /// <summary>
     /// Tries to resolve a model by models.dev provider identifier and model identifier.
     /// </summary>
@@ -82,6 +86,7 @@ public sealed class ModelsDevDatabase
         return false;
     }
 
+    // 函数功能：从原始 provider 字典构建规范化的 ModelsDevDatabase，跳过无效 ID，对模型建立多 key 查找索引。
     internal static ModelsDevDatabase CreateNormalized(
         Dictionary<string, ModelsDevProviderDefinition>? providers)
     {
@@ -106,6 +111,7 @@ public sealed class ModelsDevDatabase
         return new ModelsDevDatabase(normalizedProviders, providersById);
     }
 
+    // 函数功能：将 provider 的 model 列表规范化，为每个模型生成多个 lookup key（含 ID/名称变体）并写入不区分大小写的字典。
     private static Dictionary<string, ModelsDevModelDefinition> NormalizeModels(
         Dictionary<string, ModelsDevModelDefinition>? models)
     {
@@ -127,6 +133,7 @@ public sealed class ModelsDevDatabase
         return normalized;
     }
 
+    // 函数功能：将标识符规范化，空白时返回 null，否则修剪首尾空格。
     private static string? NormalizeIdentifier(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -135,6 +142,7 @@ public sealed class ModelsDevDatabase
         IReadOnlyDictionary<string, ModelsDevModelDefinition> ModelsById);
 }
 
+// 类型：models.dev 单个 provider 的元数据，包含 ID、名称、API 端点、环境变量及其所有模型定义。
 /// <summary>
 /// Represents one models.dev provider entry.
 /// </summary>
@@ -189,6 +197,7 @@ public sealed class ModelsDevProviderDefinition
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
+// 类型：models.dev 单个模型的详细定义，包含能力标志、费用、token 限制及交叉推理等元数据。
 /// <summary>
 /// Represents one models.dev model entry.
 /// </summary>
@@ -304,6 +313,7 @@ public sealed class ModelsDevModelDefinition
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
+// 类型：模型支持的输入/输出模态列表（如 text、image）。
 /// <summary>
 /// Represents supported input and output modalities for a model.
 /// </summary>
@@ -328,6 +338,7 @@ public sealed class ModelsDevModalitiesDefinition
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
+// 类型：模型计费信息，以每百万 token 为单位描述输入、输出、推理及缓存读写费用。
 /// <summary>
 /// Represents cost information for a model.
 /// </summary>
@@ -382,6 +393,7 @@ public sealed class ModelsDevCostDefinition
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
+// 类型：模型 token 限制，包含上下文窗口大小、最大输入和最大输出 token 数。
 /// <summary>
 /// Represents token limits for a model.
 /// </summary>
@@ -412,6 +424,7 @@ public sealed class ModelsDevLimitDefinition
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
+// 类型：模型交叉推理元数据，标记是否支持交叉推理及其输出字段名。
 /// <summary>
 /// Represents models.dev interleaved reasoning metadata.
 /// </summary>
@@ -428,8 +441,10 @@ public sealed class ModelsDevInterleavedDefinition
     public string? Field { get; set; }
 }
 
+// 类型：ModelsDevInterleavedDefinition 的自定义 JSON 转换器，支持布尔值和对象两种序列化形式。
 internal sealed class ModelsDevInterleavedDefinitionJsonConverter : JsonConverter<ModelsDevInterleavedDefinition?>
 {
+    // 函数功能：从 JSON 读取交叉推理元数据，null/true/false 映射为对应对象，对象形式则委托给 ReadObject 解析。
     public override ModelsDevInterleavedDefinition? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -445,6 +460,7 @@ internal sealed class ModelsDevInterleavedDefinitionJsonConverter : JsonConverte
         };
     }
 
+    // 函数功能：将交叉推理元数据写入 JSON：null 写 null，无 Field 时写布尔，有 Field 时写含 field 属性的对象。
     public override void Write(Utf8JsonWriter writer, ModelsDevInterleavedDefinition? value, JsonSerializerOptions options)
     {
         if (value is null)
@@ -464,6 +480,7 @@ internal sealed class ModelsDevInterleavedDefinitionJsonConverter : JsonConverte
         writer.WriteEndObject();
     }
 
+    // 函数功能：解析 JSON 对象形式的交叉推理元数据，提取 field 和 enabled 属性，返回对应的 ModelsDevInterleavedDefinition。
     private static ModelsDevInterleavedDefinition ReadObject(ref Utf8JsonReader reader)
     {
         using var document = JsonDocument.ParseValue(ref reader);

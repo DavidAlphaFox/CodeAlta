@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：定义可重放的 Agent 运行时会话消息及其消息部件类型层级
 /// <summary>
 /// Represents a replayable agent-runtime conversation message.
 /// </summary>
@@ -12,6 +13,7 @@ public sealed record AgentConversationMessage(
     AgentConversationRole Role,
     IReadOnlyList<AgentMessagePart> Parts);
 
+// 类型：会话角色枚举，区分 System / User / Assistant / Tool 四种角色
 /// <summary>
 /// Identifies a replayable agent-runtime conversation role.
 /// </summary>
@@ -38,6 +40,7 @@ public enum AgentConversationRole
     Tool,
 }
 
+// 类型：消息部件基类，通过 $type 区分文本、推理、工具调用等六种子类型
 /// <summary>
 /// Base type for replayable agent-runtime message parts.
 /// </summary>

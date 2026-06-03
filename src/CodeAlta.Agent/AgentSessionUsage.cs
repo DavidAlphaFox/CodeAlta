@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：会话 token/用量统计数据结构，涵盖上下文窗口快照、最近操作用量、限速摘要及 Copilot/Codex 特定扩展详情。
 /// <summary>
 /// Represents normalized active-context and token-usage information for a session.
 /// </summary>
@@ -45,6 +46,7 @@ public sealed record AgentSessionUsage(
             : null;
 }
 
+// 类型：当前活跃输入上下文的用量快照，包含已用 token 数、token 上限、消息数量及相关标签。
 /// <summary>
 /// Represents a normalized active input-context usage snapshot.
 /// </summary>
@@ -62,6 +64,7 @@ public sealed record AgentWindowUsageSnapshot(
     long? TotalContextEnvelope = null,
     long? MaxOutputTokens = null);
 
+// 类型：最近一次有效模型操作的规范化用量快照，含 token 消耗、费用、耗时、发起方及推理 effort 等信息。
 /// <summary>
 /// Represents normalized usage for the most recent meaningful model operation.
 /// </summary>
@@ -93,6 +96,7 @@ public sealed record AgentOperationUsageSnapshot(
     string? ReasoningEffort = null,
     string? Label = null);
 
+// 类型：规范化限速摘要，包含限额名称、计划类型及主/次限速窗口。
 /// <summary>
 /// Represents normalized rate-limit information for a session.
 /// </summary>
@@ -108,6 +112,7 @@ public sealed record AgentRateLimitSummary(
     AgentRateLimitWindow? Secondary = null,
     string? Label = null);
 
+// 类型：规范化限速窗口，记录已用百分比、重置时间及窗口时长（分钟）。
 /// <summary>
 /// Represents a normalized rate-limit window.
 /// </summary>
@@ -119,6 +124,7 @@ public sealed record AgentRateLimitWindow(
     DateTimeOffset? ResetsAt = null,
     long? WindowDurationMinutes = null);
 
+// 类型：枚举，标识用量快照所代表的语义范围（当前窗口、最近操作、会话累计、压缩、截断或纯限速）。
 /// <summary>
 /// Identifies the semantic scope represented by a usage snapshot.
 /// </summary>
@@ -160,6 +166,7 @@ public enum AgentUsageScope
     RateLimitOnly
 }
 
+// 类型：枚举，标识产生该用量快照的 provider 事件来源（Copilot/Codex 各类事件或历史恢复/本地 provider）。
 /// <summary>
 /// Identifies which provider event produced a usage snapshot.
 /// </summary>
@@ -222,6 +229,7 @@ public enum AgentUsageSource
     ProviderUsage
 }
 
+// 类型：provider/运行时特定用量详情的多态基类，由 JSON 鉴别符 "$type" 区分 codex 和 copilot 派生类型。
 /// <summary>
 /// Base type for provider/runtime-specific session usage information.
 /// </summary>
@@ -230,6 +238,7 @@ public enum AgentUsageSource
 [JsonDerivedType(typeof(CopilotSessionUsageDetails), "copilot")]
 public abstract record AgentSessionUsageDetails;
 
+// 类型：Codex 特定用量详情，包含最近一轮及累计 token 用量、上下文窗口大小和限速快照。
 /// <summary>
 /// Codex-specific usage details.
 /// </summary>
@@ -244,6 +253,7 @@ public sealed record CodexSessionUsageDetails(
     CodexRateLimitSnapshot? RateLimits = null)
     : AgentSessionUsageDetails;
 
+// 类型：Copilot 特定用量详情，包含最近模型调用用量、最近压缩信息及配额快照列表。
 /// <summary>
 /// Copilot-specific usage details.
 /// </summary>
@@ -256,6 +266,7 @@ public sealed record CopilotSessionUsageDetails(
     CopilotQuotaSnapshot[]? QuotaSnapshots = null)
     : AgentSessionUsageDetails;
 
+// 类型：Codex token 用量细分，区分缓存输入、新鲜输入、输出、推理输出及总量。
 /// <summary>
 /// Codex token-usage breakdown.
 /// </summary>
@@ -271,6 +282,7 @@ public sealed record CodexTokenUsage(
     long ReasoningOutputTokens,
     long TotalTokens);
 
+// 类型：Codex 限速快照，含限额 ID、名称、计划类型及主/次限速窗口。
 /// <summary>
 /// Codex rate-limit snapshot.
 /// </summary>
@@ -286,6 +298,7 @@ public sealed record CodexRateLimitSnapshot(
     CodexRateLimitWindow? Primary,
     CodexRateLimitWindow? Secondary);
 
+// 类型：Codex 限速窗口详情，包含已用百分比、重置时间和窗口时长。
 /// <summary>
 /// Codex rate-limit window details.
 /// </summary>
@@ -297,6 +310,7 @@ public sealed record CodexRateLimitWindow(
     DateTimeOffset? ResetsAt,
     long? WindowDurationMinutes);
 
+// 类型：Copilot 模型调用的 token 和计费用量，含输入/输出 token、缓存读写、费用、耗时及 AIU 成本。
 /// <summary>
 /// Copilot assistant-call token and billing usage.
 /// </summary>
@@ -326,6 +340,7 @@ public sealed record CopilotAssistantUsage(
     double? TotalNanoAiu = null,
     CopilotTokenDetail[]? TokenDetails = null);
 
+// 类型：Copilot token 分类明细条目，记录某一类别的 token 名称和数量。
 /// <summary>
 /// Copilot token-detail entry.
 /// </summary>
@@ -335,6 +350,7 @@ public sealed record CopilotTokenDetail(
     string TokenType,
     long TokenCount);
 
+// 类型：Copilot 压缩操作的用量与缩减详情，记录压缩前后 token/消息数量、移除量及压缩摘要。
 /// <summary>
 /// Copilot compaction usage and reduction details.
 /// </summary>
@@ -356,6 +372,7 @@ public sealed record CopilotCompactionUsage(
     CopilotCompactionTokenUsage? TokensUsed = null,
     string? SummaryContent = null);
 
+// 类型：压缩 LLM 调用的 token 用量，包含输入、输出及缓存复用的 token 数量。
 /// <summary>
 /// Copilot token usage for the compaction LLM call.
 /// </summary>
@@ -367,6 +384,7 @@ public sealed record CopilotCompactionTokenUsage(
     long OutputTokens,
     long CachedInputTokens);
 
+// 类型：具名 Copilot 配额快照，关联配额标识符与具体的配额详情。
 /// <summary>
 /// Named Copilot quota snapshot.
 /// </summary>
@@ -376,6 +394,7 @@ public sealed record CopilotQuotaSnapshot(
     string Name,
     CopilotQuotaDetails Details);
 
+// 类型：Copilot 配额详情的多态基类，由 "$type" 鉴别符区分 request（请求配额）和 opaque（不透明配额）子类型。
 /// <summary>
 /// Base type for typed Copilot quota details.
 /// </summary>
@@ -384,6 +403,7 @@ public sealed record CopilotQuotaSnapshot(
 [JsonDerivedType(typeof(CopilotOpaqueQuotaDetails), "opaque")]
 public abstract record CopilotQuotaDetails;
 
+// 类型：Copilot 请求配额快照，记录权益请求数、已用数、剩余百分比、超额量及配额重置时间。
 /// <summary>
 /// Typed Copilot request-quota snapshot.
 /// </summary>
@@ -404,6 +424,7 @@ public sealed record CopilotRequestQuotaDetails(
     DateTimeOffset? ResetDate = null)
     : CopilotQuotaDetails;
 
+// 类型：不透明 Copilot 配额快照兜底类型，将未知结构序列化为文本摘要。
 /// <summary>
 /// Typed opaque Copilot quota snapshot fallback for unknown shapes.
 /// </summary>

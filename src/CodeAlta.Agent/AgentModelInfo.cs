@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：描述提供商中某个可用模型的基本信息，包括推理能力和能力元数据
 /// <summary>
 /// Describes an available model in an agent provider.
 /// </summary>

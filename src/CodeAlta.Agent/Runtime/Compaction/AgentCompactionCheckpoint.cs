@@ -2,6 +2,7 @@ using System.Text;
 
 namespace CodeAlta.Agent.Runtime.Compaction;
 
+// 模块功能：表示本地持久化的对话压缩检查点，包含摘要文本、统计指标及保留消息
 /// <summary>
 /// Represents a persisted local compaction checkpoint.
 /// </summary>
@@ -252,6 +253,7 @@ public sealed record AgentCompactionCheckpoint
     /// </summary>
     public int? ModelVisibleModifiedFileCount { get; init; }
 
+    // 函数功能：将检查点摘要包装为合成回放消息，供会话重建时注入
     /// <summary>
     /// Creates the synthetic replay message for the checkpoint.
     /// </summary>
@@ -261,6 +263,7 @@ public sealed record AgentCompactionCheckpoint
             AgentConversationRole.User,
             [new AgentMessagePart.Text(WrapSummary(Summary))]);
 
+    // 函数功能：将摘要文本包裹进 XML 检查点信封，返回带版本标记的完整字符串
     /// <summary>
     /// Wraps summary text in the canonical checkpoint envelope.
     /// </summary>
@@ -275,6 +278,7 @@ public sealed record AgentCompactionCheckpoint
         return builder.ToString();
     }
 
+    // 函数功能：从回放消息中提取检查点摘要原文（去除信封标签），不符合格式时返回 null
     /// <summary>
     /// Attempts to extract a wrapped summary from a replay message.
     /// </summary>

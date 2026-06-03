@@ -13,6 +13,7 @@ using XenoAtom.Glob.IO;
 
 namespace CodeAlta.Agent.Runtime.Tools;
 
+// 模块功能：内置工具工厂，为本地原始 API 会话创建并注册 read_file/list_dir/grep/webget/shell_command 等所有内置工具
 /// <summary>
 /// Creates the default non-provider built-in tools used by local raw-API sessions.
 /// </summary>
@@ -137,6 +138,7 @@ public static class AgentBuiltInToolFactory
         }
         """);
 
+    // 函数功能：构建并返回所有默认内置工具列表（read_file/list_dir/grep/webget/shell_command/write_file/replace_in_file/delete_file_or_dir/rename_file_or_dir/apply_patch），根据 options 决定是否启用 apply_patch
     /// <summary>
     /// Creates the default built-in tools.
     /// </summary>
@@ -219,6 +221,7 @@ public static class AgentBuiltInToolFactory
             .ToArray();
     }
 
+    // 函数功能：实现 read_file 工具，按行号范围读取本地文本文件；参数 offset 支持正向/负向偏移，limit 限制最大行数，返回带行号前缀的文本内容
     private static Task<AgentToolResult> ReadFileAsync(
         AgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -269,6 +272,7 @@ public static class AgentBuiltInToolFactory
             [new AgentToolResultItem.Text(string.Join(Environment.NewLine, lines))]));
     }
 
+    // 函数功能：将负向行偏移（从末尾倒数）转换为正向起始行号；先统计文件总行数，再计算实际起始行，最小值钳至 1
     private static int GetStartLineFromEnd(string path, int offset, CancellationToken cancellationToken)
     {
         var totalLines = 0;
@@ -282,6 +286,7 @@ public static class AgentBuiltInToolFactory
         return Math.Max(1, startLine);
     }
 
+    // 函数功能：实现 list_dir 工具，列出指定目录的直接子项（文件标注 [file]、目录标注 [dir]），按名称不区分大小写排序后返回
     private static Task<AgentToolResult> ListDirectoryAsync(
         AgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -314,6 +319,7 @@ public static class AgentBuiltInToolFactory
             [new AgentToolResultItem.Text(entries.Length == 0 ? "(empty directory)" : string.Join(Environment.NewLine, entries))]));
     }
 
+    // 函数功能：实现 grep 工具，在指定文件或目录中按 .NET 正则逐行搜索；支持 glob 过滤、大小写敏感开关、最大匹配数限制，跳过二进制文件和图片，无匹配时返回 "(no matches)"
     private static Task<AgentToolResult> GrepAsync(
         AgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -426,6 +432,7 @@ public static class AgentBuiltInToolFactory
             [new AgentToolResultItem.Text(matches.Count == 0 ? "(no matches)" : string.Join(Environment.NewLine, matches))]));
     }
 
+    // 函数功能：实现 webget 工具，向指定 HTTP/HTTPS URL 发起 GET 请求；校验 URL 合法性、Content-Type 支持性及响应体大小限制，HTML/XHTML 默认简化为纯文本，支持 rawHtml/includeHttpStatus/timeoutSeconds 参数
     private static async Task<AgentToolResult> WebGetAsync(
         AgentBuiltInToolOptions options,
         HttpClient httpClient,
@@ -521,6 +528,7 @@ public static class AgentBuiltInToolFactory
         }
     }
 
+    // 函数功能：实现 shell_command 工具，向宿主请求权限后在本地 shell（Unix 为 $SHELL，Windows 为 pwsh）执行命令，实时泵送 stdout/stderr，支持超时；返回 exit_code、working_directory、stdout、stderr
     private static async Task<AgentToolResult> ShellCommandAsync(
         AgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -634,6 +642,7 @@ public static class AgentBuiltInToolFactory
         return new AgentToolResult(true, [new AgentToolResultItem.Text(output)]);
     }
 
+    // 函数功能：实现 write_file 工具，将指定内容完整写入文件（若不存在则创建，已存在则覆盖）；写入前自动创建父目录并向宿主请求文件修改权限
     private static async Task<AgentToolResult> WriteFileAsync(
         AgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -682,6 +691,7 @@ public static class AgentBuiltInToolFactory
         return SuccessResult($"{verb} {resolution.DisplayPath}");
     }
 
+    // 函数功能：实现 replace_in_file 工具，在文本文件中精确替换字符串；replace_all=false 时要求恰好一处匹配，自动适配文件换行风格，替换前向宿主请求权限
     private static async Task<AgentToolResult> ReplaceInFileAsync(
         AgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -767,6 +777,7 @@ public static class AgentBuiltInToolFactory
         return SuccessResult($"Replaced {replacedCount} occurrence(s) in {resolution.DisplayPath}");
     }
 
+    // 函数功能：实现 delete_file_or_dir 工具，删除指定文件或递归删除目录；禁止删除会话工作目录本身，删除前向宿主请求权限
     private static async Task<AgentToolResult> DeleteFileOrDirAsync(
         AgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -826,6 +837,7 @@ public static class AgentBuiltInToolFactory
         }
     }
 
+    // 函数功能：实现 rename_file_or_dir 工具，重命名或移动文件/目录；不允许覆盖已存在的目标路径，自动创建目标父目录，移动前向宿主请求权限
     private static async Task<AgentToolResult> RenameFileOrDirAsync(
         AgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -904,6 +916,7 @@ public static class AgentBuiltInToolFactory
         }
     }
 
+    // 函数功能：实现 apply_patch 工具，解析 Codex/OpenAI apply_patch 格式的补丁文本，获取受影响路径并向宿主请求权限，通过 AgentApplyPatch.Apply 执行实际文件变更
     private static async Task<AgentToolResult> ApplyPatchAsync(
         AgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -943,6 +956,7 @@ public static class AgentBuiltInToolFactory
         }
     }
 
+    // 函数功能：实现 request_user_input 工具（暂未注册），将结构化提示列表转交宿主的用户输入处理器，等待用户响应后将答案序列化为 JSON 返回
     private static async Task<AgentToolResult> RequestUserInputAsync(
         AgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -992,15 +1006,19 @@ public static class AgentBuiltInToolFactory
         return new AgentToolResult(true, [new AgentToolResultItem.Text(json)]);
     }
 
+    // 函数功能：将 JSON 字符串解析为 JsonElement，用于构建工具 Schema 定义
     private static JsonElement ParseSchema([StringSyntax("json")] string json)
         => JsonDocument.Parse(json).RootElement.Clone();
 
+    // 函数功能：构造表示失败的工具结果，包含错误消息文本
     private static AgentToolResult Failure(string message)
         => new(false, [new AgentToolResultItem.Text(message)], message);
 
+    // 函数功能：构造表示成功的工具结果，包含操作摘要文本
     private static AgentToolResult SuccessResult(string message)
         => new(true, [new AgentToolResultItem.Text(message)]);
 
+    // 函数功能：根据 Provider Profile 的覆盖配置判断指定工具是否应被包含；apply_patch 需额外检查 Provider 支持
     private static bool ShouldIncludeBuiltInTool(AgentBuiltInToolOptions options, string toolName)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -1016,6 +1034,7 @@ public static class AgentBuiltInToolFactory
                IsApplyPatchSupported(options.Provider, options.ProviderId);
     }
 
+    // 函数功能：判断当前 Provider 是否支持 apply_patch 工具；仅 OpenAI Responses/Chat 传输层且为 codex 协议族或指向 api.openai.com 时返回 true
     private static bool IsApplyPatchSupported(ModelProviderRuntimeDescriptor? provider, ModelProviderId ProviderId)
     {
         if (provider is null)
@@ -1041,9 +1060,11 @@ public static class AgentBuiltInToolFactory
         return string.Equals(provider.BaseUri.Host, "api.openai.com", StringComparison.OrdinalIgnoreCase);
     }
 
+    // 函数功能：获取会话工作目录的规范化绝对路径，未设置时回退到进程当前目录
     private static string GetWorkingDirectoryRoot(AgentBuiltInToolOptions options)
         => Path.GetFullPath(options.WorkingDirectory ?? Environment.CurrentDirectory);
 
+    // 函数功能：将工具参数中的路径解析为工作区绝对路径，同时生成相对于根目录的展示路径（用正斜杠）；路径为空时抛出异常
     private static WorkspacePathResolution ResolveWorkspacePath(string rootPath, string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -1056,6 +1077,7 @@ public static class AgentBuiltInToolFactory
         return new WorkspacePathResolution(fullPath, displayPath);
     }
 
+    // 函数功能：向宿主请求文件变更权限；AllowOnce/AllowForSession 时返回 null 表示允许，Deny/Cancel 时返回对应失败结果
     private static async Task<AgentToolResult?> RequestFileChangePermissionAsync(
         AgentBuiltInToolOptions options,
         AgentToolInvocation invocation,
@@ -1084,12 +1106,15 @@ public static class AgentBuiltInToolFactory
         };
     }
 
+    // 函数功能：检测文本使用的换行符风格，含 \r\n 则返回 "\r\n"，否则返回 "\n"
     private static string DetectExistingNewline(string text)
         => text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
 
+    // 函数功能：将文本中的换行符统一规范化为指定风格（先统一转为 \n，再替换为目标换行符）
     private static string NormalizeNewlines(string text, string newline)
         => text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", newline, StringComparison.Ordinal);
 
+    // 函数功能：统计 value 在 text 中精确出现的次数（Ordinal 比较），value 为空时返回 0
     private static int CountOccurrences(string text, string value)
     {
         if (value.Length == 0)
@@ -1108,6 +1133,7 @@ public static class AgentBuiltInToolFactory
         return count;
     }
 
+    // 函数功能：替换 text 中 oldValue 的第一处出现为 newValue；未找到时返回原字符串
     private static string ReplaceFirstOccurrence(string text, string oldValue, string newValue)
     {
         var index = text.IndexOf(oldValue, StringComparison.Ordinal);
@@ -1119,6 +1145,7 @@ public static class AgentBuiltInToolFactory
         return string.Concat(text.AsSpan(0, index), newValue, text.AsSpan(index + oldValue.Length));
     }
 
+    // 函数功能：将相对或绝对路径解析为完整路径；相对路径以 workingDirectory 为基准，绝对路径直接规范化，两者均为空时抛出异常
     private static string ResolvePath(string? workingDirectory, string? path)
     {
         var candidate = string.IsNullOrWhiteSpace(path) ? workingDirectory : path;
@@ -1135,9 +1162,11 @@ public static class AgentBuiltInToolFactory
             : Path.Combine(baseDirectory, candidate));
     }
 
+    // 函数功能：根据文件扩展名判断路径是否为图片文件（png/jpg/jpeg/gif/webp/bmp）
     private static bool IsImagePath(string path)
         => Path.GetExtension(path).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".bmp";
 
+    // 函数功能：将 HTML 简化为纯文本：去除 script/style 标签、剥离所有 HTML 标签、解码 HTML 实体、合并连续空白
     private static string SimplifyHtml(string html)
     {
         var withoutScripts = Regex.Replace(html, "<(script|style)[^>]*>.*?</\\1>", string.Empty, RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -1146,11 +1175,13 @@ public static class AgentBuiltInToolFactory
         return Regex.Replace(decoded, "\\s+", " ").Trim();
     }
 
+    // 函数功能：判断 FileTreeEntry 是否匹配单个 glob 模式；useRelativePath=true 时匹配相对路径，否则匹配文件名
     private static bool GlobMatches(GlobPattern globPattern, FileTreeEntry entry, bool useRelativePath)
         => useRelativePath
             ? globPattern.IsMatch(entry.RelativePath)
             : globPattern.IsMatch(entry.Name);
 
+    // 函数功能：判断 SearchFileTarget 是否匹配任意一个 SearchGlobPattern（任一匹配即返回 true）
     private static bool GlobMatches(IReadOnlyList<SearchGlobPattern> globPatterns, SearchFileTarget entry)
     {
         foreach (var globPattern in globPatterns)
@@ -1164,11 +1195,13 @@ public static class AgentBuiltInToolFactory
         return false;
     }
 
+    // 函数功能：判断 SearchFileTarget 是否匹配单个 glob 模式；useRelativePath=true 时匹配相对路径，否则匹配文件名
     private static bool GlobMatches(GlobPattern globPattern, SearchFileTarget entry, bool useRelativePath)
         => useRelativePath
             ? globPattern.IsMatch(entry.RelativePath)
             : globPattern.IsMatch(entry.Name);
 
+    // 函数功能：从 grep 工具参数中解析搜索目标路径列表；path 可以是字符串或字符串数组，省略时默认为工作目录；解析失败时通过 errorMessage 返回原因
     private static bool TryResolveGrepTargetPaths(
         string? workingDirectory,
         JsonElement arguments,
@@ -1225,6 +1258,7 @@ public static class AgentBuiltInToolFactory
         return true;
     }
 
+    // 函数功能：从 grep 工具参数中解析 glob 过滤模式列表；glob 可以是字符串或字符串数组，省略时返回空数组；解析失败时通过 errorMessage 返回原因
     private static bool TryGetGrepGlobPatterns(
         JsonElement arguments,
         out SearchGlobPattern[] globPatterns,
@@ -1274,6 +1308,7 @@ public static class AgentBuiltInToolFactory
         return true;
     }
 
+    // 函数功能：解析单个 glob 字符串并追加到模式列表；含路径分隔符时按相对路径匹配，否则按文件名匹配；glob 为空时直接返回 true
     private static bool TryAddGrepGlobPattern(
         string? glob,
         List<SearchGlobPattern> patterns,
@@ -1297,6 +1332,7 @@ public static class AgentBuiltInToolFactory
         return true;
     }
 
+    // 函数功能：对路径列表去重（Windows 不区分大小写，Unix 区分大小写），保持原有顺序，返回唯一路径数组
     private static string[] DeduplicatePaths(IReadOnlyList<string> paths)
     {
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
@@ -1313,6 +1349,7 @@ public static class AgentBuiltInToolFactory
         return uniquePaths.ToArray();
     }
 
+    // 函数功能：枚举 grep 搜索目标文件；若 targetPath 是文件则直接返回该文件，否则遍历 directoryEntries 中的非目录条目
     private static IEnumerable<SearchFileTarget> EnumerateSearchFiles(
         string targetPath,
         IEnumerable<FileTreeEntry>? directoryEntries)
@@ -1335,6 +1372,7 @@ public static class AgentBuiltInToolFactory
         }
     }
 
+    // 函数功能：逐行读取文件并用正则匹配，将命中行以 "路径:行号: 内容" 格式追加到 matches；达到 maxMatches 后停止
     private static void SearchFileLines(
         string fullPath,
         string displayPath,
@@ -1363,6 +1401,7 @@ public static class AgentBuiltInToolFactory
         }
     }
 
+    // 函数功能：根据操作系统和 login 参数构建 shell 进程规格；Windows 使用 pwsh -NoProfile，Unix 使用 $SHELL（bash/zsh 支持 -l 登录 shell）
     private static ShellProcessSpec CreateShellProcessSpec(string command, string workdir, bool login)
     {
         if (OperatingSystem.IsWindows())
@@ -1396,6 +1435,7 @@ public static class AgentBuiltInToolFactory
         return new ShellProcessSpec(CreateProcessStartInfo(shellPath, arguments, workdir));
     }
 
+    // 函数功能：构建进程启动信息，重定向 stdout/stderr，关闭 Shell 执行，并设置 NO_COLOR/CLICOLOR 环境变量以禁止 ANSI 控制序列
     private static ProcessStartInfo CreateProcessStartInfo(string fileName, IReadOnlyList<string> arguments, string workdir)
     {
         var startInfo = new ProcessStartInfo
@@ -1421,6 +1461,7 @@ public static class AgentBuiltInToolFactory
         return startInfo;
     }
 
+    // 函数功能：生成 read_file 工具的 JSON Schema，包含 path/offset/limit 参数定义，limit 默认值和上限来自 options
     private static JsonElement CreateReadFileSchema(AgentBuiltInToolOptions options)
         => ParseSchema(
             $$"""
@@ -1436,6 +1477,7 @@ public static class AgentBuiltInToolFactory
             }
             """);
 
+    // 函数功能：生成 list_dir 工具的 JSON Schema，仅包含可选的 path 参数
     private static JsonElement CreateListDirSchema()
         => ParseSchema(
             """
@@ -1448,6 +1490,7 @@ public static class AgentBuiltInToolFactory
             }
             """);
 
+    // 函数功能：生成 grep 工具的 JSON Schema，包含 pattern/path/glob/caseSensitive/maxMatches 参数，maxMatches 默认值来自 options
     private static JsonElement CreateGrepSchema(AgentBuiltInToolOptions options)
         => ParseSchema(
             $$"""
@@ -1465,6 +1508,7 @@ public static class AgentBuiltInToolFactory
             }
             """);
 
+    // 函数功能：生成 webget 工具的 JSON Schema，包含 url/timeoutSeconds/rawHtml/includeHttpStatus 参数，超时默认值来自 options
     private static JsonElement CreateWebGetSchema(AgentBuiltInToolOptions options)
         => ParseSchema(
             $$"""
@@ -1481,6 +1525,7 @@ public static class AgentBuiltInToolFactory
             }
             """);
 
+    // 函数功能：生成 shell_command 工具的 JSON Schema，包含 command/workdir/timeoutMs/login 参数
     private static JsonElement CreateShellCommandSchema()
         => ParseSchema(
             """
@@ -1497,12 +1542,14 @@ public static class AgentBuiltInToolFactory
             }
             """);
 
+    // 函数功能：检查 Content-Type 是否为 webget 支持的类型（text/*、application/json、application/xml、application/xhtml+xml）
     private static bool IsSupportedWebContentType(string mediaType)
         => mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(mediaType, "application/xml", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(mediaType, "application/xhtml+xml", StringComparison.OrdinalIgnoreCase);
 
+    // 函数功能：在响应体前拼接 HTTP 状态行和 content-type 头，用于 includeHttpStatus=true 时的输出格式化
     private static string FormatWebGetSuccessResponse(HttpResponseMessage response, string body)
     {
         var builder = new StringBuilder();
@@ -1525,6 +1572,7 @@ public static class AgentBuiltInToolFactory
         return builder.ToString();
     }
 
+    // 函数功能：在 Windows pwsh 命令末尾追加退出码传播代码，使失败的外部命令能正确传播原生 exit code 而非被 PowerShell 折叠为 1
     private static string WrapWindowsShellCommand(string command)
     {
         const string postlude =
@@ -1544,9 +1592,11 @@ public static class AgentBuiltInToolFactory
             postlude);
     }
 
+    // 函数功能：将 TimeSpan 格式化为最多三位小数的秒数字符串（不变区域），用于工具描述中的超时显示
     private static string FormatSeconds(TimeSpan value)
         => value.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture);
 
+    // 函数功能：将 shell 命令的 exitCode/workdir/stdout/stderr 格式化为结构化文本，空输出替换为 "(empty)"
     private static string FormatShellCommandOutput(int exitCode, string stdout, string stderr, string workdir)
     {
         var builder = new StringBuilder();
@@ -1559,6 +1609,7 @@ public static class AgentBuiltInToolFactory
         return builder.ToString().TrimEnd();
     }
 
+    // 函数功能：异步逐行读取进程输出流（stdout 或 stderr），拼入 StringBuilder，并通过 progress 回调实时推送每一行给调用方
     private static async Task<string> PumpProcessStreamAsync(
         StreamReader reader,
         string streamName,
@@ -1592,6 +1643,7 @@ public static class AgentBuiltInToolFactory
         return builder.ToString();
     }
 
+    // 函数功能：构建包含 stream 字段名称的 JSON 对象（JsonElement），用于 PumpProcessStreamAsync 的进度推送 details
     private static JsonElement CreateShellStreamDetails(string streamName)
     {
         using var stream = new MemoryStream();
@@ -1605,6 +1657,7 @@ public static class AgentBuiltInToolFactory
         return JsonDocument.Parse(stream.ToArray()).RootElement.Clone();
     }
 
+    // 函数功能：尝试终止进程及其整个进程树，忽略进程已退出或无效操作的异常
     private static void TryKill(Process process)
     {
         try
@@ -1619,6 +1672,7 @@ public static class AgentBuiltInToolFactory
         }
     }
 
+    // 函数功能：从 JSON 参数中读取必填字符串属性，值为空或空白时抛出 ArgumentException
     private static string GetRequiredString(JsonElement element, string propertyName)
     {
         var value = GetOptionalString(element, propertyName);
@@ -1627,6 +1681,7 @@ public static class AgentBuiltInToolFactory
             : value;
     }
 
+    // 函数功能：从 JSON 参数中读取必填字符串属性，允许空字符串但属性缺失时抛出 ArgumentException（与 GetRequiredString 的区别在于不校验空白）
     private static string GetRequiredStringValue(JsonElement element, string propertyName)
     {
         var value = GetOptionalString(element, propertyName);
@@ -1635,6 +1690,7 @@ public static class AgentBuiltInToolFactory
             : value;
     }
 
+    // 函数功能：从 JSON 参数中读取可选字符串属性，属性不存在或非字符串类型时返回 null
     private static string? GetOptionalString(JsonElement element, string propertyName)
     {
         return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
@@ -1642,6 +1698,7 @@ public static class AgentBuiltInToolFactory
             : null;
     }
 
+    // 函数功能：从 JSON 参数中读取可选整数属性，属性不存在、非数字或无法转为 int32 时返回 null
     private static int? GetOptionalInt(JsonElement element, string propertyName)
     {
         return element.TryGetProperty(propertyName, out var property) &&
@@ -1651,6 +1708,7 @@ public static class AgentBuiltInToolFactory
             : null;
     }
 
+    // 函数功能：从 JSON 参数中读取可选布尔属性，属性不存在或非布尔类型时返回 null
     private static bool? GetOptionalBool(JsonElement element, string propertyName)
     {
         return element.TryGetProperty(propertyName, out var property) && property.ValueKind is JsonValueKind.True or JsonValueKind.False
@@ -1658,6 +1716,7 @@ public static class AgentBuiltInToolFactory
             : null;
     }
 
+    // 函数功能：将用户输入答案字典序列化为 JSON 字符串，用于 request_user_input 工具的返回值
     private static string SerializeAnswers(IReadOnlyDictionary<string, string> answers)
     {
         using var stream = new MemoryStream();
@@ -1675,11 +1734,15 @@ public static class AgentBuiltInToolFactory
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
+    // 类型：封装 shell 进程的 ProcessStartInfo，用于统一传递进程启动参数
     private sealed record ShellProcessSpec(ProcessStartInfo StartInfo);
 
+    // 类型：工作区路径解析结果，包含完整绝对路径和相对于工作区根目录的展示路径
     private readonly record struct WorkspacePathResolution(string FullPath, string DisplayPath);
 
+    // 类型：grep 搜索用的 glob 模式，附带是否按相对路径匹配的标志
     private readonly record struct SearchGlobPattern(GlobPattern Pattern, bool UseRelativePath);
 
+    // 类型：grep 搜索的文件目标，包含完整路径、展示路径、相对路径及文件名
     private readonly record struct SearchFileTarget(string FullPath, string DisplayPath, string RelativePath, string Name);
 }

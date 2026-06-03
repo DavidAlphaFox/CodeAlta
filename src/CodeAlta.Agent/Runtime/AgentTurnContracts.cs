@@ -2,6 +2,7 @@ using System.Text.Json;
 
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：定义 Agent 单轮（Turn）执行所涉及的请求、响应、流式增量及会话更新等契约类型
 /// <summary>
 /// Provides cached or probed model metadata for a configured provider. Turn execution does not require this contract.
 /// </summary>
@@ -18,23 +19,28 @@ public interface IModelProviderModelCatalog
         CancellationToken cancellationToken = default);
 }
 
+// 类型：内部接口，用于释放 Provider 侧的会话资源
 internal interface IAgentProviderSessionCleanup
 {
     ValueTask DisposeProviderSessionAsync(string sessionId);
 }
 
+// 类型：描述 Agent 轮次执行失败原因，包含消息文本及是否为上下文溢出
 internal sealed record AgentTurnFailure(
     string Message,
     bool IsContextOverflow);
 
+// 类型：封装 AgentTurnFailure 的异常类型，在轮次执行失败时抛出
 internal sealed class AgentTurnExecutionException : Exception
 {
+    // 函数功能：构造函数，将 failure 的消息作为异常消息，并保存 failure 引用
     public AgentTurnExecutionException(AgentTurnFailure failure, Exception? innerException = null)
         : base(failure?.Message, innerException)
     {
         Failure = failure ?? throw new ArgumentNullException(nameof(failure));
     }
 
+    // 说明：关联的失败描述对象
     public AgentTurnFailure Failure { get; }
 }
 

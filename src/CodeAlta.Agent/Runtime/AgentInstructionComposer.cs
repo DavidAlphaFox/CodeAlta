@@ -5,8 +5,10 @@ using System.Text;
 
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：将会话选项、项目说明文件、已加载技能等组合成 Agent 系统指令包（AgentInstructionBundle）
 internal static class AgentInstructionComposer
 {
+    // 函数功能：根据会话创建选项和已加载技能列表，组装完整指令包并计算内容哈希；返回 AgentInstructionBundle
     public static AgentInstructionBundle Compose(
         AgentSessionCreateOptions options,
         IReadOnlyList<AgentLoadedSkillState>? loadedSkills = null)
@@ -59,12 +61,15 @@ internal static class AgentInstructionComposer
         return new AgentInstructionBundle(systemMessage, developerInstructions, runtimeContext, hash);
     }
 
+    // 函数功能：去除字符串首尾空白；若为空白字符串则返回 null
     private static string? Normalize(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    // 函数功能：检查指令文本中是否已包含指定标记节（不区分大小写），用于避免重复注入
     private static bool ContainsSection(string? value, string marker)
         => !string.IsNullOrWhiteSpace(value) && value.Contains(marker, StringComparison.OrdinalIgnoreCase);
 
+    // 函数功能：构建运行时上下文信息段，包含当前日期、平台、默认 Shell、工作目录及项目根目录
     private static string BuildRuntimeContextSection(string? workingDirectory, IReadOnlyList<string> projectRoots)
     {
         var lines = new List<string>
@@ -97,6 +102,7 @@ internal static class AgentInstructionComposer
         return string.Join(Environment.NewLine, lines);
     }
 
+    // 函数功能：从工作目录及项目根目录的各级父目录中查找 AGENTS.md / CLAUDE.md 等指令文件，返回有序列表（外层优先）
     private static IReadOnlyList<string> EnumerateAgentInstructionFiles(string? workingDirectory, IReadOnlyList<string> projectRoots)
     {
         var files = new List<string>();
@@ -155,6 +161,7 @@ internal static class AgentInstructionComposer
         return files;
     }
 
+    // 函数功能：将路径标准化为绝对路径并去除末尾分隔符；空路径返回 null
     private static string? NormalizePath(string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -165,6 +172,7 @@ internal static class AgentInstructionComposer
         return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 
+    // 函数功能：返回当前操作系统平台名称字符串（Windows/macOS/Linux 或 OS 描述）
     private static string GetPlatformLabel()
     {
         if (OperatingSystem.IsWindows())
@@ -185,6 +193,7 @@ internal static class AgentInstructionComposer
         return RuntimeInformation.OSDescription.Trim();
     }
 
+    // 函数功能：返回当前平台默认 Shell（Windows 为 pwsh，其他读取 SHELL 环境变量，缺省 /bin/sh）
     private static string GetDefaultShellLabel()
     {
         if (OperatingSystem.IsWindows())
@@ -198,6 +207,7 @@ internal static class AgentInstructionComposer
             : shell.Trim();
     }
 
+    // 函数功能：对系统消息、开发者指令、运行时上下文拼接后计算 SHA-256 哈希，返回十六进制字符串
     private static string ComputeHash(string? systemMessage, string? developerInstructions, string? runtimeContext)
     {
         var payload = $"{systemMessage ?? string.Empty}\n---\n{developerInstructions ?? string.Empty}\n---\n{runtimeContext ?? string.Empty}";
@@ -205,6 +215,7 @@ internal static class AgentInstructionComposer
         return Convert.ToHexString(bytes);
     }
 
+    // 函数功能：将已激活技能列表格式化为 <active_skills> XML 块；无技能时返回 null
     private static string? BuildActiveSkillsSection(IReadOnlyList<AgentLoadedSkillState>? loadedSkills)
     {
         if (loadedSkills is not { Count: > 0 })
@@ -242,6 +253,7 @@ internal static class AgentInstructionComposer
         return builder.ToString().Trim();
     }
 
+    // 函数功能：对字符串进行 XML 特殊字符转义（&、<、>、"），用于安全嵌入 XML 属性或文本
     private static string EscapeXml(string value)
         => value
             .Replace("&", "&amp;", StringComparison.Ordinal)
@@ -250,6 +262,7 @@ internal static class AgentInstructionComposer
             .Replace("\"", "&quot;", StringComparison.Ordinal);
 }
 
+// 类型：不可变的指令包，包含系统消息、开发者指令、运行时上下文及其内容哈希
 internal sealed record AgentInstructionBundle(
     string? SystemMessage,
     string? DeveloperInstructions,

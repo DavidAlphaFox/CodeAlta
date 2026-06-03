@@ -5,6 +5,7 @@ using System.Text.Json;
 
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：将 Agent 会话日志以 JSONL 文件形式持久化到本地文件系统，实现 IAgentSessionJournalStore 接口
 /// <summary>
 /// Persists local raw-API session journals on the filesystem.
 /// </summary>
@@ -27,6 +28,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
     private readonly ConcurrentDictionary<string, CachedSessionProjection> _metadataProjectionCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _sessionFiles = new(StringComparer.OrdinalIgnoreCase);
 
+    // 函数功能：公开构造函数，接受文件系统布局对象，使用默认并发数初始化存储
     /// <summary>
     /// Initializes a new instance of the <see cref="FileSystemAgentSessionStore"/> class.
     /// </summary>
@@ -37,11 +39,13 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
     {
     }
 
+    // 函数功能：内部构造函数，接受布局与日志文件对象，使用默认并发数
     internal FileSystemAgentSessionStore(AgentRuntimePathLayout layout, AgentSessionJournalFile journalFile)
         : this(layout, journalFile, DefaultMaxConcurrentMetadataProjections)
     {
     }
 
+    // 函数功能：内部完整构造函数，接受布局、日志文件对象及最大并发投影数，完成所有字段初始化
     internal FileSystemAgentSessionStore(
         AgentRuntimePathLayout layout,
         AgentSessionJournalFile journalFile,
@@ -59,6 +63,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         _maxConcurrentMetadataProjections = maxConcurrentMetadataProjections;
     }
 
+    // 函数功能：新建或更新会话摘要，将 SessionSummary 事件追加写入对应的 JSONL 文件
     /// <inheritdoc />
     public async Task UpsertSessionAsync(
         AgentSessionSummary session,
@@ -81,6 +86,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         await AppendLinesAsync(sessionFile, [snapshotEvent.ToJson()], cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：按协议族+提供方+会话ID查找会话摘要，不匹配 scope 时返回 null
     /// <inheritdoc />
     public async Task<AgentSessionSummary?> GetSessionAsync(
         string protocolFamily,
@@ -99,6 +105,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
             : null;
     }
 
+    // 函数功能：按会话ID获取会话元数据（含摘要与状态），会话不存在时返回 null
     /// <inheritdoc />
     public async Task<AgentSessionMetadata?> GetSessionAsync(
         string sessionId,
@@ -110,6 +117,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
             : ToMetadata(projection.Summary, projection.State);
     }
 
+    // 函数功能：按会话ID获取会话摘要，不含历史事件；不存在时返回 null
     /// <inheritdoc />
     public async Task<AgentSessionSummary?> GetSessionSummaryAsync(
         string sessionId,
@@ -119,6 +127,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return projection?.Summary;
     }
 
+    // 函数功能：按协议族+提供方筛选并异步枚举所有会话摘要
     /// <inheritdoc />
     public async IAsyncEnumerable<AgentSessionSummary> ListSessionSummariesAsync(
         string protocolFamily,
@@ -134,6 +143,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         }
     }
 
+    // 函数功能：按可选过滤器异步枚举所有会话元数据（含上下文/路径等信息）
     /// <inheritdoc />
     public async IAsyncEnumerable<AgentSessionMetadata> ListSessionsAsync(
         AgentSessionListFilter? filter = null,
@@ -149,6 +159,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         }
     }
 
+    // 函数功能：异步枚举所有会话摘要（无 scope 过滤），内部委托给 ListSessionProjectionsAsync
     /// <inheritdoc />
     public async IAsyncEnumerable<AgentSessionSummary> ListSessionSummariesAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -159,6 +170,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         }
     }
 
+    // 函数功能：扫描会话目录下所有 .jsonl 文件，并发投影元数据，按最后写入时间降序异步逐条产出
     private async IAsyncEnumerable<ListedSessionProjection> ListSessionProjectionsAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -198,6 +210,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         }
     }
 
+    // 函数功能：对单个 JSONL 文件进行元数据投影，忽略 IO/JSON 异常，返回 null 表示跳过该文件
     private async Task<ListedSessionProjection?> ProjectSessionFileForListingAsync(
         string sessionFile,
         CancellationToken cancellationToken)
@@ -219,6 +232,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         }
     }
 
+    // 函数功能：将一批事件以 JSON 行形式追加写入指定会话的 JSONL 文件
     /// <inheritdoc />
     public async Task AppendEventsAsync(
         string protocolFamily,
@@ -245,6 +259,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
             .ConfigureAwait(false);
     }
 
+    // 函数功能：读取指定 scope 下会话的完整事件历史，scope 不匹配或会话不存在则返回空列表
     /// <inheritdoc />
     public async Task<IReadOnlyList<AgentEvent>> ReadEventsAsync(
         string protocolFamily,
@@ -261,6 +276,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return projection.History;
     }
 
+    // 函数功能：按会话ID读取完整事件历史，不做 scope 过滤；会话不存在时返回空列表
     /// <summary>
     /// Reads canonical session events by session identifier without applying a provider-scope filter.
     /// </summary>
@@ -277,6 +293,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return projection?.History ?? [];
     }
 
+    // 函数功能：将会话状态快照作为 SessionState 事件追加写入 JSONL 文件
     /// <inheritdoc />
     public async Task UpsertStateAsync(
         AgentSessionState state,
@@ -297,6 +314,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         await AppendLinesAsync(sessionFile, [snapshotEvent.ToJson()], cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：按 scope 获取会话状态，scope 不匹配或状态不存在时返回 null
     /// <inheritdoc />
     public async Task<AgentSessionState?> GetStateAsync(
         string protocolFamily,
@@ -315,6 +333,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
             : null;
     }
 
+    // 函数功能：按会话ID获取最新会话状态（无 scope 过滤）
     /// <inheritdoc />
     public async Task<AgentSessionState?> GetStateAsync(
         string sessionId,
@@ -324,6 +343,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return projection?.State;
     }
 
+    // 函数功能：按 scope 删除会话文件，清理缓存及空目录；scope 不匹配或文件不存在则返回 false
     /// <inheritdoc />
     public async Task<bool> DeleteSessionAsync(
         string protocolFamily,
@@ -365,6 +385,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return deleted;
     }
 
+    // 函数功能：按会话ID删除会话文件（无 scope 过滤），清理缓存及空目录；不存在则返回 false
     /// <inheritdoc />
     public async Task<bool> DeleteSessionAsync(
         string sessionId,
@@ -400,6 +421,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return deleted;
     }
 
+    // 函数功能：获取会话文件路径，不存在则按创建时间生成新路径并写入缓存
     private async Task<string> GetOrCreateSessionFilePathAsync(
         string sessionId,
         DateTimeOffset createdAt,
@@ -416,6 +438,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return sessionFile;
     }
 
+    // 函数功能：获取已存在的会话文件路径，找不到则抛出 InvalidOperationException
     private async Task<string> GetExistingSessionFilePathAsync(
         string sessionId,
         CancellationToken cancellationToken)
@@ -429,6 +452,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return sessionFile;
     }
 
+    // 函数功能：尝试从缓存或磁盘查找会话文件路径，未找到时返回 null
     private async Task<string?> TryGetSessionFilePathAsync(
         string sessionId,
         CancellationToken cancellationToken)
@@ -464,6 +488,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return null;
     }
 
+    // 函数功能：解析会话的 ProviderId，优先从已有摘要获取，否则用 providerKey 构造默认值
     private async Task<ModelProviderId> ResolveProviderIdAsync(
         string sessionId,
         string providerKey,
@@ -473,6 +498,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return projection?.Summary?.ProviderId ?? new ModelProviderId(providerKey);
     }
 
+    // 函数功能：根据会话ID定位文件并投影，文件不存在时返回 null；includeHistory 控制是否读取事件历史
     private async Task<SessionProjection?> TryProjectSessionAsync(
         string sessionId,
         bool includeHistory,
@@ -487,6 +513,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return await ProjectSessionFileAsync(sessionFile, includeHistory, cancellationToken).ConfigureAwait(false);
     }
 
+    // 函数功能：以文件路径锁保护地对单个 JSONL 文件执行投影，按 includeHistory 选择完整或仅元数据投影
     private async Task<SessionProjection> ProjectSessionFileAsync(
         string sessionFile,
         bool includeHistory,
@@ -501,6 +528,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
             .ConfigureAwait(false);
     }
 
+    // 函数功能：带缓存的元数据投影；文件未变（stamp 相同）时直接返回缓存结果，否则重新读取并更新缓存
     private async Task<SessionProjection> ProjectSessionMetadataFileAsync(
         string sessionFile,
         CancellationToken cancellationToken)
@@ -524,6 +552,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return projection;
     }
 
+    // 函数功能：无缓存地读取文件头尾探针行，从 JSON 行中提取摘要与状态并规范化
     private async Task<SessionProjection> ProjectSessionMetadataFileUncachedAsync(
         string sessionFile,
         CancellationToken cancellationToken)
@@ -552,6 +581,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return NormalizeProjection(new SessionProjection(summary, state, []));
     }
 
+    // 函数功能：读取文件头部和（大文件时的）尾部探针行，供元数据投影使用；避免读取整个大文件
     private static async Task<IReadOnlyList<string>> ReadMetadataProbeLinesAsync(
         string sessionFile,
         CancellationToken cancellationToken)
@@ -572,6 +602,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return lines;
     }
 
+    // 函数功能：完整读取 JSONL 文件，从中提取摘要、状态及所有用户可见事件历史
     private async Task<SessionProjection> ProjectSessionFileWithHistoryAsync(
         string sessionFile,
         CancellationToken cancellationToken)
@@ -618,6 +649,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return NormalizeProjection(new SessionProjection(summary, state, history));
     }
 
+    // 函数功能：从单条 JSON 元素中解析摘要或状态快照并就地更新 summary/state（ref 参数）
     private static void ProjectMetadataSnapshot(
         JsonElement element,
         ref AgentSessionSummary? summary,
@@ -657,6 +689,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         }
     }
 
+    // 函数功能：对投影结果中的摘要和状态进行规范化（填充空白字段等），返回新投影记录
     private static SessionProjection NormalizeProjection(SessionProjection projection)
     {
         var summary = NormalizeSummary(projection.Summary);
@@ -664,6 +697,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return projection with { Summary = summary, State = state };
     }
 
+    // 函数功能：规范化会话摘要，确保 ProviderId/ProviderKey/ProtocolFamily 不为 null 或空白
     private static AgentSessionSummary? NormalizeSummary(AgentSessionSummary? summary)
     {
         if (summary is null)
@@ -685,6 +719,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         };
     }
 
+    // 函数功能：规范化会话状态，用摘要值回填缺失的 ProviderKey 和 ProtocolFamily
     private static AgentSessionState? NormalizeState(AgentSessionState? state, AgentSessionSummary? summary)
     {
         if (state is null)
@@ -699,9 +734,11 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         };
     }
 
+    // 函数功能：对可选字符串去空白并返回，若为纯空白则返回 null
     private static string? NormalizeOptionalText(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    // 函数功能：合并两个摘要快照，优先保留新快照字段，但以旧快照补齐 Parent/CreatedBy 等历史关联字段
     private static AgentSessionSummary MergeSummarySnapshot(
         AgentSessionSummary? current,
         AgentSessionSummary snapshot)
@@ -719,6 +756,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         };
     }
 
+    // 函数功能：逐行读取 JSONL 文件并反序列化为 AgentEvent，末行 JSON 损坏时提前结束枚举
     private async IAsyncEnumerable<AgentEvent> ReadJournalEventsAsync(
         string path,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
@@ -749,6 +787,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         }
     }
 
+    // 函数功能：从文件尾部读取最多 byteCount 字节并按行拆分，用于大文件的尾部探针
     private static async Task<IReadOnlyList<string>> ReadTailLinesAsync(
         string path,
         int byteCount,
@@ -793,6 +832,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         }
     }
 
+    // 函数功能：从文件头部读取最多 byteCount 字节并按行拆分，用于元数据探针
     private static async Task<IReadOnlyList<string>> ReadHeadLinesAsync(
         string path,
         int byteCount,
@@ -836,6 +876,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         }
     }
 
+    // 函数功能：确保目录存在后，将多行文本追加到 JSONL 文件，并使缓存失效
     private async Task AppendLinesAsync(
         string path,
         IReadOnlyList<string> lines,
@@ -850,6 +891,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         InvalidateMetadataProjectionCache(path);
     }
 
+    // 函数功能：以读共享模式异步打开文件流，失败时自动重试（ReadRetryTime 间隔）
     private static Task<FileStream> OpenReadStreamAsync(string path, CancellationToken cancellationToken)
         => AgentSessionJournalFile.RetryFileOperationAsync(
             () => Task.FromResult(new FileStream(
@@ -862,6 +904,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
             ReadRetryTime,
             cancellationToken);
 
+    // 函数功能：获取文件的修改时间与大小作为缓存校验戳，文件不存在时返回 null
     private static FileStamp? GetFileStamp(string path)
     {
         var fileInfo = new FileInfo(path);
@@ -870,15 +913,18 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
             : null;
     }
 
+    // 函数功能：从元数据投影缓存中移除指定文件路径的缓存条目
     private void InvalidateMetadataProjectionCache(string path)
         => _metadataProjectionCache.TryRemove(Path.GetFullPath(path), out _);
 
+    // 函数功能：检查会话摘要的协议族与提供方键是否与给定 scope 匹配（不区分大小写）
     private static bool MatchesScope(AgentSessionSummary summary, string protocolFamily, string providerKey)
     {
         return string.Equals(summary.ProtocolFamily, protocolFamily, StringComparison.OrdinalIgnoreCase) &&
                string.Equals(summary.ProviderKey, providerKey, StringComparison.OrdinalIgnoreCase);
     }
 
+    // 函数功能：按过滤器条件（Cwd/GitRoot/Repository/Branch）匹配会话元数据，filter 为 null 时全部匹配
     private static bool MatchesFilter(AgentSessionMetadata session, AgentSessionListFilter? filter)
     {
         if (filter is null)
@@ -913,6 +959,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         return true;
     }
 
+    // 函数功能：将摘要和状态转换为对外公开的 AgentSessionMetadata 对象
     private static AgentSessionMetadata ToMetadata(
         AgentSessionSummary summary,
         AgentSessionState? state)
@@ -933,6 +980,7 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
             summary.CreatedBySessionId,
             summary.CreatedByRunId);
 
+    // 函数功能：删除会话文件后，向上递归清理 sessions 根目录以内的所有空目录
     private void DeleteEmptySessionDirectories(string? directory)
     {
         var sessionsRoot = Path.GetFullPath(_layout.SessionsRootPath);
@@ -951,14 +999,18 @@ public sealed class FileSystemAgentSessionStore : IAgentSessionJournalStore
         }
     }
 
+    // 类型：会话投影结果，包含摘要、最新状态及完整事件历史
     private sealed record SessionProjection(
         AgentSessionSummary? Summary,
         AgentSessionState? State,
         IReadOnlyList<AgentEvent> History);
 
+    // 类型：列举时附带文件路径的会话投影包装
     private sealed record ListedSessionProjection(string SessionFile, SessionProjection Projection);
 
+    // 类型：文件校验戳，用于判断元数据投影缓存是否仍然有效
     private readonly record struct FileStamp(DateTime LastWriteTimeUtc, long Length);
 
+    // 类型：带文件戳的缓存投影条目
     private sealed record CachedSessionProjection(FileStamp Stamp, SessionProjection Projection);
 }

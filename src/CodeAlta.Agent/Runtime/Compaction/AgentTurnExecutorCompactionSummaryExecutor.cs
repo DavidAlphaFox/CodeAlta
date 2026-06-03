@@ -1,10 +1,12 @@
 namespace CodeAlta.Agent.Runtime.Compaction;
 
+// 模块功能：使用 IModelProviderTurnExecutor 执行单轮会话压缩，从 Assistant 消息中提取摘要文本并返回
 internal sealed class AgentTurnExecutorCompactionSummaryExecutor(IModelProviderTurnExecutor turnExecutor)
     : IAgentCompactionSummaryExecutor
 {
     private readonly IModelProviderTurnExecutor _turnExecutor = turnExecutor ?? throw new ArgumentNullException(nameof(turnExecutor));
 
+    // 函数功能：执行压缩摘要请求，调用 turnExecutor 发起单轮对话，提取首个非空 Text 部件作为摘要返回
     public async Task<AgentCompactionSummaryResponse> ExecuteAsync(
         AgentCompactionSummaryRequest request,
         CancellationToken cancellationToken = default)

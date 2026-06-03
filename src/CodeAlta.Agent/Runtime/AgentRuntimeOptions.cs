@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent.Runtime;
 
+// 模块功能：定义创建 CodeAlta 自有 Agent 会话运行时所需的选项，包含存储根路径与提供者注册列表
 /// <summary>
 /// Options used to create the CodeAlta-owned agent session runtime.
 /// </summary>
@@ -22,6 +23,7 @@ public sealed class AgentRuntimeOptions
     public required IReadOnlyList<AgentRuntimeProviderRegistration> Providers { get; init; }
 }
 
+// 类型：将已配置的提供者描述符与其回合执行器（及可选模型目录）关联为一条注册记录
 /// <summary>
 /// Associates a configured provider descriptor with its turn executor.
 /// </summary>

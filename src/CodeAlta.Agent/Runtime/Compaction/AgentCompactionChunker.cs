@@ -1,7 +1,9 @@
 namespace CodeAlta.Agent.Runtime.Compaction;
 
+// 模块功能：将对话消息按 Token 预算切分为可独立压缩的块，并处理超大文本消息的拆分
 internal static class AgentCompactionChunker
 {
+    // 函数功能：将消息列表按最大 Token 数切分为多个块，每块不超过 maxInputTokens；超大文本消息会先拆分
     public static IReadOnlyList<IReadOnlyList<AgentConversationMessage>> CreateChunks(
         IReadOnlyList<AgentConversationMessage> messages,
         int maxInputTokens,
@@ -46,6 +48,7 @@ internal static class AgentCompactionChunker
         return chunks;
     }
 
+    // 函数功能：将超过字符预算的单一文本/推理消息拆分为多条小消息，返回展开后的列表
     private static IReadOnlyList<AgentConversationMessage> ExpandOversizedTextMessages(
         IReadOnlyList<AgentConversationMessage> messages,
         int maxInputTokens)
@@ -71,9 +74,11 @@ internal static class AgentCompactionChunker
         return expanded;
     }
 
+    // 函数功能：将压缩单元列表展开为原始消息数组
     private static IReadOnlyList<AgentConversationMessage> FlattenUnits(IReadOnlyList<AgentCompactionUnit> units)
         => units.SelectMany(static unit => unit.SourceMessages).ToArray();
 
+    // 函数功能：尝试将单部分的超大文本或推理消息拆分；成功时返回 true 并通过 out 输出拆分后的消息列表
     private static bool TrySplitMessage(
         AgentConversationMessage message,
         int maxChunkCharacters,
@@ -99,6 +104,7 @@ internal static class AgentCompactionChunker
         }
     }
 
+    // 函数功能：将长文本内容按字符预算拆分为多条文本消息
     private static IReadOnlyList<AgentConversationMessage> SplitTextMessage(
         AgentConversationRole role,
         string value,
@@ -110,6 +116,7 @@ internal static class AgentCompactionChunker
                 role,
                 [new AgentMessagePart.Text(chunk)]));
 
+    // 函数功能：将长推理内容按字符预算拆分为多条推理消息（protectedData 仅保留在首条）
     private static IReadOnlyList<AgentConversationMessage> SplitReasoningMessage(
         AgentConversationRole role,
         string value,
@@ -122,6 +129,7 @@ internal static class AgentCompactionChunker
                 role,
                 [new AgentMessagePart.Reasoning(chunk, ProtectedData: null)]));
 
+    // 函数功能：按字符预算将字符串切分为多个块，优先在换行或空白处断开，再逐一调用 createMessage 构建消息列表
     private static IReadOnlyList<AgentConversationMessage> SplitByCharacterBudget(
         string value,
         int maxChunkCharacters,

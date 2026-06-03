@@ -1,5 +1,6 @@
 namespace CodeAlta.Agent;
 
+// 模块功能：定义手动压缩操作的结果记录及其提供者接口
 /// <summary>
 /// Represents the outcome of a manual compaction operation when the provider returns a synchronous result.
 /// </summary>
@@ -17,11 +18,13 @@ public sealed record AgentCompactionOutcome(
     long? PreCompactionTokens = null,
     long? PostCompactionTokens = null);
 
+// 类型：可选 Session 能力接口，用于公开同步手动压缩结果
 /// <summary>
 /// Optional session capability that exposes a synchronous manual compaction outcome.
 /// </summary>
 public interface IAgentCompactionOutcomeProvider
 {
+    // 函数功能：触发手动压缩并在提供商同步完成时返回结果；异步完成时返回 null
     /// <summary>
     /// Triggers manual compaction and returns a provider-reported outcome when available.
     /// </summary>

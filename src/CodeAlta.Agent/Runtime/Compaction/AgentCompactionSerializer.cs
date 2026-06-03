@@ -4,6 +4,7 @@ using System.Text.Json;
 
 namespace CodeAlta.Agent.Runtime.Compaction;
 
+// 模块功能：对话压缩序列化器，将会话消息单元序列化为结构化 XML 请求体，并管理工具调用结果与推理内容的摘录分配
 internal static class AgentCompactionSerializer
 {
     private const int ToolExcerptPerItemCharacterLimit = 1_200;
@@ -29,6 +30,7 @@ internal static class AgentCompactionSerializer
         "timeout",
     ];
 
+    // 函数功能：构建摘要请求的完整 XML 请求体，包括会话消息、前后缀、文件活动及统计信息，返回序列化结果
     public static AgentCompactionSerializationResult BuildSummaryRequestBody(
         AgentCompactionPreparation preparation,
         string? latestUserRequest,
@@ -96,6 +98,7 @@ internal static class AgentCompactionSerializer
             Statistics: statistics);
     }
 
+    // 函数功能：按优先级顺序为所有消息单元的工具调用结果和推理内容分配摘录字符预算
     private static void AllocateExpensiveParts(
         IReadOnlyList<AgentCompactionUnit> summarizedUnits,
         IReadOnlyList<AgentCompactionUnit> retainedPrefixUnits,
@@ -136,6 +139,7 @@ internal static class AgentCompactionSerializer
         }
     }
 
+    // 函数功能：将一批消息单元附加优先级和时序信息后加入排名列表
     private static void AddRankedUnits(
         ICollection<RankedUnit> target,
         IReadOnlyList<AgentCompactionUnit> units,
@@ -148,6 +152,7 @@ internal static class AgentCompactionSerializer
         }
     }
 
+    // 函数功能：对排名单元按优先级降序排列，同优先级时含工具结果的单元按时序优先
     private static IOrderedEnumerable<RankedUnit> OrderRankedUnits(IEnumerable<RankedUnit> rankedUnits)
     {
         ArgumentNullException.ThrowIfNull(rankedUnits);
@@ -158,6 +163,7 @@ internal static class AgentCompactionSerializer
             .ThenByDescending(static item => item.Recency);
     }
 
+    // 函数功能：根据所属区段（保留后缀>保留前缀>待摘要）、角色（User>Assistant>Tool）及工具失败标志计算排名分值
     private static int ComputePriority(AgentCompactionUnit unit, SectionRank sectionRank)
     {
         var sectionWeight = sectionRank switch
@@ -183,6 +189,7 @@ internal static class AgentCompactionSerializer
         return sectionWeight + roleWeight + failureWeight;
     }
 
+    // 函数功能：为单条工具调用结果分配摘录字符预算，将截断后的摘录存入序列化状态
     private static void AllocateToolResult(AgentConversationMessage message, int partIndex, AgentMessagePart.ToolResult toolResult, SerializationState state)
     {
         if (ToolExcerptPerItemCharacterLimit <= 0 || state.RemainingToolCharacters <= 0)
@@ -215,6 +222,7 @@ internal static class AgentCompactionSerializer
         }
     }
 
+    // 函数功能：为推理内容分配摘录预算，跳过受保护或空值推理；将截断摘录存入序列化状态
     private static void AllocateReasoning(AgentConversationMessage message, int partIndex, AgentMessagePart.Reasoning reasoning, SerializationState state)
     {
         if (!string.IsNullOrWhiteSpace(reasoning.ProtectedData) ||
@@ -257,6 +265,7 @@ internal static class AgentCompactionSerializer
         }
     }
 
+    // 函数功能：将消息单元列表序列化为多行文本，各单元之间以换行分隔
     private static string SerializeUnits(IReadOnlyList<AgentCompactionUnit> units, SerializationState state)
     {
         if (units.Count == 0)
@@ -276,6 +285,7 @@ internal static class AgentCompactionSerializer
         return builder.ToString().Trim();
     }
 
+    // 函数功能：根据消息单元类型（普通消息、折叠工具交互、完整工具交互）分发序列化逻辑
     private static IEnumerable<string> SerializeUnit(AgentCompactionUnit unit, SerializationState state)
     {
         switch (unit)
@@ -312,6 +322,7 @@ internal static class AgentCompactionSerializer
         }
     }
 
+    // 函数功能：将单条消息的各部分（文本、推理、工具调用/结果、附件）序列化为带角色标签的文本行
     private static IEnumerable<string> SerializeMessage(AgentConversationMessage message, SerializationState state)
     {
         var emitted = false;
@@ -375,6 +386,7 @@ internal static class AgentCompactionSerializer
         }
     }
 
+    // 函数功能：序列化折叠的重复工具交互单元，合并为一行重复次数摘要以节省 Token
     private static IEnumerable<string> SerializeCollapsedToolInteraction(AgentCompactionToolInteractionUnit unit, SerializationState state)
     {
         var toolCall = unit.ToolCalls.Single();
@@ -389,6 +401,7 @@ internal static class AgentCompactionSerializer
         yield return $"[Tool result summary] repeated successful {toolCall.Name} activity ({unit.RepeatCount}x); latest {descriptor}; bulk output omitted";
     }
 
+    // 函数功能：将对话角色枚举映射为可读的英文标签字符串
     private static string GetRoleLabel(AgentConversationRole role)
         => role switch
         {
@@ -399,12 +412,14 @@ internal static class AgentCompactionSerializer
             _ => "Message",
         };
 
+    // 函数功能：构建工具调用结果的简短描述，包含 callId、成功/失败状态及近似字符数
     private static string BuildToolDescriptor(AgentMessagePart.ToolResult toolResult)
     {
         var rendered = RenderToolResult(toolResult.Result);
         return $"callId={toolResult.CallId}, status={(toolResult.Result.Success ? "success" : "failed")}, approxChars={rendered.Length}";
     }
 
+    // 函数功能：从工具调用结果文本中提取高信号行（含错误/异常等关键词）拼接为摘录，超长时截断
     private static string CreateToolExcerpt(string text, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(text) || maxLength <= 0)
@@ -453,6 +468,7 @@ internal static class AgentCompactionSerializer
         return TrimToLength(string.Join(" | ", highSignalLines), maxLength);
     }
 
+    // 函数功能：将推理文本归一化为单行后按模式截取（SummaryOnly 仅取首句），超长时截断
     private static string CreateReasoningExcerpt(string text, int maxLength, AgentCompactionReasoningMode mode)
     {
         var normalized = string.Join(
@@ -474,6 +490,7 @@ internal static class AgentCompactionSerializer
         return TrimToLength(normalized, maxLength);
     }
 
+    // 函数功能：将工具调用参数 JSON 简化为可读摘要（最多 8 个属性），过长字符串值用占位符替换
     private static string SummarizeArguments(JsonElement arguments)
     {
         if (arguments.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
@@ -503,6 +520,7 @@ internal static class AgentCompactionSerializer
         return "{ " + string.Join(", ", segments) + " }";
     }
 
+    // 函数功能：将 JSON 属性值按类型转换为简洁字符串表示，对象/数组折叠显示
     private static string SummarizeJsonValue(string propertyName, JsonElement value)
     {
         return value.ValueKind switch
@@ -518,6 +536,7 @@ internal static class AgentCompactionSerializer
         };
     }
 
+    // 函数功能：对 JSON 字符串值进行摘要化，input/patch 等大字段及超长值用字符数占位符替换
     private static string SummarizeJsonString(string propertyName, string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -535,6 +554,7 @@ internal static class AgentCompactionSerializer
         return QuoteJsonString(value.Length <= 120 ? value : value[..117] + "...");
     }
 
+    // 函数功能：将工具调用结果的各条目渲染为纯文本，无有效内容时返回错误信息或占位符
     private static string RenderToolResult(AgentToolResult result)
     {
         var segments = result.Items.Select(static item => item switch
@@ -547,6 +567,7 @@ internal static class AgentCompactionSerializer
         return string.IsNullOrWhiteSpace(rendered) ? (result.Error ?? "(no output)") : rendered;
     }
 
+    // 函数功能：将字符串截断至 maxLength 字符，超出时末尾加省略号
     private static string TrimToLength(string value, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(value) || maxLength <= 0)
@@ -557,6 +578,7 @@ internal static class AgentCompactionSerializer
         return value.Length <= maxLength ? value : value[..Math.Max(maxLength - 3, 0)] + "...";
     }
 
+    // 函数功能：对字符串进行 JSON 转义并加双引号包装，用于摘要参数输出
     private static string QuoteJsonString(string value)
         => "\"" + value
             .Replace("\\", "\\\\", StringComparison.Ordinal)
@@ -566,6 +588,7 @@ internal static class AgentCompactionSerializer
             .Replace("\t", "\\t", StringComparison.Ordinal)
             + "\"";
 
+    // 函数功能：向 StringBuilder 追加一个 XML 标签块，值经过 XML 转义处理
     private static void AppendTag(StringBuilder builder, string tagName, string? value)
     {
         builder.Append('<').Append(tagName).AppendLine(">");
@@ -573,6 +596,7 @@ internal static class AgentCompactionSerializer
         builder.Append("</").Append(tagName).AppendLine(">");
     }
 
+    // 函数功能：将已读取和已修改的文件路径渲染为 Markdown 列表，分组显示（Modified/Read）
     private static string RenderFileActivity(
         IReadOnlyList<string> readFiles,
         IReadOnlyList<string> modifiedFiles)
@@ -604,11 +628,14 @@ internal static class AgentCompactionSerializer
         return builder.ToString().Trim();
     }
 
+    // 类型：序列化过程的可变状态，持有摘录字典及各类计数，供分配与序列化阶段共享
     private sealed class SerializationState(bool reducedOversizedAnchor)
     {
+        // 说明：工具调用结果的摘录索引，按消息实例和 partIndex 双层键存储
         public Dictionary<AgentConversationMessage, Dictionary<int, string>> ToolResultExcerpts { get; }
             = new(ReferenceEqualityComparer.Instance);
 
+        // 说明：推理内容的摘录索引，按消息实例和 partIndex 双层键存储
         public Dictionary<AgentConversationMessage, Dictionary<int, string>> ReasoningExcerpts { get; }
             = new(ReferenceEqualityComparer.Instance);
 
@@ -650,6 +677,7 @@ internal static class AgentCompactionSerializer
 
         public int SerializedAttachmentCount { get; set; }
 
+        // 函数功能：存储指定消息指定部分的工具调用结果摘录
         public void SetToolResultExcerpt(AgentConversationMessage message, int partIndex, string value)
         {
             if (!ToolResultExcerpts.TryGetValue(message, out var parts))
@@ -661,6 +689,7 @@ internal static class AgentCompactionSerializer
             parts[partIndex] = value;
         }
 
+        // 函数功能：存储指定消息指定部分的推理内容摘录
         public void SetReasoningExcerpt(AgentConversationMessage message, int partIndex, string value)
         {
             if (!ReasoningExcerpts.TryGetValue(message, out var parts))
@@ -672,12 +701,15 @@ internal static class AgentCompactionSerializer
             parts[partIndex] = value;
         }
 
+        // 函数功能：尝试取出指定消息指定部分的工具调用结果摘录，成功返回 true
         public bool TryGetToolResultExcerpt(AgentConversationMessage message, int partIndex, out string value)
             => TryGetExcerpt(ToolResultExcerpts, message, partIndex, out value);
 
+        // 函数功能：尝试取出指定消息指定部分的推理内容摘录，成功返回 true
         public bool TryGetReasoningExcerpt(AgentConversationMessage message, int partIndex, out string value)
             => TryGetExcerpt(ReasoningExcerpts, message, partIndex, out value);
 
+        // 函数功能：通用摘录读取逻辑，从双层字典中按消息引用和 partIndex 查找摘录
         private static bool TryGetExcerpt(
             IReadOnlyDictionary<AgentConversationMessage, Dictionary<int, string>> source,
             AgentConversationMessage message,
@@ -694,6 +726,7 @@ internal static class AgentCompactionSerializer
             return false;
         }
 
+        // 函数功能：将当前状态中的所有统计计数打包为不可变的 AgentCompactionSerializerStatistics 记录
         public AgentCompactionSerializerStatistics BuildStatistics()
             => new(
                 OmittedToolResultCount,
@@ -715,15 +748,17 @@ internal static class AgentCompactionSerializer
                 SerializedAttachmentCount);
     }
 
+    // 类型：携带优先级和时序信息的消息单元包装，用于摘录预算分配排序
     private readonly record struct RankedUnit(AgentCompactionUnit Unit, int Priority, int Recency)
     {
         public bool ContainsToolResult => Unit.SourceMessages.Any(static message => message.Parts.Any(static part => part is AgentMessagePart.ToolResult));
     }
 
+    // 类型：消息所属区段的排名枚举，决定摘录分配的基础权重
     private enum SectionRank
     {
-        Summarized,
-        RetainedPrefix,
-        RetainedSuffix,
+        Summarized,      // 待摘要区段
+        RetainedPrefix,  // 保留前缀区段
+        RetainedSuffix,  // 保留后缀区段（权重最高）
     }
 }

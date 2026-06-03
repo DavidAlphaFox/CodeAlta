@@ -2,6 +2,7 @@ using System.Text;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：提供轻量级启发式 token 估算，综合 UTF-8 字节数和词法分析两种策略取最大值
 /// <summary>
 /// Provides a lightweight heuristic token estimator for prompts, generated text, code, logs, and structured payloads.
 /// </summary>
@@ -36,6 +37,7 @@ public static class TokenEstimator
         return estimate >= 10 ? estimate + ((estimate + 9) / 10) : estimate;
     }
 
+    // 函数功能：对文本进行词法扫描估算 token 数，分别处理空白、标识符、数字和符号
     private static long EstimateLexical(ReadOnlySpan<char> text)
     {
         var tokens = 0L;
@@ -82,6 +84,7 @@ public static class TokenEstimator
         return tokens;
     }
 
+    // 函数功能：逐字符累计空白 token：换行符贡献 1 个，制表符贡献 1 个，连续空格每 8 个贡献 1 个
     private static long EstimateWhitespace(ReadOnlySpan<char> text, ref int index)
     {
         var tokens = 0L;
@@ -120,6 +123,7 @@ public static class TokenEstimator
         return tokens;
     }
 
+    // 函数功能：按驼峰/下划线/连字符分段估算标识符 token 数，超长部分每 6 字符额外加 1
     private static long EstimateIdentifier(ReadOnlySpan<char> word)
     {
         if (word.IsEmpty)

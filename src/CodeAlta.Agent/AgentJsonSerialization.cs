@@ -7,26 +7,35 @@ using CodeAlta.Agent.Runtime.Compaction;
 
 namespace CodeAlta.Agent;
 
+// 模块功能：agent 类型的 JSON 序列化支持，包含自定义转换器、源生成上下文和扩展方法
+// 类型：ModelProviderId 的 JSON 转换器，将其作为字符串读写
 internal sealed class ModelProviderIdJsonConverter : JsonConverter<ModelProviderId>
 {
+    // 函数功能：从 JSON 字符串反序列化为 ModelProviderId
     public override ModelProviderId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         => new(reader.GetString() ?? string.Empty);
 
+    // 函数功能：将 ModelProviderId 序列化为 JSON 字符串
     public override void Write(Utf8JsonWriter writer, ModelProviderId value, JsonSerializerOptions options)
         => writer.WriteStringValue(value.Value);
 }
 
+// 类型：AgentRunId 的 JSON 转换器，将其作为字符串读写
 internal sealed class AgentRunIdJsonConverter : JsonConverter<AgentRunId>
 {
+    // 函数功能：从 JSON 字符串反序列化为 AgentRunId
     public override AgentRunId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         => new(reader.GetString() ?? string.Empty);
 
+    // 函数功能：将 AgentRunId 序列化为 JSON 字符串
     public override void Write(Utf8JsonWriter writer, AgentRunId value, JsonSerializerOptions options)
         => writer.WriteStringValue(value.Value);
 }
 
+// 类型：IReadOnlyDictionary<string, object?> 的 JSON 转换器，支持递归读写任意嵌套 JSON 对象
 internal sealed class AgentObjectDictionaryJsonConverter : JsonConverter<IReadOnlyDictionary<string, object?>>
 {
+    // 函数功能：从 JSON 读取对象为 IReadOnlyDictionary<string, object?>，null token 返回空字典，非对象时抛出 JsonException
     public override IReadOnlyDictionary<string, object?> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.Null)
@@ -40,9 +49,11 @@ internal sealed class AgentObjectDictionaryJsonConverter : JsonConverter<IReadOn
             : throw new JsonException("Expected a JSON object.");
     }
 
+    // 函数功能：将 IReadOnlyDictionary<string, object?> 序列化为 JSON 对象
     public override void Write(Utf8JsonWriter writer, IReadOnlyDictionary<string, object?> value, JsonSerializerOptions options)
         => WriteObject(writer, value);
 
+    // 函数功能：递归将 JSON 对象元素转换为 Dictionary<string, object?>
     private static Dictionary<string, object?> ReadObject(JsonElement element)
     {
         var dictionary = new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -54,6 +65,7 @@ internal sealed class AgentObjectDictionaryJsonConverter : JsonConverter<IReadOn
         return dictionary;
     }
 
+    // 函数功能：将单个 JsonElement 递归转换为对应 CLR 类型（对象/数组/字符串/数值/布尔/null）
     private static object? ReadValue(JsonElement element)
     {
         return element.ValueKind switch
@@ -70,6 +82,7 @@ internal sealed class AgentObjectDictionaryJsonConverter : JsonConverter<IReadOn
         };
     }
 
+    // 函数功能：将键值对集合写入 Utf8JsonWriter 作为 JSON 对象
     private static void WriteObject(Utf8JsonWriter writer, IEnumerable<KeyValuePair<string, object?>> entries)
     {
         writer.WriteStartObject();
@@ -82,6 +95,7 @@ internal sealed class AgentObjectDictionaryJsonConverter : JsonConverter<IReadOn
         writer.WriteEndObject();
     }
 
+    // 函数功能：将 CLR 对象递归写入 Utf8JsonWriter，覆盖所有基本类型、时间类型、agent 标识类型、枚举、字典及序列，不支持的类型抛出 NotSupportedException
     private static void WriteValue(Utf8JsonWriter writer, object? value)
     {
         switch (value)
@@ -174,6 +188,7 @@ internal sealed class AgentObjectDictionaryJsonConverter : JsonConverter<IReadOn
     }
 }
 
+// 类型：紧凑格式的 agent JSON 源生成上下文，注册所有 agent DTO 类型以支持 AOT 安全序列化（非缩进）
 [JsonSourceGenerationOptions(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
@@ -274,6 +289,7 @@ internal sealed class AgentObjectDictionaryJsonConverter : JsonConverter<IReadOn
 [JsonSerializable(typeof(AgentUserInputResponse))]
 internal partial class AgentJsonSerializerContext : JsonSerializerContext;
 
+// 类型：缩进格式的 agent JSON 源生成上下文，与 AgentJsonSerializerContext 注册类型相同但输出美化缩进 JSON
 [JsonSourceGenerationOptions(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
@@ -374,6 +390,7 @@ internal partial class AgentJsonSerializerContext : JsonSerializerContext;
 [JsonSerializable(typeof(AgentUserInputResponse))]
 internal partial class AgentIndentedJsonSerializerContext : JsonSerializerContext;
 
+// 类型：agent DTO 的 JSON 序列化扩展方法集合，统一提供紧凑/缩进两种格式的 ToJson 重载
 /// <summary>
 /// JSON serialization helpers for CodeAlta agent DTOs.
 /// </summary>
@@ -547,6 +564,7 @@ public static class AgentJsonExtensions
     /// <returns>The indented JSON representation.</returns>
     public static string ToJsonIndented(this AgentEvent value) => value.ToJson(indented: true);
 
+    // 函数功能：根据 indented 标志选择紧凑或缩进的 JsonTypeInfo 对类型 T 进行序列化
     private static string Serialize<T>(T value, JsonTypeInfo<T> compactTypeInfo, JsonTypeInfo<T> indentedTypeInfo, bool indented)
     {
         return JsonSerializer.Serialize(value, indented ? indentedTypeInfo : compactTypeInfo);

@@ -3,11 +3,13 @@ using System.Text.Json;
 
 namespace CodeAlta.Agent.ModelCatalog;
 
+// 模块功能：为 models.dev 数据库格式提供 JSON 序列化与反序列化辅助方法（字符串、流、UTF-8 字节）
 /// <summary>
 /// Provides JSON serialization helpers for the models.dev database format.
 /// </summary>
 public static class ModelsDevDatabaseJson
 {
+    // 函数功能：从 JSON 字符串反序列化 models.dev 数据库，返回规范化后的 ModelsDevDatabase 实例
     /// <summary>
     /// Deserializes the models.dev database from a JSON string.
     /// </summary>
@@ -24,6 +26,7 @@ public static class ModelsDevDatabaseJson
         return ModelsDevDatabase.CreateNormalized(providers);
     }
 
+    // 函数功能：从 UTF-8 JSON 流反序列化 models.dev 数据库，返回规范化后的 ModelsDevDatabase 实例
     /// <summary>
     /// Deserializes the models.dev database from a UTF-8 JSON stream.
     /// </summary>
@@ -40,6 +43,7 @@ public static class ModelsDevDatabaseJson
         return ModelsDevDatabase.CreateNormalized(providers);
     }
 
+    // 函数功能：将 ModelsDevDatabase 序列化为 UTF-8 JSON 字节数组
     /// <summary>
     /// Serializes the models.dev database as UTF-8 JSON.
     /// </summary>
@@ -54,6 +58,7 @@ public static class ModelsDevDatabaseJson
             ModelsDevJsonSerializerContext.Default.ModelsDevProviderMap);
     }
 
+    // 函数功能：将 ModelsDevDatabase 序列化为 JSON 字符串（内部委托 SerializeUtf8 后 UTF-8 解码）
     /// <summary>
     /// Serializes the models.dev database as a JSON string.
     /// </summary>
